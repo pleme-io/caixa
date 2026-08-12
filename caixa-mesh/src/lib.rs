@@ -3274,8 +3274,8 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
-        kube_kind_is, kube_metadata_label, kube_metadata_labels, kube_name, kube_name_is,
-        kube_namespace,
+        kube_kind_is, kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name,
+        kube_name_is, kube_namespace,
     };
     use std::time::Duration;
 
@@ -7839,7 +7839,13 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             let labels = kube_metadata_labels(p).expect("policy metadata.labels mapping");
-            assert_eq!(kube_metadata_label(p, LABEL_APLICACAO), Some("checkout"));
+            assert!(
+                kube_metadata_label_is(p, LABEL_APLICACAO, "checkout"),
+                "policy metadata.labels.LABEL_APLICACAO must byte-equal \
+                 the parent Aplicacao's `:nome` — routes through the \
+                 lifted predicate arity that closes the three-arity \
+                 closure on the metadata.labels.<label> selector axis"
+            );
             // The contrato label is `<de>-to-<para>`; both fixture
             // edges have :de = "cart".
             let contrato_val =

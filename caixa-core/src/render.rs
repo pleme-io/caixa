@@ -20138,6 +20138,170 @@ pub fn kube_metadata_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Opt
         .and_then(|v| v.as_str())
 }
 
+/// Predicate: does the K8s custom resource YAML document at `value`
+/// carry `metadata.labels.<label>` with the string-scalar value
+/// `expected`?
+///
+/// Composes on top of [`kube_metadata_label`] as
+/// `kube_metadata_label(value, label) == Some(expected)` — the same
+/// one-hop `readback → equality-wrap` shape the sibling identity-axis
+/// predicates [`kube_name_is`] / [`kube_namespace_is`] and the sibling
+/// top-level [`kube_kind_is`] / [`kube_api_version_is`] carry on their
+/// respective pinned single-scalar-key axes, extended onto the
+/// parametric `label` axis at the `metadata.labels.<label>` sub-mapping
+/// depth. Returns `false` on any of the four vacuous-`None` short-
+/// circuits the underlying [`kube_metadata_label`] accessor closes
+/// (missing `metadata:` block, missing `metadata.labels` sub-block,
+/// non-Mapping `labels:` value, requested `<label>` key absent, or
+/// non-string label value): the predicate treats the "label absent"
+/// arm and the "label present but non-string" arm the same as the
+/// "label present but wrong value" arm — every downstream selector-
+/// filter caller (`kubectl -l pleme.pleme.io/aplicacao=<name>` grep-
+/// by-label, the future `app-operator`'s per-Aplicacao `spec.selector`
+/// join, MESH-COMPOSITION §III.2 #5) treats every non-match the same,
+/// so the predicate's boolean shape matches the selector's boolean
+/// verdict rather than exposing the underlying `Option`'s three-way
+/// split.
+///
+/// Unlike the sibling scalar-axis predicates ([`kube_name_is`],
+/// [`kube_namespace_is`], [`kube_kind_is`], [`kube_api_version_is`])
+/// whose `field` axis is pinned inside the helper because the K8s
+/// API-machinery pins those specific coordinates as the load-bearing
+/// per-CR discriminators, this predicate stays parametric on the
+/// `label` axis-key argument because the K8s labels contract
+/// deliberately admits an open-ended per-CR label surface — the same
+/// three-arity closure (accessor / predicate / navigator) applies to
+/// every label a caixa-mesh emitter writes today ([`LABEL_APLICACAO`],
+/// [`LABEL_CONTRATO`], [`LABEL_PROGRAM`]) and every label a future
+/// renderer surfaces (per-tenant label-prefix filters, per-Servico
+/// OTel-collector labels, per-`:politicas` `LABEL_POLITICA`
+/// discriminators MESH-COMPOSITION §III.2 #3 acknowledges), with the
+/// axis-key threaded through the call rather than pinned inside.
+///
+/// The canonical shape 1 test-side
+///
+/// ```ignore
+/// kube_metadata_label(p, LABEL_APLICACAO) == Some("checkout")
+/// ```
+///
+/// call site in [`caixa-mesh`][mesh]'s
+/// `cilium_policy_metadata_labels_use_lifted_consts` test previously
+/// carried inline as the three-token composition — the readback
+/// helper call, the `== Some(...)` equality wrap, the string-scalar
+/// axis-value pin — around a two-token semantic payload (the
+/// `<label>` axis-key + the `<expected>` axis-value). The lift
+/// collapses the three-token composition — the accessor call, the
+/// equality wrap, the `Some(...)` constructor — onto one predicate
+/// the caller reads as intent (`kube_metadata_label_is(p, LABEL_X, "v")`
+/// — "does this K8s CR document carry label `LABEL_X` with value
+/// `v`") rather than as a `readback → wrap → compare` chain.
+///
+/// Together with the sibling navigator [`find_by_label`] this closes
+/// the three-arity closure on the `metadata.labels.<label>` per-CR
+/// selector-axis — accessor [`kube_metadata_label`] (f3d9fcd),
+/// predicate [`kube_metadata_label_is`], navigator
+/// [`find_by_label`] — bringing it to structural parity with the
+/// three-arity closures on the sibling identity axis (accessor
+/// [`kube_name`], predicate [`kube_name_is`], navigator
+/// [`find_by_name`]), the sibling namespace-scoping axis (accessor
+/// [`kube_namespace`], predicate [`kube_namespace_is`], navigator
+/// [`find_by_namespace`]), the sibling top-level `kind:` discriminator
+/// axis (accessor [`kube_kind`], predicate [`kube_kind_is`], navigator
+/// [`find_by_kind`]), and the sibling top-level `apiVersion:` axis
+/// (accessor [`kube_api_version`], predicate [`kube_api_version_is`],
+/// navigator [`find_by_api_version`]) — the K8s API-machinery pins
+/// the identity and shape axes as the load-bearing per-CR
+/// coordinates, and pins the labels sub-mapping as the load-bearing
+/// per-CR selector-axis every label-selector consumer (Cilium
+/// `endpointSelector.matchLabels`, Gateway API `HTTPRoute` parent-
+/// selector, `kubectl -l` grep-by-label, Hubble flow grouping) keys
+/// off. This closure brackets that selector-axis so every future
+/// per-label predicate site (the future `app-operator`'s per-
+/// Aplicacao `spec.selector.matchLabels` reconciler `label_selector`
+/// pin, MESH-COMPOSITION §III.2 #5; the future per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig`-per-policy `LABEL_POLITICA` audit
+/// surface, §III.2 #3; the future per-tenant CNP filter that gates
+/// per-tenant slice CRs by the tenant-scoping label) reaches this
+/// helper by construction, with no `== Some(...)` inline composition
+/// and no drift surface on the `metadata.labels.<label>` sub-mapping
+/// axis.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_metadata_label_is(value: &serde_yaml::Value, label: &str, expected: &str) -> bool {
+    kube_metadata_label(value, label) == Some(expected)
+}
+
+/// Locate the first K8s custom resource YAML document in `docs` whose
+/// `metadata.labels.<label>` sub-mapping value byte-equals `expected`.
+///
+/// Composes on top of [`kube_metadata_label_is`] as
+/// `docs.iter().find(|d| kube_metadata_label_is(d, label, expected))`
+/// — the same one-hop `.iter().find(predicate)` navigator shape the
+/// sibling identity-axis / namespace-scoping-axis / kind-axis /
+/// apiVersion-axis navigators [`find_by_name`], [`find_by_namespace`],
+/// [`find_by_kind`], [`find_by_api_version`] carry on their
+/// respective pinned single-scalar-key axes, extended onto the
+/// parametric `label` axis at the `metadata.labels.<label>` sub-
+/// mapping depth. Returns `None` when no document in `docs` carries
+/// the requested `(<label>, <expected>)` binding (the same "no match"
+/// arm the sibling navigators return `None` on).
+///
+/// Composition-symmetric to [`kube_metadata_label_is`]: the lifted
+/// predicate answers "does *this* one document carry label
+/// `<label>` with value `<expected>`?", the lifted navigator answers
+/// "find the first document carrying label `<label>` with value
+/// `<expected>` in *this list*?". Same axis, different arity — the
+/// two call shapes emit-side / operator-side / audit-side harnesses
+/// reach for when slicing multi-doc CR emissions by per-CR selector-
+/// value. Unlike the sibling scalar-axis navigators whose axis-key
+/// is pinned inside the helper, this stays parametric on the
+/// `<label>` axis-key argument because the K8s labels contract
+/// admits an open-ended per-CR selector surface — the same navigator
+/// applies to every emitted label ([`LABEL_APLICACAO`],
+/// [`LABEL_CONTRATO`], [`LABEL_PROGRAM`], future
+/// `LABEL_POLITICA` / tenant-scoping labels) with the axis-key
+/// threaded through the call rather than pinned inside.
+///
+/// This closes the three-arity closure on the `metadata.labels.<label>`
+/// per-CR selector-axis — accessor [`kube_metadata_label`] (f3d9fcd),
+/// predicate [`kube_metadata_label_is`], navigator [`find_by_label`]
+/// — bringing it to structural parity with the sibling three-arity
+/// closures on the identity / namespace-scoping / kind / apiVersion
+/// axes ([`kube_name`] / [`kube_name_is`] / [`find_by_name`];
+/// [`kube_namespace`] / [`kube_namespace_is`] / [`find_by_namespace`];
+/// [`kube_kind`] / [`kube_kind_is`] / [`find_by_kind`];
+/// [`kube_api_version`] / [`kube_api_version_is`] /
+/// [`find_by_api_version`]). Together the five closures bracket every
+/// accessor arity on the K8s API-machinery's four load-bearing per-CR
+/// discriminator axes plus the parametric labels selector-axis, so
+/// every future multi-doc CR traversal — by identity, by namespace-
+/// scoping, by CR shape, by CRD-group/version, or by open-ended
+/// selector-value — reaches an axis-symmetric helper trio by
+/// construction, with no inline `.iter().find(closure)` combinator
+/// chain and no drift surface on the receiver-widen, combinator, or
+/// axis-key axes.
+///
+/// Every future per-label multi-doc-navigator site (the M4 cross-
+/// cluster fan-out's per-tenant `HelmRelease` split by tenant-scoping
+/// label, MESH-COMPOSITION §III.2 #3; the future `app-operator`'s
+/// per-Aplicacao CR selector-based join over emitted status docs,
+/// §III.2 #5; the future per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig`-per-policy `LABEL_POLITICA` locator
+/// over the sibling L7-policy emission) reaches this same helper by
+/// construction, with no inline `.iter().find(closure)` combinator
+/// chain and no drift surface on the receiver-widen, combinator, or
+/// axis-key axes.
+#[must_use]
+pub fn find_by_label<'a>(
+    docs: &'a [serde_yaml::Value],
+    label: &str,
+    expected: &str,
+) -> Option<&'a serde_yaml::Value> {
+    docs.iter()
+        .find(|d| kube_metadata_label_is(d, label, expected))
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -40387,6 +40551,315 @@ spec:
                  Option<&str> as the prior inline four-hop chain — \
                  otherwise the two routed caixa-mesh test-side per-CNP \
                  label-value sites drift silently"
+            );
+        }
+    }
+
+    // ── kube_metadata_label_is + find_by_label lifts ────────────────────
+
+    #[test]
+    fn kube_metadata_label_is_answers_true_only_when_label_and_value_match() {
+        // Positive-truth pin: the predicate returns true iff the
+        // `metadata.labels.<label>` sub-mapping-value byte-equals the
+        // `expected` axis-value. Pinned across the two canonical
+        // caixa-mesh per-CNP labels (LABEL_APLICACAO, LABEL_CONTRATO)
+        // so both the routed test-side call site
+        // (`cilium_policy_metadata_labels_use_lifted_consts`) and every
+        // future per-label predicate site (the future
+        // `app-operator`'s per-Aplicacao selector-based reconciler
+        // MESH-COMPOSITION §III.2 #5) reach through this exact
+        // string-scalar equality.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        labels.insert_str_key(
+            LABEL_CONTRATO,
+            serde_yaml::Value::String("cart-to-catalog".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert!(
+            kube_metadata_label_is(&value, LABEL_APLICACAO, "checkout"),
+            "kube_metadata_label_is must return true when \
+             metadata.labels.LABEL_APLICACAO byte-equals `expected` — \
+             the caixa-mesh per-CNP parent-Aplicacao label-selector \
+             equality routes through this predicate"
+        );
+        assert!(
+            kube_metadata_label_is(&value, LABEL_CONTRATO, "cart-to-catalog"),
+            "kube_metadata_label_is must return true when \
+             metadata.labels.LABEL_CONTRATO byte-equals `expected` — \
+             the caixa-mesh per-CNP contrato-edge label-selector \
+             equality routes through this predicate"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_label_is_returns_false_when_value_differs() {
+        // Negative-value pin: the predicate returns false when the
+        // label is present but the value does not byte-equal
+        // `expected`. Pin the "label present but wrong value" arm so
+        // a future selector-consumer's `if kube_metadata_label_is(...)
+        // { … }` gate does not silently short-circuit onto a
+        // structurally-adjacent CR whose selector value drifted.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert!(
+            !kube_metadata_label_is(&value, LABEL_APLICACAO, "orders"),
+            "kube_metadata_label_is must return false when \
+             metadata.labels.LABEL_APLICACAO carries a value that does \
+             not byte-equal `expected` — the underlying \
+             `kube_metadata_label(_, LABEL_APLICACAO) == Some(expected)` \
+             equality wraps this arm as a distinct-`Some` inequality"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_label_is_returns_false_on_every_accessor_short_circuit_arm() {
+        // Total-function pin: the predicate collapses every vacuous-
+        // None arm the underlying `kube_metadata_label` accessor
+        // closes on (missing metadata block, missing labels sub-block,
+        // non-Mapping labels value, requested label key absent,
+        // non-string label value) onto `false` — the same boolean
+        // verdict every downstream label-selector consumer (Cilium
+        // `endpointSelector.matchLabels`, `kubectl -l` grep, Hubble
+        // flow grouping) resolves each non-match to. A drift onto the
+        // three-way `Option` split would silently reintroduce arm-
+        // specific branching at every consumer site.
+
+        // Arm 1: missing metadata block.
+        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert!(
+            !kube_metadata_label_is(&value, LABEL_APLICACAO, "checkout"),
+            "predicate must return false when metadata block absent"
+        );
+
+        // Arm 2: present metadata but absent labels sub-block.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-gateway".into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert!(
+            !kube_metadata_label_is(&value, LABEL_APLICACAO, "checkout"),
+            "predicate must return false when labels sub-block absent"
+        );
+
+        // Arm 3: labels sub-block present but requested label absent.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert!(
+            !kube_metadata_label_is(&value, LABEL_CONTRATO, "cart-to-catalog"),
+            "predicate must return false when requested label key absent"
+        );
+
+        // Arm 4: label present but non-string value.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(LABEL_APLICACAO, serde_yaml::Value::Number(42.into()));
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert!(
+            !kube_metadata_label_is(&value, LABEL_APLICACAO, "42"),
+            "predicate must return false when label value is non-string \
+             (numeric coercion to a matching decimal string must NOT \
+             satisfy the predicate — the underlying accessor's shape \
+             gate short-circuits to None, and the equality wrap folds \
+             None onto false)"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_label_is_composes_on_lifted_kube_metadata_label_accessor() {
+        // Composition pin: the predicate folds onto the composed
+        // scalar-arity `kube_metadata_label` accessor as
+        // `kube_metadata_label(value, label) == Some(expected)`. Pin
+        // the composition-shape across every combination of the two
+        // canonical caixa-mesh per-CNP labels + both a matching and
+        // a mismatching `expected` so a future accidental rewire of
+        // the predicate's internals to a private inline four-hop
+        // chain (bypassing the accessor) is a test-visible break —
+        // matching the sibling `kube_name_is_composes_on_lifted_kube_
+        // name_accessor` pin's discipline on the identity-axis
+        // composition.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        labels.insert_str_key(
+            LABEL_CONTRATO,
+            serde_yaml::Value::String("cart-to-payment".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for (label, expected) in [
+            (LABEL_APLICACAO, "checkout"),
+            (LABEL_APLICACAO, "orders"),
+            (LABEL_CONTRATO, "cart-to-payment"),
+            (LABEL_CONTRATO, "cart-to-catalog"),
+        ] {
+            let via_helper = kube_metadata_label_is(&value, label, expected);
+            let via_composed = kube_metadata_label(&value, label) == Some(expected);
+            assert_eq!(
+                via_helper, via_composed,
+                "kube_metadata_label_is(_, {label:?}, {expected:?}) must \
+                 compose on `kube_metadata_label(_, label) == Some(expected)` \
+                 — otherwise the routed caixa-mesh label-selector site \
+                 drifts silently from the sub-mapping accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn find_by_label_returns_first_matching_document() {
+        // First-match pin: the navigator returns the first document
+        // in emission order whose `metadata.labels.<label>` byte-
+        // equals `expected`. Pin the first-match semantics against a
+        // three-document sequence so a future rewire that accidentally
+        // returned the last-match (via `.rev().find(...)`) or an all-
+        // matches filter (via `.filter(...).next()` semantics that
+        // silently reordered) is a test-visible break, matching the
+        // sibling `find_by_name` / `find_by_namespace` / `find_by_kind`
+        // / `find_by_api_version` navigators' first-match contract on
+        // the sibling scalar-key axes.
+        let make = |name: &str, program: &str| {
+            let mut labels = serde_yaml::Mapping::new();
+            labels.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String(program.into()));
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String(name.into()));
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            serde_yaml::Value::Mapping(cr)
+        };
+        let docs = vec![
+            make("cart-a", "cart"),
+            make("cart-b", "cart"),
+            make("payment-a", "payment"),
+        ];
+
+        let hit = find_by_label(&docs, LABEL_PROGRAM, "cart");
+        assert_eq!(
+            hit.and_then(|d| kube_name(d)),
+            Some("cart-a"),
+            "find_by_label must return the FIRST document whose \
+             metadata.labels.LABEL_PROGRAM byte-equals `cart` — the \
+             first-match contract must not reorder to last-match"
+        );
+
+        let payment = find_by_label(&docs, LABEL_PROGRAM, "payment");
+        assert_eq!(
+            payment.and_then(|d| kube_name(d)),
+            Some("payment-a"),
+            "find_by_label must locate a document further into the \
+             sequence when the earlier documents do not match"
+        );
+    }
+
+    #[test]
+    fn find_by_label_returns_none_when_no_document_matches() {
+        // Empty-set pin: the navigator returns None when no document
+        // in `docs` carries the requested `(<label>, <expected>)`
+        // binding — the same "no match" arm the sibling navigators
+        // return on. Pin the None-arm so a future selector-consumer's
+        // `if let Some(cr) = find_by_label(...) { … }` gate does not
+        // silently short-circuit onto a structurally-adjacent CR.
+        let make = |program: &str| {
+            let mut labels = serde_yaml::Mapping::new();
+            labels.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String(program.into()));
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            serde_yaml::Value::Mapping(cr)
+        };
+        let docs = vec![make("cart"), make("payment")];
+
+        assert!(
+            find_by_label(&docs, LABEL_PROGRAM, "catalog").is_none(),
+            "find_by_label must return None when no document carries \
+             the requested (label, expected) binding"
+        );
+
+        // Also None on an empty document set — pin the boundary.
+        assert!(
+            find_by_label(&[], LABEL_PROGRAM, "cart").is_none(),
+            "find_by_label must return None on an empty document set"
+        );
+    }
+
+    #[test]
+    fn find_by_label_composes_on_lifted_kube_metadata_label_is_predicate() {
+        // Composition pin: the navigator folds onto the composed
+        // predicate arity as
+        // `docs.iter().find(|d| kube_metadata_label_is(d, label, expected))`.
+        // Pin the composition-shape so a future rewire that bypasses
+        // the predicate (a private inline `docs.iter().find(|d| {
+        // kube_metadata_label(d, label) == Some(expected) })` copy)
+        // is a test-visible break, matching the sibling `find_by_name
+        // _composes_on_lifted_kube_name_is_predicate` pin's discipline.
+        let make = |name: &str, program: &str| {
+            let mut labels = serde_yaml::Mapping::new();
+            labels.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String(program.into()));
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String(name.into()));
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            serde_yaml::Value::Mapping(cr)
+        };
+        let docs = vec![make("cart-a", "cart"), make("payment-a", "payment")];
+
+        for (label, expected) in [
+            (LABEL_PROGRAM, "cart"),
+            (LABEL_PROGRAM, "payment"),
+            (LABEL_PROGRAM, "catalog"),
+        ] {
+            let via_helper = find_by_label(&docs, label, expected).and_then(|d| kube_name(d));
+            let via_composed = docs
+                .iter()
+                .find(|d| kube_metadata_label_is(d, label, expected))
+                .and_then(|d| kube_name(d));
+            assert_eq!(
+                via_helper, via_composed,
+                "find_by_label(_, {label:?}, {expected:?}) must compose \
+                 on `docs.iter().find(|d| kube_metadata_label_is(d, \
+                 label, expected))` — otherwise the routed selector-\
+                 axis site drifts silently from the predicate's \
+                 contract"
             );
         }
     }
