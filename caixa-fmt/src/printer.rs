@@ -153,20 +153,36 @@ impl Printer<'_> {
                 self.out.push(':');
                 self.out.push_str(s);
             }
-            NodeKind::Quote(inner) => {
-                self.out.push('\'');
-                self.emit(inner, indent);
-            }
-            NodeKind::Quasiquote(inner) => {
-                self.out.push('`');
-                self.emit(inner, indent);
-            }
-            NodeKind::Unquote(inner) => {
-                self.out.push(',');
-                self.emit(inner, indent);
-            }
-            NodeKind::UnquoteSplice(inner) => {
-                self.out.push_str(",@");
+            // Route the four reader-macro arms' sigil-then-inner emit
+            // dispatch through the lifted substrate accessor pair
+            // [`caixa_ast::NodeKind::as_reader_macro_inner`] +
+            // [`caixa_ast::NodeKind::reader_macro_prefix`] rather than the
+            // raw four-arm `NodeKind::Quote(inner) => push('\'') |
+            // Quasiquote(_) => push('`') | Unquote(_) => push(',') |
+            // UnquoteSplice(_) => push_str(",@")` open-coded per-arm
+            // pattern-match. The two accessors partition the same four-
+            // arm reader-macro-carrying arm-set (pinned live by
+            // `reader_macro_prefix_partitions_the_same_arm_set_as_as_reader_macro_inner`),
+            // so the writer half's `.expect(…)` on the prefix after
+            // gating through the inner half is a build-time-verified
+            // invariant rather than an at-runtime accident. Sibling in
+            // shape to the peer `NodeKind::List(items) | Map(items) |
+            // Vector(items)` compound-arm dispatch below that routes
+            // through the [`seq_delims`] + [`as_seq_body`] pair on the
+            // sibling D4-dialect compound axis.
+            NodeKind::Quote(_)
+            | NodeKind::Quasiquote(_)
+            | NodeKind::Unquote(_)
+            | NodeKind::UnquoteSplice(_) => {
+                self.out.push_str(
+                    n.kind
+                        .reader_macro_prefix()
+                        .expect("reader-macro arm implies reader_macro_prefix"),
+                );
+                let inner = n
+                    .kind
+                    .as_reader_macro_inner()
+                    .expect("reader-macro arm implies as_reader_macro_inner");
                 self.emit(inner, indent);
             }
             // Route the three D4-dialect compound arms' compound-emit
@@ -1050,20 +1066,27 @@ fn render_node_inline(n: &Node, out: &mut String) {
             out.push(':');
             out.push_str(s);
         }
-        NodeKind::Quote(inner) => {
-            out.push('\'');
-            render_node_inline(inner, out);
-        }
-        NodeKind::Quasiquote(inner) => {
-            out.push('`');
-            render_node_inline(inner, out);
-        }
-        NodeKind::Unquote(inner) => {
-            out.push(',');
-            render_node_inline(inner, out);
-        }
-        NodeKind::UnquoteSplice(inner) => {
-            out.push_str(",@");
+        // Sibling to the peer `Printer::emit` main reader-macro-arm
+        // dispatch — routes the four reader-macro arms' sigil-then-inner
+        // inline-render dispatch through the lifted substrate accessor
+        // pair [`caixa_ast::NodeKind::as_reader_macro_inner`] +
+        // [`caixa_ast::NodeKind::reader_macro_prefix`] rather than the
+        // raw four-arm `NodeKind::Quote(inner) => push('\'') | Quasiquote
+        // (_) => push('`') | Unquote(_) => push(',') | UnquoteSplice(_)
+        // => push_str(",@")` open-coded per-arm pattern-match.
+        NodeKind::Quote(_)
+        | NodeKind::Quasiquote(_)
+        | NodeKind::Unquote(_)
+        | NodeKind::UnquoteSplice(_) => {
+            out.push_str(
+                n.kind
+                    .reader_macro_prefix()
+                    .expect("reader-macro arm implies reader_macro_prefix"),
+            );
+            let inner = n
+                .kind
+                .as_reader_macro_inner()
+                .expect("reader-macro arm implies as_reader_macro_inner");
             render_node_inline(inner, out);
         }
         // Sibling to the peer `Printer::emit` main compound-arm dispatch
