@@ -309,6 +309,65 @@ impl NodeKind {
             _ => None,
         }
     }
+
+    /// Substrate-canonical projection onto the [`Self::List`] arm's
+    /// borrowed compound payload — returns `Some(&[Node])` byte-borrowed
+    /// from the arm's own [`Vec<Node>`] storage, and [`None`] on every
+    /// other arm of the closed fourteen-arm [`NodeKind`] variant set.
+    ///
+    /// Eleven production consumers today across four caixa-monorepo crates
+    /// — the caixa-ast [`Node::head_symbol`] list-head projection and
+    /// [`Node::kwarg`] `:key value` pair-loop; the caixa-lint rule
+    /// surface's `check_enum_pascal`, `check_paired_kwargs`, and
+    /// `check_git_pin` per-list walkers; the caixa-teia manifest parser's
+    /// `instance_from_node` `:atributos` kwargs-list gate; the caixa-fmt
+    /// `commented_head_degrades_out_of_the_plist_shape` printer test's
+    /// list-shape unwrap; the caixa-fmt `float_roundtrip` reparse test's
+    /// list-shape unwrap; and the caixa-ast `parse_list`,
+    /// `parse_map_and_vector`, and `parse_reader_macros` parser tests'
+    /// list-shape unwraps — which previously reached the underlying
+    /// [`Vec<Node>`] child sequence through eleven raw `let NodeKind::
+    /// List(items) = &X.kind else { … }` open-coded per-arm let-else
+    /// pattern-matches that expressed no compile-time link back to the
+    /// substrate primitive's typed compound-arm projection.
+    ///
+    /// Semantically distinct from the sibling `Map` and `Vector`
+    /// compound-arm carrying shapes — every one of those arms also
+    /// carries a `Vec<Node>` payload (`Map(Vec<Node>)` is the brace
+    /// dialect's `{ :k v … }`; `Vector(Vec<Node>)` is the bracket
+    /// dialect's `[ a b … ]`), so a hand-rolled `matches!(&_.kind,
+    /// NodeKind::List(_))` gate has to keep the strict-`List`-only
+    /// boundary in view at every site. This projection pins the boundary
+    /// on the substrate primitive — the sibling `Map` / `Vector` arms
+    /// return `None` even though they carry the same shape payload —
+    /// which is why the seven caixa-lint / caixa-teia / caixa-fmt /
+    /// caixa-ast production consumers all reach for the strict `List`-arm
+    /// gate rather than any compound-arm disjunction (a `(defcaixa …)`
+    /// form is a `List`, not a `Map` or `Vector`; a `:atributos` kwargs
+    /// slot is a `List`, not a `Map`; the parser's positional-run detection
+    /// runs on `List`, not the D4 brace/bracket dialect).
+    ///
+    /// Zero-copy — the returned `&[Node]` borrows from the arm's own
+    /// [`Vec<Node>`] storage (pinned by the
+    /// `as_list_is_by_borrow_pointer_identity` test), the same discipline
+    /// as the sibling per-arm [`Self::as_keyword`] (6804427) /
+    /// [`Self::as_symbol`] (e96eea1) / [`Self::as_str`] (55b2909) scalar
+    /// projections and the sibling disjunctive [`Self::as_atom_string`]
+    /// (3c3ca48) / [`Self::as_symbol_or_str`] (fd39cea) two-/three-arm
+    /// atom-name projections. Sixth `Option<&<payload>>` projection
+    /// accessor on the outer [`NodeKind`] sum-type — the first accessor
+    /// on the *compound*-arm axis (Map/List/Vector all carry
+    /// `Vec<Node>`), extending the projection family from the three
+    /// scalar-arm accessors and two disjunctive-scalar-arm accessors onto
+    /// the compound-arm axis every downstream authoring-tool and
+    /// manifest-parser walker partitions on.
+    #[must_use]
+    pub fn as_list(&self) -> Option<&[Node]> {
+        match self {
+            Self::List(items) => Some(items.as_slice()),
+            _ => None,
+        }
+    }
 }
 
 impl Node {
@@ -373,19 +432,14 @@ impl Node {
     /// canonical accessor.
     #[must_use]
     pub fn head_symbol(&self) -> Option<&str> {
-        let NodeKind::List(items) = &self.kind else {
-            return None;
-        };
-        items.first()?.kind.as_symbol()
+        self.kind.as_list()?.first()?.kind.as_symbol()
     }
 
     /// For a list formatted as alternating `:key value :key value`, returns
     /// the matching value node for `key` (without the leading colon).
     #[must_use]
     pub fn kwarg(&self, key: &str) -> Option<&Node> {
-        let NodeKind::List(items) = &self.kind else {
-            return None;
-        };
+        let items = self.kind.as_list()?;
         let start = if items.first().is_some_and(|n| n.kind.is_symbol()) {
             1
         } else {
@@ -1177,6 +1231,149 @@ mod is_variant_tests {
                  NodeKind::Float(_)) — otherwise caixa-fmt's grid-column \
                  numeric-right-align gate would silently disagree with \
                  its pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's `List`
+    // compound-arm accessor: exactly the `List` arm returns `Some(&[Node])`
+    // byte-borrowed from the arm's own [`Vec<Node>`] storage; every other
+    // arm — INCLUDING the sibling `Map` and `Vector` arms that also carry
+    // `Vec<Node>` payloads — returns `None`. Pins the "one canonical
+    // projection dispatch per typed arm on the substrate primitive"
+    // discipline the eleven per-`List`-arm consumer sites (caixa-ast
+    // [`Node::head_symbol`], [`Node::kwarg`], `parse_list`,
+    // `parse_map_and_vector`, `parse_reader_macros`; caixa-lint
+    // `check_enum_pascal`, `check_paired_kwargs`, `check_git_pin`;
+    // caixa-teia `instance_from_node` `:atributos` gate; caixa-fmt
+    // `commented_head_degrades_out_of_the_plist_shape`, `float_roundtrip`)
+    // route through via `.as_list()`. A regression that admitted a `Map`
+    // or `Vector` arm through this projection would silently classify
+    // brace-dialect `{ :k v … }` forms and bracket-dialect `[ a b … ]`
+    // forms as ordinary parenthesized `(a b …)` lists at the eleven
+    // per-consumer sites — `head_symbol` would surface the first element
+    // of a brace map as a form-head, `kwarg` would scan bracket vectors
+    // for `:key value` pairs, `check_enum_pascal` would flag Vec elements
+    // as enum-variant mis-authorings, `instance_from_node`'s `:atributos`
+    // gate would accept a hoisted `{ :k v }` shape it explicitly refuses.
+    // This test guards that surface across every arm of the closed
+    // fourteen-arm partition, with the `Map` / `Vector` non-`List`-arm
+    // gates called out explicitly as the strict-`List`-only boundary the
+    // whole point of a per-arm accessor turns on.
+    #[test]
+    fn as_list_projects_only_list_arm() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.as_list();
+            if matches!(variant, NodeKind::List(_)) {
+                let NodeKind::List(items) = variant else {
+                    unreachable!("guarded by matches! above");
+                };
+                assert_eq!(
+                    projected,
+                    Some(items.as_slice()),
+                    "NodeKind::{name} is the List arm — as_list() must \
+                     project onto its own Vec<Node> payload"
+                );
+            } else {
+                assert_eq!(
+                    projected, None,
+                    "NodeKind::{name} is not the List arm — as_list() \
+                     must return None"
+                );
+            }
+        }
+        // Empty list — the accessor is a projection, not a gate; an
+        // empty-`()` list (author-declared or parser-produced from a stray
+        // reader edge case) round-trips as `Some(&[])`, not `None`.
+        assert_eq!(NodeKind::List(Vec::new()).as_list(), Some(&[] as &[Node]));
+        // Strict-`List`-only boundary vs the sibling compound arms `Map`
+        // and `Vector` — both also carry `Vec<Node>` payloads, so a hand-
+        // rolled `matches!(_.kind, NodeKind::List(_))` gate has to keep
+        // the boundary in view at every site. A future refactor that
+        // widened this accessor to admit `Map` or `Vector` (silently
+        // collapsing the semantic distinction between the parenthesized-
+        // list, brace-map, and bracket-vector dialects) trips at these
+        // pins before the eleven per-consumer sites silently start
+        // accepting brace / bracket forms in `(defX …)` / `:atributos` /
+        // `:key value` slots.
+        assert_eq!(
+            NodeKind::Map(Vec::new()).as_list(),
+            None,
+            "Map arm carries Vec<Node> but MUST NOT project through \
+             as_list — the strict-List-only boundary is the whole point \
+             of a distinct compound-arm accessor"
+        );
+        assert_eq!(
+            NodeKind::Vector(Vec::new()).as_list(),
+            None,
+            "Vector arm carries Vec<Node> but MUST NOT project through \
+             as_list — the strict-List-only boundary is the whole point \
+             of a distinct compound-arm accessor"
+        );
+    }
+
+    // Zero-copy pin — `k.as_list()` must borrow from the `List` arm's
+    // own [`Vec<Node>`] storage, not clone into a fresh Vec. Fails at
+    // build time if a future rewrite regresses to `Some(items.clone()
+    // .as_slice().to_vec().leak())` or any other detour that silently
+    // allocates on every call (the same shape as the sibling
+    // [`as_keyword_is_by_borrow_pointer_identity`] /
+    // [`as_symbol_is_by_borrow_pointer_identity`] /
+    // [`as_str_is_by_borrow_pointer_identity`] /
+    // [`as_atom_string_is_by_borrow_pointer_identity`] /
+    // [`as_symbol_or_str_is_by_borrow_pointer_identity`] pins on the
+    // peer outer-`NodeKind` scalar and disjunctive-scalar accessors).
+    #[test]
+    fn as_list_is_by_borrow_pointer_identity() {
+        let k = NodeKind::List(vec![
+            Node::new(NodeKind::Symbol("defcaixa".into()), Span::new(0, 8)),
+            Node::new(NodeKind::Symbol("demo".into()), Span::new(9, 13)),
+        ]);
+        let via_accessor: &[Node] = k.as_list().unwrap();
+        let NodeKind::List(ref inner) = k else {
+            unreachable!("constructed above as NodeKind::List");
+        };
+        assert_eq!(
+            via_accessor.as_ptr(),
+            inner.as_ptr(),
+            "NodeKind::as_list must borrow from the List arm's \
+             Vec<Node> backing storage (zero-copy projection)",
+        );
+        assert_eq!(
+            via_accessor.len(),
+            inner.len(),
+            "NodeKind::as_list and inner.as_slice() must byte-equal \
+             in length (same slice)",
+        );
+    }
+
+    // Byte-parity pin on the pre-lift `let NodeKind::List(items) = &X.kind
+    // else { … }` shape the eleven caixa-ast/caixa-lint/caixa-teia/
+    // caixa-fmt consumer sites route through today via `.as_list()`.
+    // Refuses a future accidental split between the accessor's return
+    // contract and its pre-lift shape (a hand-rolled shadow `impl` that
+    // overrides one path, an accidental rebrand of one converged call
+    // site back to the raw `NodeKind::List(items)` form, a widening to
+    // admit `Map` or `Vector`) on the load-bearing list-shape-projection
+    // axis every downstream form walker / `:atributos` gate / positional
+    // classifier partitions on.
+    #[test]
+    fn as_list_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&[Node]> = match &variant {
+                NodeKind::List(items) => Some(items.as_slice()),
+                _ => None,
+            };
+            let via_accessor = variant.as_list();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.as_list() must byte-equal \
+                 `match &_ {{ NodeKind::List(items) => \
+                 Some(items.as_slice()), _ => None }}` — otherwise the \
+                 eleven converged caixa-ast/caixa-lint/caixa-teia/ \
+                 caixa-fmt call sites would silently disagree with their \
+                 pre-lift shape"
             );
         }
     }

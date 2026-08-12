@@ -9,7 +9,7 @@ fn assert_round_trips(v: f64, label: &str) {
     let out = format_source(&format!("(x {v:?})"), &FmtConfig::default())
         .unwrap_or_else(|e| panic!("{label}: emitted text does not re-lex: {e}"));
     let nodes = caixa_ast::parse(&out).unwrap_or_else(|e| panic!("{label}: reparse failed: {e}"));
-    let NodeKind::List(items) = &nodes[0].kind else {
+    let Some(items) = nodes[0].kind.as_list() else {
         panic!("{label}: shape changed")
     };
     match &items[1].kind {
