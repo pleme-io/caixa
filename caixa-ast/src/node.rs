@@ -430,6 +430,67 @@ impl NodeKind {
             _ => None,
         }
     }
+
+    /// Substrate-canonical projection onto the disjunctive
+    /// [`Self::List`] | [`Self::Map`] | [`Self::Vector`] compound-body
+    /// arm-set — returns `Some(&[Node])` byte-borrowed from the matched
+    /// arm's own [`Vec<Node>`] storage on any of the three D4-dialect
+    /// compound-carrying arms (parenthesized list, brace map, bracket
+    /// vector), and [`None`] on every other arm of the closed
+    /// fourteen-arm [`NodeKind`] variant set.
+    ///
+    /// Three production consumers today across two caixa-monorepo crates
+    /// — the caixa-ast [`crate::visit::walk`] visitor recursion (which
+    /// treats every compound as a child-bearing container to descend
+    /// into), the caixa-fmt printer's `emit_header_operand` inlineable
+    /// gate (which flattens any D4-dialect compound header operand that
+    /// fits the width budget), and the caixa-fmt printer's `is_atom`
+    /// grid-cell classifier (which refuses any D4-dialect compound as a
+    /// grid cell because it carries its own layout) — which previously
+    /// reached the underlying `Vec<Node>` child sequence through three
+    /// raw `NodeKind::List(items) | NodeKind::Map(items) |
+    /// NodeKind::Vector(items) => …` open-coded three-arm disjunctive
+    /// pattern-matches that expressed no compile-time link back to the
+    /// substrate primitive's typed compound-body arm-set. Each site is a
+    /// compound-shape-agnostic projection: the consumer does not care
+    /// WHICH D4-dialect compound arm it is (the delimiter distinction
+    /// matters to per-arm emit sites, not to walkers), only that the
+    /// arm hides a `Vec<Node>` child sequence whose iteration is the
+    /// whole traversal.
+    ///
+    /// Semantically distinct from the sibling [`Self::as_list`] (48efa3b)
+    /// single-arm compound projection — that one pins the strict-`List`-
+    /// only boundary the manifest-parser and positional-classifier sites
+    /// gate on (a `(defcaixa …)` form is a `List`, not a `Map` or
+    /// `Vector`); this one lifts the disjunctive three-arm compound-body
+    /// arm-set every compound-shape-agnostic walker / header-inliner /
+    /// grid-cell classifier reaches for. A future D4-adjacent compound
+    /// arm addition (a hypothetical `NodeKind::Set(Vec<Node>)` shape
+    /// once the tatara-lisp reader grows a `#{…}` set literal, a
+    /// `NodeKind::Tuple(Vec<Node>)` shape once the sexp→JSON bridge
+    /// stabilizes fixed-arity tuple sugar) folds into this projection
+    /// by extending the accessor's arm-set once at the substrate
+    /// primitive, rather than a three-way coordinated rewrite across
+    /// every downstream walker.
+    ///
+    /// Zero-copy — the returned `&[Node]` borrows from the matched arm's
+    /// own [`Vec<Node>`] storage (pinned by the
+    /// `as_seq_body_is_by_borrow_pointer_identity` test), the same
+    /// discipline as the sibling per-arm [`Self::as_list`] (48efa3b)
+    /// compound and [`Self::as_reader_macro_inner`] (20be266) reader-
+    /// macro projections. Eighth `Option<&<payload>>` projection
+    /// accessor on the outer [`NodeKind`] sum-type — extends the
+    /// projection family from the two disjunctive-scalar and one
+    /// reader-macro-arm-set accessors onto the disjunctive-compound-arm
+    /// axis every downstream compound-shape-agnostic walker partitions
+    /// on.
+    #[must_use]
+    pub fn as_seq_body(&self) -> Option<&[Node]> {
+        match self {
+            Self::List(items) | Self::Map(items) | Self::Vector(items) => Some(items.as_slice()),
+            _ => None,
+        }
+    }
 }
 
 impl Node {
@@ -1606,6 +1667,196 @@ mod is_variant_tests {
                  _ => None }}` — otherwise the four converged caixa-ast/ \
                  caixa-fmt/caixa-teia/caixa-lint walker sites would \
                  silently disagree with their pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's disjunctive
+    // three-arm `List` | `Map` | `Vector` D4-dialect compound-body arm-
+    // set accessor: exactly the three compound-carrying arms return
+    // `Some(&[Node])` byte-borrowed from the matched arm's own
+    // [`Vec<Node>`] storage; every other arm of the closed fourteen-arm
+    // partition returns `None`. Pins the "one canonical projection
+    // dispatch per typed arm-set on the substrate primitive" discipline
+    // the three per-disjunctive-arm-set consumer sites (caixa-ast
+    // [`crate::visit::walk`] visitor recursion, caixa-fmt printer
+    // `emit_header_operand` inlineable gate, caixa-fmt printer `is_atom`
+    // grid-cell classifier) route through via `.as_seq_body()`. A
+    // regression that admitted a non-compound arm (an atom, a reader-
+    // macro wrapper) through this projection would silently reroute the
+    // walker's recursion into an atom-body traversal at every compound
+    // site — the three-arm walker converges would start descending into
+    // atoms and stop descending into brace/bracket dialects.
+    #[test]
+    fn as_seq_body_projects_only_compound_arms() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.as_seq_body();
+            let is_compound_arm = matches!(
+                variant,
+                NodeKind::List(_) | NodeKind::Map(_) | NodeKind::Vector(_)
+            );
+            if is_compound_arm {
+                let expected: &[Node] = match variant {
+                    NodeKind::List(items) | NodeKind::Map(items) | NodeKind::Vector(items) => {
+                        items.as_slice()
+                    }
+                    _ => unreachable!("guarded by is_compound_arm above"),
+                };
+                assert_eq!(
+                    projected,
+                    Some(expected),
+                    "NodeKind::{name} is a compound-carrying arm — \
+                     as_seq_body() must project onto its own Vec<Node> \
+                     body"
+                );
+            } else {
+                assert_eq!(
+                    projected, None,
+                    "NodeKind::{name} is not a compound-carrying arm — \
+                     as_seq_body() must return None"
+                );
+            }
+        }
+        // Empty compound — the accessor is a projection, not a gate; an
+        // empty-`()` list, empty-`{}` map, and empty-`[]` vector each
+        // round-trip as `Some(&[])`, not `None`, because the arm still
+        // carries a (zero-length) `Vec<Node>` body a walker is entitled
+        // to iterate over.
+        assert_eq!(
+            NodeKind::List(Vec::new()).as_seq_body(),
+            Some(&[] as &[Node])
+        );
+        assert_eq!(
+            NodeKind::Map(Vec::new()).as_seq_body(),
+            Some(&[] as &[Node])
+        );
+        assert_eq!(
+            NodeKind::Vector(Vec::new()).as_seq_body(),
+            Some(&[] as &[Node])
+        );
+        // Strict-compound-body-only boundary vs the sibling reader-macro-
+        // carrying arms — all four reader-macro arms carry a boxed inner
+        // `Node`, not a `Vec<Node>` body, so a widening to admit a
+        // reader-macro arm through `as_seq_body` (silently collapsing the
+        // semantic distinction between a container `(x y)` and a wrapper
+        // `'x`) would break every walker that gates on the compound-body
+        // arm-set. Pinned across all four reader-macro arms — a per-arm-
+        // specific regression would slip past a single-arm pin.
+        assert_eq!(
+            NodeKind::Quote(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0)))).as_seq_body(),
+            None,
+            "Quote arm carries a Box<Node> inner but MUST NOT project \
+             through as_seq_body — the compound-body-only boundary is \
+             the whole point of a distinct projection"
+        );
+        assert_eq!(
+            NodeKind::Quasiquote(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0)))).as_seq_body(),
+            None,
+            "Quasiquote arm carries a Box<Node> inner but MUST NOT \
+             project through as_seq_body — the compound-body-only \
+             boundary is the whole point of a distinct projection"
+        );
+        assert_eq!(
+            NodeKind::Unquote(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0)))).as_seq_body(),
+            None,
+            "Unquote arm carries a Box<Node> inner but MUST NOT project \
+             through as_seq_body — the compound-body-only boundary is \
+             the whole point of a distinct projection"
+        );
+        assert_eq!(
+            NodeKind::UnquoteSplice(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0))))
+                .as_seq_body(),
+            None,
+            "UnquoteSplice arm carries a Box<Node> inner but MUST NOT \
+             project through as_seq_body — the compound-body-only \
+             boundary is the whole point of a distinct projection"
+        );
+    }
+
+    // Zero-copy pin — `k.as_seq_body()` must borrow from the matched
+    // arm's own [`Vec<Node>`] storage, not clone into a fresh Vec.
+    // Fails at build time if a future rewrite regresses to
+    // `Some(items.clone().as_slice().to_vec().leak())` or any other
+    // detour that silently allocates on every call. Pinned across all
+    // three compound-carrying arms (List/Map/Vector) — a per-arm-specific
+    // regression would slip past a single-arm pin — the same shape as
+    // the sibling
+    // [`as_reader_macro_inner_is_by_borrow_pointer_identity`] pin on
+    // the peer disjunctive reader-macro accessor, extended onto the
+    // Vec<Node> compound-body indirection every D4-dialect arm carries.
+    #[test]
+    fn as_seq_body_is_by_borrow_pointer_identity() {
+        for (constructor, ctor_name) in [
+            (
+                (|items: Vec<Node>| NodeKind::List(items)) as fn(Vec<Node>) -> NodeKind,
+                "List",
+            ),
+            (
+                (|items: Vec<Node>| NodeKind::Map(items)) as fn(Vec<Node>) -> NodeKind,
+                "Map",
+            ),
+            (
+                (|items: Vec<Node>| NodeKind::Vector(items)) as fn(Vec<Node>) -> NodeKind,
+                "Vector",
+            ),
+        ] {
+            let payload = vec![
+                Node::new(NodeKind::Symbol(format!("s-{ctor_name}")), Span::new(0, 8)),
+                Node::new(NodeKind::Int(42), Span::new(9, 11)),
+            ];
+            let k = constructor(payload);
+            let via_accessor: &[Node] = k.as_seq_body().unwrap();
+            let inner: &Vec<Node> = match &k {
+                NodeKind::List(items) | NodeKind::Map(items) | NodeKind::Vector(items) => items,
+                _ => unreachable!("constructed above via compound arm ctor"),
+            };
+            assert_eq!(
+                via_accessor.as_ptr(),
+                inner.as_ptr(),
+                "NodeKind::as_seq_body on the {ctor_name} arm must borrow \
+                 from that arm's Vec<Node> backing storage (zero-copy \
+                 projection)",
+            );
+            assert_eq!(
+                via_accessor.len(),
+                inner.len(),
+                "NodeKind::as_seq_body and inner.as_slice() must byte-equal \
+                 in length (same slice) on the {ctor_name} arm",
+            );
+        }
+    }
+
+    // Byte-parity pin on the pre-lift three-arm disjunctive
+    // `match &_.kind { NodeKind::List(items) | NodeKind::Map(items) |
+    // NodeKind::Vector(items) => Some(items.as_slice()), _ => None }`
+    // shape the three caixa-ast/caixa-fmt consumer sites route through
+    // today via `.as_seq_body()`. Refuses a future accidental split
+    // between the accessor's return contract and its pre-lift
+    // disjunctive shape (a hand-rolled shadow `impl` that overrides
+    // one path, an accidental rebrand of one converged call site back
+    // to the raw three-arm `NodeKind::List(items) | …` form, a
+    // widening to admit a reader-macro arm) on the load-bearing
+    // compound-body-carrying disjunctive axis every downstream walker
+    // recursion / header-inliner / grid-cell classifier partitions on.
+    #[test]
+    fn as_seq_body_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&[Node]> = match &variant {
+                NodeKind::List(items) | NodeKind::Map(items) | NodeKind::Vector(items) => {
+                    Some(items.as_slice())
+                }
+                _ => None,
+            };
+            let via_accessor = variant.as_seq_body();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.as_seq_body() must byte-equal \
+                 `match &_ {{ NodeKind::List(items) | NodeKind::Map(items) \
+                 | NodeKind::Vector(items) => Some(items.as_slice()), _ \
+                 => None }}` — otherwise the three converged caixa-ast/ \
+                 caixa-fmt walker / header-inliner / grid-cell classifier \
+                 sites would silently disagree with their pre-lift shape"
             );
         }
     }

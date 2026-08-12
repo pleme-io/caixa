@@ -1,6 +1,6 @@
 //! Visitor — depth-first walk over a [`crate::Node`] tree.
 
-use crate::node::{Node, NodeKind};
+use crate::node::Node;
 
 /// Visitor trait — override the methods you care about, defaults recurse.
 pub trait Visitor {
@@ -24,17 +24,21 @@ pub fn walk<V: Visitor + ?Sized>(v: &mut V, node: &Node) {
         v.visit_node(inner);
         return;
     }
-    match &node.kind {
-        // Map and Vector are compound and MUST recurse. The `_` arm
-        // below is a silent trap for new compound variants: it makes a
-        // missing recursion compile cleanly and simply not visit the
-        // children, so every lint that walks the tree would quietly stop
-        // seeing anything nested inside `{ … }` or `[ … ]`.
-        NodeKind::List(items) | NodeKind::Map(items) | NodeKind::Vector(items) => {
-            for item in items {
-                v.visit_node(item);
-            }
+    // Route the D4-dialect compound-body recursion through the lifted
+    // [`crate::NodeKind::as_seq_body`] `Option<&[Node]>` accessor
+    // rather than the raw three-arm `NodeKind::List(items) |
+    // NodeKind::Map(items) | NodeKind::Vector(items) => …` open-coded
+    // per-arm disjunctive pattern-match. The prior open-coded shape
+    // relied on a silent `_ => {}` trap for a future compound variant
+    // — a new D4-adjacent compound arm (a hypothetical
+    // `NodeKind::Set(Vec<Node>)`, a `NodeKind::Tuple(Vec<Node>)`) would
+    // compile cleanly and silently stop being visited; the lifted
+    // accessor centralises the compound-arm-set at the substrate
+    // primitive, so extending it there reaches every walker by
+    // construction.
+    if let Some(items) = node.kind.as_seq_body() {
+        for item in items {
+            v.visit_node(item);
         }
-        _ => {}
     }
 }
