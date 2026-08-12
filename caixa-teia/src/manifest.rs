@@ -84,6 +84,21 @@ fn kwarg_symbol(n: &Node, key: &str) -> Option<String> {
 }
 
 fn node_to_value(n: &Node) -> Result<TeiaValue, TeiaError> {
+    // Route the reader-macro-arm-set recursion through the lifted
+    // [`caixa_ast::NodeKind::as_reader_macro_inner`] `Option<&Node>`
+    // accessor rather than the raw four-arm `NodeKind::Quote(inner) |
+    // NodeKind::Quasiquote(inner) | NodeKind::Unquote(inner) |
+    // NodeKind::UnquoteSplice(inner) => node_to_value(inner)` open-coded
+    // per-arm disjunctive pattern-match — sibling to the peer
+    // `caixa-ast::visit::walk`, `caixa-fmt::contains_comment`, and
+    // `caixa-lint::walk` reader-macro sites converged in this run. The
+    // remaining match stays exhaustive over the ten non-reader-macro
+    // arms; the four reader-macro arms are listed as an `unreachable!`
+    // sink to keep the "every arm accounted for at the manifest lowerer"
+    // discipline in view.
+    if let Some(inner) = n.kind.as_reader_macro_inner() {
+        return node_to_value(inner);
+    }
     match &n.kind {
         NodeKind::Nil => Ok(TeiaValue::Null),
         NodeKind::Bool(b) => Ok(TeiaValue::Bool(*b)),
@@ -124,10 +139,15 @@ fn node_to_value(n: &Node) -> Result<TeiaValue, TeiaError> {
             }
             Ok(TeiaValue::List(out))
         }
-        NodeKind::Quote(inner)
-        | NodeKind::Quasiquote(inner)
-        | NodeKind::Unquote(inner)
-        | NodeKind::UnquoteSplice(inner) => node_to_value(inner),
+        NodeKind::Quote(_)
+        | NodeKind::Quasiquote(_)
+        | NodeKind::Unquote(_)
+        | NodeKind::UnquoteSplice(_) => {
+            unreachable!(
+                "reader-macro arms routed through NodeKind::as_reader_macro_inner \
+                 above"
+            )
+        }
     }
 }
 

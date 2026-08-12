@@ -368,6 +368,68 @@ impl NodeKind {
             _ => None,
         }
     }
+
+    /// Substrate-canonical projection onto the disjunctive
+    /// [`Self::Quote`] | [`Self::Quasiquote`] | [`Self::Unquote`] |
+    /// [`Self::UnquoteSplice`] reader-macro arm-set — returns
+    /// `Some(&Node)` byte-borrowed from the matched arm's own
+    /// [`Box<Node>`] storage, and [`None`] on every other arm of the
+    /// closed fourteen-arm [`NodeKind`] variant set.
+    ///
+    /// Four production consumers today across four caixa-monorepo crates
+    /// — the caixa-ast [`crate::visit::walk`] visitor recursion, the
+    /// caixa-fmt printer's `contains_comment` sub-tree comment probe,
+    /// the caixa-teia `node_to_value` manifest lowerer, and the caixa-
+    /// lint per-file `walk` traversal — which previously reached the
+    /// underlying inner-node payload through four raw `NodeKind::Quote
+    /// (inner) | NodeKind::Quasiquote(inner) | NodeKind::Unquote(inner)
+    /// | NodeKind::UnquoteSplice(inner) => recurse(inner)` open-coded
+    /// four-arm disjunctive pattern-matches that expressed no compile-
+    /// time link back to the substrate primitive's typed reader-macro-
+    /// carrying arm-set. Each is a transparent-wrapper unwrap: the
+    /// consumer does not care WHICH reader macro variant it is, only
+    /// that the wrapper hides an inner [`Node`] whose recursion is the
+    /// whole traversal.
+    ///
+    /// Semantically distinct from the peer per-arm compound projections
+    /// [`Self::as_list`] (48efa3b) and from the sibling per-arm scalar
+    /// projections [`Self::as_keyword`] (6804427) / [`Self::as_symbol`]
+    /// (e96eea1) / [`Self::as_str`] (55b2909) / disjunctive scalar
+    /// [`Self::as_atom_string`] (3c3ca48) / [`Self::as_symbol_or_str`]
+    /// (fd39cea) — those project onto borrowed scalars or borrowed
+    /// [`Vec<Node>`] slices; this one projects onto a borrowed inner
+    /// [`Node`], the first projection accessor on the outer-`NodeKind`
+    /// sum-type to reach across the [`Box<Node>`] indirection every
+    /// reader-macro arm carries. A future reader-macro arm addition (a
+    /// hypothetical `NodeKind::Splice(Box<Node>)` shape once the
+    /// tatara-lisp reader grows a splicing-quote variant, a
+    /// `NodeKind::TaggedQuote(Box<Node>, QuoteTag)` shape once the
+    /// sexp→JSON bridge stabilizes tagged-quote sugar) folds into this
+    /// projection by extending the accessor's arm-set once at the
+    /// substrate primitive, rather than a four-way coordinated rewrite
+    /// across every downstream walker.
+    ///
+    /// Zero-copy — the returned `&Node` borrows from the matched arm's
+    /// own [`Box<Node>`] storage (pinned by the
+    /// `as_reader_macro_inner_is_by_borrow_pointer_identity` test), the
+    /// same discipline as the sibling per-arm scalar and compound
+    /// projections. Seventh `Option<&<payload>>` projection accessor on
+    /// the outer [`NodeKind`] sum-type — the first accessor on the
+    /// *reader-macro* arm-family (Quote/Quasiquote/Unquote/UnquoteSplice
+    /// all carry `Box<Node>`), extending the projection family from the
+    /// three scalar-arm, two disjunctive-scalar-arm, and one compound-
+    /// arm accessors onto the fourth arm-family every downstream
+    /// authoring-tool walker and manifest-lowerer partitions on.
+    #[must_use]
+    pub fn as_reader_macro_inner(&self) -> Option<&Node> {
+        match self {
+            Self::Quote(inner)
+            | Self::Quasiquote(inner)
+            | Self::Unquote(inner)
+            | Self::UnquoteSplice(inner) => Some(inner),
+            _ => None,
+        }
+    }
 }
 
 impl Node {
@@ -1374,6 +1436,176 @@ mod is_variant_tests {
                  eleven converged caixa-ast/caixa-lint/caixa-teia/ \
                  caixa-fmt call sites would silently disagree with their \
                  pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's disjunctive
+    // four-arm `Quote` | `Quasiquote` | `Unquote` | `UnquoteSplice`
+    // reader-macro-carrying accessor: exactly the four reader-macro-
+    // carrying arms return `Some(&Node)` byte-borrowed from the matched
+    // arm's own [`Box<Node>`] storage; every other arm of the closed
+    // fourteen-arm partition returns `None`. Pins the "one canonical
+    // projection dispatch per typed arm-set on the substrate primitive"
+    // discipline the four per-disjunctive-arm-set consumer sites (caixa-
+    // ast [`crate::visit::walk`] visitor recursion, caixa-fmt printer
+    // `contains_comment` sub-tree probe, caixa-teia `node_to_value`
+    // manifest lowerer, caixa-lint per-file `walk` traversal) route
+    // through via `.as_reader_macro_inner().map(recurse)`. A regression
+    // that admitted a non-reader-macro arm (a bare List, an atom) through
+    // this projection would silently reroute the walker's recursion into
+    // a compound-body traversal at every reader-macro site — the four-
+    // arm walker converges would stop descending into unquoted forms and
+    // start descending twice into every list.
+    #[test]
+    fn as_reader_macro_inner_projects_only_reader_macro_arms() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.as_reader_macro_inner();
+            let is_reader_macro_arm = matches!(
+                variant,
+                NodeKind::Quote(_)
+                    | NodeKind::Quasiquote(_)
+                    | NodeKind::Unquote(_)
+                    | NodeKind::UnquoteSplice(_)
+            );
+            if is_reader_macro_arm {
+                let expected: &Node = match variant {
+                    NodeKind::Quote(inner)
+                    | NodeKind::Quasiquote(inner)
+                    | NodeKind::Unquote(inner)
+                    | NodeKind::UnquoteSplice(inner) => inner.as_ref(),
+                    _ => unreachable!("guarded by is_reader_macro_arm above"),
+                };
+                assert_eq!(
+                    projected,
+                    Some(expected),
+                    "NodeKind::{name} is a reader-macro-carrying arm — \
+                     as_reader_macro_inner() must project onto its own \
+                     Box<Node> inner payload"
+                );
+            } else {
+                assert_eq!(
+                    projected, None,
+                    "NodeKind::{name} is not a reader-macro-carrying arm \
+                     — as_reader_macro_inner() must return None"
+                );
+            }
+        }
+        // Strict-boundary vs the sibling compound-carrying arms — both
+        // `List` and `Map` and `Vector` carry compound child sequences,
+        // but reader-macros carry a single boxed inner node; a future
+        // refactor that widened this accessor to admit the compound arms
+        // (silently collapsing the semantic distinction between a
+        // reader-macro wrapper `'x` and a container `(x)`) trips at
+        // these pins before the four per-consumer walker sites silently
+        // start unwrapping list bodies as reader-macro inners.
+        assert_eq!(
+            NodeKind::List(Vec::new()).as_reader_macro_inner(),
+            None,
+            "List arm carries a Vec<Node> body but MUST NOT project through \
+             as_reader_macro_inner — the reader-macro-only boundary is the \
+             whole point of a distinct projection"
+        );
+        assert_eq!(
+            NodeKind::Map(Vec::new()).as_reader_macro_inner(),
+            None,
+            "Map arm carries a Vec<Node> body but MUST NOT project through \
+             as_reader_macro_inner — the reader-macro-only boundary is the \
+             whole point of a distinct projection"
+        );
+        assert_eq!(
+            NodeKind::Vector(Vec::new()).as_reader_macro_inner(),
+            None,
+            "Vector arm carries a Vec<Node> body but MUST NOT project through \
+             as_reader_macro_inner — the reader-macro-only boundary is the \
+             whole point of a distinct projection"
+        );
+    }
+
+    // Zero-copy pin — `k.as_reader_macro_inner()` must borrow from the
+    // matched arm's own [`Box<Node>`] storage, not clone into a fresh
+    // Node. Fails at build time if a future rewrite regresses to
+    // `Some(Box::leak(inner.clone()))` or any other detour that silently
+    // allocates on every call. Pinned across all four reader-macro-
+    // carrying arms (Quote/Quasiquote/Unquote/UnquoteSplice) — a per-
+    // arm-specific regression would slip past a single-arm pin — the
+    // same shape as the sibling
+    // [`as_atom_string_is_by_borrow_pointer_identity`] /
+    // [`as_symbol_or_str_is_by_borrow_pointer_identity`] pins on the
+    // peer disjunctive scalar accessors, extended onto the Box<Node>
+    // indirection every reader-macro arm carries.
+    #[test]
+    fn as_reader_macro_inner_is_by_borrow_pointer_identity() {
+        for (constructor, ctor_name) in [
+            (
+                (|n: Node| NodeKind::Quote(Box::new(n))) as fn(Node) -> NodeKind,
+                "Quote",
+            ),
+            (
+                (|n: Node| NodeKind::Quasiquote(Box::new(n))) as fn(Node) -> NodeKind,
+                "Quasiquote",
+            ),
+            (
+                (|n: Node| NodeKind::Unquote(Box::new(n))) as fn(Node) -> NodeKind,
+                "Unquote",
+            ),
+            (
+                (|n: Node| NodeKind::UnquoteSplice(Box::new(n))) as fn(Node) -> NodeKind,
+                "UnquoteSplice",
+            ),
+        ] {
+            let inner = Node::new(NodeKind::Symbol(format!("s-{ctor_name}")), Span::new(0, 8));
+            let k = constructor(inner);
+            let via_accessor: &Node = k.as_reader_macro_inner().unwrap();
+            let inner_ref: &Node = match &k {
+                NodeKind::Quote(b)
+                | NodeKind::Quasiquote(b)
+                | NodeKind::Unquote(b)
+                | NodeKind::UnquoteSplice(b) => b.as_ref(),
+                _ => unreachable!("constructed above via reader-macro arm ctor"),
+            };
+            assert!(
+                std::ptr::eq(via_accessor, inner_ref),
+                "NodeKind::as_reader_macro_inner on the {ctor_name} arm \
+                 must borrow from that arm's Box<Node> heap allocation \
+                 (zero-copy projection through the boxed indirection)",
+            );
+        }
+    }
+
+    // Byte-parity pin on the pre-lift four-arm disjunctive
+    // `match &_.kind { NodeKind::Quote(inner) | NodeKind::Quasiquote(inner)
+    // | NodeKind::Unquote(inner) | NodeKind::UnquoteSplice(inner) =>
+    // recurse(inner), _ => … }` shape the four caixa-ast/caixa-fmt/
+    // caixa-teia/caixa-lint consumer sites route through today via
+    // `.as_reader_macro_inner()`. Refuses a future accidental split
+    // between the accessor's return contract and its pre-lift disjunctive
+    // shape (a hand-rolled shadow `impl` that overrides one path, an
+    // accidental rebrand of one converged call site back to the raw
+    // four-arm `NodeKind::Quote(inner) | …` form, a widening to admit a
+    // compound arm) on the load-bearing reader-macro-carrying disjunctive
+    // axis every downstream walker recursion partitions on.
+    #[test]
+    fn as_reader_macro_inner_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&Node> = match &variant {
+                NodeKind::Quote(inner)
+                | NodeKind::Quasiquote(inner)
+                | NodeKind::Unquote(inner)
+                | NodeKind::UnquoteSplice(inner) => Some(inner.as_ref()),
+                _ => None,
+            };
+            let via_accessor = variant.as_reader_macro_inner();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.as_reader_macro_inner() must byte-equal \
+                 `match &_ {{ NodeKind::Quote(inner) | \
+                 NodeKind::Quasiquote(inner) | NodeKind::Unquote(inner) | \
+                 NodeKind::UnquoteSplice(inner) => Some(inner.as_ref()), \
+                 _ => None }}` — otherwise the four converged caixa-ast/ \
+                 caixa-fmt/caixa-teia/caixa-lint walker sites would \
+                 silently disagree with their pre-lift shape"
             );
         }
     }

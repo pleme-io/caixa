@@ -506,17 +506,21 @@ fn check_consistent_quote(node: &Node, diags: &mut Vec<Diagnostic>) {
 
 fn walk<F: FnMut(&Node)>(node: &Node, f: &mut F) {
     f(node);
-    match &node.kind {
-        NodeKind::List(items) => {
-            for it in items {
-                walk(it, f);
-            }
+    // Route the reader-macro-arm-set recursion through the lifted
+    // [`caixa_ast::NodeKind::as_reader_macro_inner`] `Option<&Node>`
+    // accessor rather than the raw four-arm `NodeKind::Quote(inner) |
+    // …` open-coded per-arm disjunctive pattern-match — sibling to the
+    // peer `caixa-ast::visit::walk`, `caixa-fmt::contains_comment`, and
+    // `caixa-teia::node_to_value` reader-macro sites converged in this
+    // run.
+    if let Some(inner) = node.kind.as_reader_macro_inner() {
+        walk(inner, f);
+        return;
+    }
+    if let Some(items) = node.kind.as_list() {
+        for it in items {
+            walk(it, f);
         }
-        NodeKind::Quote(inner)
-        | NodeKind::Quasiquote(inner)
-        | NodeKind::Unquote(inner)
-        | NodeKind::UnquoteSplice(inner) => walk(inner, f),
-        _ => {}
     }
 }
 
