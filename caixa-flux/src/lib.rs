@@ -2435,7 +2435,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_name, kube_root_str_field,
+        kube_kind, kube_name, kube_root_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -6117,8 +6117,15 @@ spec:
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        // Readback through the substrate-primitive [`kube_kind`] pinned
+        // accessor rather than the parametric [`kube_root_str_field`]
+        // two-token composition — the accessor pins the top-level
+        // `kind:` scalar-key axis at the substrate level so this
+        // per-CR discriminator readback stays aligned with the same
+        // three-arity closure the sibling `metadata.name` +
+        // `metadata.namespace` coordinates already carry.
         assert_eq!(
-            kube_root_str_field(&parsed, KUBE_KEY_KIND),
+            kube_kind(&parsed),
             Some(FLUX_KIND_GIT_REPOSITORY),
             "gitrepository.yaml top-level kind must spell the lifted \
              FLUX_KIND_GIT_REPOSITORY ({FLUX_KIND_GIT_REPOSITORY:?}); a drifted \
@@ -6346,8 +6353,11 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        // Readback through the substrate-primitive [`kube_kind`] pinned
+        // accessor — peer of the sibling gitrepository / kustomization
+        // per-CR discriminator readbacks in the same test module.
         assert_eq!(
-            kube_root_str_field(&parsed, KUBE_KEY_KIND),
+            kube_kind(&parsed),
             Some(FLUX_KIND_HELM_RELEASE),
             "helmrelease.yaml top-level kind must spell the lifted \
              FLUX_KIND_HELM_RELEASE ({FLUX_KIND_HELM_RELEASE:?}); a drifted \
@@ -6766,8 +6776,11 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        // Readback through the substrate-primitive [`kube_kind`] pinned
+        // accessor — peer of the sibling gitrepository / helmrelease
+        // per-CR discriminator readbacks in the same test module.
         assert_eq!(
-            kube_root_str_field(&parsed, KUBE_KEY_KIND),
+            kube_kind(&parsed),
             Some(FLUX_KIND_KUSTOMIZATION),
             "kustomization.yaml top-level kind must spell the lifted \
              FLUX_KIND_KUSTOMIZATION ({FLUX_KIND_KUSTOMIZATION:?}); a drifted \
