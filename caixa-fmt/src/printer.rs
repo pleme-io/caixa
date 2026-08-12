@@ -1315,7 +1315,7 @@ mod tests {
     #[test]
     fn commented_head_degrades_out_of_the_plist_shape() {
         let nodes = parse("(defcaixa\n  ;; why\n  demo :k v)").unwrap();
-        let NodeKind::List(items) = &nodes[0].kind else {
+        let Some(items) = nodes[0].kind.as_list() else {
             panic!("list")
         };
         assert_eq!(classify(items, Delims::PAREN, true), FormShape::Positional);

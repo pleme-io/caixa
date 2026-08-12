@@ -42,7 +42,15 @@ fn instance_from_node(n: &Node) -> Result<TeiaInstance, TeiaError> {
     let nome = kwarg_symbol(n, "nome").ok_or(TeiaError::BadForm(n.span.start, "missing :nome"))?;
     let mut atributos: BTreeMap<String, TeiaValue> = BTreeMap::new();
     if let Some(attrs_node) = n.kwarg("atributos") {
-        let NodeKind::List(items) = &attrs_node.kind else {
+        // Route the :atributos list-shape gate through the lifted
+        // [`caixa_ast::NodeKind::as_list`] `Option<&[Node]>` accessor —
+        // strict-`List`-only boundary vs the sibling D4 `Map` / `Vector`
+        // arms is exactly what the ":atributos must be a kwargs list"
+        // error message enforces; sibling to the caixa-lint
+        // `check_enum_pascal` / `check_paired_kwargs` / `check_git_pin`
+        // per-form walkers and the caixa-ast `Node::head_symbol` /
+        // `Node::kwarg` list-head / pair-loop projections.
+        let Some(items) = attrs_node.kind.as_list() else {
             return Err(TeiaError::BadForm(
                 attrs_node.span.start,
                 ":atributos must be a kwargs list",

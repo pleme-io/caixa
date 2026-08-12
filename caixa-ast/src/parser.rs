@@ -269,7 +269,7 @@ mod tests {
     fn parse_list() {
         let nodes = parse("(a b c)").unwrap();
         assert_eq!(nodes.len(), 1);
-        let NodeKind::List(items) = &nodes[0].kind else {
+        let Some(items) = nodes[0].kind.as_list() else {
             panic!("expected list");
         };
         assert_eq!(items.len(), 3);
@@ -283,7 +283,7 @@ mod tests {
     fn parse_map_and_vector() {
         let nodes =
             parse(r#"(defcaixa demo :package { :name "d" } :workflows [ :a :b ])"#).unwrap();
-        let NodeKind::List(items) = &nodes[0].kind else {
+        let Some(items) = nodes[0].kind.as_list() else {
             panic!("expected list")
         };
         // head, name, :package, {…}, :workflows, [ … ]  — SIX items, not
@@ -370,7 +370,7 @@ mod tests {
         let NodeKind::Quasiquote(inner) = &nodes[0].kind else {
             panic!("expected quasiquote");
         };
-        let NodeKind::List(items) = &inner.kind else {
+        let Some(items) = inner.kind.as_list() else {
             panic!("expected list inside quasiquote");
         };
         assert_eq!(items.len(), 3);

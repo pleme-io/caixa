@@ -131,7 +131,15 @@ fn check_keyword_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
 fn check_enum_pascal(node: &Node, diags: &mut Vec<Diagnostic>) {
     // Target-fields that conventionally take enum variants.
     const ENUM_KEYS: &[&str] = &["kind", "severity", "tipo", "horizon", "coordination"];
-    let NodeKind::List(items) = &node.kind else {
+    // Route the per-form list-shape gate through the lifted
+    // [`caixa_ast::NodeKind::as_list`] `Option<&[Node]>` accessor rather
+    // than the raw `let NodeKind::List(items) = &node.kind else …` open-
+    // coded per-arm let-else pattern-match — sibling to the peer
+    // `check_paired_kwargs` / `check_git_pin` walkers and to the caixa-ast
+    // [`Node::head_symbol`] / [`Node::kwarg`] pair-loop projections that
+    // all key off the strict-`List`-only compound-arm boundary vs the
+    // sibling `Map` / `Vector` D4 dialect arms.
+    let Some(items) = node.kind.as_list() else {
         return;
     };
     let start = usize::from(matches!(
@@ -223,7 +231,11 @@ const POSITIONAL_KW_HEADS: &[&str] = &[
 
 fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {
     walk(node, &mut |n| {
-        let NodeKind::List(items) = &n.kind else {
+        // Route the per-form list-shape gate through the lifted
+        // [`caixa_ast::NodeKind::as_list`] `Option<&[Node]>` accessor —
+        // sibling to `check_enum_pascal`, `check_git_pin`, and the
+        // caixa-teia `instance_from_node` :atributos gate.
+        let Some(items) = n.kind.as_list() else {
             return;
         };
         // Either the whole list is kwargs, or it starts with a head symbol.
@@ -396,7 +408,11 @@ fn check_aplicacao_timeout(node: &Node, diags: &mut Vec<Diagnostic>) {
 fn check_git_pin(node: &Node, diags: &mut Vec<Diagnostic>) {
     // Walk every `(:tipo git …)` source and ensure :tag or :rev is set.
     walk(node, &mut |n| {
-        let NodeKind::List(items) = &n.kind else {
+        // Route the per-form list-shape gate through the lifted
+        // [`caixa_ast::NodeKind::as_list`] `Option<&[Node]>` accessor —
+        // sibling to `check_enum_pascal`, `check_paired_kwargs`, and the
+        // caixa-teia `instance_from_node` :atributos gate.
+        let Some(items) = n.kind.as_list() else {
             return;
         };
         // A :fonte value list looks like (:tipo git :repo "…" :tag "…" …).
