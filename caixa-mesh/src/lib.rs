@@ -3274,7 +3274,7 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_kind_is, kube_name,
-        kube_name_is, kube_root_str_field,
+        kube_name_is, kube_namespace, kube_root_str_field,
     };
     use std::time::Duration;
 
@@ -8897,10 +8897,20 @@ mod tests {
                     .and_then(|v| v.as_str())
                     .is_some()
             );
-            assert_eq!(
-                metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
-                Some(DEFAULT_NAMESPACE)
-            );
+            // Route the per-CNP `metadata.namespace` readback through
+            // the substrate-primitive [`kube_namespace`] pinned
+            // accessor rather than the raw two-hop
+            // `metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str())`
+            // navigation on the already-extracted `metadata` sub-view
+            // — sibling convergence to the caixa-flux
+            // `programs_yaml_entry` production readback + the
+            // `cluster_bundle` kustomization.yaml pin that fold onto
+            // the same substrate accessor. The extracted `metadata`
+            // sub-mapping stays for the sibling `.len()` /
+            // `KUBE_KEY_LABELS` probes above / below that need the
+            // sub-view for shape assertions the per-axis accessor does
+            // not close.
+            assert_eq!(kube_namespace(p), Some(DEFAULT_NAMESPACE));
             assert!(metadata.get(KUBE_KEY_LABELS).is_some());
         }
     }
@@ -8927,10 +8937,15 @@ mod tests {
             metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
             Some("checkout")
         );
-        assert_eq!(
-            metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
-            Some(DEFAULT_NAMESPACE)
-        );
+        // Route the per-Gateway `metadata.namespace` readback through
+        // the substrate-primitive [`kube_namespace`] pinned accessor
+        // rather than the raw two-hop
+        // `metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str())`
+        // navigation on the already-extracted `metadata` sub-view —
+        // peer convergence to the sibling
+        // `cilium_policy_carries_canonical_kube_skeleton` per-CNP
+        // readback that migrates through the same accessor.
+        assert_eq!(kube_namespace(gateway), Some(DEFAULT_NAMESPACE));
         assert!(
             metadata.get(KUBE_KEY_LABELS).is_none(),
             "Gateway must not carry metadata.labels (empty-labels-skip \
