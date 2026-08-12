@@ -3273,8 +3273,8 @@ mod tests {
         Caixa, CaixaKind, DEFAULT_SERVICO_PORT, Entrada, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
-        PlacementStrategy, WitContract, find_by_kind, kube_kind_is, kube_metadata_str_field,
-        kube_root_str_field,
+        PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_kind_is,
+        kube_metadata_str_field, kube_name_is, kube_root_str_field,
     };
     use std::time::Duration;
 
@@ -7767,9 +7767,7 @@ mod tests {
 
         let cart_to_catalog: Vec<_> = policies
             .iter()
-            .filter(|p| {
-                kube_metadata_str_field(p, KUBE_KEY_NAME) == Some("checkout-cart-to-catalog")
-            })
+            .filter(|p| kube_name_is(p, "checkout-cart-to-catalog"))
             .collect();
         assert_eq!(
             cart_to_catalog.len(),
@@ -7952,10 +7950,7 @@ mod tests {
     #[test]
     fn cilium_http_contracts_emit_l7_rules() {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
-        let cart_to_catalog = policies
-            .iter()
-            .find(|p| kube_metadata_str_field(p, KUBE_KEY_NAME) == Some("checkout-cart-to-catalog"))
-            .unwrap();
+        let cart_to_catalog = find_by_name(&policies, "checkout-cart-to-catalog").unwrap();
         let http_rules = cart_to_catalog
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(CILIUM_KEY_INGRESS))
@@ -7987,10 +7982,7 @@ mod tests {
             slot: None,
         });
         let policies = cilium_network_policies(&c).unwrap();
-        let nats_policy = policies
-            .iter()
-            .find(|p| kube_metadata_str_field(p, KUBE_KEY_NAME) == Some("checkout-payment-to-cart"))
-            .unwrap();
+        let nats_policy = find_by_name(&policies, "checkout-payment-to-cart").unwrap();
         let to_ports = nats_policy
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(CILIUM_KEY_INGRESS))
@@ -9974,10 +9966,8 @@ mod tests {
             slot: None,
         });
         let policies = cilium_network_policies(&c).unwrap();
-        let nats_policy = policies
-            .iter()
-            .find(|p| kube_metadata_str_field(p, KUBE_KEY_NAME) == Some("checkout-payment-to-cart"))
-            .expect("pubsub CNP present");
+        let nats_policy =
+            find_by_name(&policies, "checkout-payment-to-cart").expect("pubsub CNP present");
         let rule = nats_policy
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(CILIUM_KEY_INGRESS))
@@ -10013,10 +10003,8 @@ mod tests {
         // `default_namespace_re_export_points_at_caixa_core_canonical`
         // pin on the namespace-axis lifted-constant.
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
-        let cart_to_payment = policies
-            .iter()
-            .find(|p| kube_metadata_str_field(p, KUBE_KEY_NAME) == Some("checkout-cart-to-payment"))
-            .expect("cart→payment CNP present");
+        let cart_to_payment =
+            find_by_name(&policies, "checkout-cart-to-payment").expect("cart→payment CNP present");
         let port_value = cart_to_payment
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(CILIUM_KEY_INGRESS))
@@ -10069,10 +10057,8 @@ mod tests {
         // destination (a non-apex destination — the entrada names
         // `:para "cart"`, so the resolver falls back to the substrate
         // floor).
-        let cart_to_catalog = policies
-            .iter()
-            .find(|p| kube_metadata_str_field(p, KUBE_KEY_NAME) == Some("checkout-cart-to-catalog"))
-            .expect("cart→catalog CNP present");
+        let cart_to_catalog =
+            find_by_name(&policies, "checkout-cart-to-catalog").expect("cart→catalog CNP present");
         let port_value = cart_to_catalog
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(CILIUM_KEY_INGRESS))
