@@ -19154,6 +19154,138 @@ pub fn kube_kind(value: &serde_yaml::Value) -> Option<&str> {
     kube_root_str_field(value, KUBE_KEY_KIND)
 }
 
+/// Read the top-level `apiVersion:` string-scalar CRD-group/version axis
+/// of a K8s custom resource YAML document as `Option<&str>` — the pinned
+/// peer on the CRD-group/version axis to the parametric
+/// [`kube_root_str_field`] on the top-level `<field>` sub-axis surface,
+/// and the accessor-arity peer that closes the two-axis top-level
+/// `(apiVersion, kind)` discriminator-pair the K8s API-machinery pins as
+/// the load-bearing per-CR-registration coordinates. [`kube_kind`]
+/// (89a49a4) closes the accessor arity on the top-level `kind:` half of
+/// the discriminator pair; [`kube_api_version`] closes it on the
+/// top-level `apiVersion:` half — together the two accessors bracket
+/// the CRD-registration coordinate pair every K8s CR readback at
+/// controller / API-server admission time keys off. Structural mirror
+/// of the sibling closure the sub-`metadata.{name, namespace}`
+/// coordinate pair already carries at accessor arity ([`kube_name`]
+/// c9cdecb + [`kube_namespace`] e18297b).
+///
+/// Returns `None` when either the top-level `apiVersion:` scalar is
+/// absent or the `apiVersion:` scalar carries a non-string YAML type —
+/// the same two-way vacuous-`None` short-circuit the parent
+/// [`kube_root_str_field`] closes on the underlying one-hop navigation.
+///
+/// The [`KUBE_KEY_API_VERSION`] axis is pinned inside the helper
+/// (unlike the parametric `field` axis of the underlying
+/// [`kube_root_str_field`]) because the K8s CRD registration schema
+/// pins `apiVersion` as the load-bearing per-CR group/version
+/// discriminator on every `CustomResource` across every group
+/// (paired with `kind` for CRD-registration disambiguation) — the
+/// same load-bearing status the sibling `kind:` discriminator carries
+/// on the sibling top-level scalar-axis that already lifted an
+/// accessor peer under the same discipline. Every readback consumer
+/// downstream (`.unwrap()`, `.expect(...)`, `== Some(...)` equality
+/// wraps, `.to_string()` clone) drives off the same pinned return;
+/// a hypothetical future K8s API-machinery rebrand on the
+/// `apiVersion:` axis (a hypothetical Server-Side-Apply-driven
+/// per-field-ownership migration under an aliased
+/// `group/version` scalar pair, a schema-migration to a wrapped
+/// `apiVersionV2:` scalar under a CRD group's per-conformance
+/// evolution axis) reaches every caller through one lift, not a
+/// coordinated rewrite across every per-CR CRD-registration
+/// readback site.
+///
+/// The canonical shape 10 emit-side test-harness readback sites across
+/// [`caixa-flux`][flux] (4) + [`caixa-mesh`][mesh] (6) previously
+/// carried inline as the two-token composition
+///
+/// ```ignore
+/// kube_root_str_field(<value>, KUBE_KEY_API_VERSION)
+/// ```
+///
+/// around a one-token semantic payload (the readback intent — "what
+/// apiVersion did the emitter write into this CR?"). The lift collapses
+/// the two-token composition — the parametric readback helper, the
+/// pinned CRD-group/version-axis scalar-key argument — onto one
+/// accessor the caller reads as intent (`kube_api_version(<value>)` —
+/// "what is this K8s CR document's top-level `apiVersion:`?") rather
+/// than a `readback → axis-pin` two-arg call. Peer accessors for other
+/// top-level discriminators (a hypothetical `kube_group` accessor for
+/// CRD-group filtering on the pre-`/`-slash prefix of the same
+/// `apiVersion:` scalar, a `kube_version` accessor for the
+/// post-`/`-slash version suffix on a multi-version migration harness)
+/// land as sibling helpers with their own pinned axis, not as
+/// re-parameterizations of this one.
+///
+/// Structural peer to sibling [`kube_kind`] (89a49a4) on the sibling
+/// top-level CRD-discriminator half of the same canonical `(apiVersion,
+/// kind)` coordinate pair: [`kube_kind`] closes the accessor arity on
+/// the `kind:` half; [`kube_api_version`] closes it on the
+/// `apiVersion:` half. Same accessor-arity shape, different pinned
+/// scalar-key on the same navigation depth (root) — together the two
+/// accessors bracket the top-level K8s-CR CRD-registration coordinate
+/// pair every renderer + every test-side per-CR readback path reaches
+/// through, closing the accessor-arity peer-set on the same load-
+/// bearing per-CR discriminator pair the K8s API-machinery threads
+/// through every controller / API-server admission decision.
+///
+/// Sites lifted:
+///
+///   * caixa-flux's per-emitted-file top-level `apiVersion:` readback
+///     across the 4 emit-side pins on the `cluster_bundle`
+///     multi-file sequence —
+///     `cluster_bundle_helmrelease_uses_lifted_flux_api_version`
+///     (`helmrelease.yaml`),
+///     `cluster_bundle_kustomization_health_check_uses_lifted_flux_api_version`
+///     (per-entry `kustomization.yaml` `spec.healthChecks[].apiVersion`
+///     loop),
+///     `cluster_bundle_gitrepository_uses_lifted_flux_api_version`
+///     (`gitrepository.yaml`),
+///     `cluster_bundle_kustomization_uses_lifted_flux_api_version`
+///     (`kustomization.yaml`) — each per-file
+///     `kube_root_str_field(&parsed, KUBE_KEY_API_VERSION) ==
+///     Some(FLUX_<CRD>_API_VERSION)` lifted-uses pin on the Flux v2
+///     controller-triplet CRD-group/version axis;
+///   * caixa-mesh's per-CNP top-level `apiVersion:` readback loop in
+///     the two test bodies
+///     `cilium_network_policies_use_lifted_cilium_api_version` +
+///     `cilium_policy_carries_canonical_kube_skeleton` — each
+///     `for p in &policies { assert_eq!(kube_root_str_field(p,
+///     KUBE_KEY_API_VERSION), Some(CILIUM_API_VERSION)); }` loop
+///     over the multi-doc CNP emission;
+///   * caixa-mesh's per-Gateway / per-HTTPRoute top-level `apiVersion:`
+///     readback across the four test bodies
+///     `gateway_carries_canonical_kube_skeleton_without_labels`
+///     (`Gateway`),
+///     `httproute_carries_canonical_kube_skeleton_without_labels`
+///     (`HTTPRoute`),
+///     `gateway_routes_gateway_uses_lifted_gateway_api_api_version`
+///     (`Gateway`),
+///     `gateway_routes_httproute_uses_lifted_gateway_api_api_version`
+///     (`HTTPRoute`) — each `find_by_kind(&docs, <KIND>) →
+///     kube_root_str_field(_, KUBE_KEY_API_VERSION) ==
+///     Some(caixa_core::GATEWAY_API_API_VERSION)` chain over the
+///     paired-Gateway/HTTPRoute emission.
+///
+/// Every future per-CR `apiVersion:` readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-CR
+/// CRD-group/version pin, MESH-COMPOSITION §III.2 #3; the future
+/// `app-operator`'s `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-status CRD-group/version readback, §III.2 #5;
+/// the future M4 cross-cluster fan-out's per-cluster Flux-triplet
+/// CRD-group/version pin across the `.toolkit.fluxcd.io` root)
+/// reaches the same pinned accessor by construction, with no
+/// axis-key argument drift and no re-inlined
+/// `kube_root_str_field(_, KUBE_KEY_API_VERSION)` two-token
+/// composition.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_api_version(value: &serde_yaml::Value) -> Option<&str> {
+    kube_root_str_field(value, KUBE_KEY_API_VERSION)
+}
+
 /// Predicate: does the K8s custom resource YAML document at `value`
 /// declare its `metadata.name` identity axis as exactly `name`?
 ///
@@ -38227,6 +38359,100 @@ spec:
                 None,
                 "kube_kind must return None when top-level kind: carries \
                  a non-string YAML type ({non_string:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn kube_api_version_matches_lifted_kube_root_str_field_readback_shape() {
+        // Byte-equivalence pin: the lifted accessor reproduces the
+        // two-token composition (`kube_root_str_field(v,
+        // KUBE_KEY_API_VERSION)`) the 10 caixa-flux (4) + caixa-mesh (6)
+        // test-side per-CR CRD-group/version readback sites previously
+        // carried inline around the readback intent "what apiVersion did
+        // the emitter write into this CR?". Closes the "did the lift
+        // accidentally rename the pinned scalar-key axis to
+        // KUBE_KEY_KIND (silently pulling the peer discriminator
+        // coordinate instead of the primary), drop the axis-key
+        // argument, or widen the return type" drift class every future
+        // re-lift on the peer top-level axis surface (a hypothetical
+        // `kube_group` accessor for CRD-group filtering on the pre-`/`-
+        // slash prefix of the same `apiVersion:` scalar, a
+        // `kube_version` accessor for the post-`/`-slash version
+        // suffix on a multi-version migration harness) would otherwise
+        // reopen. Peer of the sibling
+        // `kube_kind_matches_lifted_kube_root_str_field_readback_shape`
+        // pin on the sibling top-level `kind:` half of the same
+        // canonical `(apiVersion, kind)` discriminator-pair closure —
+        // together the two pins bracket the top-level per-CR
+        // CRD-registration coordinate pair, matching the sibling
+        // sub-`metadata.{name, namespace}` accessor-arity closure the
+        // peer `kube_name` / `kube_namespace` byte-equivalence pins
+        // carry on the sub-`metadata:` axis half of the same accessor-
+        // arity peer-set.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(kube_api_version(&value), Some(CILIUM_API_VERSION));
+        assert_eq!(
+            kube_api_version(&value),
+            kube_root_str_field(&value, KUBE_KEY_API_VERSION),
+            "kube_api_version must byte-agree with the parametric \
+             `kube_root_str_field(v, KUBE_KEY_API_VERSION)` composition \
+             it replaces at every consumer site — drift on either half \
+             silently opens a per-CR CRD-group/version readback that \
+             no longer routes through the pinned KUBE_KEY_API_VERSION \
+             axis-key",
+        );
+    }
+
+    #[test]
+    fn kube_api_version_none_when_api_version_absent_or_non_string() {
+        // Complement-side pin: the accessor returns `None` when either
+        // the top-level `apiVersion:` scalar is absent (a partially-
+        // authored CR the K8s API-server would reject at admission but
+        // that this readback tolerates as `None` so the accessor stays
+        // a total function) or the `apiVersion:` scalar is present but
+        // carries a non-string YAML type (a numeric, boolean, sequence,
+        // or nested mapping — invalid CR shape per the K8s
+        // API-machinery OpenAPI schema which pins `apiVersion` as a
+        // required string scalar). Peer of the sibling
+        // `kube_kind_none_when_kind_absent_or_non_string` +
+        // `kube_root_str_field_returns_none_when_field_absent` +
+        // `kube_root_str_field_returns_none_when_field_carries_non_string_type`
+        // pins on the sibling `kind:` half of the same canonical
+        // `(apiVersion, kind)` discriminator-pair + the parametric
+        // readback surface — this pin verifies the pinned-axis variant
+        // preserves the same total-function contract every consumer
+        // site's `.unwrap_or(...)` / `Some(...) ==` follow-up depends
+        // on.
+        let empty = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_api_version(&empty),
+            None,
+            "kube_api_version must return None when the top-level \
+             apiVersion: scalar is absent",
+        );
+
+        for non_string in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_API_VERSION, non_string.clone());
+            assert_eq!(
+                kube_api_version(&serde_yaml::Value::Mapping(cr)),
+                None,
+                "kube_api_version must return None when top-level \
+                 apiVersion: carries a non-string YAML type \
+                 ({non_string:?})",
             );
         }
     }
