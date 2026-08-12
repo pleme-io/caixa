@@ -491,6 +491,50 @@ impl NodeKind {
             _ => None,
         }
     }
+
+    /// Substrate-canonical projection onto the delimiter-pair `(open, close)`
+    /// that the tatara-lisp reader consumes to build the three D4-dialect
+    /// compound arms — `Self::List` reads as `('(', ')')`, `Self::Map` as
+    /// `('{', '}')`, `Self::Vector` as `('[', ']')` — and returns [`None`]
+    /// on every other arm of the closed fourteen-arm [`NodeKind`] variant
+    /// set. Companion to the sibling [`Self::as_seq_body`] compound-body
+    /// projection: the reader/writer duality's two halves — the body slice
+    /// the arm carries, and the two delimiter bytes the arm reads back as
+    /// — now each dispatch through one substrate accessor rather than a
+    /// three-way per-arm pattern-match repeated at every writer site.
+    ///
+    /// Four production consumer sites today in caixa-fmt/src/printer.rs
+    /// — the top-level `emit` main compound-arm dispatch, the
+    /// `emit_header_operand` inlineable branch (previously guarded by
+    /// [`Self::as_seq_body`] then re-matched with a `_ => unreachable!`
+    /// trap), the `render_node_inline` inline-render main compound-arm
+    /// dispatch, and the `classify_is_total_and_names_the_expected_shape`
+    /// test helper — which previously reached the delimiter pair through
+    /// three raw `NodeKind::List(_) => Delims::PAREN | NodeKind::Map(_)
+    /// => Delims::BRACE | NodeKind::Vector(_) => Delims::BRACKET`
+    /// open-coded per-arm pattern-matches. The doc-comment on caixa-fmt's
+    /// own `Delims` type already names the invariant this accessor lifts:
+    /// "`(…)`, `{…}` and `[…]` differ ONLY in these two bytes."
+    ///
+    /// Contract with [`Self::as_seq_body`]: for every variant, either both
+    /// return [`Some`] (the three D4-dialect compound arms) or both return
+    /// [`None`] (every other arm) — pinned by
+    /// `seq_delims_partitions_the_same_arm_set_as_as_seq_body`. A future
+    /// D4-adjacent compound arm addition (a hypothetical
+    /// `NodeKind::Set(Vec<Node>)` shape once the tatara-lisp reader grows
+    /// a `#{…}` set literal) folds onto both accessors at exactly the
+    /// substrate — the writer half by extending this partition once, the
+    /// walker half by extending [`Self::as_seq_body`]'s — rather than a
+    /// coordinated rewrite across every per-consumer writer site.
+    #[must_use]
+    pub fn seq_delims(&self) -> Option<(char, char)> {
+        match self {
+            Self::List(_) => Some(('(', ')')),
+            Self::Map(_) => Some(('{', '}')),
+            Self::Vector(_) => Some(('[', ']')),
+            _ => None,
+        }
+    }
 }
 
 impl Node {
@@ -1857,6 +1901,149 @@ mod is_variant_tests {
                  => None }}` — otherwise the three converged caixa-ast/ \
                  caixa-fmt walker / header-inliner / grid-cell classifier \
                  sites would silently disagree with their pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's writer-side
+    // delimiter-pair accessor: exactly the three D4-dialect compound-
+    // carrying arms return `Some((open, close))` with the per-arm
+    // reader-side delimiter pair (`List` → `('(', ')')`, `Map` → `('{',
+    // '}')`, `Vector` → `('[', ']')`); every other arm of the closed
+    // fourteen-arm partition returns `None`. Pins the "one canonical
+    // projection dispatch per typed arm-set on the substrate primitive"
+    // discipline the four per-consumer writer sites in
+    // caixa-fmt/src/printer.rs route through via `.seq_delims()`. A
+    // regression that flipped one arm's delimiter pair (a copy-paste
+    // that routed `List` through `('[', ']')` and `Vector` through
+    // `('(', ')')`) would silently start rendering every parenthesised
+    // form as a bracket vector and every vector as a list at every
+    // writer site.
+    #[test]
+    fn seq_delims_projects_only_compound_arms_with_dialect_pair() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.seq_delims();
+            let expected = match variant {
+                NodeKind::List(_) => Some(('(', ')')),
+                NodeKind::Map(_) => Some(('{', '}')),
+                NodeKind::Vector(_) => Some(('[', ']')),
+                _ => None,
+            };
+            assert_eq!(
+                projected, expected,
+                "NodeKind::{name}.seq_delims() must project onto the \
+                 per-arm reader-side delimiter pair (List → ('(', ')'), \
+                 Map → ('{{', '}}'), Vector → ('[', ']')) — otherwise \
+                 the four converged caixa-fmt writer sites would \
+                 silently start emitting the wrong delimiters"
+            );
+        }
+        // Empty compound — the accessor is a projection over the arm
+        // discriminator, not a gate on the body length; an empty-`()`
+        // list, empty-`{}` map, and empty-`[]` vector each round-trip
+        // as `Some((open, close))` with the arm's own pair, because the
+        // arm still IS a `List` / `Map` / `Vector` regardless of body
+        // arity.
+        assert_eq!(NodeKind::List(Vec::new()).seq_delims(), Some(('(', ')')));
+        assert_eq!(NodeKind::Map(Vec::new()).seq_delims(), Some(('{', '}')));
+        assert_eq!(NodeKind::Vector(Vec::new()).seq_delims(), Some(('[', ']')));
+        // Strict-compound-arm-only boundary vs the sibling reader-macro-
+        // carrying arms — all four reader-macro arms are wrapper syntax
+        // (`'x` / `` `x `` / `,x` / `,@x`) with no delimiter PAIR (the
+        // one-character sigil is not a matched pair the writer emits
+        // around a body), so a future widening to admit a reader-macro
+        // arm through `seq_delims` would silently start bracketing
+        // reader-macro inners as if they were containers. Pinned across
+        // all four reader-macro arms — a per-arm-specific regression
+        // would slip past a single-arm pin.
+        assert_eq!(
+            NodeKind::Quote(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0)))).seq_delims(),
+            None,
+            "Quote arm is reader-macro sigil syntax with no delimiter \
+             pair — MUST NOT project through seq_delims"
+        );
+        assert_eq!(
+            NodeKind::Quasiquote(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0)))).seq_delims(),
+            None,
+            "Quasiquote arm is reader-macro sigil syntax with no \
+             delimiter pair — MUST NOT project through seq_delims"
+        );
+        assert_eq!(
+            NodeKind::Unquote(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0)))).seq_delims(),
+            None,
+            "Unquote arm is reader-macro sigil syntax with no delimiter \
+             pair — MUST NOT project through seq_delims"
+        );
+        assert_eq!(
+            NodeKind::UnquoteSplice(Box::new(Node::new(NodeKind::Nil, Span::new(0, 0))))
+                .seq_delims(),
+            None,
+            "UnquoteSplice arm is reader-macro sigil syntax with no \
+             delimiter pair — MUST NOT project through seq_delims"
+        );
+    }
+
+    // Contract with sibling [`NodeKind::as_seq_body`] — for every
+    // variant, either both accessors return `Some` (the three D4-
+    // dialect compound arms) or both return `None` (every other arm).
+    // Pinned live rather than by inspection: a future addition of a
+    // fourth compound arm (a hypothetical `NodeKind::Set(Vec<Node>)`
+    // once the tatara-lisp reader grows a `#{…}` set literal) that
+    // extended one accessor but not the other would silently produce
+    // a walker-half-of-the-reader/writer-duality drift (as_seq_body
+    // Some but seq_delims None → the emit dispatch's `.expect(…)` on
+    // the writer half would panic at runtime for a body the walker
+    // already treats as compound; the reverse would let the writer
+    // emit delimiters around a body the walker refuses to descend
+    // into). The `.expect(…)` calls at the caixa-fmt converge sites
+    // are load-bearing on this partition-equivalence — this test
+    // is what turns them from a runtime assertion into a build-time
+    // pin.
+    #[test]
+    fn seq_delims_partitions_the_same_arm_set_as_as_seq_body() {
+        for (variant, name) in all_variants() {
+            assert_eq!(
+                variant.seq_delims().is_some(),
+                variant.as_seq_body().is_some(),
+                "NodeKind::{name} — seq_delims().is_some() must equal \
+                 as_seq_body().is_some() (reader/writer-duality partition \
+                 equivalence); the caixa-fmt writer sites depend on this \
+                 for their `expect(…)` on the delims half after gating \
+                 through as_seq_body"
+            );
+        }
+    }
+
+    // Byte-parity pin on the pre-lift three-arm disjunctive
+    // `match &_.kind { NodeKind::List(_) => Some(('(', ')')) | … | _ =>
+    // None }` shape the four caixa-fmt writer sites route through
+    // today via `.seq_delims()`. Refuses a future accidental split
+    // between the accessor's return contract and its pre-lift
+    // per-arm shape (a hand-rolled shadow `impl` that overrides one
+    // path, an accidental rebrand of one converged call site back to
+    // the raw `NodeKind::List(_) => Delims::PAREN | …` form, a per-
+    // arm delimiter-pair flip) on the load-bearing writer-half-of-the-
+    // reader/writer-duality axis every downstream compound-emit site
+    // partitions on.
+    #[test]
+    fn seq_delims_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<(char, char)> = match &variant {
+                NodeKind::List(_) => Some(('(', ')')),
+                NodeKind::Map(_) => Some(('{', '}')),
+                NodeKind::Vector(_) => Some(('[', ']')),
+                _ => None,
+            };
+            let via_accessor = variant.seq_delims();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.seq_delims() must byte-equal \
+                 `match &_ {{ NodeKind::List(_) => Some(('(', ')')) | \
+                 NodeKind::Map(_) => Some(('{{', '}}')) | \
+                 NodeKind::Vector(_) => Some(('[', ']')) | _ => None }}` \
+                 — otherwise the four converged caixa-fmt writer sites \
+                 would silently disagree with their pre-lift shape"
             );
         }
     }
