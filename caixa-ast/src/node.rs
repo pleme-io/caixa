@@ -615,9 +615,40 @@ impl Node {
 
     /// Drop all spans + trivia, lowering into the plain `tatara_lisp::Sexp`
     /// used by the compile pipeline.
+    ///
+    /// Route the D4-dialect compound-body lowering through the lifted
+    /// [`NodeKind::as_seq_body`] `Option<&[Node]>` accessor rather than
+    /// the raw four-arm `NodeKind::List(items) => Sexp::List(…) |
+    /// NodeKind::Map(items) | NodeKind::Vector(items) => Sexp::List(…)`
+    /// open-coded per-arm dispatch — sibling in shape to the peer
+    /// [`crate::visit::walk`], `caixa-fmt::Printer::emit`,
+    /// `caixa-fmt::render_node_inline`, `caixa-fmt::emit_header_operand`,
+    /// `caixa-fmt::is_atom`, and `caixa-teia::node_to_value` compound-body
+    /// sites that all key off the same substrate-canonical accessor. The
+    /// three D4-dialect compound arms produce IDENTICAL `Sexp::List`
+    /// bodies (only the brace-ness is dropped — see the historical note
+    /// below), so the pre-lift shape was two match arms restating the
+    /// same `Sexp::List(items.iter().map(Node::to_tatara_sexp).collect())`
+    /// body; the lift folds both onto one dispatch that gates on the
+    /// substrate-primitive compound-body-carrying arm-set.
+    ///
+    /// `tatara_lisp::Sexp` has no Map/Vector variant yet — adding them is
+    /// a LANGUAGE change, sequenced as Phase 2 of
+    /// theory/TATARA-LISP-CONSOLIDATION.md D4 and gated on its own
+    /// differential run over the 1,123-file corpus (correction C4). Until
+    /// that lands, all three compound arms lower to a plain list: the
+    /// elements survive in order, only the brace-ness is dropped. That is
+    /// strictly closer to intent than the pre-D4 behaviour, where the
+    /// delimiters lowered as literal `{` / `}` SYMBOLS inside the list.
+    /// This projection is used only by the round-trip equivalence tests,
+    /// which stay honest because formatting re-emits the delimiters and
+    /// re-parsing recovers the node.
     #[must_use]
     pub fn to_tatara_sexp(&self) -> tatara_lisp::Sexp {
         use tatara_lisp::{Atom, Sexp};
+        if let Some(items) = self.kind.as_seq_body() {
+            return Sexp::List(items.iter().map(Node::to_tatara_sexp).collect());
+        }
         match &self.kind {
             NodeKind::Nil => Sexp::Nil,
             NodeKind::Symbol(s) => Sexp::Atom(Atom::Symbol(s.clone())),
@@ -626,25 +657,13 @@ impl Node {
             NodeKind::Int(i) => Sexp::Atom(Atom::Int(*i)),
             NodeKind::Float(f) => Sexp::Atom(Atom::Float(*f)),
             NodeKind::Bool(b) => Sexp::Atom(Atom::Bool(*b)),
-            NodeKind::List(items) => Sexp::List(items.iter().map(Node::to_tatara_sexp).collect()),
-            // `tatara_lisp::Sexp` has no Map/Vector variant yet — adding
-            // them is a LANGUAGE change, sequenced as Phase 2 of
-            // theory/TATARA-LISP-CONSOLIDATION.md D4 and gated on its own
-            // differential run over the 1,123-file corpus (correction C4).
-            // Until that lands, both lower to a plain list: the elements
-            // survive in order, only the brace-ness is dropped. That is
-            // strictly closer to intent than today's behaviour, where the
-            // delimiters lowered as literal `{` / `}` SYMBOLS inside the
-            // list. This projection is used only by the round-trip
-            // equivalence tests, which stay honest because formatting
-            // re-emits the delimiters and re-parsing recovers the node.
-            NodeKind::Map(items) | NodeKind::Vector(items) => {
-                Sexp::List(items.iter().map(Node::to_tatara_sexp).collect())
-            }
             NodeKind::Quote(inner) => Sexp::Quote(Box::new(inner.to_tatara_sexp())),
             NodeKind::Quasiquote(inner) => Sexp::Quasiquote(Box::new(inner.to_tatara_sexp())),
             NodeKind::Unquote(inner) => Sexp::Unquote(Box::new(inner.to_tatara_sexp())),
             NodeKind::UnquoteSplice(inner) => Sexp::UnquoteSplice(Box::new(inner.to_tatara_sexp())),
+            NodeKind::List(_) | NodeKind::Map(_) | NodeKind::Vector(_) => {
+                unreachable!("compound-arm-set routed through NodeKind::as_seq_body above")
+            }
         }
     }
 
@@ -2247,6 +2266,181 @@ mod is_variant_tests {
                  otherwise the two converged caixa-fmt writer sites would \
                  silently disagree with their pre-lift shape"
             );
+        }
+    }
+
+    // Pin the [`Node::to_tatara_sexp`] compound-arm-set converge onto the
+    // lifted [`NodeKind::as_seq_body`] `Option<&[Node]>` accessor.
+    //
+    // Every one of the three D4-dialect compound arms (List, Map, Vector)
+    // must lower to a `Sexp::List` whose body is the arm's own child
+    // sequence lowered element-wise — the pre-lift shape had `List` and
+    // `Map | Vector` as two match arms restating the identical
+    // `Sexp::List(items.iter().map(Node::to_tatara_sexp).collect())`
+    // body, and this pin refuses a future accidental split where one arm
+    // silently changes shape (a per-arm `NodeKind::Map(items) =>
+    // Sexp::List(items.iter().rev().map(…).collect())` reorder, a
+    // `NodeKind::Vector(items) => Sexp::Nil` drop, a partial arm-set
+    // widening back to the raw pattern-match that misses a future D4-
+    // adjacent compound arm addition). Sibling in shape to the peer
+    // `as_seq_body_projects_only_compound_arms` partition pin on the
+    // walker half of the compound axis, extended onto the substrate-side
+    // lowering-half converge in `Node::to_tatara_sexp`.
+    #[test]
+    fn to_tatara_sexp_lowers_every_compound_arm_to_sexp_list_with_identical_body() {
+        use tatara_lisp::{Atom, Sexp};
+        let expected_body: Vec<Sexp> = vec![
+            Sexp::Atom(Atom::Symbol("a".into())),
+            Sexp::Atom(Atom::Int(1)),
+            Sexp::Atom(Atom::Keyword("k".into())),
+        ];
+        let child_nodes: Vec<Node> = vec![
+            Node::new(NodeKind::Symbol("a".into()), Span::new(0, 0)),
+            Node::new(NodeKind::Int(1), Span::new(0, 0)),
+            Node::new(NodeKind::Keyword("k".into()), Span::new(0, 0)),
+        ];
+        for (ctor, name) in [
+            (NodeKind::List as fn(Vec<Node>) -> NodeKind, "List"),
+            (NodeKind::Map, "Map"),
+            (NodeKind::Vector, "Vector"),
+        ] {
+            let node = Node::new(ctor(child_nodes.clone()), Span::new(0, 0));
+            let lowered = node.to_tatara_sexp();
+            match lowered {
+                Sexp::List(body) => assert_eq!(
+                    body, expected_body,
+                    "NodeKind::{name} — to_tatara_sexp must lower to \
+                     Sexp::List whose body is the element-wise lowering \
+                     of the arm's own child sequence, byte-identically \
+                     across all three D4-dialect compound arms"
+                ),
+                other => panic!(
+                    "NodeKind::{name}.to_tatara_sexp() must lower to \
+                     Sexp::List (Sexp has no Map/Vector variant yet — see \
+                     theory/TATARA-LISP-CONSOLIDATION.md D4 Phase 2); \
+                     got {other:?}"
+                ),
+            }
+        }
+        // Empty compound — the lowering is a projection, not a gate; an
+        // empty-`()` list, empty-`{}` map, and empty-`[]` vector each
+        // lower to `Sexp::List(vec![])`, not `Sexp::Nil`, because the
+        // arm still carries a (zero-length) child sequence a lowerer is
+        // entitled to iterate over. Pinned across all three compound
+        // arms — a per-arm-specific regression would slip past a single-
+        // arm pin.
+        for (ctor, name) in [
+            (NodeKind::List as fn(Vec<Node>) -> NodeKind, "List"),
+            (NodeKind::Map, "Map"),
+            (NodeKind::Vector, "Vector"),
+        ] {
+            let empty = Node::new(ctor(Vec::new()), Span::new(0, 0));
+            let lowered = empty.to_tatara_sexp();
+            match lowered {
+                Sexp::List(body) => assert!(
+                    body.is_empty(),
+                    "empty NodeKind::{name} — to_tatara_sexp must lower \
+                     to Sexp::List(vec![]), not Sexp::Nil or a \
+                     stringified delimiter"
+                ),
+                other => panic!(
+                    "empty NodeKind::{name}.to_tatara_sexp() must lower \
+                     to Sexp::List(vec![]); got {other:?}"
+                ),
+            }
+        }
+    }
+
+    // Byte-parity pin on the pre-lift four-arm compound-body shape
+    // `match &self.kind { NodeKind::List(items) => Sexp::List(items.iter()
+    // .map(Node::to_tatara_sexp).collect()) | NodeKind::Map(items) |
+    // NodeKind::Vector(items) => Sexp::List(items.iter().map(Node::
+    // to_tatara_sexp).collect()) | _ => (fall through to atoms) }` shape
+    // the [`Node::to_tatara_sexp`] compound-body dispatch routed through
+    // before the converge. Refuses a future accidental split between the
+    // accessor-routed compound-body dispatch and its pre-lift per-arm
+    // shape (a hand-rolled shadow `impl` that overrides one path, an
+    // accidental rebrand of the converged dispatch back to the raw two-
+    // arm pattern-match with a fourth new-D4-arm silently missed, a per-
+    // arm body-map reorder that would silently corrupt only one of the
+    // three arms). Sibling in shape to the peer
+    // `seq_delims_byte_equal_pre_lift_pattern_match_shape` /
+    // `as_seq_body_byte_equal_pre_lift_pattern_match_shape` pins on the
+    // sibling writer + walker halves of the compound axis.
+    #[test]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the two same-body compound arms ARE the pre-lift shape \
+                  this pin reproduces; collapsing them would erase what \
+                  the pin documents"
+    )]
+    fn to_tatara_sexp_compound_arm_body_byte_equal_pre_lift_pattern_match_shape() {
+        use tatara_lisp::Sexp;
+        let child_nodes: Vec<Node> = vec![
+            Node::new(NodeKind::Nil, Span::new(0, 0)),
+            Node::new(NodeKind::Symbol("h".into()), Span::new(0, 0)),
+            Node::new(NodeKind::Str("s".into()), Span::new(0, 0)),
+            Node::new(NodeKind::Float(1.5), Span::new(0, 0)),
+            Node::new(NodeKind::Bool(true), Span::new(0, 0)),
+        ];
+        for (ctor, name) in [
+            (NodeKind::List as fn(Vec<Node>) -> NodeKind, "List"),
+            (NodeKind::Map, "Map"),
+            (NodeKind::Vector, "Vector"),
+        ] {
+            let node = Node::new(ctor(child_nodes.clone()), Span::new(0, 0));
+            let via_accessor = node.to_tatara_sexp();
+            // Reconstruct the pre-lift per-arm shape byte-for-byte from the
+            // arm's own child sequence, independent of the accessor path
+            // — a hand-rolled shadow that reproduces the pre-lift dispatch.
+            let via_pattern = match &node.kind {
+                NodeKind::List(items) => {
+                    Sexp::List(items.iter().map(Node::to_tatara_sexp).collect())
+                }
+                NodeKind::Map(items) | NodeKind::Vector(items) => {
+                    Sexp::List(items.iter().map(Node::to_tatara_sexp).collect())
+                }
+                _ => unreachable!("guarded by the ctor loop above"),
+            };
+            let via_pattern_body = match via_pattern {
+                Sexp::List(b) => b,
+                other => panic!("pre-lift shape must produce Sexp::List; got {other:?}"),
+            };
+            let via_accessor_body = match via_accessor {
+                Sexp::List(b) => b,
+                other => panic!(
+                    "NodeKind::{name}.to_tatara_sexp() — accessor-routed \
+                     dispatch must produce Sexp::List; got {other:?}"
+                ),
+            };
+            assert_eq!(
+                via_accessor_body, via_pattern_body,
+                "NodeKind::{name}.to_tatara_sexp() body must byte-equal \
+                 the pre-lift per-arm `Sexp::List(items.iter().map(Node::\
+                 to_tatara_sexp).collect())` shape — otherwise the \
+                 converged dispatch would silently disagree with the \
+                 pre-lift shape at exactly this compound arm"
+            );
+            // A grounding sanity check: the body carries five children
+            // (one per child_nodes element), each of which lowered to a
+            // Sexp::Atom (the atom arms) — a per-child drop or duplicate
+            // would slip past a pure body-vs-body equality if BOTH the
+            // accessor path and the pre-lift shadow shared the same bug.
+            assert_eq!(
+                via_accessor_body.len(),
+                child_nodes.len(),
+                "NodeKind::{name}.to_tatara_sexp() must preserve the \
+                 arm's child-count exactly"
+            );
+            for (i, s) in via_accessor_body.iter().enumerate() {
+                assert!(
+                    matches!(s, Sexp::Atom(_) | Sexp::Nil),
+                    "NodeKind::{name}.to_tatara_sexp() body[{i}] — every \
+                     child in this fixture is an atom or nil arm; a \
+                     compound projection here would signal a lowerer \
+                     drift"
+                );
+            }
         }
     }
 }
