@@ -19034,6 +19034,143 @@ pub fn find_by_kind<'a>(
     docs.iter().find(|d| kube_kind_is(d, kind))
 }
 
+/// Predicate: does the K8s custom resource YAML document at `value`
+/// declare its `metadata.name` identity axis as exactly `name`?
+///
+/// Composes on top of [`kube_metadata_str_field`] (6809867) — same
+/// two-hop `.get(KUBE_KEY_METADATA).and_then(get(KUBE_KEY_NAME))
+/// .and_then(as_str)` navigation — and closes the
+/// "metadata.name identity equality" predicate axis every multi-doc
+/// mesh emission traversal reaches for to split the emitted sequence
+/// by per-CR name (the CR identity axis) rather than by CRD-kind
+/// (the CR shape axis) the sibling [`kube_kind_is`] already closes.
+///
+/// The canonical shape 6 test-side
+///
+/// ```ignore
+/// kube_metadata_str_field(p, KUBE_KEY_NAME) == Some(<NAME>)
+/// ```
+///
+/// call sites in [`caixa-mesh`][mesh]'s per-CNP-name /
+/// per-Aplicacao-edge test harnesses previously carried inline as
+/// the three-token composition — the readback helper call, the
+/// `== Some(...)` equality wrap, the identity-axis pin on
+/// [`KUBE_KEY_NAME`] — around a one-token semantic payload (the
+/// `<NAME>` axis-value: `"checkout-cart-to-catalog"`,
+/// `"checkout-payment-to-cart"`, `"checkout-cart-to-payment"`, each
+/// a [`cilium_network_policy_name`]-composed byte-string). The lift
+/// collapses the three-token composition onto one predicate the
+/// caller reads as intent (`kube_name_is(p, <NAME>)` — "is this K8s
+/// CR document named `<NAME>`") rather than as a
+/// `readback → wrap → compare` chain.
+///
+/// The [`KUBE_KEY_NAME`] axis is pinned inside the helper (unlike
+/// the parametric `field` axis of the underlying
+/// [`kube_metadata_str_field`]) because the "is this CR document
+/// named X" question is a semantically-distinct identity predicate,
+/// not a generic scalar-readback: the K8s API-machinery pins
+/// `metadata.name` as the load-bearing per-CR identity axis on every
+/// `CustomResource` across every group/version (paired with
+/// `metadata.namespace` for cluster-scoped-vs-namespaced disambiguation),
+/// so this predicate lives one abstraction step above the generic
+/// readback. Peer predicates for other `metadata.*` sub-axes (e.g. a
+/// hypothetical `kube_namespace_is` on a per-namespace router harness,
+/// a future `kube_uid_is` for ownerReference bookkeeping) land as
+/// sibling helpers with their own pinned axis, not as
+/// re-parameterizations of this one.
+///
+/// Structural peer to [`kube_kind_is`] (2902d9d) on the sibling
+/// top-level `kind:` discriminator axis: [`kube_kind_is`] answers
+/// "does this document match kind X" (the CR shape axis);
+/// [`kube_name_is`] answers "does this document match name X" (the
+/// CR identity axis). Same one-hop readback + equality-wrap shape,
+/// different pinned scalar-key — together they bracket the two
+/// canonical CR discriminator axes every multi-doc mesh emission
+/// traversal reaches for.
+///
+/// Sites lifted:
+///
+///   * caixa-mesh's `cilium_network_policies` test harness — 6
+///     `.find(|p| kube_metadata_str_field(p, KUBE_KEY_NAME) ==
+///     Some(<NAME>))` + `.filter(|p| … == Some(<NAME>))` sites
+///     splitting the emitted CNP multi-doc sequence by the
+///     [`cilium_network_policy_name`]-composed `<aplicacao>-<de>-to-
+///     <para>` byte-string for per-CR body-axis assertions.
+///
+/// Every future per-CR-name traversal (the M4 cross-cluster fan-out's
+/// per-cluster `HelmRelease`-name-router; the `app-operator`'s
+/// per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR status-name
+/// join; the future per-`:contratos`
+/// `CiliumClusterwideEnvoyConfig`-name filter) reaches the same
+/// helper by construction, with no `== Some(...)` inline composition
+/// and no drift surface on the `metadata.name` scalar-key axis.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_name_is(value: &serde_yaml::Value, name: &str) -> bool {
+    kube_metadata_str_field(value, KUBE_KEY_NAME) == Some(name)
+}
+
+/// Locate the first K8s CR YAML document in `docs` whose
+/// `metadata.name` identity axis equals `name`.
+///
+/// Composes on top of [`kube_name_is`] — same one-hop
+/// `.get(KUBE_KEY_METADATA).and_then(get(KUBE_KEY_NAME))
+/// .and_then(as_str) == Some(name)` predicate — and closes the
+/// "find the one document with a given name inside a multi-doc mesh
+/// emission" navigator axis every per-Aplicacao renderer's post-emit
+/// test harness reaches for to split the emitted sequence by per-CR
+/// identity before probing a per-CR body-axis.
+///
+/// The canonical shape 5 test-side
+///
+/// ```ignore
+/// docs.iter().find(|d| kube_name_is(d, <NAME>))
+/// ```
+///
+/// call sites in [`caixa-mesh`][mesh]'s `cilium_network_policies`
+/// test harness previously threaded the three-token
+/// `.iter().find(closure)` combinator chain around a one-token
+/// semantic payload (the [`cilium_network_policy_name`]-composed
+/// `<aplicacao>-<de>-to-<para>` byte-string). The lift collapses
+/// the three-token chain — the `.iter()` receiver-widen, the
+/// `.find(closure)` combinator, the inline closure wrap around
+/// [`kube_name_is`] — onto one navigator function the caller reads
+/// as intent (`find_by_name(&docs, <NAME>)` — "give me the K8s CR
+/// document named `<NAME>`") rather than as a
+/// receiver-widen → combinator → predicate chain.
+///
+/// Composition-symmetric to [`kube_name_is`]: the lifted predicate
+/// answers "does *this* one document match name `<NAME>`?", the
+/// lifted navigator answers "find the one document of name
+/// `<NAME>` in *this list*?". Same axis, different arity — the two
+/// call shapes emit-side test harnesses reach for when splitting
+/// multi-doc CR emissions by per-CR identity. Peer of
+/// [`find_by_kind`] (b73a13e) on the sibling `kind:` discriminator
+/// axis: [`find_by_kind`] navigates by CR shape (there is exactly
+/// one `Gateway` + one `HTTPRoute` per Aplicacao at V0); this navigates
+/// by CR identity (there is one CNP per `(:de, :para)` fan-in
+/// group, and the per-CNP identity is the
+/// [`cilium_network_policy_name`]-composed edge label).
+///
+/// Every future per-CR-name multi-doc-navigator site (the future
+/// `app-operator`'s per-Aplicacao CR-name join over emitted status
+/// docs, MESH-COMPOSITION §III.2 #5; the M4 cross-cluster fan-out's
+/// per-cluster `HelmRelease`-name split; the future per-`:contratos`
+/// `CiliumClusterwideEnvoyConfig`-name filter over the sibling
+/// L7-policy emission) reaches the same helper by construction, with
+/// no inline `.iter().find(closure)` combinator chain and no drift
+/// surface on the receiver-widen or combinator axes.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn find_by_name<'a>(
+    docs: &'a [serde_yaml::Value],
+    name: &str,
+) -> Option<&'a serde_yaml::Value> {
+    docs.iter().find(|d| kube_name_is(d, name))
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -37572,6 +37709,181 @@ spec:
         assert_eq!(
             kube_metadata_str_field(first, KUBE_KEY_NAME),
             Some("primary"),
+        );
+    }
+
+    #[test]
+    fn kube_name_is_matches_lifted_kube_metadata_str_field_equality_shape() {
+        // Byte-equivalence pin: the lifted predicate reproduces the
+        // three-token composition (`kube_metadata_str_field(v,
+        // KUBE_KEY_NAME) == Some(<NAME>)`) the 6 caixa-mesh test-side
+        // `.find`/`.filter` sites previously carried inline. Closes the
+        // "did the lift accidentally rename the pinned scalar-key axis
+        // to KUBE_KEY_NAMESPACE or drop the `Some(...)` wrap" drift
+        // class every future re-lift on the peer-axis surface (a
+        // hypothetical `kube_namespace_is` peer on a per-namespace
+        // router harness, a `kube_uid_is` for ownerReference
+        // bookkeeping) would otherwise reopen. Peer of the sibling
+        // `kube_kind_is_matches_lifted_kube_root_str_field_equality_shape`
+        // pin on the `kind:` discriminator axis.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert!(kube_name_is(&value, "checkout-cart-to-catalog"));
+        assert_eq!(
+            kube_name_is(&value, "checkout-cart-to-catalog"),
+            kube_metadata_str_field(&value, KUBE_KEY_NAME) == Some("checkout-cart-to-catalog"),
+        );
+    }
+
+    #[test]
+    fn kube_name_is_false_on_mismatched_name_and_missing_name() {
+        // Complement-side pin: the predicate returns `false` when
+        // either the name axis carries a different identity or the
+        // sub-`metadata.name:` scalar (or the enclosing `metadata:`
+        // block) is absent altogether (the same vacuous-`None`
+        // short-circuit the parent `kube_metadata_str_field` closes on
+        // the underlying two-hop navigation). Consumer sites
+        // (`docs.iter().find(|d| kube_name_is(d, X))`) rely on the
+        // false-on-mismatch shape to skip the wrong CRs across the
+        // multi-doc mesh emission and land on the intended per-name
+        // document. Peer of the sibling
+        // `kube_kind_is_false_on_mismatched_kind_and_missing_kind` pin
+        // on the `kind:` discriminator axis.
+        let mut wrong_meta = serde_yaml::Mapping::new();
+        wrong_meta.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-payment-to-cart".into()),
+        );
+        let mut cr_wrong_name = serde_yaml::Mapping::new();
+        cr_wrong_name.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(wrong_meta));
+        assert!(!kube_name_is(
+            &serde_yaml::Value::Mapping(cr_wrong_name),
+            "checkout-cart-to-catalog",
+        ));
+
+        let cr_no_metadata = serde_yaml::Mapping::new();
+        assert!(!kube_name_is(
+            &serde_yaml::Value::Mapping(cr_no_metadata),
+            "checkout-cart-to-catalog",
+        ));
+
+        let empty_meta = serde_yaml::Mapping::new();
+        let mut cr_no_name = serde_yaml::Mapping::new();
+        cr_no_name.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        assert!(!kube_name_is(
+            &serde_yaml::Value::Mapping(cr_no_name),
+            "checkout-cart-to-catalog",
+        ));
+    }
+
+    #[test]
+    fn find_by_name_matches_inline_iter_find_kube_name_is_shape() {
+        // Byte-equivalence pin: the lifted navigator reproduces the
+        // three-token combinator chain (`docs.iter().find(|d|
+        // kube_name_is(d, <NAME>))`) the 5 caixa-mesh test-side
+        // per-CNP-name find-by-name sites previously carried inline.
+        // Closes the "did the lift accidentally widen the receiver,
+        // drop the closure, or swap `find` for `filter`" drift class
+        // every future re-lift on the sibling multi-doc-navigator axis
+        // (a hypothetical `filter_by_name` peer that carries the same
+        // underlying predicate but returns an iterator) would otherwise
+        // reopen. Peer of the sibling
+        // `find_by_kind_matches_inline_iter_find_kube_kind_is_shape`
+        // pin on the `kind:` discriminator axis.
+        let mut meta_a = serde_yaml::Mapping::new();
+        meta_a.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+        );
+        let mut policy_a = serde_yaml::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
+        let mut meta_b = serde_yaml::Mapping::new();
+        meta_b.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-payment-to-cart".into()),
+        );
+        let mut policy_b = serde_yaml::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let docs = vec![
+            serde_yaml::Value::Mapping(policy_a),
+            serde_yaml::Value::Mapping(policy_b),
+        ];
+
+        assert_eq!(
+            find_by_name(&docs, "checkout-cart-to-catalog"),
+            docs.iter()
+                .find(|d| kube_name_is(d, "checkout-cart-to-catalog")),
+        );
+        assert_eq!(
+            find_by_name(&docs, "checkout-payment-to-cart"),
+            docs.iter()
+                .find(|d| kube_name_is(d, "checkout-payment-to-cart")),
+        );
+
+        // Miss path: absent name → None, matching the inline `.find`
+        // short-circuit that consumer sites rely on to distinguish
+        // "no such CR in this emission" from "wrong shape" in their
+        // `.unwrap()` / `.expect(...)` follow-ups.
+        assert_eq!(find_by_name(&docs, "checkout-cart-to-payment"), None);
+        let empty: Vec<serde_yaml::Value> = Vec::new();
+        assert_eq!(find_by_name(&empty, "checkout-cart-to-catalog"), None);
+    }
+
+    #[test]
+    fn find_by_name_returns_first_match_on_duplicate_name() {
+        // Order-preservation pin: the lifted navigator returns the
+        // first document of the matching name (the same short-circuit
+        // `Iterator::find` exposes). Multi-doc mesh emissions never
+        // carry two documents with identical `metadata.name` at V0
+        // (`cilium_network_policies` fans distinct `(:de, :para)`
+        // pairs into distinct CNP names — see the sibling
+        // `cilium_http_contracts_fan_multiple_edges_into_one_policy`
+        // fan-in pin), but the M4 cross-cluster fan-out will produce
+        // per-cluster CR duplicates on the identity axis (one
+        // `HelmRelease` per cluster carrying the same base name). Pin
+        // the first-match contract keeps the M4 caller-side "the
+        // first hit is the primary" convention aligned with the
+        // helper's combinator half. Peer of the sibling
+        // `find_by_kind_returns_first_match_on_duplicate_kind` pin on
+        // the `kind:` discriminator axis.
+        let mut meta_a = serde_yaml::Mapping::new();
+        meta_a.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+        );
+        meta_a.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("cluster-a".into()),
+        );
+        let mut policy_a = serde_yaml::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
+        let mut meta_b = serde_yaml::Mapping::new();
+        meta_b.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+        );
+        meta_b.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("cluster-b".into()),
+        );
+        let mut policy_b = serde_yaml::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let docs = vec![
+            serde_yaml::Value::Mapping(policy_a),
+            serde_yaml::Value::Mapping(policy_b),
+        ];
+
+        let first = find_by_name(&docs, "checkout-cart-to-catalog").unwrap();
+        assert_eq!(
+            kube_metadata_str_field(first, KUBE_KEY_NAMESPACE),
+            Some("cluster-a"),
         );
     }
 
