@@ -147,15 +147,22 @@ fn build_ref(items: &[Node]) -> Result<TeiaValue, TeiaError> {
             ));
         }
     };
-    let nome = match &items[2].kind {
-        NodeKind::Symbol(s) | NodeKind::Str(s) => s.clone(),
-        _ => {
-            return Err(TeiaError::BadForm(
-                items[2].span.start,
-                "ref nome must be a symbol or string",
-            ));
-        }
-    };
+    // Route the `:nome`-slot projection through the lifted
+    // [`caixa_ast::NodeKind::as_symbol_or_str`] `Option<&str>` accessor
+    // rather than the raw two-arm `NodeKind::Symbol(s) | NodeKind::Str(s)
+    // => s.clone()` open-coded per-arm disjunctive pattern-match —
+    // sibling in shape to the caixa-lsp `document_symbol` `:nome`-detail
+    // projection converge on the same atom-name-carrying disjunctive axis
+    // (this run) and to the neighbouring `:atributo`-slot converge on
+    // the three-arm [`NodeKind::as_atom_string`] projection (3c3ca48).
+    let nome = items[2]
+        .kind
+        .as_symbol_or_str()
+        .map(str::to_owned)
+        .ok_or(TeiaError::BadForm(
+            items[2].span.start,
+            "ref nome must be a symbol or string",
+        ))?;
     // Route the `:atributo`-slot projection through the lifted
     // [`caixa_ast::NodeKind::as_atom_string`] `Option<&str>` accessor
     // rather than the raw three-arm `NodeKind::Symbol(s) |

@@ -258,6 +258,57 @@ impl NodeKind {
             _ => None,
         }
     }
+
+    /// Substrate-canonical projection onto the disjunctive
+    /// [`Self::Symbol`] | [`Self::Str`] atom-name-carrying arm-set —
+    /// returns `Some(&str)` byte-borrowed from the matched arm's own
+    /// [`String`] storage, and [`None`] on every other arm of the closed
+    /// fourteen-arm [`NodeKind`] variant set.
+    ///
+    /// Two production consumers today across two caixa-monorepo crates
+    /// — the caixa-teia `build_ref` `:nome` slot (`(ref aws/vpc main id)`
+    /// — the second position accepts either a bare symbol `main` or a
+    /// quoted `"main"` string, error-messaged as "must be a symbol or
+    /// string") and the caixa-lsp `document_symbol` `:nome`-detail
+    /// projection (the `DocumentSymbol.detail` field takes the
+    /// `:nome value` from every top-level `(defX …)` form, where authors
+    /// spell the name as either a bare `nome-slug` symbol or a quoted
+    /// `"nome-slug"` string). Both previously reached the underlying
+    /// scalar through a raw two-arm `NodeKind::Symbol(s) |
+    /// NodeKind::Str(s) => s.clone()` open-coded per-arm disjunctive
+    /// pattern-match that expressed no compile-time link back to the
+    /// substrate primitive's typed atom-name-carrying arm-set.
+    ///
+    /// Semantically distinct from the sibling three-arm
+    /// [`Self::as_atom_string`] (3c3ca48) projection — that one accepts
+    /// the full atom-string-carrying arm-set including `Keyword` (a `:foo`
+    /// keyword literal counts as an atom-string in caixa-teia's
+    /// `:tipo`/`:nome` / `:atributo` slot); this one accepts only the
+    /// two-arm subset that excludes `Keyword`, matching the caixa-teia
+    /// `build_ref` `:nome` gate's "must be a symbol or string" contract
+    /// and the caixa-lsp `document_symbol` detail's "bare-symbol or
+    /// quoted-string name" author-facing shape.
+    ///
+    /// Zero-copy — the returned `&str` borrows from the matched arm's
+    /// own [`String`] storage (pinned by the
+    /// `as_symbol_or_str_is_by_borrow_pointer_identity` test), the same
+    /// discipline as the sibling per-arm [`Self::as_keyword`] (6804427)
+    /// / [`Self::as_symbol`] (e96eea1) / [`Self::as_str`] (55b2909) /
+    /// three-arm [`Self::as_atom_string`] (3c3ca48) projections and the
+    /// peer [`caixa_teia::TeiaValue::as_str`] (7304ffe) outer-sum-type
+    /// projection. Fifth `Option<&<payload>>` projection accessor on the
+    /// outer [`NodeKind`] sum-type — the second *disjunctive* accessor
+    /// on the projection family the three sibling per-arm accessors
+    /// opened, extending the discipline onto the two-arm atom-name-
+    /// carrying subset every caixa-teia `build_ref` `:nome` / caixa-lsp
+    /// `document_symbol` `:nome`-detail site partitions on.
+    #[must_use]
+    pub fn as_symbol_or_str(&self) -> Option<&str> {
+        match self {
+            Self::Symbol(s) | Self::Str(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
 }
 
 impl Node {
@@ -952,6 +1003,156 @@ mod is_variant_tests {
                  }}` — otherwise the two converged caixa-teia \
                  manifest-parser call sites would silently disagree \
                  with their pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's disjunctive
+    // two-arm `Symbol` | `Str` atom-name-carrying accessor: exactly the
+    // two atom-name-carrying arms return `Some(&str)` byte-borrowed from
+    // the matched arm's own [`String`] storage; every other arm (including
+    // the `Keyword` arm — the strict-subset boundary vs the sibling
+    // three-arm [`NodeKind::as_atom_string`] projection) returns `None`.
+    // Pins the "one canonical projection dispatch per typed arm-set on
+    // the substrate primitive" discipline the two per-two-arm-disjunction
+    // consumer sites (caixa-teia `build_ref` `:nome`-slot projection;
+    // caixa-lsp `document_symbol` `:nome`-detail projection) route through
+    // via `.as_symbol_or_str().map(str::to_owned)`. A regression that
+    // admitted a non-atom-name-carrying arm (a keyword literal, a numeric,
+    // a list, a quote) through this projection would silently classify
+    // `:foo` / `42` / `(a b)` as a `:nome` name at the caixa-teia manifest
+    // parser and the caixa-lsp document-symbol pane — `build_ref` would
+    // let `(ref aws/vpc :foo id)` slip past its "must be a symbol or
+    // string" guard, `document_symbol.detail` would surface a stringified
+    // keyword or integer as an instance name. This test guards that
+    // surface across every arm of the closed fourteen-arm partition.
+    #[test]
+    fn as_symbol_or_str_projects_only_symbol_and_str_arms() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.as_symbol_or_str();
+            let is_symbol_or_str_arm = matches!(variant, NodeKind::Symbol(_) | NodeKind::Str(_));
+            if is_symbol_or_str_arm {
+                let expected = match variant {
+                    NodeKind::Symbol(s) | NodeKind::Str(s) => s.as_str(),
+                    _ => unreachable!("guarded by is_symbol_or_str_arm above"),
+                };
+                assert_eq!(
+                    projected,
+                    Some(expected),
+                    "NodeKind::{name} is an atom-name-carrying arm — \
+                     as_symbol_or_str() must project onto its own String \
+                     payload"
+                );
+            } else {
+                assert_eq!(
+                    projected, None,
+                    "NodeKind::{name} is not an atom-name-carrying arm \
+                     (Symbol|Str) — as_symbol_or_str() must return None"
+                );
+            }
+        }
+        // Empty payload on each of the two carrying arms — the accessor
+        // is a projection, not a gate; a nameless symbol/string round-
+        // trips as `Some("")`, not `None`.
+        assert_eq!(
+            NodeKind::Symbol(String::new()).as_symbol_or_str(),
+            Some(""),
+            "empty-payload Symbol arm must project to Some(\"\")"
+        );
+        assert_eq!(
+            NodeKind::Str(String::new()).as_symbol_or_str(),
+            Some(""),
+            "empty-payload Str arm must project to Some(\"\")"
+        );
+        // Strict-subset boundary vs the sibling three-arm
+        // [`NodeKind::as_atom_string`] (3c3ca48): the `Keyword` arm is
+        // in the three-arm superset but NOT in this two-arm subset — a
+        // future refactor that widened this accessor to admit `Keyword`
+        // (silently collapsing the semantic distinction between the
+        // two accessors) trips at this pin before the caixa-teia
+        // `build_ref` `:nome` guard and the caixa-lsp `document_symbol`
+        // detail silently start accepting `:keyword` literals.
+        assert_eq!(
+            NodeKind::Keyword("k".into()).as_symbol_or_str(),
+            None,
+            "Keyword arm is in as_atom_string's three-arm set but MUST NOT \
+             be in as_symbol_or_str's two-arm subset — the strict-subset \
+             boundary is the whole point of a distinct accessor"
+        );
+    }
+
+    // Zero-copy pin — `k.as_symbol_or_str()` must borrow from the matched
+    // arm's own [`String`] storage, not clone into a fresh buffer. Fails
+    // at build time if a future rewrite regresses to `Some(s.clone()
+    // .leak())` or any other detour that silently allocates on every call.
+    // Pinned across both atom-name-carrying arms (Symbol/Str) — a per-
+    // arm-specific regression would slip past a single-arm pin — the same
+    // shape as the sibling [`as_atom_string_is_by_borrow_pointer_identity`]
+    // pin on the peer three-arm outer-`NodeKind` disjunctive projection.
+    #[test]
+    fn as_symbol_or_str_is_by_borrow_pointer_identity() {
+        for (constructor, ctor_name) in [
+            (
+                (|s: String| NodeKind::Symbol(s)) as fn(String) -> NodeKind,
+                "Symbol",
+            ),
+            (
+                (|s: String| NodeKind::Str(s)) as fn(String) -> NodeKind,
+                "Str",
+            ),
+        ] {
+            let payload = format!("aws-vpc-{ctor_name}");
+            let payload_len = payload.len();
+            let k = constructor(payload);
+            let via_accessor: &str = k.as_symbol_or_str().unwrap();
+            let inner_ptr = match &k {
+                NodeKind::Symbol(inner) | NodeKind::Str(inner) => inner.as_ptr(),
+                _ => unreachable!("constructed above via atom-name arm ctor"),
+            };
+            assert_eq!(
+                via_accessor.as_ptr(),
+                inner_ptr,
+                "NodeKind::as_symbol_or_str on the {ctor_name} arm must \
+                 borrow from that arm's String backing storage \
+                 (zero-copy projection)",
+            );
+            assert_eq!(
+                via_accessor.len(),
+                payload_len,
+                "NodeKind::as_symbol_or_str on the {ctor_name} arm must \
+                 byte-equal in length to the arm's payload",
+            );
+        }
+    }
+
+    // Byte-parity pin on the pre-lift two-arm disjunctive
+    // `match &_.kind { NodeKind::Symbol(s) | NodeKind::Str(s) => s.clone(),
+    // _ => … }` shape the two caixa-teia `build_ref` `:nome`-slot and
+    // caixa-lsp `document_symbol` `:nome`-detail consumer sites route
+    // through today via `.as_symbol_or_str().map(str::to_owned)`. Refuses
+    // a future accidental split between the accessor's return contract
+    // and its pre-lift disjunctive shape (a hand-rolled shadow `impl` that
+    // overrides one path, an accidental rebrand of one converged call site
+    // back to the raw two-arm `NodeKind::Symbol(s) | NodeKind::Str(s)`
+    // form, or a widening of the accessor to admit `Keyword`) on the
+    // load-bearing atom-name-carrying disjunctive axis every `:nome` slot
+    // partitions on.
+    #[test]
+    fn as_symbol_or_str_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&str> = match &variant {
+                NodeKind::Symbol(s) | NodeKind::Str(s) => Some(s.as_str()),
+                _ => None,
+            };
+            let via_accessor = variant.as_symbol_or_str();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.as_symbol_or_str() must byte-equal \
+                 `match &_ {{ NodeKind::Symbol(s) | NodeKind::Str(s) => \
+                 Some(s.as_str()), _ => None }}` — otherwise the two \
+                 converged caixa-teia/caixa-lsp `:nome` call sites would \
+                 silently disagree with their pre-lift shape"
             );
         }
     }
