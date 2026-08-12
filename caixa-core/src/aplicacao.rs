@@ -4670,7 +4670,127 @@ impl PlacementStrategy {
             _ => None,
         }
     }
+
+    /// Substrate-canonical per-arm predicate naming the cross-slot
+    /// `:placement :estrategia` ↔ `:placement :shard-key` invariant on the
+    /// closed-set typed [`PlacementStrategy`] enum: `true` iff the strategy
+    /// consumes the paired [`Placement::shard_key`] axis (and therefore
+    /// requires — and is the only strategy that permits — a non-empty
+    /// `:shard-key` on the paired slot). Today the accept-set is the
+    /// singleton `{Sharded}` — `Sharded` is the sole Akka-style
+    /// hash-keyed distribution arm (MESH-COMPOSITION §II.4) that keys off a
+    /// per-entity extractor expression; `SingleNode` (Erlang/OTP
+    /// distributed-app takeover — §II.1) and `Replicated` (active-active
+    /// across every named cluster) have no hash-keyed routing axis to
+    /// consume the slot and refuse a declared-but-inert `:shard-key`
+    /// through [`AplicacaoError::ShardKeyOnNonSharded`].
+    ///
+    /// Every validated [`Placement`] past [`AplicacaoSpec::validate_placement`]
+    /// satisfies `placement.shard_key().is_some() ==
+    /// placement.estrategia().requires_shard_key()` by construction — the
+    /// cross-slot partition the pin
+    /// [`tests::validate_placement_admits_paired_shape_iff_strategy_requires_shard_key`]
+    /// locks load-bearing, so every downstream consumer that reaches for
+    /// the paired shape (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+    /// CR materializer's per-CR shard-key resolver, the future
+    /// [`feira app graph --shard-key`] per-Aplicacao column, the future
+    /// per-cluster Akka-style cluster-sharding reconciler's per-entity
+    /// hash-routing gate, the M5 adaptive-placement engine's per-strategy
+    /// shard-key requirement probe, a future author-facing tatara-lisp
+    /// linter that flags `(:placement (:estrategia Replicated :shard-key
+    /// "tenantId"))` shapes before `feira lint` reaches
+    /// [`AplicacaoSpec::validate`]) can reach for one typed dispatch on
+    /// the substrate primitive — the predicate names *the cross-slot
+    /// invariant*, not the arm identity.
+    ///
+    /// Prior to this lift the "does this strategy consume `:shard-key`"
+    /// classification lived under the `gen_platform::IsVariant`-derived
+    /// [`Self::is_sharded`] predicate at three fixture-builder sites in
+    /// this crate (the [`tests::placement_strategy_variants_round_trip`]
+    /// per-variant `Placement`-builder's `if s.is_sharded() { Some("$key"…)
+    /// } else { None }` cascade, the
+    /// [`tests::estrategia_returns_placement_estrategia_verbatim_across_permutations`]
+    /// per-variant `Placement`-builder's `estrategia.is_sharded().then(||
+    /// "tenantId".to_string())` cascade, and the
+    /// [`tests::validate_placement_reads_through_lifted_estrategia_accessor`]
+    /// per-variant spec-mutator's identical `.is_sharded().then(…)`
+    /// cascade). Each site conflated two semantically distinct questions:
+    /// "is the variant `Sharded`?" (arm-identity, what
+    /// [`Self::is_sharded`] answers) and "does the variant consume
+    /// `:shard-key`?" (cross-slot-invariant, what this predicate answers).
+    /// The two questions land on the same three-way answer under today's
+    /// closed accept-set (both trip on the singleton `{Sharded}`), but a
+    /// future arm addition that consumed `:shard-key` under a different
+    /// name (a hypothetical `Anycast` mesh-anycast arm the MESH-COMPOSITION
+    /// §II.5 roadmap-hint names that hash-partitions across the cluster
+    /// pool by client-IP hash rather than an author-declared extractor
+    /// expression, a hypothetical `WeightedShard` variant that carries a
+    /// shard-key + per-cluster weight table under a promoted M5
+    /// adaptive-placement engine) or an addition that did *not* consume
+    /// `:shard-key` on a semantically Sharded-shaped arm would silently
+    /// split the two questions. Any consumer that read
+    /// `.is_sharded().then(…)` for the shard-key requirement gate would
+    /// silently misclassify the new arm as non-consuming — a fixture
+    /// builder would omit `:shard-key` where the new arm required one and
+    /// [`AplicacaoSpec::validate_placement`] would refuse the fixture with
+    /// [`AplicacaoError::ShardedWithoutKey`] far from the arm-addition
+    /// commit, a future M4 CR materializer would fall through the
+    /// `.is_sharded()`-only branch to the non-shard-key resolver arm and
+    /// silently emit an empty extractor at the Akka reconciler layer.
+    ///
+    /// Lifting the classification as a substrate-primitive method on the
+    /// closed-set typed enum names the cross-slot invariant on the
+    /// primitive that owns the partition: every future arm addition
+    /// declares its `:shard-key` consumption in one place (this predicate's
+    /// `match self` arm-set), and every downstream consumer that reaches
+    /// for the paired shape reads through one typed dispatch. Same
+    /// discipline as the sibling [`WitContract::is_capability`] (7b97d26)
+    /// per-arm predicate on the pre-projection WIT-shape axis and the
+    /// [`WitTarget::is_capability`] `gen_platform::IsVariant`-derived
+    /// paired predicate on the post-projection typed-view axis — a
+    /// per-arm semantic-classification predicate paired with the
+    /// arm-identity predicate the derive already emits, closing the drift
+    /// footgun on the cross-slot invariant axis.
+    ///
+    /// Method-named `requires_shard_key` (not `has_shard_key`, not
+    /// `is_shard_keyed`, not `takes_shard_key`) because the cross-slot
+    /// invariant reads as "this strategy *requires* the paired
+    /// `:shard-key` axis" — the `SingleNode`/`Replicated` arms *refuse*
+    /// the axis through [`AplicacaoError::ShardKeyOnNonSharded`], not
+    /// merely omit it. The `has_*` framing would read as an accessor
+    /// (returning the presence of an already-carried value) rather than a
+    /// requirement (naming the invariant the paired slot must satisfy).
+    /// Returns `bool` (not `Option<()>` or a marker-type witness), same
+    /// shape as the sibling [`WitContract::is_capability`] /
+    /// [`Self::is_sharded`] per-arm boolean predicates on the closed-set
+    /// arm-family, so every consumer reaches for `.requires_shard_key()`
+    /// as a drop-in replacement for the `.is_sharded()` conflated read
+    /// without a return-shape migration.
+    #[must_use]
+    pub const fn requires_shard_key(self) -> bool {
+        match self {
+            Self::Sharded => true,
+            Self::SingleNode | Self::Replicated => false,
+        }
+    }
 }
+
+// Compile-time pins on the [`PlacementStrategy::requires_shard_key`]
+// cross-slot-invariant per-arm predicate: the module-scope const-eval
+// assertions below trip at caixa-core build time (not test time) if a
+// future edit rewires the predicate's arm-set away from the singleton
+// `{Sharded}` accept-set MESH-COMPOSITION §II.4 pins. The
+// [`tests::placement_strategy_requires_shard_key_partitions_the_arm_set`]
+// runtime pin covers the same truth-table with a more descriptive
+// diagnostic on failure; these const-eval items add a build-time failure
+// surface strictly stronger than the runtime pin (a downstream renderer's
+// `const`-context reader that composed against a rebound predicate would
+// still surface here before the test suite even ran) and side-step the
+// `clippy::assertions_on_constants` lint the runtime `assert!(CONST)` pin
+// would otherwise accumulate on the caixa-core module baseline.
+const _: () = assert!(!PlacementStrategy::SingleNode.requires_shard_key());
+const _: () = assert!(!PlacementStrategy::Replicated.requires_shard_key());
+const _: () = assert!(PlacementStrategy::Sharded.requires_shard_key());
 
 /// [`std::fmt::Display`] routed through [`PlacementStrategy::as_str`], so
 /// the pretty-printed byte-string every consumer that formats the strategy
@@ -14227,7 +14347,20 @@ mod tests {
                 estrategia: s,
                 clusters: vec!["rio".into()],
                 affinity: None,
-                shard_key: if s.is_sharded() {
+                // Route the paired `:shard-key` fixture-builder through the
+                // typed cross-slot invariant predicate
+                // [`PlacementStrategy::requires_shard_key`] rather than the
+                // [`gen_platform::IsVariant`]-derived [`Self::is_sharded`]
+                // arm-identity predicate — the two answer the same
+                // question under today's closed accept-set but a future
+                // arm addition that consumed `:shard-key` under a
+                // non-`Sharded` name would silently mis-attach the
+                // fixture's `:shard-key` if the builder read through the
+                // arm-identity predicate. The cross-slot-invariant
+                // predicate migrates through one caixa-core edit on any
+                // future arm addition; the fixture keeps producing a
+                // `validate()`-passing round-trip by construction.
+                shard_key: if s.requires_shard_key() {
                     Some("$key".into())
                 } else {
                     None
@@ -14498,6 +14631,203 @@ mod tests {
         assert!(IS_SINGLE_NODE);
         assert!(IS_REPLICATED);
         assert!(IS_SHARDED);
+    }
+
+    #[test]
+    fn placement_strategy_requires_shard_key_partitions_the_arm_set() {
+        // Fail-before-pass-after pin on the substrate-lifted
+        // [`PlacementStrategy::requires_shard_key`] cross-slot-invariant
+        // per-arm predicate: for each variant in the closed accept-set the
+        // predicate returns `true` iff the variant consumes the paired
+        // [`Placement::shard_key`] axis under
+        // [`AplicacaoSpec::validate_placement`]'s `Sharded` ↔ non-`Sharded`
+        // partition. Today the accept-set is the singleton `{Sharded}` —
+        // `Sharded` is the Akka-style hash-keyed distribution arm
+        // (MESH-COMPOSITION §II.4), `SingleNode` (Erlang/OTP takeover —
+        // §II.1) and `Replicated` (active-active) refuse the axis through
+        // [`AplicacaoError::ShardKeyOnNonSharded`].
+        //
+        // Pins the per-arm truth-table so a future arm addition (an
+        // `Anycast` mesh-anycast arm the MESH-COMPOSITION §II.5 hint the
+        // roadmap names, a `WeightedShard` promotion the future M5
+        // adaptive-placement engine acknowledges) that landed a variant
+        // without extending this predicate's arm-set would surface as a
+        // caixa-core build-time exhaustiveness error at the
+        // `match self { … }` arm-fan below rather than a silent per-consumer
+        // mis-classification at renderer emit time. The paired
+        // [`Self::is_sharded`] `gen_platform::IsVariant`-derived arm-identity
+        // predicate stays a distinct question — arm-identity (which the
+        // sibling
+        // [`placement_strategy_is_variant_predicates_partition_the_arm_set`]
+        // pin already locks) is not cross-slot-invariant consumption; today
+        // they trip on the same singleton but the pair migrates through
+        // one caixa-core edit on any future arm addition.
+        //
+        // Peer of the sibling per-arm classifier pins
+        // [`wit_contract_is_capability_partitions_the_wit_shape_space`]
+        // (7b97d26) on the [`WitContract`] pre-projection WIT-shape axis
+        // and the [`WitTarget::is_capability`] `gen_platform::IsVariant`-
+        // derived paired predicate on the post-projection typed-view axis
+        // — same "per-arm semantic-classification predicate paired with
+        // the arm-identity predicate the derive already emits" discipline
+        // extended onto the M3 mesh-slot `:placement :estrategia` ↔
+        // `:placement :shard-key` cross-slot-invariant axis.
+        let rows: [(PlacementStrategy, bool); 3] = [
+            (PlacementStrategy::SingleNode, false),
+            (PlacementStrategy::Replicated, false),
+            (PlacementStrategy::Sharded, true),
+        ];
+        for (variant, expected) in rows {
+            assert_eq!(
+                variant.requires_shard_key(),
+                expected,
+                "PlacementStrategy::{variant:?}.requires_shard_key() must \
+                 be {expected} (the substrate-canonical cross-slot invariant \
+                 on the :placement :shard-key axis; today `Sharded` is the \
+                 singleton consuming arm — MESH-COMPOSITION §II.4)",
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_requires_shard_key_is_const_fn() {
+        // The [`PlacementStrategy::requires_shard_key`] cross-slot-
+        // invariant per-arm predicate is declared `#[must_use] pub const
+        // fn` — pin the `const`-eval posture here so a future accidental
+        // downgrade to non-`const` (an added runtime helper reachable
+        // only from a non-`const` context, a manual hand-rolled `impl`
+        // that shadows the current three-arm `match self { … }` dispatch)
+        // trips at caixa-core build time rather than surfacing as a
+        // downstream `const`-context regression far from the declaration.
+        // Same shape as the sibling
+        // [`placement_strategy_is_variant_predicates_are_const_fn`] pin on
+        // the peer [`gen_platform::IsVariant`]-derived arm-identity
+        // predicate axis, but here the load-bearing assertions live in
+        // module-scope `const _: () = assert!(…)` items so a violation
+        // fails at compile time (const-eval trip) rather than test time —
+        // strictly stronger than the runtime `assert!(CONST)` pattern the
+        // sibling pin uses, and side-steps the
+        // `clippy::assertions_on_constants` lint the runtime pattern
+        // otherwise accumulates on the module baseline.
+        //
+        // The test body simply witnesses that the module-scope items
+        // compiled and the runtime dispatch agrees with the const-eval
+        // dispatch on every arm — the runtime read gives the test a
+        // failure surface (rather than an empty test body clippy would
+        // flag as a no-op).
+        const REQUIRES_SINGLE_NODE: bool = PlacementStrategy::SingleNode.requires_shard_key();
+        const REQUIRES_REPLICATED: bool = PlacementStrategy::Replicated.requires_shard_key();
+        const REQUIRES_SHARDED: bool = PlacementStrategy::Sharded.requires_shard_key();
+        assert_eq!(
+            [REQUIRES_SINGLE_NODE, REQUIRES_REPLICATED, REQUIRES_SHARDED,],
+            [
+                PlacementStrategy::SingleNode.requires_shard_key(),
+                PlacementStrategy::Replicated.requires_shard_key(),
+                PlacementStrategy::Sharded.requires_shard_key(),
+            ],
+            "runtime and const-eval dispatch on \
+             PlacementStrategy::requires_shard_key must agree on every arm",
+        );
+    }
+
+    #[test]
+    fn validate_placement_admits_paired_shape_iff_strategy_requires_shard_key() {
+        // Load-bearing cross-slot-partition pin closing the loop between
+        // the substrate-lifted
+        // [`PlacementStrategy::requires_shard_key`] per-arm predicate on
+        // the closed-set typed enum and the actual
+        // [`AplicacaoSpec::validate_placement`] runtime behavior across
+        // the paired `:placement :shard-key` axis: every validated
+        // [`Placement`] past [`AplicacaoSpec::validate_placement`]
+        // satisfies `placement.shard_key().is_some() ==
+        // placement.estrategia().requires_shard_key()`. The four-cell
+        // shape witness sweeps every combination of (variant in the
+        // closed accept-set, `:shard-key` Some/None) and pins:
+        //
+        //   * variant.requires_shard_key() && shard_key.is_some() →
+        //     validate() passes; the paired shape is the sole
+        //     `requires_shard_key` arm-family accepted shape.
+        //   * variant.requires_shard_key() && shard_key.is_none() →
+        //     validate() fails with [`AplicacaoError::ShardedWithoutKey`];
+        //     the paired shape is the refused missing-key shape on
+        //     Sharded-family arms.
+        //   * !variant.requires_shard_key() && shard_key.is_some() →
+        //     validate() fails with
+        //     [`AplicacaoError::ShardKeyOnNonSharded`]; the paired shape
+        //     is the refused declared-but-inert shape on non-Sharded-
+        //     family arms.
+        //   * !variant.requires_shard_key() && shard_key.is_none() →
+        //     validate() passes; the paired shape is the sole
+        //     non-`requires_shard_key` arm-family accepted shape.
+        //
+        // The compile-time-exhaustive `match p.estrategia()` dispatch at
+        // [`AplicacaoSpec::validate_placement`] preserves its structural
+        // arm-fan (a future arm addition still surfaces a build-time
+        // exhaustiveness error there); this pin closes the semantic loop
+        // between the arm-fan's shape-gate cascades and the substrate-
+        // canonical predicate every downstream consumer of the paired
+        // shape reads through. Fail-before-pass-after locally verified by
+        // mutating the predicate's `Sharded => true` arm to `false` — the
+        // truthy `expects_ok` cell for `Sharded` + `Some` trips the
+        // `validate() must pass` assertion; restoring passes. Same "close
+        // the loop between the typed predicate and the runtime behavior"
+        // discipline as the sibling
+        // [`wit_contract_is_capability_agrees_with_projected_wit_target_capability_variant`]
+        // (7b97d26) cross-projection pin on the peer [`WitTarget`]
+        // per-arm classifier axis.
+        for variant in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            for present in [false, true] {
+                let mut spec = three_member_spec();
+                spec.placement.estrategia = variant;
+                spec.placement.shard_key = present.then(|| "tenantId".into());
+                let expects_ok = variant.requires_shard_key() == present;
+                let result = spec.validate();
+                match (expects_ok, &result) {
+                    (true, Ok(())) => {}
+                    (false, Err(err)) => {
+                        // Cross-check the refusal diagnostic names the
+                        // right cell of the four-cell shape witness — the
+                        // `requires_shard_key && !present` cell must trip
+                        // [`AplicacaoError::ShardedWithoutKey`]; the
+                        // `!requires_shard_key && present` cell must trip
+                        // [`AplicacaoError::ShardKeyOnNonSharded`].
+                        match (variant.requires_shard_key(), present, err) {
+                            (true, false, AplicacaoError::ShardedWithoutKey) => {}
+                            (
+                                false,
+                                true,
+                                AplicacaoError::ShardKeyOnNonSharded { estrategia: e, .. },
+                            ) => {
+                                assert_eq!(
+                                    *e, variant,
+                                    "ShardKeyOnNonSharded.estrategia must byte-equal \
+                                     the paired PlacementStrategy",
+                                );
+                            }
+                            _ => panic!(
+                                "unexpected refusal for estrategia={variant:?} \
+                                 present={present}: {err:?}"
+                            ),
+                        }
+                    }
+                    (true, Err(err)) => panic!(
+                        "validate() must pass for estrategia={variant:?} \
+                         present={present} (requires_shard_key={} == present={present}), \
+                         got {err:?}",
+                        variant.requires_shard_key(),
+                    ),
+                    (false, Ok(())) => panic!(
+                        "validate() must fail for estrategia={variant:?} \
+                         present={present} (requires_shard_key={} != present={present})",
+                        variant.requires_shard_key(),
+                    ),
+                }
+            }
+        }
     }
 
     #[test]
@@ -21407,7 +21737,16 @@ mod tests {
             PlacementStrategy::Replicated,
             PlacementStrategy::Sharded,
         ] {
-            let shard_key = estrategia.is_sharded().then(|| "tenantId".to_string());
+            // Route the paired `:shard-key` fixture-builder through the
+            // typed cross-slot invariant predicate
+            // [`PlacementStrategy::requires_shard_key`] rather than the
+            // [`gen_platform::IsVariant`]-derived [`PlacementStrategy::is_sharded`]
+            // arm-identity predicate — same discipline the sibling
+            // `placement_strategy_variants_round_trip` fixture builder now
+            // reads through.
+            let shard_key = estrategia
+                .requires_shard_key()
+                .then(|| "tenantId".to_string());
             let p = Placement {
                 estrategia,
                 clusters: vec!["rio".into()],
@@ -21466,7 +21805,18 @@ mod tests {
             let mut spec = three_member_spec();
             spec.placement.estrategia = estrategia;
             spec.placement.clusters = Vec::new();
-            spec.placement.shard_key = estrategia.is_sharded().then(|| "tenantId".to_string());
+            // Route the paired `:shard-key` spec-mutator through the typed
+            // cross-slot invariant predicate
+            // [`PlacementStrategy::requires_shard_key`] rather than the
+            // [`gen_platform::IsVariant`]-derived
+            // [`PlacementStrategy::is_sharded`] arm-identity predicate —
+            // same discipline the sibling
+            // `placement_strategy_variants_round_trip` and
+            // `estrategia_returns_placement_estrategia_verbatim_across_permutations`
+            // fixture builders now read through.
+            spec.placement.shard_key = estrategia
+                .requires_shard_key()
+                .then(|| "tenantId".to_string());
             let err = spec.validate().unwrap_err();
             match err {
                 AplicacaoError::PlacementWithoutClusters { estrategia: e } => {
