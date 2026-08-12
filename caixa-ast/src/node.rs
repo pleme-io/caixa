@@ -535,6 +535,70 @@ impl NodeKind {
             _ => None,
         }
     }
+
+    /// Substrate-canonical projection onto the writer-side sigil prefix
+    /// that the tatara-lisp reader consumes to build the four reader-macro
+    /// arms — `Self::Quote` reads as one apostrophe byte, `Self::Quasiquote`
+    /// as one backtick byte, `Self::Unquote` as one comma byte,
+    /// `Self::UnquoteSplice` as two bytes (comma then at-sign) — and
+    /// returns [`None`] on every other arm of the closed fourteen-arm
+    /// [`NodeKind`] variant set. Companion to the sibling
+    /// [`Self::as_reader_macro_inner`] reader-macro-inner projection: the
+    /// reader/writer duality's two halves on the reader-macro-arm-set —
+    /// the boxed inner node the arm carries, and the sigil bytes the arm
+    /// reads back as — now each dispatch through one substrate accessor
+    /// rather than a four-arm per-arm pattern-match repeated at every
+    /// writer site.
+    ///
+    /// Two production consumer sites today in caixa-fmt/src/printer.rs
+    /// — the top-level `Printer::emit` main reader-macro-arm dispatch, and
+    /// the peer `render_node_inline` inline-render main reader-macro-arm
+    /// dispatch — which previously reached the sigil bytes through four
+    /// raw per-arm pattern-matches (`Quote` pushing the apostrophe byte,
+    /// `Quasiquote` pushing the backtick byte, `Unquote` pushing the
+    /// comma byte, `UnquoteSplice` pushing the two-byte comma-then-at-
+    /// sign) restated at each site. The fact that the four reader-macro
+    /// arms differ ONLY in these one-or-two sigil bytes had no home in
+    /// the type system — it lived as prose in the printer's own arm
+    /// dispatch, and a copy-paste that flipped one arm's sigil (routed
+    /// `Quote` through the backtick byte and `Quasiquote` through the
+    /// apostrophe byte) would silently rewrite every quote as a
+    /// quasiquote and vice versa at every writer site.
+    ///
+    /// Contract with [`Self::as_reader_macro_inner`]: for every variant,
+    /// either both accessors return [`Some`] (the four reader-macro arms)
+    /// or both return [`None`] (every other arm) — pinned by
+    /// `reader_macro_prefix_partitions_the_same_arm_set_as_as_reader_macro_inner`.
+    /// A future reader-macro arm addition (a hypothetical
+    /// `NodeKind::Splice(Box<Node>)` shape once the tatara-lisp reader
+    /// grows a splicing-quote variant, a `NodeKind::TaggedQuote(Box<Node>,
+    /// QuoteTag)` shape once the sexp→JSON bridge stabilizes tagged-quote
+    /// sugar — the same extension axis the sibling
+    /// [`Self::as_reader_macro_inner`] doc-comment names) folds onto both
+    /// accessors at exactly the substrate — the writer half by extending
+    /// this partition once, the walker half by extending
+    /// [`Self::as_reader_macro_inner`]'s — rather than a coordinated
+    /// rewrite across every per-consumer writer site.
+    ///
+    /// Tenth `Option<&<payload>>`-shaped projection accessor on the
+    /// outer-`NodeKind` sum-type — the writer-half sibling to
+    /// [`Self::as_reader_macro_inner`] on the reader-macro-arm-set,
+    /// mirroring the shape of the paired
+    /// [`Self::seq_delims`] / [`Self::as_seq_body`] compound-arm-set
+    /// accessors on the sibling D4-dialect compound axis. Returns
+    /// `&'static str` rather than a borrow into arm storage because the
+    /// sigil bytes are the arm's IDENTITY (like `seq_delims`'s
+    /// `(char, char)` pair) rather than a payload the arm carries.
+    #[must_use]
+    pub fn reader_macro_prefix(&self) -> Option<&'static str> {
+        match self {
+            Self::Quote(_) => Some("'"),
+            Self::Quasiquote(_) => Some("`"),
+            Self::Unquote(_) => Some(","),
+            Self::UnquoteSplice(_) => Some(",@"),
+            _ => None,
+        }
+    }
 }
 
 impl Node {
@@ -2044,6 +2108,144 @@ mod is_variant_tests {
                  NodeKind::Vector(_) => Some(('[', ']')) | _ => None }}` \
                  — otherwise the four converged caixa-fmt writer sites \
                  would silently disagree with their pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's writer-side
+    // reader-macro-sigil accessor: exactly the four reader-macro-carrying
+    // arms return `Some(&'static str)` with the per-arm sigil bytes
+    // (`Quote` → `"'"`, `Quasiquote` → `` "`" ``, `Unquote` → `","`,
+    // `UnquoteSplice` → `",@"`); every other arm of the closed fourteen-
+    // arm partition returns `None`. Pins the "one canonical projection
+    // dispatch per typed arm-set on the substrate primitive" discipline
+    // the two per-consumer writer sites in caixa-fmt/src/printer.rs route
+    // through via `.reader_macro_prefix()`. A regression that flipped one
+    // arm's sigil (a copy-paste that routed `Quote` through `` "`" `` and
+    // `Quasiquote` through `"'"`, or `Unquote` through `",@"` and
+    // `UnquoteSplice` through `","`) would silently rewrite every quote
+    // as a quasiquote and every unquote-splice as an unquote at every
+    // writer site.
+    #[test]
+    fn reader_macro_prefix_projects_only_reader_macro_arms_with_sigil_bytes() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.reader_macro_prefix();
+            let expected = match variant {
+                NodeKind::Quote(_) => Some("'"),
+                NodeKind::Quasiquote(_) => Some("`"),
+                NodeKind::Unquote(_) => Some(","),
+                NodeKind::UnquoteSplice(_) => Some(",@"),
+                _ => None,
+            };
+            assert_eq!(
+                projected, expected,
+                "NodeKind::{name}.reader_macro_prefix() must project onto \
+                 the per-arm reader-side sigil (Quote → \"'\", Quasiquote \
+                 → \"`\", Unquote → \",\", UnquoteSplice → \",@\") — \
+                 otherwise the two converged caixa-fmt writer sites would \
+                 silently start emitting the wrong sigil"
+            );
+        }
+        // Strict-reader-macro-arm-only boundary vs the sibling D4-dialect
+        // compound-carrying arms — all three compound arms carry a
+        // `Vec<Node>` body with matched delimiter pairs (`(…)`, `{…}`,
+        // `[…]`), not a one- or two-byte sigil prefix, so a future
+        // widening to admit a compound arm through `reader_macro_prefix`
+        // (silently collapsing the semantic distinction between a
+        // reader-macro wrapper `'x` and a container `(x)`) would break
+        // every writer site that gates on the reader-macro-arm-set.
+        // Pinned across all three compound arms — a per-arm-specific
+        // regression would slip past a single-arm pin.
+        assert_eq!(
+            NodeKind::List(Vec::new()).reader_macro_prefix(),
+            None,
+            "List arm is a matched-delimiter compound container with no \
+             one-byte reader-macro sigil prefix — MUST NOT project through \
+             reader_macro_prefix"
+        );
+        assert_eq!(
+            NodeKind::Map(Vec::new()).reader_macro_prefix(),
+            None,
+            "Map arm is a matched-delimiter compound container with no \
+             one-byte reader-macro sigil prefix — MUST NOT project through \
+             reader_macro_prefix"
+        );
+        assert_eq!(
+            NodeKind::Vector(Vec::new()).reader_macro_prefix(),
+            None,
+            "Vector arm is a matched-delimiter compound container with no \
+             one-byte reader-macro sigil prefix — MUST NOT project through \
+             reader_macro_prefix"
+        );
+    }
+
+    // Contract with sibling [`NodeKind::as_reader_macro_inner`] — for
+    // every variant, either both accessors return `Some` (the four reader-
+    // macro arms) or both return `None` (every other arm). Pinned live
+    // rather than by inspection: a future addition of a fifth reader-macro
+    // arm (a hypothetical `NodeKind::Splice(Box<Node>)` once the tatara-
+    // lisp reader grows a splicing-quote variant, a `NodeKind::TaggedQuote
+    // (Box<Node>, QuoteTag)` shape once the sexp→JSON bridge stabilizes
+    // tagged-quote sugar) that extended one accessor but not the other
+    // would silently produce a walker-half-of-the-reader/writer-duality
+    // drift (as_reader_macro_inner Some but reader_macro_prefix None →
+    // the emit dispatch's `.expect(…)` on the writer half would panic at
+    // runtime for a wrapper the walker already treats as reader-macro;
+    // the reverse would let the writer emit a sigil around a payload the
+    // walker refuses to descend into). The `.expect(…)` calls at the
+    // caixa-fmt converge sites are load-bearing on this partition-
+    // equivalence — this test is what turns them from a runtime assertion
+    // into a build-time pin. Sibling in shape to
+    // `seq_delims_partitions_the_same_arm_set_as_as_seq_body` on the
+    // peer D4-dialect compound axis.
+    #[test]
+    fn reader_macro_prefix_partitions_the_same_arm_set_as_as_reader_macro_inner() {
+        for (variant, name) in all_variants() {
+            assert_eq!(
+                variant.reader_macro_prefix().is_some(),
+                variant.as_reader_macro_inner().is_some(),
+                "NodeKind::{name} — reader_macro_prefix().is_some() must \
+                 equal as_reader_macro_inner().is_some() (reader/writer-\
+                 duality partition equivalence on the reader-macro-arm-\
+                 set); the caixa-fmt writer sites depend on this for their \
+                 `expect(…)` on the prefix half after gating through \
+                 as_reader_macro_inner"
+            );
+        }
+    }
+
+    // Byte-parity pin on the pre-lift four-arm disjunctive
+    // `match &_.kind { NodeKind::Quote(_) => Some("'") | Quasiquote(_) =>
+    // Some("`") | Unquote(_) => Some(",") | UnquoteSplice(_) => Some(",@")
+    // | _ => None }` shape the two caixa-fmt writer sites route through
+    // today via `.reader_macro_prefix()`. Refuses a future accidental
+    // split between the accessor's return contract and its pre-lift
+    // per-arm shape (a hand-rolled shadow `impl` that overrides one path,
+    // an accidental rebrand of one converged call site back to the raw
+    // four-arm `NodeKind::Quote(inner) => self.out.push('\'') | …` form,
+    // a per-arm sigil flip) on the load-bearing writer-half-of-the-
+    // reader/writer-duality axis every downstream reader-macro-emit site
+    // partitions on.
+    #[test]
+    fn reader_macro_prefix_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&'static str> = match &variant {
+                NodeKind::Quote(_) => Some("'"),
+                NodeKind::Quasiquote(_) => Some("`"),
+                NodeKind::Unquote(_) => Some(","),
+                NodeKind::UnquoteSplice(_) => Some(",@"),
+                _ => None,
+            };
+            let via_accessor = variant.reader_macro_prefix();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.reader_macro_prefix() must byte-equal \
+                 `match &_ {{ NodeKind::Quote(_) => Some(\"'\") | \
+                 Quasiquote(_) => Some(\"`\") | Unquote(_) => Some(\",\") \
+                 | UnquoteSplice(_) => Some(\",@\") | _ => None }}` — \
+                 otherwise the two converged caixa-fmt writer sites would \
+                 silently disagree with their pre-lift shape"
             );
         }
     }
