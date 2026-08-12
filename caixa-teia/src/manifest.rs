@@ -58,10 +58,22 @@ fn instance_from_node(n: &Node) -> Result<TeiaInstance, TeiaError> {
         };
         let mut i = 0;
         while i + 1 < items.len() {
-            let NodeKind::Keyword(k) = &items[i].kind else {
+            // Route the `:atributos` pair-loop's per-item keyword-name
+            // scalar projection through the lifted
+            // [`caixa_ast::NodeKind::as_keyword`] `Option<&str>` accessor
+            // rather than the raw `let NodeKind::Keyword(k) = &items[i]
+            // .kind else …` open-coded per-arm let-else pattern-match —
+            // sibling to the peer `build_object` per-key `:keyword` extract
+            // (this run) and to the caixa-ast [`caixa_ast::Node::kwarg`]
+            // pair-loop the substrate-canonical accessor already routes
+            // through. Byte-parity swap: the error message +
+            // `.to_owned()`-vs-`.clone()` owned-string mint on the
+            // matched arm both stay the same at every arm of the closed
+            // 14-arm partition.
+            let Some(k) = items[i].kind.as_keyword() else {
                 return Err(TeiaError::BadForm(items[i].span.start, "expected :keyword"));
             };
-            atributos.insert(k.clone(), node_to_value(&items[i + 1])?);
+            atributos.insert(k.to_owned(), node_to_value(&items[i + 1])?);
             i += 2;
         }
     }
@@ -166,15 +178,27 @@ fn is_ref_form(items: &[Node]) -> bool {
 }
 
 fn build_ref(items: &[Node]) -> Result<TeiaValue, TeiaError> {
-    let tipo = match &items[1].kind {
-        NodeKind::Symbol(s) => s.clone(),
-        _ => {
-            return Err(TeiaError::BadForm(
-                items[1].span.start,
-                "ref tipo must be a symbol",
-            ));
-        }
-    };
+    // Route the `(ref <tipo> <nome> <atributo>)` second-slot symbol-name
+    // projection through the lifted [`caixa_ast::NodeKind::as_symbol`]
+    // `Option<&str>` accessor rather than the raw `match &items[1].kind
+    // { NodeKind::Symbol(s) => s.clone(), _ => return Err(…) }` open-
+    // coded per-arm pattern-match — closing the `build_ref` per-
+    // positional-slot converge onto the substrate accessor family: the
+    // sibling `:nome` (third slot) already routes through
+    // [`caixa_ast::NodeKind::as_symbol_or_str`] (fd39cea) and the
+    // sibling `:atributo` (fourth slot) already routes through
+    // [`caixa_ast::NodeKind::as_atom_string`] (3c3ca48), so this lift
+    // makes all three `(ref …)` positional slots share the substrate-
+    // canonical per-arm-set discipline. Byte-parity swap: the error
+    // message + span carrier stay identical at every arm.
+    let tipo = items[1]
+        .kind
+        .as_symbol()
+        .map(str::to_owned)
+        .ok_or(TeiaError::BadForm(
+            items[1].span.start,
+            "ref tipo must be a symbol",
+        ))?;
     // Route the `:nome`-slot projection through the lifted
     // [`caixa_ast::NodeKind::as_symbol_or_str`] `Option<&str>` accessor
     // rather than the raw two-arm `NodeKind::Symbol(s) | NodeKind::Str(s)
@@ -214,25 +238,41 @@ fn build_ref(items: &[Node]) -> Result<TeiaValue, TeiaError> {
 }
 
 fn is_kwargs(items: &[Node]) -> bool {
+    // Route the per-item keyword-arm gate through the
+    // [`gen_platform::IsVariant`]-derived
+    // [`caixa_ast::NodeKind::is_keyword`] predicate rather than the raw
+    // `matches!(n.kind, NodeKind::Keyword(_))` field-agnostic literal —
+    // sibling to the peer caixa-lint `check_paired_kwargs` `Keyword`-arm
+    // gate and to the [`caixa_ast::Node::kwarg`] pair-loop's own per-
+    // item keyword-arm check. Byte-parity swap: the closed 14-arm
+    // partition remains identical, but the shape-check now keys off the
+    // substrate-canonical arm-discriminator so a future `Keyword`-arm
+    // rename or `#[is_variant(name = "…")]` override reaches this
+    // dispatch through one edit at the primitive.
     !items.is_empty()
         && items.len() % 2 == 0
-        && items
-            .iter()
-            .step_by(2)
-            .all(|n| matches!(n.kind, NodeKind::Keyword(_)))
+        && items.iter().step_by(2).all(|n| n.kind.is_keyword())
 }
 
 fn build_object(items: &[Node]) -> Result<TeiaValue, TeiaError> {
     let mut out = BTreeMap::new();
     let mut i = 0;
     while i + 1 < items.len() {
-        let NodeKind::Keyword(k) = &items[i].kind else {
+        // Sibling per-key `:keyword` extract to `instance_from_node`'s
+        // `:atributos` pair-loop above — routes through the lifted
+        // [`caixa_ast::NodeKind::as_keyword`] `Option<&str>` accessor for
+        // the same reason and closes the caixa-teia manifest per-key
+        // `Keyword`-arm converge onto the substrate-canonical accessor.
+        // Byte-parity swap: the error message +
+        // `.to_owned()`-vs-`.clone()` owned-string mint on the matched
+        // arm both stay the same.
+        let Some(k) = items[i].kind.as_keyword() else {
             return Err(TeiaError::BadForm(
                 items[i].span.start,
                 "kwargs key must be :keyword",
             ));
         };
-        out.insert(k.clone(), node_to_value(&items[i + 1])?);
+        out.insert(k.to_owned(), node_to_value(&items[i + 1])?);
         i += 2;
     }
     Ok(TeiaValue::Object(out))
@@ -296,5 +336,147 @@ mod tests {
         let hcl = m.instances[0].to_hcl();
         assert!(hcl.contains("resource \"aws_vpc\" \"main\""));
         assert!(hcl.contains(r#""10.0.0.0/16""#));
+    }
+
+    #[test]
+    fn build_ref_rejects_non_symbol_tipo_with_byte_parity_error() {
+        // Fail-before-pass-after pin on the `build_ref` `:tipo` slot's
+        // error path after the raw `match &items[1].kind {
+        // NodeKind::Symbol(s) => s.clone(), _ => return Err(…) }` open-
+        // coded per-arm pattern-match was converged onto the lifted
+        // [`caixa_ast::NodeKind::as_symbol`] `Option<&str>` accessor +
+        // the `Option::ok_or` combinator: every non-`Symbol`-arm value at
+        // the second positional slot of a `(ref …)` form (a string
+        // literal, a keyword, an integer, a nested list) must surface
+        // the same "ref tipo must be a symbol" [`TeiaError::BadForm`]
+        // the pre-lift raw pattern-match returned, and the error's span
+        // carrier must point at the offending atom (not the outer
+        // `(ref …)` form's span). Guards against a silent widening of
+        // the accessor's accept-set (a future `as_symbol` refactor that
+        // admitted `Str` values through the projection would silently
+        // start accepting `(ref "aws/vpc" …)` here) and against a silent
+        // narrowing of the error's `TeiaError::BadForm` shape.
+        for (src, expected_msg) in [
+            (
+                r#"(defteia :tipo aws/vpc :nome main :atributos (:vpc-id (ref "aws/vpc" main id)))"#,
+                "ref tipo must be a symbol",
+            ),
+            (
+                "(defteia :tipo aws/vpc :nome main :atributos (:vpc-id (ref :aws/vpc main id)))",
+                "ref tipo must be a symbol",
+            ),
+            (
+                "(defteia :tipo aws/vpc :nome main :atributos (:vpc-id (ref 42 main id)))",
+                "ref tipo must be a symbol",
+            ),
+        ] {
+            let err = parse_teia_source(src).expect_err(
+                "non-Symbol at (ref …) second slot must surface \
+                 TeiaError::BadForm — build_ref converged onto as_symbol",
+            );
+            match err {
+                TeiaError::BadForm(_, msg) => assert_eq!(
+                    msg, expected_msg,
+                    "build_ref :tipo slot's error message must byte-equal \
+                     the pre-lift raw-pattern-match's message (fixture: \
+                     {src:?})",
+                ),
+                TeiaError::Parse(parse_err) => panic!(
+                    "expected TeiaError::BadForm from non-Symbol :tipo \
+                     slot, got TeiaError::Parse({parse_err:?}) (fixture: {src:?})"
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn build_object_rejects_non_keyword_key_with_byte_parity_error() {
+        // Fail-before-pass-after pin on the `build_object` per-key
+        // `:keyword` extract's error path after the raw `let
+        // NodeKind::Keyword(k) = &items[i].kind else …` open-coded
+        // per-arm let-else pattern-match was converged onto the lifted
+        // [`caixa_ast::NodeKind::as_keyword`] `Option<&str>` accessor:
+        // any non-`Keyword`-arm value at an even index of a brace-map
+        // (`{ …k v …}`) — a string literal key, a symbol key, an integer
+        // key — must surface the same "kwargs key must be :keyword"
+        // [`TeiaError::BadForm`] the pre-lift raw let-else returned, and
+        // the error's span must point at the offending key atom.
+        //
+        // The parenthesised paired-shape sibling in `instance_from_node`
+        // does not reach this code path because the `is_kwargs` pre-
+        // gate rejects the malformed shape before `build_object` runs
+        // (which converts the whole list into a positional
+        // `TeiaValue::List` instead), so this pin covers only the
+        // brace-map surface where `NodeKind::Map(items) => build_object
+        // (items)` bypasses the sniff.
+        for (src, expected_msg) in [
+            (
+                r#"(defteia :tipo aws/vpc :nome main :atributos (:tags {"name" "main"}))"#,
+                "kwargs key must be :keyword",
+            ),
+            (
+                r#"(defteia :tipo aws/vpc :nome main :atributos (:tags {owner "main"}))"#,
+                "kwargs key must be :keyword",
+            ),
+        ] {
+            let err = parse_teia_source(src).expect_err(
+                "non-Keyword at brace-map even index must surface \
+                 TeiaError::BadForm — build_object converged onto as_keyword",
+            );
+            match err {
+                TeiaError::BadForm(_, msg) => assert_eq!(
+                    msg, expected_msg,
+                    "build_object per-key extract's error message must \
+                     byte-equal the pre-lift raw-let-else message \
+                     (fixture: {src:?})",
+                ),
+                TeiaError::Parse(parse_err) => panic!(
+                    "expected TeiaError::BadForm from non-Keyword brace-\
+                     map key, got TeiaError::Parse({parse_err:?}) (fixture: {src:?})"
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn is_kwargs_predicate_keys_off_is_keyword_derived_arm_check() {
+        // Load-bearing pin on the `is_kwargs` predicate after the raw
+        // `matches!(n.kind, NodeKind::Keyword(_))` field-agnostic
+        // literal was converged onto the [`gen_platform::IsVariant`]-
+        // derived [`caixa_ast::NodeKind::is_keyword`] predicate: the
+        // sniffed accept-set stays exactly "even-length lists whose
+        // every even-index atom is a `NodeKind::Keyword`". A regression
+        // that widened `is_keyword` to admit `Symbol` arms would
+        // silently start treating symbol-keyed lists as kwargs objects
+        // at the manifest lowerer; a regression that narrowed it would
+        // silently start treating keyword-keyed lists as positional
+        // lists. Both directions surface here at build time rather than
+        // at manifest-lowering-diff-review time.
+        //
+        // Exercised via [`parse_teia_source`] end-to-end so the pin
+        // guards both the direct [`is_kwargs`] predicate and its
+        // dispatch site at `NodeKind::List(items) if is_kwargs(items)`
+        // in [`node_to_value`].
+        let kwargs_shape = r#"(defteia :tipo aws/vpc :nome main :atributos (:tags (:owner "team-a" :team "infra")))"#;
+        let m = parse_teia_source(kwargs_shape).unwrap();
+        let tags = m.instances[0].atributos.get("tags").unwrap();
+        assert!(
+            matches!(tags, TeiaValue::Object(_)),
+            "kwargs-shaped list with every even-index atom a :keyword \
+             must lower to TeiaValue::Object — is_kwargs predicate \
+             converged onto NodeKind::is_keyword derived arm-check"
+        );
+        let non_kwargs_shape =
+            r#"(defteia :tipo aws/vpc :nome main :atributos (:things ("a" "b")))"#;
+        // ^ kept as `r#"…"#` because the inner `"a"` / `"b"` string
+        //   literals need the delimiter escape.
+        let m = parse_teia_source(non_kwargs_shape).unwrap();
+        let things = m.instances[0].atributos.get("things").unwrap();
+        assert!(
+            matches!(things, TeiaValue::List(_)),
+            "non-kwargs-shaped list must lower to TeiaValue::List — the \
+             is_kwargs predicate must reject any list whose even-index \
+             atoms are not all Keyword arms"
+        );
     }
 }
