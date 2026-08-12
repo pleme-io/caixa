@@ -19358,6 +19358,111 @@ pub fn require_positive_bounded_u64<E>(
     Ok(())
 }
 
+/// Bracket a typed `u64` axis carrying a quantized value with the
+/// "zero-floor + below-quantum floor + upper-cap + not-quantum-multiple"
+/// four-arm gate every capped-and-quantized `u64` axis in the crate
+/// carries. Returns `on_zero()` when `value == 0`,
+/// `on_below_quantum(value)` when `value < quantum`,
+/// `on_cap_exceeded(value)` when `value > cap`,
+/// `on_not_quantum_multiple(value)` when `value % quantum != 0`,
+/// `Ok(())` otherwise.
+///
+/// The four arms fire in canonical `zero → below-quantum → cap →
+/// not-quantum-multiple` order, matching the discipline the pre-lift
+/// inline block at [`crate::LimitsSpec::validate`]'s `:memory` axis
+/// applied by hand across four sequential `if let Some(m) = self.memory()`
+/// wrappers. Each arm strictly precedes the next: the zero-floor arm
+/// precedes the below-quantum arm so `Some(0)` (a value the modulus arm
+/// would silently accept because `0 % quantum == 0` and the below-quantum
+/// arm would also flag because `0 < quantum` — two distinct diagnostics
+/// for the same value) surfaces the self-locating zero diagnostic every
+/// per-axis error variant already documents an "omit the axis to
+/// express no-bound" remediation for; the below-quantum arm precedes
+/// the cap arm so a sub-quantum value (which is *also* not a quantum
+/// multiple by construction — the smallest positive quantum multiple
+/// *is* `quantum`) surfaces the more actionable "raise to at least one
+/// quantum" diagnostic first; the cap arm precedes the not-multiple
+/// arm so a value that is both above-cap and sub-quantum-residue
+/// surfaces the cap diagnostic first (the not-multiple remediation
+/// would be misleading when the offending value already exceeds the
+/// upper bracket — the canonical fix collapses both into "pin a
+/// quantum-aligned value ≤ cap"), peer to the
+/// [`require_positive_canonical_bounded_duration`] cap-precedes-not-
+/// canonical ordering on the sibling typed-`Duration` axis.
+///
+/// One existing call site collapses onto this helper —
+/// [`crate::LimitsSpec::validate`] on
+/// [`crate::LimitsSpec::memory`] (zero →
+/// [`crate::LimitsError::MemoryZero`], below-quantum →
+/// [`crate::LimitsError::MemoryBelowWasm32Page`], cap →
+/// [`crate::LimitsError::MemoryExceedsWasm32Cap`], not-multiple →
+/// [`crate::LimitsError::MemoryNotPageMultiple`],
+/// quantum = [`crate::LIMITS_MEMORY_WASM32_PAGE_BYTES`] (64 KiB),
+/// cap = [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`] (4 GiB)) — the last
+/// unlifted `:limits` axis on the four-axis `LimitsSpec::validate`
+/// discipline. The three peer axes (`:fuel`, `:wall-clock`, `:cpu`)
+/// each route through one substrate helper today
+/// ([`require_positive_bounded_u64`],
+/// [`require_positive_canonical_bounded_duration`],
+/// [`require_positive_bounded_u32`]); after this lift `:memory` joins
+/// them at the same altitude — every `LimitsSpec::validate` axis is
+/// exactly one typed-helper dispatch, with the four-arm ordering
+/// discipline promoted from per-site convention to structural contract
+/// on the substrate primitive.
+///
+/// Peer to [`require_positive_bounded_u32`] /
+/// [`require_positive_bounded_u64`] on the two-arm integer-typed
+/// bracket axes and to [`require_positive_canonical_bounded_duration`]
+/// on the three-arm typed-`Duration` bracket-and-quantize axis. Generic
+/// over the caller's error enum so the same helper reaches every
+/// crate-level [`thiserror`] surface — the four per-axis error variants
+/// remain the source of truth for each axis's remediation prose; the
+/// helper only sequences the four gate arms in canonical order and
+/// threads the value into the below-quantum / cap / not-multiple arms'
+/// discriminator fields.
+///
+/// PRIME DIRECTIVE promotion: the four-arm quantized-byte-cap cascade
+/// is the natural u64 extension of the two-arm
+/// [`require_positive_bounded_u64`] bracket the sibling `:fuel` axis
+/// already routes through. Lifting it means a future quantized-byte-cap
+/// axis reaching for the same discipline — a wasm64-target promotion
+/// raising the wasm32 page and address-space bounds, a hypothetical
+/// per-Aplicacao heap-max byte-cap, an operator-side page-aligned
+/// byte-cap admitted by the M4 CR materializer's admission webhook —
+/// lands as a thin four-closure wrapper rather than re-inlining the
+/// same four-arm cascade with a fresh page-alignment convention.
+///
+/// # Errors
+///
+/// Returns `on_zero()` for `value == 0`; returns
+/// `on_below_quantum(value)` for `value < quantum`; returns
+/// `on_cap_exceeded(value)` for `value > cap`; returns
+/// `on_not_quantum_multiple(value)` for `value % quantum != 0`;
+/// returns `Ok(())` otherwise.
+pub fn require_positive_quantum_multiple_bounded_u64<E>(
+    value: u64,
+    quantum: u64,
+    cap: u64,
+    on_zero: impl FnOnce() -> E,
+    on_below_quantum: impl FnOnce(u64) -> E,
+    on_cap_exceeded: impl FnOnce(u64) -> E,
+    on_not_quantum_multiple: impl FnOnce(u64) -> E,
+) -> Result<(), E> {
+    if value == 0 {
+        return Err(on_zero());
+    }
+    if value < quantum {
+        return Err(on_below_quantum(value));
+    }
+    if value > cap {
+        return Err(on_cap_exceeded(value));
+    }
+    if !value.is_multiple_of(quantum) {
+        return Err(on_not_quantum_multiple(value));
+    }
+    Ok(())
+}
+
 /// Bracket a typed `Duration` axis with the "zero-floor +
 /// canonical-form + upper-cap" three-arm gate every typed-`Duration`
 /// slot in the crate carries. Returns `on_zero()` when `value` is
@@ -33896,6 +34001,141 @@ mod tests {
             require_positive_bounded_u64::<TestErr>(u64::MAX, 10, || TestErr::Zero, TestErr::Cap),
             Err(TestErr::Cap(u64::MAX))
         );
+    }
+
+    // ── require_positive_quantum_multiple_bounded_u64 ────────────────────
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum QuantumTestErr {
+        Zero,
+        BelowQuantum(u64),
+        Cap(u64),
+        NotMultiple(u64),
+    }
+
+    fn q_gate(value: u64, quantum: u64, cap: u64) -> Result<(), QuantumTestErr> {
+        require_positive_quantum_multiple_bounded_u64(
+            value,
+            quantum,
+            cap,
+            || QuantumTestErr::Zero,
+            QuantumTestErr::BelowQuantum,
+            QuantumTestErr::Cap,
+            QuantumTestErr::NotMultiple,
+        )
+    }
+
+    #[test]
+    fn require_positive_quantum_multiple_bounded_u64_accepts_in_range_multiples() {
+        // Every canonical quantum-multiple in `quantum..=cap` — the shared
+        // accepted set every quantized-byte-cap consumer inherits — must
+        // pass the gate. Pin the accepted set here so a future tightening
+        // surfaces as a test failure rather than a silent narrowing at
+        // the single consumer site (`:limits :memory`).
+        let quantum = 64 * 1024;
+        let cap = 4 * 1024 * 1024 * 1024;
+        for value in [quantum, quantum * 2, quantum * 100, quantum * 1000, cap] {
+            assert_eq!(
+                q_gate(value, quantum, cap),
+                Ok(()),
+                "quantum-multiple in-range value {value} must pass the gate",
+            );
+        }
+    }
+
+    #[test]
+    fn require_positive_quantum_multiple_bounded_u64_rejects_zero_before_other_arms() {
+        // The zero-floor arm strictly precedes the below-quantum, cap,
+        // and not-multiple arms — a value of 0 surfaces the
+        // caller's self-locating `on_zero` diagnostic (every per-axis
+        // error variant documents an "omit the axis to express no-bound"
+        // remediation for) rather than the misleading below-quantum arm
+        // (which would also fire because 0 < quantum) or the not-multiple
+        // arm (which the modulus check `0 % quantum == 0` would silently
+        // accept).
+        let quantum = 64 * 1024;
+        let cap = 4 * 1024 * 1024 * 1024;
+        assert_eq!(q_gate(0, quantum, cap), Err(QuantumTestErr::Zero));
+        // The degenerate `cap == 0` / `quantum == 1` boundaries: 0 still
+        // routes through the zero arm — the ordering contract holds even
+        // when the cap or quantum themselves take the degenerate shape
+        // (never valid production shapes for a positive-bounded quantized
+        // axis, but pin the arm ordering).
+        assert_eq!(q_gate(0, 1, 0), Err(QuantumTestErr::Zero));
+        assert_eq!(q_gate(0, quantum, 0), Err(QuantumTestErr::Zero));
+    }
+
+    #[test]
+    fn require_positive_quantum_multiple_bounded_u64_rejects_below_quantum_before_cap_and_multiple()
+    {
+        // The below-quantum arm strictly precedes the cap and
+        // not-multiple arms — a sub-quantum non-zero value (which is
+        // ALSO not a quantum-multiple by construction, since the
+        // smallest positive quantum-multiple *is* `quantum`) surfaces
+        // the more actionable "raise to at least one quantum" diagnostic
+        // rather than the not-multiple no-op. Pin the ordering across
+        // the value grid — every value in `1..quantum` must fire the
+        // below-quantum arm with the offending byte count threaded
+        // through the callback.
+        let quantum = 64 * 1024;
+        let cap = 4 * 1024 * 1024 * 1024;
+        for value in [1u64, 2, 32 * 1024, quantum - 1] {
+            assert_eq!(
+                q_gate(value, quantum, cap),
+                Err(QuantumTestErr::BelowQuantum(value)),
+                "sub-quantum {value} must surface BelowQuantum before Cap / NotMultiple",
+            );
+        }
+    }
+
+    #[test]
+    fn require_positive_quantum_multiple_bounded_u64_rejects_above_cap_before_not_multiple() {
+        // The cap arm strictly precedes the not-multiple arm — a value
+        // that is *both* above-cap and sub-quantum-residue must surface
+        // the more aggressive cap-shape diagnostic first (the
+        // not-multiple remediation would be misleading when the
+        // offending value exceeds the upper bracket anyway; the
+        // canonical fix collapses both into "pin a quantum-aligned
+        // value ≤ cap"). Pin the ordering across the value grid,
+        // including the boundary case `cap + 1`.
+        let quantum = 64 * 1024;
+        let cap = 4 * 1024 * 1024 * 1024;
+        for value in [
+            cap + 1,             // above-cap AND sub-quantum-residue
+            cap + quantum,       // above-cap and quantum-aligned
+            cap + quantum * 100, // well above-cap and quantum-aligned
+            u64::MAX,            // maximally above-cap
+        ] {
+            assert_eq!(
+                q_gate(value, quantum, cap),
+                Err(QuantumTestErr::Cap(value)),
+                "above-cap {value} must surface Cap before NotMultiple",
+            );
+        }
+    }
+
+    #[test]
+    fn require_positive_quantum_multiple_bounded_u64_rejects_not_multiple_with_value_threaded() {
+        // The not-multiple arm surfaces the offending value verbatim so
+        // the caller's `on_not_quantum_multiple` variant threads it into
+        // its discriminator field (`bytes:`). Pin the arm across the
+        // in-range-but-not-aligned value grid — every value in
+        // `quantum..=cap` carrying a sub-quantum residue must fire the
+        // not-multiple arm.
+        let quantum = 64 * 1024;
+        let cap = 4 * 1024 * 1024 * 1024;
+        for value in [
+            quantum + 1,       // one page plus a 1-byte residue
+            quantum * 2 - 1,   // two pages minus one byte
+            100_000,           // ≈ 97.65 KiB — one page + 34_464-byte residue
+            quantum * 100 + 7, // 100 pages plus a 7-byte residue
+        ] {
+            assert_eq!(
+                q_gate(value, quantum, cap),
+                Err(QuantumTestErr::NotMultiple(value)),
+                "sub-quantum-residue {value} must surface NotMultiple",
+            );
+        }
     }
 
     // ── require_positive_canonical_bounded_duration ─────────────────────
