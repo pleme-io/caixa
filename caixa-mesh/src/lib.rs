@@ -3277,7 +3277,7 @@ mod tests {
         kube_kind_is, kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
         kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is,
         kube_namespace, kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
-        kube_spec_seq_first, kube_spec_str_field,
+        kube_spec_seq_first, kube_spec_str_field, kube_str,
     };
     use std::time::Duration;
 
@@ -4362,7 +4362,7 @@ mod tests {
             .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
             .expect("spec.ingress[0].toPorts[0].ports[0] port-tuple");
         assert_eq!(
-            port_tuple.get(KUBE_KEY_PROTOCOL).and_then(|v| v.as_str()),
+            kube_str(port_tuple, KUBE_KEY_PROTOCOL),
             Some(KUBE_PROTOCOL_TCP),
             "per-`toPorts[].ports[]` port-tuple `protocol:` scalar must be \
              the lifted `KUBE_PROTOCOL_TCP` (`\"TCP\"`) verbatim — the \
@@ -6296,10 +6296,7 @@ mod tests {
     fn programs_for_aplicacao_annotates_with_parent_nome() {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for e in &entries {
-            assert_eq!(
-                e.get(FLEET_PROGRAMS_KEY_APLICACAO).and_then(|v| v.as_str()),
-                Some("checkout")
-            );
+            assert_eq!(kube_str(e, FLEET_PROGRAMS_KEY_APLICACAO), Some("checkout"));
         }
     }
 
@@ -7913,7 +7910,7 @@ mod tests {
             .unwrap();
         assert_eq!(http_rules.len(), 1);
         assert_eq!(
-            http_rules[0].get(CILIUM_KEY_PATH).and_then(|v| v.as_str()),
+            kube_str(&http_rules[0], CILIUM_KEY_PATH),
             Some("/products/:id")
         );
     }
@@ -7957,13 +7954,11 @@ mod tests {
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).unwrap();
         let listener = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS).unwrap();
         assert_eq!(
-            listener
-                .get(GATEWAY_API_KEY_HOSTNAME)
-                .and_then(|h| h.as_str()),
+            kube_str(listener, GATEWAY_API_KEY_HOSTNAME),
             Some("checkout.quero.cloud")
         );
         assert_eq!(
-            listener.get(KUBE_KEY_PROTOCOL).and_then(|p| p.as_str()),
+            kube_str(listener, KUBE_KEY_PROTOCOL),
             Some(GATEWAY_API_PROTOCOL_HTTP)
         );
     }
@@ -7998,7 +7993,7 @@ mod tests {
         let listener = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS)
             .expect("first listener present");
         assert_eq!(
-            listener.get(GATEWAY_API_KEY_NAME).and_then(|n| n.as_str()),
+            kube_str(listener, GATEWAY_API_KEY_NAME),
             Some(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME),
             "the Gateway per-listener name-discriminator scalar must render \
              the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME constant \
@@ -8716,10 +8711,7 @@ mod tests {
         let backend = kube_spec_seq_first(route, KUBE_KEY_RULES)
             .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
             .unwrap();
-        assert_eq!(
-            backend.get(GATEWAY_API_KEY_NAME).and_then(|n| n.as_str()),
-            Some("cart")
-        );
+        assert_eq!(kube_str(backend, GATEWAY_API_KEY_NAME), Some("cart"));
         assert_eq!(
             backend.get(KUBE_KEY_PORT).and_then(|p| p.as_u64()),
             Some(8080)

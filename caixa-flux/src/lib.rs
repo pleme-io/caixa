@@ -2437,6 +2437,7 @@ mod tests {
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
         kube_api_version_is, kube_kind, kube_name, kube_root_seq_field, kube_seq, kube_spec_field,
         kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field,
+        kube_str,
     };
 
     fn sample_caixa() -> Caixa {
@@ -4424,12 +4425,9 @@ spec:
     #[test]
     fn programs_yaml_entry_round_trips() {
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        assert_eq!(kube_str(&entry, FLEET_PROGRAMS_KEY_NAME), Some("hello-rio"));
         assert_eq!(
-            entry.get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()),
-            Some("hello-rio")
-        );
-        assert_eq!(
-            entry.get(KUBE_KEY_NAMESPACE).and_then(|n| n.as_str()),
+            kube_str(&entry, KUBE_KEY_NAMESPACE),
             Some(DEFAULT_NAMESPACE)
         );
         assert!(entry.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
@@ -4461,7 +4459,7 @@ spec:
         .unwrap();
         let entry = programs_yaml_entry(&sample_caixa(), &cu).unwrap();
         assert_eq!(
-            entry.get(KUBE_KEY_NAMESPACE).and_then(|n| n.as_str()),
+            kube_str(&entry, KUBE_KEY_NAMESPACE),
             Some(DEFAULT_NAMESPACE)
         );
     }
@@ -4687,7 +4685,7 @@ programs: []
         let arr = kube_root_seq_field(&modified, FLEET_PROGRAMS_KEY_PROGRAMS).unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(
-            arr[0].get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()),
+            kube_str(&arr[0], FLEET_PROGRAMS_KEY_NAME),
             Some("hello-rio")
         );
     }
@@ -4756,7 +4754,7 @@ spec:
             .unwrap();
         assert_eq!(arr.len(), 2);
         assert_eq!(
-            arr[1].get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()),
+            kube_str(&arr[1], FLEET_PROGRAMS_KEY_NAME),
             Some("hello-rio")
         );
     }
@@ -4806,14 +4804,8 @@ spec:
         });
         let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
         let limits = entry.get(M2_KEY_LIMITS).expect("limits propagates");
-        assert_eq!(
-            limits.get(M2_LIMITS_KEY_MEMORY).and_then(|m| m.as_str()),
-            Some("64MiB")
-        );
-        assert_eq!(
-            limits.get(M2_LIMITS_KEY_CPU).and_then(|m| m.as_str()),
-            Some("500m")
-        );
+        assert_eq!(kube_str(limits, M2_LIMITS_KEY_MEMORY), Some("64MiB"));
+        assert_eq!(kube_str(limits, M2_LIMITS_KEY_CPU), Some("500m"));
     }
 
     #[test]
