@@ -3274,9 +3274,9 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
-        kube_kind_is, kube_metadata, kube_metadata_label, kube_metadata_label_is,
-        kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_spec, kube_spec_field,
-        kube_spec_seq_field, kube_spec_str_field,
+        kube_kind_is, kube_match_labels, kube_metadata, kube_metadata_label,
+        kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is, kube_namespace,
+        kube_spec, kube_spec_field, kube_spec_seq_field, kube_spec_str_field,
     };
     use std::time::Duration;
 
@@ -6723,13 +6723,21 @@ mod tests {
         let policies = cilium_network_policies(&c).unwrap();
         assert!(!policies.is_empty());
         for policy in &policies {
+            // Route the trailing per-fromEndpoints[0]
+            // `.get(KUBE_KEY_MATCH_LABELS).and_then(as_mapping)` two-
+            // hop tail through the substrate-primitive
+            // [`kube_match_labels`] pinned selector-axis sub-mapping
+            // accessor — sibling convergence to the peer
+            // `cilium_endpoint_selector_is_program_only` +
+            // `cilium_from_endpoints_carries_aplicacao_scoped_selector`
+            // per-selector `matchLabels:` sub-mapping readback sites
+            // that migrate through the same substrate accessor.
             let selector = kube_spec_seq_field(policy, CILIUM_KEY_INGRESS)
                 .and_then(|s| s.first())
                 .and_then(|i| i.get(CILIUM_KEY_FROM_ENDPOINTS))
                 .and_then(|e| e.as_sequence())
                 .and_then(|s| s.first())
-                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
-                .and_then(|m| m.as_mapping())
+                .and_then(kube_match_labels)
                 .expect("CNP spec.ingress[0].fromEndpoints[0].matchLabels mapping present");
             let emitted = selector
                 .get(LABEL_APLICACAO)
@@ -7781,8 +7789,16 @@ mod tests {
     fn cilium_policies_are_identity_based() {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
+            // Route the per-endpointSelector + per-fromEndpoints[0]
+            // trailing `.get(KUBE_KEY_MATCH_LABELS).and_then(
+            // as_mapping)` two-hop tails through the substrate-
+            // primitive [`kube_match_labels`] pinned selector-axis
+            // sub-mapping accessor — sibling convergence to the
+            // sister sites on `cilium_endpoint_selector_is_program_only`
+            // + `cilium_from_endpoints_carries_aplicacao_scoped_selector`
+            // that migrate through the same substrate accessor.
             let endpoint = kube_spec_field(p, CILIUM_KEY_ENDPOINT_SELECTOR)
-                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
+                .and_then(kube_match_labels)
                 .unwrap();
             assert!(endpoint.get(LABEL_PROGRAM).is_some());
             // Source endpoint must include both program + aplicacao labels
@@ -7791,7 +7807,7 @@ mod tests {
                 .and_then(|i| i.get(CILIUM_KEY_FROM_ENDPOINTS))
                 .and_then(|e| e.as_sequence())
                 .and_then(|s| s.first())
-                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
+                .and_then(kube_match_labels)
                 .unwrap();
             assert_eq!(
                 from.get(LABEL_APLICACAO).and_then(|v| v.as_str()),
@@ -7865,9 +7881,13 @@ mod tests {
         // semantic shift, not an accidental drift.
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
+            // Route the trailing per-endpointSelector
+            // `.get(KUBE_KEY_MATCH_LABELS).and_then(as_mapping)` two-
+            // hop tail through the substrate-primitive
+            // [`kube_match_labels`] pinned selector-axis sub-mapping
+            // accessor.
             let selector = kube_spec_field(p, CILIUM_KEY_ENDPOINT_SELECTOR)
-                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
-                .and_then(|m| m.as_mapping())
+                .and_then(kube_match_labels)
                 .expect("endpointSelector.matchLabels mapping");
             assert_eq!(
                 selector.len(),
@@ -7887,13 +7907,17 @@ mod tests {
         // cannot satisfy the rule.
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
+            // Route the trailing per-fromEndpoints[0]
+            // `.get(KUBE_KEY_MATCH_LABELS).and_then(as_mapping)` two-
+            // hop tail through the substrate-primitive
+            // [`kube_match_labels`] pinned selector-axis sub-mapping
+            // accessor.
             let from = kube_spec_seq_field(p, CILIUM_KEY_INGRESS)
                 .and_then(|s| s.first())
                 .and_then(|i| i.get(CILIUM_KEY_FROM_ENDPOINTS))
                 .and_then(|e| e.as_sequence())
                 .and_then(|s| s.first())
-                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
-                .and_then(|m| m.as_mapping())
+                .and_then(kube_match_labels)
                 .expect("fromEndpoints[0].matchLabels mapping");
             assert_eq!(
                 from.len(),
