@@ -6121,8 +6121,7 @@ spec:
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let source_ref_kind = kube_spec_field(&parsed, FLUX_KEY_CHART)
             .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
-            .and_then(|r| r.get(KUBE_KEY_KIND))
-            .and_then(|k| k.as_str())
+            .and_then(kube_kind)
             .expect("helmrelease.yaml spec.chart.spec.sourceRef.kind present");
         assert_eq!(
             source_ref_kind, FLUX_KIND_GIT_REPOSITORY,
@@ -6156,8 +6155,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         let source_ref_kind = kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
-            .and_then(|r| r.get(KUBE_KEY_KIND))
-            .and_then(|k| k.as_str())
+            .and_then(kube_kind)
             .expect("kustomization.yaml spec.sourceRef.kind present");
         assert_eq!(
             source_ref_kind, FLUX_KIND_GIT_REPOSITORY,
@@ -6188,18 +6186,15 @@ spec:
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
 
-        let gr_kind = serde_yaml::from_str::<serde_yaml::Value>(
+        let gr_parsed: serde_yaml::Value = serde_yaml::from_str(
             &files
                 .iter()
                 .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
-        .unwrap()
-        .get(KUBE_KEY_KIND)
-        .and_then(|v| v.as_str())
-        .map(String::from)
         .unwrap();
+        let gr_kind = kube_kind(&gr_parsed).map(String::from).unwrap();
 
         let hr_parsed: serde_yaml::Value = serde_yaml::from_str(
             &files
@@ -6211,8 +6206,7 @@ spec:
         .unwrap();
         let hr_source_kind = kube_spec_field(&hr_parsed, FLUX_KEY_CHART)
             .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
-            .and_then(|r| r.get(KUBE_KEY_KIND))
-            .and_then(|v| v.as_str())
+            .and_then(kube_kind)
             .map(String::from)
             .unwrap();
 
@@ -6225,8 +6219,7 @@ spec:
         )
         .unwrap();
         let kz_source_kind = kube_spec_field(&kz_parsed, FLUX_KEY_SOURCE_REF)
-            .and_then(|r| r.get(KUBE_KEY_KIND))
-            .and_then(|v| v.as_str())
+            .and_then(kube_kind)
             .map(String::from)
             .unwrap();
 
@@ -6358,9 +6351,7 @@ spec:
              entry — the HelmRelease health gate is the canonical pleme-io \
              Flux bundle invariant"
         );
-        let health_kind = health_checks[0]
-            .get(KUBE_KEY_KIND)
-            .and_then(|k| k.as_str())
+        let health_kind = kube_kind(&health_checks[0])
             .expect("kustomization.yaml spec.healthChecks[0].kind present");
         assert_eq!(
             health_kind, FLUX_KIND_HELM_RELEASE,
@@ -6391,18 +6382,15 @@ spec:
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
 
-        let hr_kind = serde_yaml::from_str::<serde_yaml::Value>(
+        let hr_parsed: serde_yaml::Value = serde_yaml::from_str(
             &files
                 .iter()
                 .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
-        .unwrap()
-        .get(KUBE_KEY_KIND)
-        .and_then(|v| v.as_str())
-        .map(String::from)
         .unwrap();
+        let hr_kind = kube_kind(&hr_parsed).map(String::from).unwrap();
 
         let kz_parsed: serde_yaml::Value = serde_yaml::from_str(
             &files
@@ -6414,8 +6402,7 @@ spec:
         .unwrap();
         let kz_health_kind = kube_spec_seq_field(&kz_parsed, FLUX_KEY_HEALTH_CHECKS)
             .and_then(|seq| seq.first())
-            .and_then(|e| e.get(KUBE_KEY_KIND))
-            .and_then(|v| v.as_str())
+            .and_then(kube_kind)
             .map(String::from)
             .unwrap();
 
