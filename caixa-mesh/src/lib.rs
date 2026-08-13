@@ -3277,7 +3277,7 @@ mod tests {
         kube_kind_is, kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
         kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is,
         kube_namespace, kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
-        kube_spec_seq_first, kube_spec_str_field, kube_str,
+        kube_spec_seq_first, kube_spec_str_field, kube_str, kube_u64,
     };
     use std::time::Duration;
 
@@ -8093,7 +8093,7 @@ mod tests {
         let listener = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS)
             .expect("first listener present");
         assert_eq!(
-            listener.get(KUBE_KEY_PORT).and_then(|p| p.as_u64()),
+            kube_u64(listener, KUBE_KEY_PORT),
             Some(u64::from(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT)),
             "the Gateway per-listener HTTP-listener-port scalar must render \
              the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT constant \
@@ -8600,8 +8600,7 @@ mod tests {
                 .expect("HTTPRoute present under every :entrada :para permutation");
             let emitted_port = kube_spec_seq_first(route, KUBE_KEY_RULES)
                 .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
-                .and_then(|b| b.get(KUBE_KEY_PORT))
-                .and_then(|p| p.as_u64())
+                .and_then(|b| kube_u64(b, KUBE_KEY_PORT))
                 .expect("first HTTPRoute rule's first backendRef.port scalar present");
             assert_eq!(
                 emitted_port,
@@ -8659,8 +8658,7 @@ mod tests {
             find_by_kind(&gateway_docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         let httproute_port = kube_spec_seq_first(route, KUBE_KEY_RULES)
             .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
-            .and_then(|b| b.get(KUBE_KEY_PORT))
-            .and_then(|p| p.as_u64())
+            .and_then(|b| kube_u64(b, KUBE_KEY_PORT))
             .expect("HTTPRoute backendRef.port scalar present");
         assert_eq!(
             httproute_port,
@@ -8712,10 +8710,7 @@ mod tests {
             .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
             .unwrap();
         assert_eq!(kube_str(backend, GATEWAY_API_KEY_NAME), Some("cart"));
-        assert_eq!(
-            backend.get(KUBE_KEY_PORT).and_then(|p| p.as_u64()),
-            Some(8080)
-        );
+        assert_eq!(kube_u64(backend, KUBE_KEY_PORT), Some(8080));
     }
 
     #[test]
@@ -9559,8 +9554,7 @@ mod tests {
         for rule in &rules {
             let attempts = rule
                 .get(GATEWAY_API_KEY_RETRY)
-                .and_then(|r| r.get(GATEWAY_API_KEY_ATTEMPTS))
-                .and_then(|v| v.as_u64())
+                .and_then(|r| kube_u64(r, GATEWAY_API_KEY_ATTEMPTS))
                 .expect("each of the 3 rules carries retry.attempts");
             assert_eq!(attempts, 3);
         }
@@ -9583,8 +9577,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_RETRY)
-                    .and_then(|r| r.get(GATEWAY_API_KEY_ATTEMPTS))
-                    .and_then(|v| v.as_u64()),
+                    .and_then(|r| kube_u64(r, GATEWAY_API_KEY_ATTEMPTS)),
                 Some(5),
                 "retry.attempts must round-trip the typed :retries value verbatim"
             );
@@ -9657,8 +9650,7 @@ mod tests {
             );
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_RETRY)
-                    .and_then(|r| r.get(GATEWAY_API_KEY_ATTEMPTS))
-                    .and_then(|v| v.as_u64()),
+                    .and_then(|r| kube_u64(r, GATEWAY_API_KEY_ATTEMPTS)),
                 Some(2)
             );
         }

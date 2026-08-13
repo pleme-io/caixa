@@ -22118,6 +22118,95 @@ pub fn kube_str<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str
     value.get(field).and_then(|v| v.as_str())
 }
 
+/// Read a sub-`<field>` YAML scalar-integer nested one hop under an
+/// arbitrary `&serde_yaml::Value` mapping receiver as `Option<u64>`
+/// — the value-level two-hop navigation primitive that folds
+/// `.get(<field>) → as_u64` into a single helper call. Integer-arity
+/// peer of the value-level scalar-str [`kube_str`] (a23f61d) accessor
+/// on the same value-level two-hop navigation axis: where [`kube_str`]
+/// closes the string-arity shape-gate on the nested `<field>` axis,
+/// this accessor closes the unsigned-integer-arity shape-gate on the
+/// same axis, so every routed test-side + production per-nested-
+/// mapping numeric-typed readback (per-listener + per-`backendRefs[]`
+/// `port:` scalars on the Gateway API family, per-`retry.attempts`
+/// integer scalar on the `HTTPRoute` per-rule mesh-policy overlay, per-
+/// `spec.install.remediation.retries` / `spec.upgrade.remediation
+/// .retries` scalars on the `HelmRelease` per-remediation overlay, per-
+/// `:limits :fuel` cap scalar on the `pleme-computeunit` values-block
+/// overlay) now reaches through the same one-line dispatch the
+/// scalar-str axis already does.
+///
+/// Returns `None` on any of the three short-circuit arms folded through
+/// the underlying two-hop composition: the receiver `value` carries a
+/// YAML type without a `get(<field>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<field>` axis-key is absent from the receiver's mapping
+/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value
+/// is present but carries a non-`u64` YAML scalar type (the trailing
+/// [`serde_yaml::Value::as_u64`] shape-gate short-circuit — a
+/// schema-invalid scalar type per the K8s apiserver's `OpenAPI` schema
+/// but tolerated here as `None` so the readback stays a total
+/// function, mirroring the sibling [`kube_str`] posture). The returned
+/// `u64` is a fresh primitive value (integer scalars carry no
+/// underlying borrow the way the sibling string-arity accessor
+/// preserves) — the caller decides whether to `assert_eq!(_,
+/// Some(<expected>))` for a determinism pin, thread through a
+/// downstream [`u64::from`] widen on a typed `u16` / `u32` overlay
+/// scalar, `.expect(...)` for a load-bearing scalar identity, or
+/// `.filter(|n| _)` for a range predicate.
+///
+/// The canonical shape ~11 test-side + production per-nested-mapping
+/// scalar-`u64` readback sites in [`caixa-mesh`][mesh],
+/// [`caixa-flux`][flux], and [`caixa-helm`][helm] previously carried
+/// inline as the two-line composition
+///
+/// ```ignore
+/// <value>.get(<FIELD>).and_then(|v| v.as_u64())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field
+/// axis-key — [`KUBE_KEY_PORT`] on the per-`Gateway` listener +
+/// per-`HTTPRoute` `backendRefs[0].port` L4 scalars, [`GATEWAY_API_KEY_ATTEMPTS`]
+/// on the per-`HTTPRoute` per-rule `retry.attempts` overlay,
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] on the per-`HelmRelease`
+/// remediation cap overlays, [`M2_LIMITS_KEY_FUEL`] on the per-
+/// `:limits :fuel` cap scalar). After this lift every routed consumer
+/// folds the two-line navigation onto `kube_u64(<value>, <FIELD>)` —
+/// the two-hop `get → as_u64` walk happens once inside the helper,
+/// and the caller keeps its downstream assertion posture
+/// (`assert_eq!(_, Some(<expected>))`, `.expect(...)`, an `if let
+/// Some(n) = _` bind) unchanged — the lift closes the navigation
+/// surface, not the per-site downstream posture.
+///
+/// Every future nested `<field>` scalar-`u64` readback the M3.x + M4
+/// renderer set materializes (the future `:politicas :rate-limit`
+/// per-rule numeric cap the mesh-policy overlay lifts once the M4
+/// per-edge rate cap axis lands, the future per-Aplicacao
+/// `spec.placement.replicas` scalar the `Replicated` placement
+/// strategy admits at MESH-COMPOSITION §III.2, the future
+/// `:supervisor :max-restarts` numeric-scalar overlay materialization
+/// the caixa-teia per-Supervisor render pass emits, per-`:contratos`
+/// per-edge numeric weight the M4 weighted-routing overlay adds)
+/// reaches this one helper by construction. No per-consumer two-hop
+/// re-inline; no coordinated rewrite across every nested-scalar-`u64`
+/// readback on a future [`serde_yaml`] surface rebrand or shape-gate
+/// shift. Closes the value-level primitive axis at the two principal
+/// scalar arities the K8s apiserver `OpenAPI` schema partitions on —
+/// string via [`kube_str`], unsigned-integer via `kube_u64` — matching
+/// the closed shape of the sibling spec/metadata/root-anchored
+/// families one altitude above where scalar-str + sequence + map
+/// arities already partition the axis surface.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_u64(value: &serde_yaml::Value, field: &str) -> Option<u64> {
+    value.get(field).and_then(serde_yaml::Value::as_u64)
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -47380,6 +47469,206 @@ spec:
              seeds — a drop-in for the routed per-CNP L4-tuple \
              `spec.ingress[0].toPorts[0].protocol` determinism-pin \
              site"
+        );
+    }
+
+    #[test]
+    fn kube_u64_reads_sub_field_scalar_integer_verbatim() {
+        // Load-bearing contract: given a `&Value` mapping receiver
+        // carrying a nested `<field>: <int>` scalar-integer entry at a
+        // per-key axis, the value-level two-hop scalar-`u64` primitive
+        // returns `Some(<int>)` so the routed determinism-pin caller
+        // reaches the integer through one dispatch. Integer-arity peer
+        // of the sibling scalar-str [`kube_str`] value-level accessor —
+        // this exercises the same value-level two-hop navigation but
+        // with an unsigned-integer shape-gate instead of the string one.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::Number(8080u64.into()));
+        inner.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(3u64.into()),
+        );
+        let value = serde_yaml::Value::Mapping(inner);
+
+        assert_eq!(
+            kube_u64(&value, KUBE_KEY_PORT),
+            Some(8080),
+            "kube_u64 must return the sub-field scalar-integer verbatim \
+             — the routed per-`Gateway` listener + per-`HTTPRoute` \
+             `backendRefs[0].port` L4 readback sites now reach through \
+             this accessor for the load-bearing K8s core Port OpenAPI \
+             schema integer identity pin"
+        );
+        assert_eq!(
+            kube_u64(&value, GATEWAY_API_KEY_ATTEMPTS),
+            Some(3),
+            "kube_u64 must return the sub-field scalar-integer verbatim \
+             across a second axis-key — the routed per-`HTTPRoute` per-\
+             rule `retry.attempts` typed `:retries` overlay determinism \
+             pin sits here"
+        );
+    }
+
+    #[test]
+    fn kube_u64_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying two-hop
+        // `get → as_u64` closes on folds through this accessor to
+        // `None`. Pin all three arms so a future refactor reaching for
+        // `.as_u64().unwrap()` (which would panic on any of the three
+        // arms) is a test-visible break.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<field>)` navigation surface.
+        let scalar_receiver = serde_yaml::Value::Number(42u64.into());
+        assert_eq!(
+            kube_u64(&scalar_receiver, KUBE_KEY_PORT),
+            None,
+            "kube_u64 must short-circuit to None when the receiver \
+             Value carries a scalar YAML type with no `get` navigation \
+             surface — Value::get's scalar-arm None folds through, \
+             preserving the total-function contract"
+        );
+
+        // Arm 2: requested `<field>` axis-key absent from receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(3u64.into()),
+        );
+        let missing_field = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_u64(&missing_field, KUBE_KEY_PORT),
+            None,
+            "kube_u64 must short-circuit to None when the requested \
+             `<field>` axis-key is absent from the receiver's mapping \
+             — Value::get's trailing miss folds through"
+        );
+
+        // Arm 3: `<field>` present but non-integer (a string, the
+        // wrong-arity shape the sibling [`kube_str`] axis owns).
+        let mut non_int = serde_yaml::Mapping::new();
+        non_int.insert_string(KUBE_KEY_PORT, "eight-thousand");
+        let non_int_field = serde_yaml::Value::Mapping(non_int);
+        assert_eq!(
+            kube_u64(&non_int_field, KUBE_KEY_PORT),
+            None,
+            "kube_u64 must short-circuit to None when the `<field>` \
+             value carries a non-`u64` YAML scalar type — the trailing \
+             `.as_u64()` shape-gate fold-through short-circuits here \
+             (mirrors the sibling `kube_str`'s scalar-str-arm-only \
+             posture, one axis-arity over)"
+        );
+    }
+
+    #[test]
+    fn kube_u64_matches_prior_inline_two_hop_chain() {
+        // Cross-check the value-level primitive's output byte-for-byte
+        // against the prior inline `.get(<F>).and_then(|v| v.as_u64())`
+        // two-hop chain the ~11 routed caller sites in caixa-mesh +
+        // caixa-flux + caixa-helm previously carried. A drift between
+        // the helper's return and the inline chain would silently
+        // regress every downstream determinism-pin (`assert_eq!(_,
+        // Some(<expected>))`, `.expect(...)`) — pin the byte-
+        // equivalence across three representative sub-field axis-keys
+        // spanning the K8s L4 port axis (KUBE_KEY_PORT), the Gateway
+        // API per-rule retry-attempts axis (GATEWAY_API_KEY_ATTEMPTS),
+        // and the M2 `:limits :fuel` per-Servico cap axis
+        // (M2_LIMITS_KEY_FUEL) so the composed helper stays a drop-in
+        // replacement for the routed sites' prior two-line block.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::Number(8080u64.into()));
+        inner.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(5u64.into()),
+        );
+        inner.insert_str_key(
+            M2_LIMITS_KEY_FUEL,
+            serde_yaml::Value::Number(1_000_000u64.into()),
+        );
+        inner.insert_string(GATEWAY_API_KEY_HOSTNAME, "not-a-number");
+        let value = serde_yaml::Value::Mapping(inner);
+
+        for sub_field in [
+            KUBE_KEY_PORT,
+            GATEWAY_API_KEY_ATTEMPTS,
+            M2_LIMITS_KEY_FUEL,
+            GATEWAY_API_KEY_HOSTNAME,
+        ] {
+            let via_helper = kube_u64(&value, sub_field);
+            let via_inline = value.get(sub_field).and_then(serde_yaml::Value::as_u64);
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_u64(v, {sub_field:?}) must byte-equal the prior \
+                 inline `.get({sub_field:?}).and_then(|v| v.as_u64())` \
+                 two-hop chain — the lift must stay a drop-in for \
+                 every routed caller's downstream determinism-pin \
+                 posture"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_u64_composes_naturally_below_kube_seq_first() {
+        // Composition pin: the two-hop-nested spec-anchored + value-
+        // level scalar-`u64` readback path `spec.<outer>[0].<inner>` —
+        // e.g. the per-`HTTPRoute` `spec.rules[0].backendRefs[0].port`
+        // L4-port bracket the routed httproute per-rule readback sites
+        // walk — must compose byte-equally through
+        // `kube_spec_seq_first(v, OUTER).and_then(|o| kube_seq_first(o,
+        // INNER)).and_then(|b| kube_u64(b, PORT))` and the equivalent
+        // multi-hop inline chain. Pin the composition on the canonical
+        // per-`HTTPRoute` backendRef port outer/inner/scalar triple so
+        // the sibling-composition surface stays contract-preserving —
+        // parallels the sibling [`kube_str`] composition pin one arity
+        // over on the scalar-str shape-gate.
+        let mut backend_map = serde_yaml::Mapping::new();
+        backend_map.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::Number(8080u64.into()));
+        let backend_seq =
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(backend_map)]);
+
+        let mut rule_map = serde_yaml::Mapping::new();
+        rule_map.insert_str_key(GATEWAY_API_KEY_BACKEND_REFS, backend_seq);
+
+        let mut spec_map = serde_yaml::Mapping::new();
+        spec_map.insert_str_key(
+            KUBE_KEY_RULES,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(rule_map)]),
+        );
+
+        let mut root_map = serde_yaml::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
+        let value = serde_yaml::Value::Mapping(root_map);
+
+        let via_composed = kube_spec_seq_first(&value, KUBE_KEY_RULES)
+            .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
+            .and_then(|b| kube_u64(b, KUBE_KEY_PORT));
+        let via_inline = value
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.as_mapping())
+            .and_then(|m| m.get(KUBE_KEY_RULES))
+            .and_then(|v| v.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
+            .and_then(|v| v.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|b| b.get(KUBE_KEY_PORT))
+            .and_then(serde_yaml::Value::as_u64);
+        assert_eq!(
+            via_composed, via_inline,
+            "kube_spec_seq_first(v, RULES) + kube_seq_first(r, BACKEND_REFS) \
+             + kube_u64(b, PORT) must byte-equal the eight-hop inline \
+             chain the routed per-`HTTPRoute` `spec.rules[0].backendRefs\
+             [0].port` sites previously carried below the two outer \
+             sequence-first accessors"
+        );
+        assert_eq!(
+            via_composed,
+            Some(8080),
+            "the composed two-hop-nested scalar-`u64` readback must \
+             surface the per-`backendRefs[0].port` integer scalar the \
+             fixture seeds — a drop-in for the routed per-`HTTPRoute` \
+             rule backend port determinism-pin site"
         );
     }
 }
