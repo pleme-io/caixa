@@ -21937,6 +21937,89 @@ pub fn kube_seq_first<'a>(
         .and_then(|s| s.first())
 }
 
+/// Read a sub-`<field>[]` YAML sequence nested one hop under an
+/// arbitrary `&serde_yaml::Value` mapping receiver as
+/// `Option<&serde_yaml::Sequence>` — the value-level two-hop navigation
+/// primitive that folds `.get(<field>) → as_sequence` into a single
+/// helper call. Sequence-arity peer of the value-level first-entry
+/// accessor [`kube_seq_first`] (2d6cb54): the pair closes the
+/// (sequence, head-selector) two-arity closure on the value-level
+/// axis, mirroring the ([`kube_spec_seq_field`], [`kube_spec_seq_first`])
+/// two-arity closure on the spec-anchored axis one altitude above.
+/// Where [`kube_seq_first`] folds the trailing `.first()` head-selector
+/// onto the two-hop `get → as_sequence` navigation, this stops at the
+/// sequence itself — so a caller enumerating the tail (`.iter()`,
+/// `.len()`, `.filter_map`, `.expect(...)` a full-sequence bind for a
+/// downstream length assertion or per-entry walk) reaches for this
+/// accessor directly instead of re-inlining the two-line
+/// `.and_then(|v| v.get(<K>)).and_then(|v| v.as_sequence())` block.
+/// Together with [`kube_seq_first`] the pair spans the value-level
+/// sub-`<field>[]` axis at both arities: the whole sequence via this
+/// accessor, the head entry via the sibling.
+///
+/// Returns `None` on any of the three short-circuit arms folded through
+/// the underlying two-hop composition: the receiver `value` carries a
+/// YAML type without a `get(<field>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<field>` axis-key is absent from the receiver's mapping
+/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value is
+/// present but carries a non-sequence YAML type (the trailing
+/// `.as_sequence()` shape-gate short-circuit — a schema-invalid nested-
+/// sub-field type per the K8s apiserver's `OpenAPI` schema but tolerated
+/// here as `None` so the readback stays a total function). The returned
+/// `&Sequence` borrows into the input `Value` — the caller decides
+/// whether to iterate (`.iter()`), enumerate for length (`.len()`),
+/// check emptiness (`.is_empty()`), filter-map by shape
+/// (`.iter().filter_map(|v| v.as_str())`), or commit (`.expect(...)`).
+///
+/// The canonical shape 11 test-side per-nested-`<field>[]` sequence
+/// readback sites in [`caixa-mesh`][mesh] and [`caixa-flux`][flux]
+/// previously carried inline as the two-line composition
+///
+/// ```ignore
+/// <value>
+///     .and_then(|v| v.get(<FIELD>))
+///     .and_then(|v| v.as_sequence())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-
+/// key — [`CILIUM_KEY_TO_PORTS`] on the per-CNP `ingress[0].toPorts[]`
+/// L4-port bracket, [`CILIUM_KEY_FROM_ENDPOINTS`] on the per-CNP
+/// `ingress[0].fromEndpoints[]` source-endpoint bracket,
+/// [`CILIUM_KEY_HTTP`] on the per-CNP L7 HTTP-rule sequence,
+/// [`GATEWAY_API_KEY_MATCHES`] on the per-`HTTPRoute` per-rule
+/// `matches[]` bracket, `M2_KEY_UPGRADE_FROM` on the caixa-flux
+/// per-programs-entry upgradeFrom sequence, `FLEET_PROGRAMS_KEY_PROGRAMS`
+/// on the fleet-programs values.programs[] readback). After this lift
+/// every routed consumer folds the two-line navigation onto
+/// `kube_seq(<value>, <FIELD>)` — the two-hop `get → as_sequence` walk
+/// happens once inside the helper, and the caller keeps its downstream
+/// idiom (`.iter()`, `.len()`, `.expect(...)`, `.filter_map(...)`)
+/// unchanged — the lift closes the navigation surface, not the per-site
+/// downstream posture.
+///
+/// Every future nested sub-`<field>[]` sequence readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` per-policy nested
+/// rule-set walk, the `app-operator`'s per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's nested
+/// `spec.entrada.paths[]` / `spec.placement.clusters[]` sequences, the
+/// future `caixa-otel` per-Servico OpenTelemetry-Collector CR's
+/// per-`receivers.<name>.protocols[]` nested sequence, every future
+/// test-side nested-sequence probe the M3.x + M4 renderer set adds)
+/// reaches this same helper by construction — no per-consumer two-hop
+/// chain re-inline, no coordinated rewrite across every nested-sequence
+/// bracket on a future [`serde_yaml`] surface rebrand or a shift in
+/// the shape-gate semantics.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_seq<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a serde_yaml::Sequence> {
+    value.get(field).and_then(|v| v.as_sequence())
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -46582,6 +46665,195 @@ spec:
                  .and_then(|s| s.first())` chain — the lift must stay a \
                  drop-in for every routed caller's downstream \
                  continuation posture"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_seq_reads_whole_sub_field_sequence_borrowing_into_input_value() {
+        // Load-bearing contract: given a `&Value` mapping receiver
+        // carrying a nested `<field>: [ ... ]` sequence at a per-key
+        // axis, the value-level two-hop sequence-arity primitive
+        // returns `Some(<sequence>)` borrowing into the input Value so
+        // downstream `.iter()` / `.len()` / `.filter_map(...)`
+        // continuations reach the entries without a further clone.
+        // Sequence-arity peer of the sibling [`kube_seq_first`]
+        // head-selector pin one arity above — this exercises the same
+        // two-hop `get → as_sequence` navigation but stops before the
+        // trailing head-selector so the whole tail (not just the head)
+        // reaches the caller.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("to-ports-0".into()),
+                serde_yaml::Value::String("to-ports-1".into()),
+                serde_yaml::Value::String("to-ports-2".into()),
+            ]),
+        );
+        inner.insert_str_key(
+            CILIUM_KEY_FROM_ENDPOINTS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("from-endpoints-0".into())]),
+        );
+        let value = serde_yaml::Value::Mapping(inner);
+
+        let to_ports = kube_seq(&value, CILIUM_KEY_TO_PORTS)
+            .expect("kube_seq must return the full toPorts sequence");
+        assert_eq!(
+            to_ports.len(),
+            3,
+            "kube_seq must return the whole sequence — the routed \
+             per-CNP `ingress[0].toPorts[]` tail-enumeration site \
+             reaches through this arity for `.len()` / `.iter()` \
+             continuations"
+        );
+        let from_endpoints = kube_seq(&value, CILIUM_KEY_FROM_ENDPOINTS)
+            .expect("kube_seq must return the full fromEndpoints sequence");
+        assert_eq!(
+            from_endpoints.len(),
+            1,
+            "kube_seq must return a one-entry sequence unchanged — \
+             same shape-gate semantics regardless of tail cardinality, \
+             mirroring the sibling head-selector arity"
+        );
+    }
+
+    #[test]
+    fn kube_seq_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying two-hop
+        // `get → as_sequence` closes on folds through this accessor to
+        // `None`. Pin all three arms so a future refactor reaching for
+        // `.as_sequence().unwrap()` (which would panic on any of the
+        // three arms) is a test-visible break.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<field>)` surface.
+        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        assert_eq!(
+            kube_seq(&scalar_receiver, CILIUM_KEY_TO_PORTS),
+            None,
+            "kube_seq must short-circuit to None when the receiver \
+             Value carries a scalar YAML type with no `get` navigation \
+             surface — Value::get's scalar-arm None folds through, \
+             preserving the total-function contract"
+        );
+
+        // Arm 2: requested `<field>` axis-key absent from receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_str_key(
+            CILIUM_KEY_FROM_ENDPOINTS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("only-fe".into())]),
+        );
+        let missing_field = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_seq(&missing_field, CILIUM_KEY_TO_PORTS),
+            None,
+            "kube_seq must short-circuit to None when the requested \
+             `<field>` axis-key is absent from the receiver's mapping \
+             — Value::get's trailing miss folds through"
+        );
+
+        // Arm 3: `<field>` present but non-sequence.
+        let mut non_seq = serde_yaml::Mapping::new();
+        non_seq.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::String("scalar-not-sequence".into()),
+        );
+        let non_seq_field = serde_yaml::Value::Mapping(non_seq);
+        assert_eq!(
+            kube_seq(&non_seq_field, CILIUM_KEY_TO_PORTS),
+            None,
+            "kube_seq must short-circuit to None when the `<field>` \
+             value carries a non-sequence YAML type — the trailing \
+             `.as_sequence()` shape-gate fold-through short-circuits \
+             here"
+        );
+    }
+
+    #[test]
+    fn kube_seq_preserves_empty_sequence_distinctly_from_missing() {
+        // Cardinality-preservation pin: unlike the sibling
+        // [`kube_seq_first`] which collapses the "sequence present but
+        // empty" arm onto the same `None` verdict as the three upstream
+        // short-circuits, this accessor returns `Some(&[])` on a
+        // present-but-empty sequence — the caller sees the empty
+        // sequence as a legitimate reading, distinct from the missing-
+        // field arm. This is the load-bearing distinction that lets
+        // the tail-enumeration caller distinguish "no such field" from
+        // "field present but zero entries" at the cost of one arm's
+        // fold-through — the sibling head-selector accessor's
+        // fold-through is right for its callers, this accessor's
+        // preservation is right for its callers.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
+        let empty_seq_value = serde_yaml::Value::Mapping(m);
+
+        let seq = kube_seq(&empty_seq_value, CILIUM_KEY_TO_PORTS);
+        assert!(
+            seq.is_some(),
+            "kube_seq must return Some on a present-but-empty sequence \
+             — the shape-gate accepts empty sequences (they are \
+             sequences), the distinction between empty and missing \
+             carries through to the caller"
+        );
+        assert_eq!(
+            seq.expect("kube_seq must return Some on present-but-empty")
+                .len(),
+            0,
+            "kube_seq's return on an empty sequence must carry the \
+             empty length through — distinct from the sibling \
+             kube_seq_first's fold-through-to-None arm"
+        );
+    }
+
+    #[test]
+    fn kube_seq_matches_prior_inline_two_hop_chain() {
+        // Cross-check the value-level primitive's output byte-for-byte
+        // against the prior inline
+        // `.get(<F>).and_then(|v| v.as_sequence())` two-hop chain the
+        // ~11 routed caller sites in caixa-mesh + caixa-flux previously
+        // carried. A drift between the helper's return and the inline
+        // chain would silently regress every downstream continuation
+        // (`.iter()`, `.len()`, `.expect(...)`) — pin the byte-
+        // equivalence across four representative sub-field axis-keys
+        // spanning both CNP nested brackets (toPorts, fromEndpoints)
+        // and the Gateway API HTTPRoute nested brackets (matches) so
+        // the composed helper stays a drop-in replacement for the
+        // routed sites' prior two-line block.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("tp-0".into()),
+                serde_yaml::Value::String("tp-1".into()),
+            ]),
+        );
+        inner.insert_str_key(
+            CILIUM_KEY_FROM_ENDPOINTS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("fe-0".into())]),
+        );
+        inner.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_yaml::Value::Sequence(vec![]));
+        inner.insert_str_key(
+            CILIUM_KEY_HTTP,
+            serde_yaml::Value::String("scalar-not-a-seq".into()),
+        );
+        let value = serde_yaml::Value::Mapping(inner);
+
+        for sub_field in [
+            CILIUM_KEY_TO_PORTS,
+            CILIUM_KEY_FROM_ENDPOINTS,
+            GATEWAY_API_KEY_MATCHES,
+            CILIUM_KEY_HTTP,
+        ] {
+            let via_helper = kube_seq(&value, sub_field);
+            let via_inline = value.get(sub_field).and_then(|v| v.as_sequence());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_seq(v, {sub_field:?}) must byte-equal the prior \
+                 inline `.get({sub_field:?}).and_then(|v| v.as_sequence())` \
+                 two-hop chain — the lift must stay a drop-in for \
+                 every routed caller's downstream continuation posture"
             );
         }
     }

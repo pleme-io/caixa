@@ -3276,7 +3276,7 @@ mod tests {
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
         kube_kind_is, kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
         kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is,
-        kube_namespace, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
+        kube_namespace, kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
         kube_spec_seq_first, kube_spec_str_field,
     };
     use std::time::Duration;
@@ -5433,8 +5433,7 @@ mod tests {
             .iter()
             .find_map(|p| {
                 kube_spec_seq_first(p, CILIUM_KEY_INGRESS)
-                    .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
-                    .and_then(|p| p.as_sequence())
+                    .and_then(|i| kube_seq(i, CILIUM_KEY_TO_PORTS))
                     .and_then(|s| s.iter().find(|tp| tp.get(KUBE_KEY_RULES).is_some()))
                     .and_then(|tp| tp.get(KUBE_KEY_RULES))
             })
@@ -5541,9 +5540,7 @@ mod tests {
              selection-predicate discriminator scalar-key nests under"
         );
         for rule in &rules {
-            let matches = rule
-                .get(caixa_core::GATEWAY_API_KEY_MATCHES)
-                .and_then(|m| m.as_sequence())
+            let matches = kube_seq(rule, caixa_core::GATEWAY_API_KEY_MATCHES)
                 .expect("HTTPRoute per-rule spec.rules[].matches sequence");
             for m in matches {
                 let path = m
@@ -7744,8 +7741,7 @@ mod tests {
         );
 
         let to_ports = kube_spec_seq_first(cart_to_catalog[0], CILIUM_KEY_INGRESS)
-            .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
-            .and_then(|p| p.as_sequence())
+            .and_then(|i| kube_seq(i, CILIUM_KEY_TO_PORTS))
             .expect("ingress[0].toPorts sequence");
         assert_eq!(
             to_ports.len(),
@@ -7913,8 +7909,7 @@ mod tests {
         let http_rules = kube_spec_seq_first(cart_to_catalog, CILIUM_KEY_INGRESS)
             .and_then(|i| kube_seq_first(i, CILIUM_KEY_TO_PORTS))
             .and_then(|p| p.get(KUBE_KEY_RULES))
-            .and_then(|r| r.get(CILIUM_KEY_HTTP))
-            .and_then(|h| h.as_sequence())
+            .and_then(|r| kube_seq(r, CILIUM_KEY_HTTP))
             .unwrap();
         assert_eq!(http_rules.len(), 1);
         assert_eq!(
@@ -8209,9 +8204,7 @@ mod tests {
             let emitted: Vec<String> = rules
                 .iter()
                 .map(|r| {
-                    r.get(GATEWAY_API_KEY_MATCHES)
-                        .and_then(|m| m.as_sequence())
-                        .and_then(|s| s.first())
+                    kube_seq_first(r, GATEWAY_API_KEY_MATCHES)
                         .and_then(|m| m.get(GATEWAY_API_KEY_PATH))
                         .and_then(|p| p.get(GATEWAY_API_KEY_VALUE))
                         .and_then(|v| v.as_str())
@@ -9215,13 +9208,10 @@ mod tests {
              axis nests under"
         );
         for rule in &rules {
-            let matches = rule
-                .get(caixa_core::GATEWAY_API_KEY_MATCHES)
-                .and_then(|m| m.as_sequence())
-                .expect(
-                    "HTTPRoute per-rule spec.rules[].matches must be navigable \
+            let matches = kube_seq(rule, caixa_core::GATEWAY_API_KEY_MATCHES).expect(
+                "HTTPRoute per-rule spec.rules[].matches must be navigable \
                      through the lifted constant",
-                );
+            );
             assert!(
                 !matches.is_empty(),
                 "per-rule matches sequence must carry at least one entry — the \
@@ -9262,9 +9252,7 @@ mod tests {
              axis nests under"
         );
         for rule in &rules {
-            let matches = rule
-                .get(caixa_core::GATEWAY_API_KEY_MATCHES)
-                .and_then(|m| m.as_sequence())
+            let matches = kube_seq(rule, caixa_core::GATEWAY_API_KEY_MATCHES)
                 .expect("HTTPRoute per-rule spec.rules[].matches sequence");
             assert!(
                 !matches.is_empty(),
@@ -9340,9 +9328,7 @@ mod tests {
 
     fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         find_by_kind(docs, GATEWAY_API_KIND_HTTP_ROUTE)
-            .and_then(kube_spec)
-            .and_then(|s| s.get(KUBE_KEY_RULES))
-            .and_then(|r| r.as_sequence())
+            .and_then(|v| kube_spec_seq_field(v, KUBE_KEY_RULES))
             .cloned()
             .expect("HTTPRoute spec.rules sequence")
     }
@@ -9845,20 +9831,14 @@ mod tests {
             // The auth block must not leak inside fromEndpoints[] or
             // toPorts[] — guards the Cilium-side schema contract that
             // mutual-auth is an ingress-rule-level concern.
-            let from = m
-                .get(CILIUM_KEY_FROM_ENDPOINTS)
-                .and_then(|f| f.as_sequence())
-                .expect("fromEndpoints sequence");
+            let from = kube_seq(rule, CILIUM_KEY_FROM_ENDPOINTS).expect("fromEndpoints sequence");
             for fe in from {
                 assert!(
                     fe.get(CILIUM_KEY_AUTHENTICATION).is_none(),
                     "authentication must not nest inside fromEndpoints[]"
                 );
             }
-            let to = m
-                .get(CILIUM_KEY_TO_PORTS)
-                .and_then(|t| t.as_sequence())
-                .expect("toPorts sequence");
+            let to = kube_seq(rule, CILIUM_KEY_TO_PORTS).expect("toPorts sequence");
             for tp in to {
                 assert!(
                     tp.get(CILIUM_KEY_AUTHENTICATION).is_none(),
