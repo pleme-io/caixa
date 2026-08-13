@@ -3274,8 +3274,8 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
-        kube_kind_is, kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name,
-        kube_name_is, kube_namespace, kube_spec, kube_spec_field,
+        kube_kind_is, kube_metadata, kube_metadata_label, kube_metadata_label_is,
+        kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_spec, kube_spec_field,
     };
     use std::time::Duration;
 
@@ -8829,10 +8829,21 @@ mod tests {
             // Per-CNP discriminator readback through the
             // substrate-primitive [`kube_kind`] pinned accessor.
             assert_eq!(kube_kind(p), Some(CILIUM_KIND_NETWORK_POLICY));
-            let metadata = p
-                .get(KUBE_KEY_METADATA)
-                .and_then(|m| m.as_mapping())
-                .expect("metadata mapping");
+            // Route the per-CNP `metadata:` sub-mapping readback
+            // through the substrate-primitive [`kube_metadata`] pinned
+            // accessor rather than the raw two-hop
+            // `.get(KUBE_KEY_METADATA).and_then(|m| m.as_mapping())`
+            // navigation — sibling convergence to the peer
+            // `gateway_carries_canonical_kube_skeleton_without_labels`
+            // + `httproute_carries_canonical_kube_skeleton_without_labels`
+            // + `cilium_policy_metadata_iterates_alphabetically`
+            // per-CR metadata-sub-mapping-readback sites that fold
+            // onto the same substrate accessor. The extracted
+            // `metadata` sub-mapping stays bound for the sibling
+            // `.len()` / `KUBE_KEY_NAME` / `KUBE_KEY_LABELS` per-sub-
+            // key probes below that need the sub-view for shape
+            // assertions the per-axis accessor does not close.
+            let metadata = kube_metadata(p).expect("metadata mapping");
             // metadata carries name + namespace + labels (3 keys) — no
             // accidental extras leak past the skeleton lift.
             assert_eq!(metadata.len(), 3);
@@ -8869,10 +8880,15 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         assert!(kube_api_version_is(gateway, "gateway.networking.k8s.io/v1",));
-        let metadata = gateway
-            .get(KUBE_KEY_METADATA)
-            .and_then(|m| m.as_mapping())
-            .expect("metadata mapping");
+        // Route the per-Gateway `metadata:` sub-mapping readback
+        // through the substrate-primitive [`kube_metadata`] pinned
+        // accessor — sibling convergence to the peer
+        // `cilium_policy_carries_canonical_kube_skeleton` +
+        // `httproute_carries_canonical_kube_skeleton_without_labels` +
+        // `cilium_policy_metadata_iterates_alphabetically` per-CR
+        // metadata-sub-mapping-readback sites that fold onto the same
+        // substrate accessor.
+        let metadata = kube_metadata(gateway).expect("metadata mapping");
         // Exactly 2 metadata keys (name + namespace) — labels absent.
         assert_eq!(metadata.len(), 2);
         assert_eq!(
@@ -8917,10 +8933,12 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         assert!(kube_api_version_is(route, "gateway.networking.k8s.io/v1",));
-        let metadata = route
-            .get(KUBE_KEY_METADATA)
-            .and_then(|m| m.as_mapping())
-            .expect("metadata mapping");
+        // Route the per-HTTPRoute `metadata:` sub-mapping readback
+        // through the substrate-primitive [`kube_metadata`] pinned
+        // accessor — sibling convergence to the peer per-CR
+        // metadata-sub-mapping-readback sites that fold onto the same
+        // substrate accessor.
+        let metadata = kube_metadata(route).expect("metadata mapping");
         assert_eq!(metadata.len(), 2);
         assert_eq!(
             metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
@@ -9315,10 +9333,15 @@ mod tests {
         // §V.2.7).
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
-            let metadata = p
-                .get(KUBE_KEY_METADATA)
-                .and_then(|m| m.as_mapping())
-                .expect("metadata mapping");
+            // Route the per-CNP `metadata:` sub-mapping readback
+            // through the substrate-primitive [`kube_metadata`] pinned
+            // accessor — sibling convergence to the peer per-CR
+            // metadata-sub-mapping-readback sites that fold onto the
+            // same substrate accessor. The extracted `metadata` sub-
+            // mapping stays bound for the sibling `.iter()` walk that
+            // pins the alphabetical-iteration determinism contract
+            // this test protects (THEORY.md §V.2.7).
+            let metadata = kube_metadata(p).expect("metadata mapping");
             let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
             assert_eq!(
                 keys,
