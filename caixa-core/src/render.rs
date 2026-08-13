@@ -20388,6 +20388,107 @@ pub fn kube_spec(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
     value.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping())
 }
 
+/// Read the sub-`spec.<field>` value on a K8s custom resource YAML
+/// document as `Option<&serde_yaml::Value>` — the composed scalar-arity
+/// per-sub-field-Value accessor peer that stands on the sub-mapping-arity
+/// [`kube_spec`] (9b028ee) accessor, closing the two-hop
+/// `spec → as_mapping → get(<field>)` composition the load-bearing
+/// per-CR body sub-block admits. Structural mirror of the way the
+/// sibling scalar-arity per-sub-field accessors on the sub-`metadata:`
+/// axis compose on the parametric [`kube_metadata_str_field`] (6809867)
+/// primitive: the scalar-arity per-sub-field-Value accessor stands on
+/// the sub-mapping-arity sub-block accessor, folding the "read one
+/// specific sub-field Value" question onto one parametric method call
+/// the caller reads as intent (`kube_spec_field(<value>, <FIELD>)` —
+/// "read this K8s CR's `spec.<FIELD>` sub-Value") rather than as a
+/// hand-spelled two-hop `outer readback → sub-mapping shape gate →
+/// per-key lookup` chain the routed convergence pattern
+/// [`kube_spec_composes_with_further_sub_field_navigation`] already
+/// pinned as the drop-in fold shape.
+///
+/// Returns `None` on any of the three short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// [`kube_spec`] outer-arm short-circuit), the `spec:` value is present
+/// but carries a non-Mapping YAML type (the [`kube_spec`] shape-gate
+/// short-circuit), or the requested sub-field `<field>` axis-key is
+/// absent from the `spec:` sub-mapping (the trailing `Mapping::get`
+/// none-arm). The returned `&Value` borrows into the input `Value` —
+/// the caller decides whether to further-navigate (`.as_sequence()`,
+/// `.get(<DEEPER_KEY>)`), scalar-readback (`.as_str()`, `.as_u64()`),
+/// or clone. The `field` axis stays parametric (rather than pinned to
+/// a specific canonical sub-field like [`CILIUM_KEY_INGRESS`] or
+/// [`GATEWAY_API_KEY_LISTENERS`] as separate helpers) because the K8s
+/// `CustomResource` per-CRD-kind spec-body contract admits an
+/// open-ended per-CR sub-field surface — one helper covers every
+/// emitted `spec.<field>` axis-key today ([`CILIUM_KEY_INGRESS`],
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`], [`GATEWAY_API_KEY_LISTENERS`],
+/// [`GATEWAY_API_KEY_PARENT_REFS`], [`GATEWAY_API_KEY_HOSTNAMES`],
+/// [`GATEWAY_API_KEY_GATEWAY_CLASS_NAME`], and every future
+/// per-CRD-kind body-axis) with the axis-key threaded through the call.
+///
+/// The canonical shape 32 test-side per-CR readback sites across
+/// [`caixa-mesh`][mesh] previously carried inline as the two-line
+/// composition
+///
+/// ```ignore
+/// kube_spec(value)
+///     .and_then(|s| s.get(<FIELD>))
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field
+/// axis-key). After this lift, every routed consumer folds the
+/// outer two-hop navigation onto `kube_spec_field(value, <FIELD>)`
+/// — the outer `spec → as_mapping → get(<field>)` walk happens once
+/// inside the helper, and the caller keeps its downstream idiom
+/// (`.and_then(|i| i.as_sequence())`, `.and_then(|c| c.get(...))`,
+/// `.and_then(|v| v.as_str())`) unchanged.
+///
+/// Structural peer on the composition-on-lifted-sub-mapping axis to
+/// sibling [`kube_metadata_label`] (f3d9fcd) on the sub-
+/// `metadata.labels.<label>` per-selector axis: both accessors compose
+/// on top of a same-crate sub-mapping-arity accessor primitive, both
+/// close a canonical two-hop `sub-block → per-key lookup` navigation
+/// onto one parametric substrate helper the caller reaches for by
+/// intent, and both stay parametric on the per-key axis-key (labels
+/// stays open-ended on the K8s selector surface, spec-body stays
+/// open-ended on the K8s CRD-schema surface). Return-shape splits on
+/// the sibling's shape gate — [`kube_metadata_label`] returns
+/// `Option<&str>` because the labels contract pins every value as a
+/// string scalar, this returns `Option<&Value>` because the spec-body
+/// contract admits nested Mappings, Sequences, scalars, and unions
+/// per-CRD-kind. The caller closes the trailing shape-gate at
+/// call-site, mirroring the `metadata.labels` sub-mapping-arity
+/// accessor's caller-side-shape-gate discipline
+/// ([`kube_metadata_labels`] returns `Option<&Mapping>` and callers
+/// pick their per-consumer shape-gate on top).
+///
+/// Every future per-CR body-sub-field readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
+/// `spec.rules[]` readback, MESH-COMPOSITION §III.2 #3; the
+/// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's `spec.membros`/`spec.contratos` navigation, §III.2 #5;
+/// the future `caixa-otel` per-Servico OTel-Collector CR's
+/// `spec.receivers` readback; every future test-side `spec.<field>`
+/// probe the M3.x + M4 renderer set adds) reaches this same helper by
+/// construction — no per-consumer two-hop chain re-inline, no
+/// per-consumer `KUBE_KEY_SPEC` axis-key drift, no coordinated rewrite
+/// across every per-CR body-sub-field readback on a future K8s
+/// API-machinery rebrand of the top-level `spec:` axis (a schema-
+/// migration to a wrapped `specV2:` sub-block under a versioned CRD
+/// evolution axis, a per-tenant migration to a nested `spec.tenant.*`
+/// scoped sub-namespace under Server-Side-Apply's per-field ownership
+/// annotations).
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_spec_field<'a>(
+    value: &'a serde_yaml::Value,
+    field: &str,
+) -> Option<&'a serde_yaml::Value> {
+    kube_spec(value).and_then(|s| s.get(field))
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -41160,6 +41261,249 @@ spec:
                  surface where a rebrand of the outer two-hop \
                  navigation silently splits the routed sites from the \
                  unrouted"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_field_reads_sub_spec_field_value() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `spec: { <sub-field>: <value>, ... }` body sub-
+        // mapping, the composed accessor returns Some(&Value) for the
+        // routed per-sub-field readback across the three canonical
+        // sub-field axis-keys the caixa-mesh test-harness reaches for
+        // (`CILIUM_KEY_INGRESS` for the per-CNP ingress-rules readback,
+        // `GATEWAY_API_KEY_LISTENERS` for the per-Gateway listener-set
+        // readback, `GATEWAY_API_KEY_PARENT_REFS` for the per-HTTPRoute
+        // parent-Gateway readback). Peer of the sibling
+        // `kube_metadata_label_reads_per_label_string_scalar` pin on
+        // the composed-scalar-arity accessor on the sub-
+        // `metadata.labels.<label>` axis.
+        let ingress =
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-marker".into())]);
+        let listeners =
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-marker".into())]);
+        let parent_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+            "parent-ref-marker".into(),
+        )]);
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, ingress.clone());
+        spec.insert_str_key(GATEWAY_API_KEY_LISTENERS, listeners.clone());
+        spec.insert_str_key(GATEWAY_API_KEY_PARENT_REFS, parent_refs.clone());
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for (sub_field, expected) in [
+            (CILIUM_KEY_INGRESS, &ingress),
+            (GATEWAY_API_KEY_LISTENERS, &listeners),
+            (GATEWAY_API_KEY_PARENT_REFS, &parent_refs),
+        ] {
+            assert_eq!(
+                kube_spec_field(&value, sub_field),
+                Some(expected),
+                "kube_spec_field must read the per-sub-field Value at \
+                 `spec.{sub_field}` — every caixa-mesh per-CR test-side \
+                 readback site reaches through this axis for further \
+                 per-body-key navigation (`.and_then(|i| \
+                 i.as_sequence())`, `.and_then(|c| c.get(...))`, \
+                 `.and_then(|v| v.as_str())`)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_field_returns_none_when_spec_sub_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_spec`] sub-mapping-
+        // arity accessor closes on folds through this composed
+        // accessor. Covers the missing top-level `spec:` block arm
+        // ([`kube_spec`]'s outer-arm) across the same outer-Value
+        // shape permutations the sibling
+        // `kube_spec_returns_none_when_spec_sub_block_absent` pin
+        // covers on the direct primitive. Peer of the sibling
+        // `kube_metadata_label_returns_none_when_labels_block_absent`
+        // pin on the composed accessor on the sub-`metadata.labels`
+        // axis.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_spec_field(&shape, CILIUM_KEY_INGRESS),
+                None,
+                "kube_spec_field({shape:?}, <FIELD>) must short-circuit \
+                 to None through the underlying kube_spec's outer-arm \
+                 when the top-level `spec:` block is absent on the \
+                 outer Value — the composition fold must preserve \
+                 kube_spec's total-function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_field_returns_none_when_spec_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `spec:` value on the outer Value
+        // folds through [`kube_spec`]'s trailing `.as_mapping()` shape-
+        // gate — the composed accessor returns None so the caller's
+        // `.and_then(|v| v.as_str())` / `.as_sequence()` continuation
+        // stays a total function. Pin the shape-gate fold-through so a
+        // future refactor that bypasses [`kube_spec`]'s Mapping-gate
+        // (a private inline `value.get(KUBE_KEY_SPEC).and_then(|s|
+        // s.get(field))` chain that would return `Some` on a non-
+        // Mapping spec-value carrying a numeric-index accidental match)
+        // is a test-visible break, not a runtime regression at the
+        // first schema-invalid CR the reader sees. Peer of the sibling
+        // `kube_metadata_label_returns_none_when_labels_block_absent`
+        // pin.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("spec-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_field(&value, CILIUM_KEY_INGRESS),
+                None,
+                "kube_spec_field must return None when the top-level \
+                 `spec:` axis carries a non-Mapping YAML type \
+                 ({non_mapping:?}) — the fold through kube_spec's \
+                 shape-gate arm short-circuits here, and every routed \
+                 caller depends on that None-arm to keep the readback \
+                 total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_field_returns_none_when_requested_field_absent() {
+        // The composition's trailing per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `spec:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-CNP
+        // ingress-rules readback that finds no `spec.ingress[]`
+        // sub-field expects None here (routing the fallback path)
+        // rather than a panic. Peer of the sibling
+        // `kube_metadata_label_returns_none_when_requested_label_absent`
+        // pin on the composed sub-`metadata.labels.<label>` accessor.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_yaml::Value::Sequence(vec![]));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_field(&value, GATEWAY_API_KEY_LISTENERS),
+            None,
+            "kube_spec_field must return None when the requested \
+             `spec.<field>` axis-key is absent from the sub-mapping — \
+             a `Mapping::get(<KEY>)` miss short-circuits the composed \
+             accessor, and callers rely on the None-arm to route the \
+             fallback path (rather than the wrong-shape arm)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_field_composes_on_lifted_kube_spec_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_spec(value).and_then(|s| s.get(field))` — the outer
+        // sub-mapping-arity accessor stays load-bearing, the composed
+        // accessor stands one abstraction step above it. Pin the
+        // delegation-shape byte-for-byte across three representative
+        // sub-field axis-keys so a future refactor that bypasses
+        // [`kube_spec`] (a private inline two-hop chain copy that
+        // reaches for `.get(KUBE_KEY_SPEC).and_then(|s|
+        // s.as_mapping()).and_then(|m| m.get(field))` directly instead
+        // of composing on the sibling accessor) is a test-visible
+        // break. Peer of the sibling
+        // `kube_metadata_label_composes_on_lifted_kube_metadata_labels_accessor`
+        // pin on the composed sub-`metadata.labels.<label>` accessor.
+        let ingress =
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-marker".into())]);
+        let listeners =
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-marker".into())]);
+        let parent_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+            "parent-ref-marker".into(),
+        )]);
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, ingress);
+        spec.insert_str_key(GATEWAY_API_KEY_LISTENERS, listeners);
+        spec.insert_str_key(GATEWAY_API_KEY_PARENT_REFS, parent_refs);
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            CILIUM_KEY_INGRESS,
+            GATEWAY_API_KEY_LISTENERS,
+            GATEWAY_API_KEY_PARENT_REFS,
+        ] {
+            let via_composed = kube_spec_field(&value, sub_field);
+            let via_delegation = kube_spec(&value).and_then(|s| s.get(sub_field));
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_spec_field(v, {sub_field:?}) must equal the \
+                 delegation-shape `kube_spec(v).and_then(|s| \
+                 s.get({sub_field:?}))` — the composition pin closes \
+                 the drift surface where a private inline bypass \
+                 silently desynchronizes from the underlying \
+                 sub-mapping accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the prior inline two-hop chain the routed caller
+        // previously carried. A drift between the composed helper's
+        // return and the inline chain would silently regress the
+        // caixa-mesh per-CR sub-spec-field-readback sites' downstream
+        // continuations (`.and_then(|i| i.as_sequence())`,
+        // `.and_then(|c| c.get(...))`, `.and_then(|v| v.as_str())`) —
+        // pin the byte-equivalence across three representative sub-
+        // field axis-keys so the composed helper remains a drop-in
+        // replacement for the routed site's prior two-line block.
+        // Peer of the sibling
+        // `kube_metadata_label_matches_prior_inline_chain` pin.
+        let ingress =
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-marker".into())]);
+        let listeners =
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-marker".into())]);
+        let parent_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+            "parent-ref-marker".into(),
+        )]);
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, ingress);
+        spec.insert_str_key(GATEWAY_API_KEY_LISTENERS, listeners);
+        spec.insert_str_key(GATEWAY_API_KEY_PARENT_REFS, parent_refs);
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            CILIUM_KEY_INGRESS,
+            GATEWAY_API_KEY_LISTENERS,
+            GATEWAY_API_KEY_PARENT_REFS,
+        ] {
+            let via_helper = kube_spec_field(&value, sub_field);
+            let via_inline = value.get(KUBE_KEY_SPEC).and_then(|s| s.get(sub_field));
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_spec_field(v, {sub_field:?}) must yield the same \
+                 Option<&Value> as the prior inline two-hop chain \
+                 `value.get(KUBE_KEY_SPEC).and_then(|s| \
+                 s.get({sub_field:?}))` — otherwise the routed \
+                 caixa-mesh per-CR sub-spec-field-readback sites drift \
+                 silently at test time"
             );
         }
     }
