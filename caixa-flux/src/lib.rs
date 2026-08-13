@@ -2436,7 +2436,7 @@ mod tests {
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
         kube_api_version_is, kube_kind, kube_name, kube_root_seq_field, kube_spec_field,
-        kube_spec_map_field, kube_spec_seq_field, kube_spec_str_field,
+        kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -6392,8 +6392,7 @@ spec:
                 .contents,
         )
         .unwrap();
-        let kz_health_kind = kube_spec_seq_field(&kz_parsed, FLUX_KEY_HEALTH_CHECKS)
-            .and_then(|seq| seq.first())
+        let kz_health_kind = kube_spec_seq_first(&kz_parsed, FLUX_KEY_HEALTH_CHECKS)
             .and_then(kube_kind)
             .map(String::from)
             .unwrap();
