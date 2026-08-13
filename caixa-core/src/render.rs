@@ -20390,7 +20390,12 @@ pub fn find_by_label<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
-    value.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping())
+    // Post-lift body: composes on the substrate-primitive
+    // [`kube_root_map_field`] parametric root-axis accessor rather
+    // than re-inlining the two-hop `value.get(KUBE_KEY_SPEC)
+    // .and_then(|s| s.as_mapping())` chain. Structural mirror of the
+    // sibling [`kube_metadata`] recomposition on the same lifted helper.
+    kube_root_map_field(value, KUBE_KEY_SPEC)
 }
 
 /// Read the sub-`spec.<field>` value on a K8s custom resource YAML
@@ -20872,7 +20877,18 @@ pub fn kube_spec_map_field<'a>(
 /// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
 #[must_use]
 pub fn kube_metadata(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
-    value.get(KUBE_KEY_METADATA).and_then(|m| m.as_mapping())
+    // Post-lift body: composes on the substrate-primitive
+    // [`kube_root_map_field`] parametric root-axis accessor rather
+    // than re-inlining the two-hop `value.get(KUBE_KEY_METADATA)
+    // .and_then(|m| m.as_mapping())` chain. Structural mirror of the
+    // sibling [`kube_spec`] recomposition on the same lifted helper —
+    // both pinned peers on this root-level sub-mapping-arity axis now
+    // stand on one navigation primitive with only their pinned
+    // [`KUBE_KEY_<AXIS>`] const differing. A future K8s API-machinery
+    // rebrand on the `metadata:` axis reaches one substrate helper
+    // rather than a coordinated rewrite across every per-CR identity-
+    // sub-block accessor site.
+    kube_root_map_field(value, KUBE_KEY_METADATA)
 }
 
 /// Read the sub-`metadata.<field>` value on a K8s custom resource YAML
@@ -21179,6 +21195,80 @@ pub fn kube_metadata_seq_field<'a>(
     field: &str,
 ) -> Option<&'a serde_yaml::Sequence> {
     kube_metadata_field(value, field).and_then(|v| v.as_sequence())
+}
+
+/// Read a top-level `<field>:` sub-mapping on a K8s custom resource
+/// YAML document as `Option<&serde_yaml::Mapping>` — the composed
+/// sub-mapping-arity per-top-level-field accessor at the root axis,
+/// folding the shape `value.get(field).and_then(|v| v.as_mapping())`
+/// onto one substrate-primitive method call the caller reads as
+/// intent (`kube_root_map_field(<value>, <FIELD>)` — "read this K8s
+/// CR's top-level `<FIELD>:` sub-mapping") rather than as a two-hop
+/// `readback → shape-gate` chain. Structural mirror at the root axis
+/// of the sibling composed sub-mapping-arity accessors on the sub-
+/// axes: [`kube_metadata_map_field`] (d03cc08) on the sub-
+/// `metadata.<field>` axis and [`kube_spec_map_field`] (27fc2ee) on
+/// the sub-`spec.<field>` axis — same trailing `.as_mapping()` shape-
+/// gate closure folded onto the readback, differing only in which
+/// axis the caller navigates (top-level `<field>:` here, sub-
+/// `metadata.<field>` on the metadata peer, sub-`spec.<field>` on the
+/// spec peer). The root-level variant needs no outer shape gate on
+/// `value` itself — [`serde_yaml::Value::get`] already short-circuits
+/// to `None` on non-Mapping outer values — so the composition folds
+/// on one hop rather than the two hops the sub-axis peers close.
+///
+/// The two canonical pinned peers on this root-level sub-mapping-
+/// arity axis — [`kube_metadata`] (f41c4fe) on the [`KUBE_KEY_METADATA`]
+/// half of the K8s CR skeleton every controller admits and
+/// [`kube_spec`] (9b028ee) on the [`KUBE_KEY_SPEC`] half — now
+/// compose through this lifted primitive: [`kube_metadata`] becomes
+/// `kube_root_map_field(value, KUBE_KEY_METADATA)` and [`kube_spec`]
+/// becomes `kube_root_map_field(value, KUBE_KEY_SPEC)`. The two
+/// previously carried identical two-hop
+/// `value.get(<KUBE_KEY_*>).and_then(|v| v.as_mapping())` bodies
+/// differing only in the pinned top-level axis-key — exactly the
+/// two-verbatim-copy shape a substrate-primitive lift closes into
+/// one navigation surface.
+///
+/// Returns `None` on either short-circuit arm the underlying inline
+/// chain closes: the requested top-level `<field>:` axis-key is
+/// absent (a legally-omitted top-level sub-block — e.g. a
+/// `List`-shaped document that carries no per-item `metadata:`
+/// header, or a bare status-scoped document that carries no `spec:`
+/// body), or the top-level `<field>:` value is present but carries a
+/// non-Mapping YAML type (a schema-invalid top-level sub-block per
+/// the K8s API-machinery contract that pins both `metadata:` and
+/// `spec:` as Mappings, but tolerated here as `None` so the readback
+/// stays a total function). The returned `&Mapping` borrows into
+/// the input `Value` — the caller decides whether to enumerate
+/// (`for (k, v) in sub { ... }`), further-navigate
+/// (`sub.get(KUBE_KEY_LABELS)`), pin its length (`.len()`), or clone.
+///
+/// The `field` axis stays parametric (rather than pinned to
+/// [`KUBE_KEY_METADATA`] or [`KUBE_KEY_SPEC`] — those pinned peers
+/// [`kube_metadata`] / [`kube_spec`] still exist and now compose on
+/// this primitive) so the same lift closes every top-level sub-
+/// mapping-arity axis a future K8s API-machinery revision surfaces:
+/// a `status:` sub-block readback for the future caixa-operator's
+/// per-`Caixa`/`Lacre`/`CaixaBuild` CR reconciler's
+/// `status.observedGeneration` navigation, a `data:` sub-block
+/// readback on `ConfigMap` / `Secret` shapes the mesh renderer
+/// materializes for per-Aplicacao config surfaces, a
+/// `spec.template` nested pod-template readback each future per-
+/// Deployment renderer reaches for — each new top-level sub-mapping
+/// axis reaches this helper with a new [`KUBE_KEY_<AXIS>`] const,
+/// not a fresh per-axis helper. Root-axis peer to [`kube_root_str_field`]
+/// (ae83f4e) which closes the same one-hop-plus-shape-gate
+/// navigation on the string-scalar-arity top-level `<field>:` axis
+/// — together they open a two-arity family at the root that mirrors
+/// the sub-`metadata:` and sub-`spec:` three-arity families
+/// (`{str, seq, map}`) already closed at the sub-axis level.
+#[must_use]
+pub fn kube_root_map_field<'a>(
+    value: &'a serde_yaml::Value,
+    field: &str,
+) -> Option<&'a serde_yaml::Mapping> {
+    value.get(field).and_then(|v| v.as_mapping())
 }
 
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
@@ -44481,5 +44571,269 @@ spec:
             gateway_api_http_route_name(aplicacao, para),
             format!("{aplicacao}-{para}"),
         );
+    }
+
+    // ── kube_root_map_field lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_root_map_field_reads_top_level_field_mapping() {
+        // The lift's load-bearing contract: given a Value carrying the
+        // canonical K8s CR skeleton (top-level `metadata:` identity
+        // sub-block + top-level `spec:` body sub-block — the two-half
+        // (identity, body) skeleton every `kube_resource_skeleton`
+        // emission renders and every controller admits), the composed
+        // sub-mapping-arity root-axis accessor returns `Some(<mapping>)`
+        // borrowing into the input Value across the two canonical
+        // pinned axes ([`KUBE_KEY_METADATA`], [`KUBE_KEY_SPEC`]) plus
+        // an open-ended peer axis-key (`status`) that the parametric
+        // `<field>` axis leaves reachable without a fresh helper.
+        let mut labels_body = serde_yaml::Mapping::new();
+        labels_body.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        let mut metadata_body = serde_yaml::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
+        let mut spec_body = serde_yaml::Mapping::new();
+        spec_body.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
+        let mut status_body = serde_yaml::Mapping::new();
+        status_body.insert_str_key(
+            "observedGeneration",
+            serde_yaml::Value::Number(serde_yaml::Number::from(1_u64)),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_body));
+        cr.insert_str_key("status", serde_yaml::Value::Mapping(status_body));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_map_field(&value, KUBE_KEY_METADATA).map(serde_yaml::Mapping::len),
+            Some(2),
+            "kube_root_map_field must read the top-level `metadata:` \
+             sub-mapping as a two-entry mapping (name + labels) — the \
+             pinned peer `kube_metadata` now composes on this axis"
+        );
+        assert_eq!(
+            kube_root_map_field(&value, KUBE_KEY_SPEC).map(serde_yaml::Mapping::len),
+            Some(1),
+            "kube_root_map_field must read the top-level `spec:` \
+             sub-mapping as a one-entry mapping (rules) — the pinned \
+             peer `kube_spec` now composes on this axis"
+        );
+        assert_eq!(
+            kube_root_map_field(&value, "status").map(serde_yaml::Mapping::len),
+            Some(1),
+            "kube_root_map_field must read the top-level `status:` \
+             sub-mapping as a one-entry mapping — the parametric \
+             `<field>` axis stays open-ended so the future caixa-\
+             operator `status.observedGeneration` navigation reaches \
+             the same helper with a different key"
+        );
+    }
+
+    #[test]
+    fn kube_root_map_field_returns_none_when_field_absent() {
+        // Short-circuit arm 1: the requested top-level `<field>:` axis-
+        // key is absent from the outer Mapping (a legally-omitted top-
+        // level sub-block per the K8s API-machinery — a `List`-shaped
+        // document that carries no per-item `metadata:` header, or a
+        // bare status-scoped document that carries no `spec:` body).
+        // The helper folds this to `None` so the readback stays a
+        // total function.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String("CiliumNetworkPolicy".into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_map_field(&value, KUBE_KEY_METADATA),
+            None,
+            "kube_root_map_field must short-circuit to None when the \
+             requested top-level axis-key is absent from the CR outer \
+             Mapping"
+        );
+        assert_eq!(
+            kube_root_map_field(&value, KUBE_KEY_SPEC),
+            None,
+            "kube_root_map_field must short-circuit to None on both \
+             canonical pinned axes when either is absent — the two \
+             canonical pinned peers `kube_metadata` / `kube_spec` \
+             inherit this None-arm through composition"
+        );
+    }
+
+    #[test]
+    fn kube_root_map_field_returns_none_when_field_carries_non_mapping_type() {
+        // Short-circuit arm 2: the requested top-level `<field>:` value
+        // is present but carries a non-Mapping YAML type (a schema-
+        // invalid top-level sub-block per the K8s API-machinery
+        // contract that pins both `metadata:` and `spec:` as Mappings,
+        // tolerated here as `None` so the readback stays a total
+        // function).
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_METADATA,
+            serde_yaml::Value::String("this-should-be-a-mapping".into()),
+        );
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_map_field(&value, KUBE_KEY_METADATA),
+            None,
+            "kube_root_map_field must short-circuit to None when the \
+             top-level `metadata:` axis-key carries a non-Mapping YAML \
+             type (here: a String) — the trailing `.as_mapping()` \
+             shape-gate closure inside the helper folds this to None"
+        );
+        assert_eq!(
+            kube_root_map_field(&value, KUBE_KEY_SPEC),
+            None,
+            "kube_root_map_field must short-circuit to None when the \
+             top-level `spec:` axis-key carries a non-Mapping YAML \
+             type (here: a Sequence) — the same shape-gate short-\
+             circuit closes both canonical pinned axes"
+        );
+    }
+
+    #[test]
+    fn kube_root_map_field_short_circuits_when_outer_value_is_non_mapping() {
+        // Third short-circuit: the outer `value` itself carries a
+        // non-Mapping YAML type. Unlike the sub-`metadata:` / sub-
+        // `spec:` peers which need an explicit `.as_mapping()` gate
+        // on the outer sub-block, the root-axis variant needs no
+        // explicit outer shape gate — [`serde_yaml::Value::get`]
+        // already short-circuits to None on non-Mapping outer values.
+        // Pin the None arm across the four non-Mapping outer shapes
+        // (Null, Bool, Number, String, Sequence) so a future
+        // serde_yaml revision that changes the `Value::get` outer-
+        // shape contract lights up here rather than silently
+        // desynchronizing the root axis from its sub-axis peers.
+        let outer_shapes = [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::String("not-a-mapping".into()),
+            serde_yaml::Value::Sequence(vec![]),
+        ];
+        for outer in outer_shapes {
+            assert_eq!(
+                kube_root_map_field(&outer, KUBE_KEY_METADATA),
+                None,
+                "kube_root_map_field must short-circuit to None on \
+                 every non-Mapping outer Value shape — Value::get \
+                 handles the outer-shape gate the sub-axis peers \
+                 close explicitly"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_composes_on_lifted_kube_root_map_field_accessor() {
+        // Composition pin: after the lift, `kube_metadata(value)` must
+        // resolve exactly the same `Option<&Mapping>` as
+        // `kube_root_map_field(value, KUBE_KEY_METADATA)` across every
+        // routed short-circuit arm. Structural mirror of the sibling
+        // `kube_metadata_str_field` recomposition pin on
+        // `kube_metadata_field` — the composition-link between a
+        // pinned per-axis accessor and its parametric substrate
+        // primitive is a substrate invariant, not a per-call-site
+        // coincidence.
+        let mut metadata_body = serde_yaml::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+        let with_metadata = serde_yaml::Value::Mapping(cr);
+        let without_metadata = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let non_mapping_metadata = {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::String("bad".into()));
+            serde_yaml::Value::Mapping(cr)
+        };
+
+        for value in [&with_metadata, &without_metadata, &non_mapping_metadata] {
+            assert_eq!(
+                kube_metadata(value),
+                kube_root_map_field(value, KUBE_KEY_METADATA),
+                "kube_metadata must resolve identically to \
+                 kube_root_map_field(value, KUBE_KEY_METADATA) across \
+                 every routed short-circuit arm — the composition-link \
+                 between the pinned peer and its parametric primitive \
+                 is a substrate invariant"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_composes_on_lifted_kube_root_map_field_accessor() {
+        // Composition pin: after the lift, `kube_spec(value)` must
+        // resolve exactly the same `Option<&Mapping>` as
+        // `kube_root_map_field(value, KUBE_KEY_SPEC)` across every
+        // routed short-circuit arm. Structural mirror of the sibling
+        // `kube_metadata_composes_on_lifted_kube_root_map_field_accessor`
+        // pin on the peer canonical top-level sub-mapping-arity axis.
+        let mut spec_body = serde_yaml::Mapping::new();
+        spec_body.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_body));
+        let with_spec = serde_yaml::Value::Mapping(cr);
+        let without_spec = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let non_mapping_spec = {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
+            serde_yaml::Value::Mapping(cr)
+        };
+
+        for value in [&with_spec, &without_spec, &non_mapping_spec] {
+            assert_eq!(
+                kube_spec(value),
+                kube_root_map_field(value, KUBE_KEY_SPEC),
+                "kube_spec must resolve identically to \
+                 kube_root_map_field(value, KUBE_KEY_SPEC) across \
+                 every routed short-circuit arm — the composition-link \
+                 between the pinned peer and its parametric primitive \
+                 is a substrate invariant"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_map_field_matches_prior_inline_chain() {
+        // Byte-equivalence pin: the lifted `kube_root_map_field`
+        // helper resolves exactly the same `Option<&Mapping>` as the
+        // two-hop `value.get(field).and_then(|v| v.as_mapping())`
+        // inline chain the two pinned peers (`kube_metadata`,
+        // `kube_spec`) previously each carried a copy of. A future
+        // refactor that mistakenly desynchronizes the lifted primitive
+        // from that inline shape lights up here rather than silently
+        // splitting the two pinned peers back apart across the
+        // substrate.
+        let mut metadata_body = serde_yaml::Mapping::new();
+        metadata_body.insert_str_key(
+            KUBE_KEY_LABELS,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let mut spec_body = serde_yaml::Mapping::new();
+        spec_body.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_body));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for field in [KUBE_KEY_METADATA, KUBE_KEY_SPEC, "status", "data"] {
+            assert_eq!(
+                kube_root_map_field(&value, field),
+                value.get(field).and_then(|v| v.as_mapping()),
+                "kube_root_map_field must be byte-equivalent to the \
+                 prior inline `value.get(field).and_then(|v| \
+                 v.as_mapping())` chain across the pinned canonical \
+                 axes and the open-ended parametric axes — any \
+                 divergence indicates the composition drifted"
+            );
+        }
     }
 }
