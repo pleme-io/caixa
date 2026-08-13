@@ -22207,6 +22207,110 @@ pub fn kube_u64(value: &serde_yaml::Value, field: &str) -> Option<u64> {
     value.get(field).and_then(serde_yaml::Value::as_u64)
 }
 
+/// Read a sub-`<field>` YAML mapping nested one hop under an arbitrary
+/// `&serde_yaml::Value` mapping receiver as `Option<&serde_yaml::Mapping>`
+/// — the value-level two-hop navigation primitive that folds
+/// `.get(<field>) → as_mapping` into a single helper call. Sub-mapping-
+/// arity peer of the value-level scalar-str [`kube_str`] (a23f61d),
+/// scalar-integer [`kube_u64`] (bfbec1d), and sequence-arity [`kube_seq`]
+/// (9c74ddb) accessors on the same value-level two-hop navigation axis:
+/// where those three close the string / unsigned-integer / sequence
+/// shape-gates on the nested `<field>` axis, this accessor closes the
+/// sub-mapping shape-gate on the same axis, so every routed test-side +
+/// production per-nested-mapping sub-block readback (per-`HTTPRouteMatch`
+/// `path:` sub-mapping on the Gateway API family, per-programs-entry
+/// `placement:` sub-mapping on the caixa-mesh M3 fan-out, per-`HTTPRoute`
+/// per-rule `timeouts:` / `retry:` mesh-policy overlay sub-mappings, per-
+/// `CiliumNetworkPolicy` per-rule `authentication:` mTLS-overlay sub-
+/// mapping, per-`HelmRelease` `spec.values.<library>:` wrap sub-mapping on
+/// the caixa-flux cluster-bundle path) now reaches through the same
+/// one-line dispatch the scalar-str / scalar-integer / sequence arities
+/// already do. The quartet
+/// ([`kube_str`], [`kube_u64`], [`kube_seq`], `kube_map`) closes the
+/// value-level axis at the four principal K8s apiserver `OpenAPI` schema
+/// shape arities — string, unsigned-integer, sequence, sub-mapping —
+/// matching the closed shape of the spec/metadata/root-anchored families
+/// one altitude above where each arity already has its named accessor
+/// ([`kube_spec_str_field`] / [`kube_spec_seq_field`] /
+/// [`kube_spec_map_field`], and the parallel `metadata_*` / `root_*`
+/// families).
+///
+/// Returns `None` on any of the three short-circuit arms folded through
+/// the underlying two-hop composition: the receiver `value` carries a
+/// YAML type without a `get(<field>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<field>` axis-key is absent from the receiver's mapping
+/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value is
+/// present but carries a non-mapping YAML type (the trailing
+/// [`serde_yaml::Value::as_mapping`] shape-gate short-circuit — a
+/// schema-invalid sub-field type per the K8s apiserver's `OpenAPI` schema
+/// but tolerated here as `None` so the readback stays a total function,
+/// mirroring the sibling [`kube_str`] / [`kube_u64`] / [`kube_seq`]
+/// posture). The returned `&Mapping` borrows into the input `Value` — the
+/// caller decides whether to `assert_eq!(_, Some(<expected>))` for a
+/// determinism pin, thread through a nested `.get(<K>)` on the returned
+/// sub-mapping for a downstream scalar readback, `.expect(...)` for a
+/// load-bearing sub-block identity, or `.is_empty()` / `.len()` for a
+/// cardinality predicate.
+///
+/// The canonical shape 7 test-side per-nested-mapping sub-block
+/// readback sites in [`caixa-mesh`][mesh] previously carried inline as
+/// the two-line composition
+///
+/// ```ignore
+/// <value>.get(<FIELD>).and_then(|v| v.as_mapping())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-key
+/// — [`GATEWAY_API_KEY_PATH`] on the per-`HTTPRouteMatch` `path:` sub-
+/// mapping (two routed matches-per-rule readback sites folding onto
+/// this arity), [`M3_KEY_PLACEMENT`] on the per-programs-entry
+/// `placement:` sub-mapping's `placement_blocks` helper,
+/// [`GATEWAY_API_KEY_TIMEOUTS`] on the per-rule `timeouts:` mesh-policy
+/// overlay sub-mapping, [`GATEWAY_API_KEY_RETRY`] on the per-rule
+/// `retry:` overlay sub-mapping, [`CILIUM_KEY_AUTHENTICATION`] on the
+/// per-CNP rule `authentication:` mTLS sub-mapping (two routed
+/// tristate-arm readback sites — the `Some(true)` `required` arm and
+/// the explicit `Some(false)` `disabled` arm — folding onto this
+/// arity)). The `&Value`-receiver signature also stays the reachable
+/// call surface for every future caller already holding a nested
+/// `&Value` bracket (the caixa-flux cluster-bundle
+/// `spec.values.<library>:` wrap sub-mapping stays out-of-reach today
+/// because its receiver is a lifted `&Mapping` returned from
+/// [`kube_spec_map_field`] rather than a `&Value` — a peer
+/// `Mapping`-receiver overload would land on a separate lift, one
+/// altitude down on the mapping-arity axis, if the routed caller
+/// surface ever grows dense enough on that receiver-arm to justify it).
+/// After this lift every routed `&Value`-receiver consumer folds the
+/// two-line navigation onto `kube_map(<value>, <FIELD>)` — the two-hop
+/// `get → as_mapping` walk happens once inside the helper, and the
+/// caller keeps its downstream continuation posture (`.get(<K>)` on the
+/// returned `&Mapping`, `.expect(...)`, `.is_empty()`, `.len()`)
+/// unchanged — the lift closes the navigation surface, not the per-site
+/// downstream posture.
+///
+/// Every future nested `<field>` sub-mapping readback the M3.x + M4
+/// renderer set materializes (per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` per-policy nested sub-blocks, the
+/// `app-operator`'s per-Aplicacao materializer's
+/// `spec.placement.<affinity-block>` nested affinity sub-mapping, the
+/// future `caixa-otel` per-Servico per-`receivers.<name>:` nested
+/// sub-mapping, the future per-`:contratos` per-edge WIT-attribute
+/// sub-block once the M4 typed per-edge overlay lands) reaches this one
+/// helper by construction. No per-consumer two-hop re-inline; no
+/// coordinated rewrite across every nested-sub-mapping readback on a
+/// future [`serde_yaml`] surface rebrand or shape-gate shift.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_map<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a serde_yaml::Mapping> {
+    value.get(field).and_then(serde_yaml::Value::as_mapping)
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -47669,6 +47773,276 @@ spec:
              surface the per-`backendRefs[0].port` integer scalar the \
              fixture seeds — a drop-in for the routed per-`HTTPRoute` \
              rule backend port determinism-pin site"
+        );
+    }
+
+    #[test]
+    fn kube_map_reads_sub_field_mapping_borrowing_into_input_value() {
+        // Load-bearing contract: given a `&Value` mapping receiver
+        // carrying a nested `<field>: { ... }` sub-mapping at a per-key
+        // axis, the value-level two-hop sub-mapping-arity primitive
+        // returns `Some(<mapping>)` borrowing into the input Value so
+        // downstream `.get(<K>)` / `.len()` / `.is_empty()`
+        // continuations reach the sub-block entries without a further
+        // clone. Sub-mapping-arity peer of the sibling value-level
+        // scalar-str [`kube_str`], scalar-integer [`kube_u64`], and
+        // sequence-arity [`kube_seq`] accessors — this exercises the
+        // same value-level two-hop navigation but with a sub-mapping
+        // shape-gate closing the quartet across the four principal K8s
+        // apiserver OpenAPI schema shape arities.
+        let mut path_body = serde_yaml::Mapping::new();
+        path_body.insert_str_key(
+            KUBE_KEY_TYPE,
+            serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
+        );
+        path_body.insert_string(GATEWAY_API_KEY_VALUE, "/hello");
+        let mut auth_body = serde_yaml::Mapping::new();
+        auth_body.insert_str_key(
+            CILIUM_KEY_MODE,
+            serde_yaml::Value::String(CILIUM_AUTH_MODE_REQUIRED.into()),
+        );
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_body));
+        m.insert_str_key(
+            CILIUM_KEY_AUTHENTICATION,
+            serde_yaml::Value::Mapping(auth_body),
+        );
+        let value = serde_yaml::Value::Mapping(m);
+
+        let path = kube_map(&value, GATEWAY_API_KEY_PATH)
+            .expect("kube_map must return the per-HTTPRouteMatch path sub-mapping");
+        assert_eq!(
+            path.get(KUBE_KEY_TYPE).and_then(|v| v.as_str()),
+            Some(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX),
+            "kube_map's returned &Mapping must expose the nested \
+             `type:` scalar via a fresh `.get(KUBE_KEY_TYPE)` walk — \
+             the routed per-`HTTPRouteMatch` path-selection predicate \
+             determinism pin composes on top of the lifted accessor \
+             without a further clone"
+        );
+        let auth = kube_map(&value, CILIUM_KEY_AUTHENTICATION)
+            .expect("kube_map must return the per-CNP rule authentication sub-mapping");
+        assert_eq!(
+            auth.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
+            Some(CILIUM_AUTH_MODE_REQUIRED),
+            "kube_map's returned &Mapping must expose the nested \
+             `mode:` scalar unchanged across a second axis-key — the \
+             routed per-CNP rule mTLS `authentication.mode` \
+             determinism pin sits here"
+        );
+    }
+
+    #[test]
+    fn kube_map_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying two-hop
+        // `get → as_mapping` closes on folds through this accessor to
+        // `None`. Pin all three arms so a future refactor reaching for
+        // `.as_mapping().unwrap()` (which would panic on any of the
+        // three arms) is a test-visible break.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<field>)` navigation surface.
+        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        assert_eq!(
+            kube_map(&scalar_receiver, GATEWAY_API_KEY_PATH),
+            None,
+            "kube_map must short-circuit to None when the receiver \
+             Value carries a scalar YAML type with no `get` navigation \
+             surface — Value::get's scalar-arm None folds through, \
+             preserving the total-function contract"
+        );
+
+        // Arm 2: requested `<field>` axis-key absent from receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_str_key(
+            CILIUM_KEY_AUTHENTICATION,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let missing_field = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_map(&missing_field, GATEWAY_API_KEY_PATH),
+            None,
+            "kube_map must short-circuit to None when the requested \
+             `<field>` axis-key is absent from the receiver's mapping \
+             — Value::get's trailing miss folds through"
+        );
+
+        // Arm 3: `<field>` present but non-mapping (a scalar-str, the
+        // wrong-arity shape the sibling [`kube_str`] axis owns).
+        let mut non_map = serde_yaml::Mapping::new();
+        non_map.insert_string(GATEWAY_API_KEY_PATH, "PathPrefix");
+        let non_map_field = serde_yaml::Value::Mapping(non_map);
+        assert_eq!(
+            kube_map(&non_map_field, GATEWAY_API_KEY_PATH),
+            None,
+            "kube_map must short-circuit to None when the `<field>` \
+             value carries a non-mapping YAML type — the trailing \
+             `.as_mapping()` shape-gate fold-through short-circuits \
+             here (mirrors the sibling `kube_str` / `kube_u64` / \
+             `kube_seq` scalar-arm-only posture, one axis-arity over)"
+        );
+    }
+
+    #[test]
+    fn kube_map_preserves_empty_mapping_distinctly_from_missing() {
+        // Cardinality-preservation pin (mirrors the sibling
+        // [`kube_seq`]'s `preserves_empty_sequence_distinctly_from_missing`
+        // arm one arity over on the sequence shape-gate): the arity
+        // gate accepts empty sub-mappings — a `<field>: {}` block emits
+        // `Some(<empty Mapping>)` distinct from the missing-field arm's
+        // `None`. The caller sees the empty sub-mapping as a legitimate
+        // reading, distinct from "no such field" — the load-bearing
+        // distinction that lets the tail-continuation caller
+        // distinguish the two at the cost of one arm's fold-through.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(
+            GATEWAY_API_KEY_PATH,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let empty_map_value = serde_yaml::Value::Mapping(m);
+
+        let sub = kube_map(&empty_map_value, GATEWAY_API_KEY_PATH);
+        assert!(
+            sub.is_some(),
+            "kube_map must return Some on a present-but-empty sub-\
+             mapping — the shape-gate accepts empty mappings (they are \
+             mappings), the distinction between empty and missing \
+             carries through to the caller"
+        );
+        assert_eq!(
+            sub.expect("kube_map must return Some on present-but-empty")
+                .len(),
+            0,
+            "kube_map's return on an empty sub-mapping must carry the \
+             empty length through — mirroring the sibling kube_seq's \
+             empty-sequence preservation arm"
+        );
+    }
+
+    #[test]
+    fn kube_map_matches_prior_inline_two_hop_chain() {
+        // Cross-check the value-level primitive's output byte-for-byte
+        // against the prior inline `.get(<F>).and_then(|v| v.as_mapping())`
+        // two-hop chain the ~8 routed caller sites in caixa-mesh +
+        // caixa-flux previously carried. A drift between the helper's
+        // return and the inline chain would silently regress every
+        // downstream continuation (`.get(<K>)`, `.expect(...)`,
+        // `.is_empty()`) — pin the byte-equivalence across four
+        // representative sub-field axis-keys spanning the Gateway API
+        // mesh-policy overlays (timeouts, retry), the Cilium mTLS
+        // overlay (authentication), and the caixa-flux cluster-bundle
+        // helm-values wrap (`<library>`) so the composed helper stays
+        // a drop-in replacement for the routed sites' prior two-line
+        // block.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            GATEWAY_API_KEY_TIMEOUTS,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        inner.insert_str_key(
+            GATEWAY_API_KEY_RETRY,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        inner.insert_str_key(
+            CILIUM_KEY_AUTHENTICATION,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        inner.insert_string(DEFAULT_LIBRARY_NAME, "scalar-not-a-mapping");
+        let value = serde_yaml::Value::Mapping(inner);
+
+        for sub_field in [
+            GATEWAY_API_KEY_TIMEOUTS,
+            GATEWAY_API_KEY_RETRY,
+            CILIUM_KEY_AUTHENTICATION,
+            DEFAULT_LIBRARY_NAME,
+        ] {
+            let via_helper = kube_map(&value, sub_field);
+            let via_inline = value.get(sub_field).and_then(serde_yaml::Value::as_mapping);
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_map(v, {sub_field:?}) must byte-equal the prior \
+                 inline `.get({sub_field:?}).and_then(|v| v.as_mapping())` \
+                 two-hop chain — the lift must stay a drop-in for \
+                 every routed caller's downstream continuation posture"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_map_composes_naturally_below_kube_seq_first() {
+        // Composition pin: the two-hop-nested spec-anchored + value-
+        // level sub-mapping readback path `spec.<outer>[0].<inner>` —
+        // e.g. the per-`HTTPRoute` `spec.rules[0].matches[0].path` sub-
+        // mapping the routed httproute per-rule readback sites walk —
+        // must compose byte-equally through
+        // `kube_spec_seq_first(v, RULES).and_then(|r| kube_seq_first(r,
+        // MATCHES)).and_then(|m| kube_map(m, PATH))` and the equivalent
+        // multi-hop inline chain. Pin the composition on the canonical
+        // per-`HTTPRouteMatch` path outer/inner/sub-mapping triple so
+        // the sibling-composition surface stays contract-preserving —
+        // parallels the sibling [`kube_u64`] / [`kube_str`] composition
+        // pins one arity over on the scalar shape-gates.
+        let mut path_body = serde_yaml::Mapping::new();
+        path_body.insert_str_key(
+            KUBE_KEY_TYPE,
+            serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
+        );
+
+        let mut match_map = serde_yaml::Mapping::new();
+        match_map.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_body));
+        let match_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(match_map)]);
+
+        let mut rule_map = serde_yaml::Mapping::new();
+        rule_map.insert_str_key(GATEWAY_API_KEY_MATCHES, match_seq);
+
+        let mut spec_map = serde_yaml::Mapping::new();
+        spec_map.insert_str_key(
+            KUBE_KEY_RULES,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(rule_map)]),
+        );
+
+        let mut root_map = serde_yaml::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
+        let value = serde_yaml::Value::Mapping(root_map);
+
+        let via_composed = kube_spec_seq_first(&value, KUBE_KEY_RULES)
+            .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_MATCHES))
+            .and_then(|m| kube_map(m, GATEWAY_API_KEY_PATH));
+        let via_inline = value
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.as_mapping())
+            .and_then(|m| m.get(KUBE_KEY_RULES))
+            .and_then(|v| v.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|r| r.get(GATEWAY_API_KEY_MATCHES))
+            .and_then(|v| v.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|m| m.get(GATEWAY_API_KEY_PATH))
+            .and_then(serde_yaml::Value::as_mapping);
+        assert_eq!(
+            via_composed, via_inline,
+            "kube_spec_seq_first(v, RULES) + kube_seq_first(r, MATCHES) \
+             + kube_map(m, PATH) must byte-equal the eight-hop inline \
+             chain the routed per-`HTTPRoute` `spec.rules[0].matches\
+             [0].path` sites previously carried below the two outer \
+             sequence-first accessors"
+        );
+        assert!(
+            via_composed.is_some(),
+            "the composed two-hop-nested sub-mapping readback must \
+             surface the per-`matches[0].path` sub-mapping the fixture \
+             seeds — a drop-in for the routed per-`HTTPRoute` per-\
+             match path-selection-predicate determinism-pin site"
+        );
+        let path = via_composed.expect("must be Some");
+        assert_eq!(
+            path.get(KUBE_KEY_TYPE).and_then(|v| v.as_str()),
+            Some(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX),
+            "the returned sub-mapping must carry the canonical Gateway \
+             API v1 HTTPPathMatch discriminator-key axis verbatim — a \
+             `type:` scalar identifying the path-selection predicate \
+             the routed test-side site pins against"
         );
     }
 }
