@@ -20489,6 +20489,103 @@ pub fn kube_spec_field<'a>(
     kube_spec(value).and_then(|s| s.get(field))
 }
 
+/// Read the sub-`spec.<field>` string-scalar on a K8s custom resource YAML
+/// document as `Option<&str>` — the composed scalar-str-arity per-sub-
+/// field-string accessor peer that stands on the composed scalar-arity
+/// [`kube_spec_field`] (23bd568) accessor, folding the trailing
+/// `.and_then(|v| v.as_str())` shape-gate closure into the helper for
+/// callers that always want a string scalar (the load-bearing per-CR
+/// body-sub-field scalar readbacks — `spec.path` on `Kustomization`,
+/// `spec.url` on `GitRepository`, `spec.timeout` on `Kustomization`,
+/// `spec.interval` on the Flux v2 controller CR family,
+/// `spec.gatewayClassName` on `Gateway`). Structural mirror of the
+/// sibling [`kube_metadata_str_field`] (6809867) on the sub-`metadata:`
+/// axis: both accessors fold a trailing `.as_str()` shape-gate onto a
+/// two-hop sub-block-then-per-field navigation, both return
+/// `Option<&str>` for callers that pin a string scalar downstream, both
+/// stay parametric on the per-`<field>` sub-field axis-key. Where
+/// [`kube_metadata_str_field`] closes the `metadata.<field>` string-
+/// scalar readback at the sub-`metadata:` axis, this closes the
+/// `spec.<field>` string-scalar readback at the sub-`spec:` axis. The
+/// two together bracket the two canonical top-level sub-mapping-and-
+/// per-sub-field string-scalar readback surfaces every K8s CR document
+/// the emit-side [`kube_resource_skeleton`] renders admits:
+/// `metadata.<field>` for per-CR identity string coordinates via the
+/// sibling, `spec.<field>` for per-CR body string coordinates via this
+/// accessor.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// [`kube_spec`] outer-arm short-circuit), the `spec:` value is present
+/// but carries a non-Mapping YAML type (the [`kube_spec`] shape-gate
+/// short-circuit), the requested sub-field `<field>` axis-key is absent
+/// from the `spec:` sub-mapping (the [`kube_spec_field`] trailing
+/// `Mapping::get` none-arm), or the sub-field value is present but
+/// carries a non-string YAML type (the trailing `.as_str()` shape gate
+/// short-circuit — a schema-invalid per-CR body-sub-field type per the
+/// K8s apiserver's `OpenAPI` schema but tolerated here as `None` so the
+/// readback stays a total function). The returned `&str` borrows into
+/// the input `Value` — the caller decides whether to compare (`==`),
+/// clone (`.to_string()`), unwrap-then-panic (`.expect(...)`), or route
+/// a fallback (`.unwrap_or(...)`).
+///
+/// The canonical shape 7 test-side per-CR readback sites across
+/// [`caixa-flux`][flux] (6) + [`caixa-mesh`][mesh] (1) previously
+/// carried inline as the two-line composition
+///
+/// ```ignore
+/// kube_spec_field(<value>, <FIELD>)
+///     .and_then(|v| v.as_str())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-
+/// key — [`FLUX_KUSTOMIZATION_KEY_PATH`] on 2 sites,
+/// [`FLUX_KUSTOMIZATION_KEY_TIMEOUT`] on 1 site,
+/// [`FLUX_GITREPOSITORY_KEY_URL`] on 1 site, [`FLUX_KEY_INTERVAL`] on
+/// 1 site, [`GATEWAY_API_KEY_GATEWAY_CLASS_NAME`] on 1 site). After
+/// this lift, every routed consumer folds the two-hop-plus-shape-gate
+/// navigation onto `kube_spec_str_field(<value>, <FIELD>)` — the outer
+/// `spec → as_mapping → get(<field>) → as_str` walk happens once inside
+/// the helper, and the caller keeps its downstream idiom (`.expect(...)`,
+/// `.unwrap_or_else(...)`, `== Some(<VALUE>)`, `assert_eq!(..,
+/// Some(<VALUE>))`) unchanged — the lift closes the navigation surface,
+/// not the per-site error-handling posture.
+///
+/// Sites lifted include caixa-flux's
+/// `cluster_bundle_kustomization_path_pins_lifted_sub_tree` and
+/// `cluster_bundle_kustomization_path_matches_lifted_sub_tree_composer`
+/// (per-`Kustomization` `spec.path`),
+/// `cluster_bundle_kustomization_timeout_uses_lifted_default` (per-
+/// `Kustomization` `spec.timeout`),
+/// `cluster_bundle_gitrepository_url_pins_lifted_default` (per-
+/// `GitRepository` `spec.url`),
+/// `cluster_bundle_flux_cr_docs_carry_lifted_interval` (per-CR
+/// `spec.interval`), plus caixa-mesh's
+/// `gateway_routes_gateway_uses_lifted_default_gateway_class_name`
+/// (per-`Gateway` `spec.gatewayClassName`).
+///
+/// Every future per-CR `spec.<field>` string-scalar readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
+/// `spec.rules[].name` navigation, MESH-COMPOSITION §III.2 #3; the
+/// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's `spec.*` scalar readbacks, §III.2 #5; the future
+/// `caixa-otel` per-Servico OpenTelemetry-Collector CR's `spec.*`
+/// scalar navigation; every future test-side `spec.<field>` string-
+/// scalar probe the M3.x + M4 renderer set adds) reaches this same
+/// helper by construction — no per-consumer two-hop-plus-shape-gate
+/// chain re-inline, no per-consumer `KUBE_KEY_SPEC` axis-key drift, no
+/// coordinated rewrite across every per-CR body-sub-field string
+/// readback on a future K8s API-machinery rebrand of the top-level
+/// `spec:` axis.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_spec_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
+    kube_spec_field(value, field).and_then(|v| v.as_str())
+}
+
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
@@ -42210,6 +42307,292 @@ spec:
                  Option<&Value> as the prior inline two-hop chain — \
                  otherwise a caller migrating from the inline chain onto \
                  the helper silently drifts at readback time"
+            );
+        }
+    }
+
+    // ── kube_spec_str_field lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_spec_str_field_reads_sub_spec_field_string_scalar() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `spec: { <sub-field>: <str>, ... }` body sub-mapping
+        // (every K8s CR the emit-side [`kube_resource_skeleton`] renders
+        // with a string-scalar `spec.<field>` axis — `spec.path` on
+        // `Kustomization`, `spec.url` on `GitRepository`, `spec.timeout`
+        // on `Kustomization`, `spec.interval` on the Flux v2 controller
+        // CR family, `spec.gatewayClassName` on `Gateway`), the composed
+        // scalar-str-arity accessor returns `Some(<str>)` borrowing into
+        // the input Value across the routed per-sub-field readback axes.
+        // Structural mirror of the sibling
+        // `kube_metadata_str_field_reads_metadata_name_and_namespace_string_scalars`
+        // pin on the sub-`metadata:` axis's composed scalar-str-arity
+        // accessor.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            FLUX_KUSTOMIZATION_KEY_PATH,
+            serde_yaml::Value::String("clusters/rio/apps/checkout".into()),
+        );
+        spec.insert_str_key(
+            FLUX_KUSTOMIZATION_KEY_TIMEOUT,
+            serde_yaml::Value::String(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT.into()),
+        );
+        spec.insert_str_key(
+            GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
+            serde_yaml::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
+            Some("clusters/rio/apps/checkout"),
+            "kube_spec_str_field must read spec.path as a string scalar \
+             — the caixa-flux cluster_bundle_kustomization_path pins \
+             reach through this axis for per-caixa sub-tree navigation"
+        );
+        assert_eq!(
+            kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_TIMEOUT),
+            Some(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT),
+            "kube_spec_str_field must read spec.timeout as a string \
+             scalar — the caixa-flux per-Kustomization reconcile-cap \
+             pin reaches through this axis"
+        );
+        assert_eq!(
+            kube_spec_str_field(&value, GATEWAY_API_KEY_GATEWAY_CLASS_NAME),
+            Some(DEFAULT_GATEWAY_CLASS_NAME),
+            "kube_spec_str_field must read spec.gatewayClassName as a \
+             string scalar — the caixa-mesh per-Gateway controller-\
+             choice pin reaches through this axis"
+        );
+    }
+
+    #[test]
+    fn kube_spec_str_field_returns_none_when_spec_sub_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_spec_field`] closes on
+        // (which in turn folds through [`kube_spec`]'s outer-arm and
+        // shape-gate) folds through this composed scalar-str-arity
+        // accessor. Covers the missing top-level `spec:` block arm
+        // across the same outer-Value shape permutations the sibling
+        // `kube_spec_field_returns_none_when_spec_sub_block_absent` pin
+        // covers on the direct scalar-arity primitive.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_spec_str_field(&shape, FLUX_KUSTOMIZATION_KEY_PATH),
+                None,
+                "kube_spec_str_field({shape:?}, <FIELD>) must short-\
+                 circuit to None through the underlying kube_spec_field's \
+                 kube_spec outer-arm when the top-level `spec:` block is \
+                 absent on the outer Value — the composition fold must \
+                 preserve the total-function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_str_field_returns_none_when_spec_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `spec:` value on the outer Value
+        // folds through [`kube_spec`]'s trailing `.as_mapping()` shape-
+        // gate up through [`kube_spec_field`] up through this composed
+        // accessor — the caller's `.expect(...)` / `.unwrap_or(...)`
+        // continuation stays a total function.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("spec-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
+                None,
+                "kube_spec_str_field must return None when the top-\
+                 level `spec:` axis carries a non-Mapping YAML type \
+                 ({non_mapping:?}) — the fold through kube_spec's \
+                 shape-gate arm short-circuits here, and every routed \
+                 caller depends on that None-arm to keep the readback \
+                 total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_str_field_returns_none_when_requested_field_absent() {
+        // The composition's middle per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `spec:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-
+        // Kustomization `spec.path` readback that finds no `spec.path`
+        // sub-field expects None here (routing the fallback path)
+        // rather than a panic.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            FLUX_KUSTOMIZATION_KEY_TIMEOUT,
+            serde_yaml::Value::String(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT.into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
+            None,
+            "kube_spec_str_field must return None when the requested \
+             `spec.<field>` axis-key is absent from the sub-mapping — \
+             a `Mapping::get(<KEY>)` miss short-circuits the composed \
+             accessor, and callers rely on the None-arm to route the \
+             fallback path (rather than the wrong-shape arm)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_str_field_returns_none_when_field_carries_non_string_type() {
+        // The composition's trailing `.as_str()` shape-gate None arm:
+        // a `spec.<field>` axis-key present but carrying a non-string
+        // YAML type. Schema-invalid per the K8s apiserver's OpenAPI
+        // schema (the routed readback sites — `spec.path`, `spec.url`,
+        // `spec.timeout`, `spec.interval`, `spec.gatewayClassName` —
+        // all pin string scalars) but tolerated here as None so the
+        // readback stays a total function. Pin the None-arm so a
+        // future refactor that reaches for `.as_str().unwrap()`
+        // (which would panic on a numeric axis-value) is a test-
+        // visible break, not a runtime regression at the first
+        // schema-invalid CR the reader sees. Peer of the sibling
+        // `kube_metadata_str_field_returns_none_when_field_carries_non_string_type`
+        // pin on the composed sub-`metadata.<field>` scalar-str-arity
+        // accessor.
+        for non_string in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PATH, non_string.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
+                None,
+                "kube_spec_str_field must return None when spec.path \
+                 carries a non-string YAML type ({non_string:?}) — the \
+                 trailing `.as_str()` shape gate short-circuits here, \
+                 and every routed caller depends on that None-arm to \
+                 keep the readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_str_field_composes_on_lifted_kube_spec_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_spec_field(value, field).and_then(|v| v.as_str())` —
+        // the composed scalar-arity accessor stays load-bearing, this
+        // scalar-str-arity accessor stands one abstraction step above
+        // it (folding the trailing `.as_str()` shape-gate closure).
+        // Pin the delegation-shape byte-for-byte across three
+        // representative sub-field axis-keys so a future refactor that
+        // bypasses [`kube_spec_field`] (a private inline
+        // `.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping()).and_then(|m|
+        // m.get(field)).and_then(|n| n.as_str())` chain that would
+        // silently drift on a future rebrand of the outer two-hop
+        // navigation) is a test-visible break. Peer of the sibling
+        // `kube_spec_field_composes_on_lifted_kube_spec_accessor` +
+        // `kube_metadata_field_composes_on_lifted_kube_metadata_accessor`
+        // composition pins on the same composed-on-lifted-primitive
+        // axis.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            FLUX_KUSTOMIZATION_KEY_PATH,
+            serde_yaml::Value::String("path-marker".into()),
+        );
+        spec.insert_str_key(
+            FLUX_GITREPOSITORY_KEY_URL,
+            serde_yaml::Value::String("https://example.com/repo.git".into()),
+        );
+        spec.insert_str_key(FLUX_KEY_INTERVAL, serde_yaml::Value::String("5m".into()));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            FLUX_KUSTOMIZATION_KEY_PATH,
+            FLUX_GITREPOSITORY_KEY_URL,
+            FLUX_KEY_INTERVAL,
+        ] {
+            let via_composed = kube_spec_str_field(&value, sub_field);
+            let via_delegation = kube_spec_field(&value, sub_field).and_then(|v| v.as_str());
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_spec_str_field(v, {sub_field:?}) must equal the \
+                 delegation-shape `kube_spec_field(v, {sub_field:?})\
+                 .and_then(|v| v.as_str())` — the composition pin \
+                 closes the drift surface where a private inline bypass \
+                 silently desynchronizes from the underlying composed \
+                 scalar-arity accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_str_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the prior inline three-hop `kube_spec_field(v, F)
+        // .and_then(|v| v.as_str())` chain the seven routed caller
+        // sites previously carried. A drift between the composed
+        // helper's return and the inline chain would silently regress
+        // the caixa-flux + caixa-mesh per-CR sub-spec-field string-
+        // readback sites' downstream continuations (`.expect(...)`,
+        // `.unwrap_or_else(...)`, `== Some(<VALUE>)`) — pin the byte-
+        // equivalence across three representative sub-field axis-keys
+        // so the composed helper remains a drop-in replacement for the
+        // routed site's prior two-line block.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            FLUX_KUSTOMIZATION_KEY_PATH,
+            serde_yaml::Value::String("clusters/rio/apps/hello".into()),
+        );
+        spec.insert_str_key(
+            FLUX_GITREPOSITORY_KEY_URL,
+            serde_yaml::Value::String("https://github.com/pleme-io/k8s.git".into()),
+        );
+        spec.insert_str_key(
+            GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
+            serde_yaml::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            FLUX_KUSTOMIZATION_KEY_PATH,
+            FLUX_GITREPOSITORY_KEY_URL,
+            GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
+        ] {
+            let via_helper = kube_spec_str_field(&value, sub_field);
+            let via_inline = kube_spec_field(&value, sub_field).and_then(|v| v.as_str());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_spec_str_field(v, {sub_field:?}) must yield the \
+                 same Option<&str> as the prior inline \
+                 `kube_spec_field(v, {sub_field:?}).and_then(|v| \
+                 v.as_str())` chain — otherwise the routed caixa-flux \
+                 + caixa-mesh per-CR sub-spec-field string-readback \
+                 sites drift silently at test time"
             );
         }
     }
