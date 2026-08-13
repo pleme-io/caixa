@@ -2435,8 +2435,8 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_kind, kube_name, kube_spec_field, kube_spec_map_field,
-        kube_spec_seq_field, kube_spec_str_field,
+        kube_api_version_is, kube_kind, kube_name, kube_root_seq_field, kube_spec_field,
+        kube_spec_map_field, kube_spec_seq_field, kube_spec_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -4684,11 +4684,7 @@ programs: []
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         let (modified, inserted) = upsert_into_programs_yaml(initial, entry).unwrap();
         assert!(inserted, "first time should be insert");
-        let arr = modified
-            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
-            .unwrap()
-            .as_sequence()
-            .unwrap();
+        let arr = kube_root_seq_field(&modified, FLEET_PROGRAMS_KEY_PROGRAMS).unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(
             arr[0].get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()),
@@ -4716,11 +4712,7 @@ programs:
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         let (modified, inserted) = upsert_into_programs_yaml(initial, entry).unwrap();
         assert!(!inserted, "second time should be replace");
-        let arr = modified
-            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
-            .unwrap()
-            .as_sequence()
-            .unwrap();
+        let arr = kube_root_seq_field(&modified, FLEET_PROGRAMS_KEY_PROGRAMS).unwrap();
         assert_eq!(arr.len(), 2, "no new entry added");
         let updated_module = arr[0]
             .get(COMPUTEUNIT_SPEC_KEY_MODULE)
