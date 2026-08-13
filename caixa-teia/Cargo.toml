@@ -11,6 +11,7 @@ authors.workspace = true
 [dependencies]
 caixa-ast = { workspace = true }
 caixa-core = { workspace = true }
+gen-platform = { workspace = true }
 iac-forge = { workspace = true }
 tatara-lisp = { workspace = true }
 serde = { workspace = true }
