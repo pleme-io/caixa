@@ -2435,7 +2435,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_kind, kube_name,
+        kube_api_version_is, kube_kind, kube_name, kube_spec_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -3031,9 +3031,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let install_retries = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_HELMRELEASE_KEY_INSTALL))
+        let install_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_INSTALL)
             .and_then(|i| i.get(FLUX_HELMRELEASE_KEY_REMEDIATION))
             .and_then(|r| r.get(FLUX_HELMRELEASE_KEY_RETRIES))
             .and_then(|v| v.as_u64())
@@ -3090,9 +3088,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let upgrade_retries = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_HELMRELEASE_KEY_UPGRADE))
+        let upgrade_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
             .and_then(|u| u.get(FLUX_HELMRELEASE_KEY_REMEDIATION))
             .and_then(|r| r.get(FLUX_HELMRELEASE_KEY_RETRIES))
             .and_then(|v| v.as_u64())
@@ -3154,9 +3150,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let remediate_last_failure = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_HELMRELEASE_KEY_UPGRADE))
+        let remediate_last_failure = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
             .and_then(|u| u.get(FLUX_HELMRELEASE_KEY_REMEDIATION))
             .and_then(|r| r.get(FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE))
             .and_then(|v| v.as_bool())
@@ -3315,9 +3309,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let create_namespace = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_HELMRELEASE_KEY_INSTALL))
+        let create_namespace = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_INSTALL)
             .and_then(|i| i.get(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE))
             .and_then(|v| v.as_bool())
             .expect(
@@ -3545,9 +3537,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let prune = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KUSTOMIZATION_KEY_PRUNE))
+        let prune = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_PRUNE)
             .and_then(|v| v.as_bool())
             .expect(
                 "spec.prune boolean scalar present; drift on this axis \
@@ -3708,9 +3698,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let path = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KUSTOMIZATION_KEY_PATH))
+        let path = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH)
             .and_then(|v| v.as_str())
             .expect(
                 "spec.path string scalar present; drift on this axis \
@@ -3853,9 +3841,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let emitted = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KUSTOMIZATION_KEY_PATH))
+        let emitted = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH)
             .and_then(|v| v.as_str())
             .expect("spec.path string scalar present")
             .to_owned();
@@ -3976,9 +3962,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let timeout = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KUSTOMIZATION_KEY_TIMEOUT))
+        let timeout = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_TIMEOUT)
             .and_then(|v| v.as_str())
             .expect(
                 "spec.timeout string scalar present; drift on this axis \
@@ -4779,14 +4763,9 @@ spec:
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(inserted);
-        let arr = modified
-            .get(KUBE_KEY_SPEC)
-            .unwrap()
-            .get(FLUX_KEY_VALUES)
-            .unwrap()
-            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
-            .unwrap()
-            .as_sequence()
+        let arr = kube_spec_field(&modified, FLUX_KEY_VALUES)
+            .and_then(|v| v.get(FLEET_PROGRAMS_KEY_PROGRAMS))
+            .and_then(|p| p.as_sequence())
             .unwrap();
         assert_eq!(arr.len(), 2);
         assert_eq!(
@@ -4815,14 +4794,9 @@ spec:
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(!inserted);
-        let arr = modified
-            .get(KUBE_KEY_SPEC)
-            .unwrap()
-            .get(FLUX_KEY_VALUES)
-            .unwrap()
-            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
-            .unwrap()
-            .as_sequence()
+        let arr = kube_spec_field(&modified, FLUX_KEY_VALUES)
+            .and_then(|v| v.get(FLEET_PROGRAMS_KEY_PROGRAMS))
+            .and_then(|p| p.as_sequence())
             .unwrap();
         assert_eq!(arr.len(), 2);
         let updated = arr[0]
@@ -4995,9 +4969,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let values = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_VALUES))
+        let values = kube_spec_field(&parsed, FLUX_KEY_VALUES)
             .and_then(|v| v.as_mapping())
             .expect("spec.values mapping present");
         assert!(
@@ -5162,9 +5134,7 @@ spec:
              the bootstrap kustomize-controller's watch window"
         );
         assert_eq!(
-            parsed
-                .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
+            kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
                 .and_then(|r| r.get("name"))
                 .and_then(|n| n.as_str()),
             Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
@@ -5265,9 +5235,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
-        let health_checks = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
+        let health_checks = kube_spec_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .and_then(|h| h.as_sequence())
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
@@ -6157,11 +6125,8 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let source_ref_kind = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_CHART))
-            .and_then(|c| c.get(KUBE_KEY_SPEC))
-            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
+        let source_ref_kind = kube_spec_field(&parsed, FLUX_KEY_CHART)
+            .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
             .and_then(|r| r.get(KUBE_KEY_KIND))
             .and_then(|k| k.as_str())
             .expect("helmrelease.yaml spec.chart.spec.sourceRef.kind present");
@@ -6196,9 +6161,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        let source_ref_kind = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
+        let source_ref_kind = kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
             .and_then(|r| r.get(KUBE_KEY_KIND))
             .and_then(|k| k.as_str())
             .expect("kustomization.yaml spec.sourceRef.kind present");
@@ -6244,37 +6207,34 @@ spec:
         .map(String::from)
         .unwrap();
 
-        let hr_source_kind = serde_yaml::from_str::<serde_yaml::Value>(
+        let hr_parsed: serde_yaml::Value = serde_yaml::from_str(
             &files
                 .iter()
                 .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
-        .unwrap()
-        .get(KUBE_KEY_SPEC)
-        .and_then(|s| s.get(FLUX_KEY_CHART))
-        .and_then(|c| c.get(KUBE_KEY_SPEC))
-        .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
-        .and_then(|r| r.get(KUBE_KEY_KIND))
-        .and_then(|v| v.as_str())
-        .map(String::from)
         .unwrap();
+        let hr_source_kind = kube_spec_field(&hr_parsed, FLUX_KEY_CHART)
+            .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
+            .and_then(|r| r.get(KUBE_KEY_KIND))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap();
 
-        let kz_source_kind = serde_yaml::from_str::<serde_yaml::Value>(
+        let kz_parsed: serde_yaml::Value = serde_yaml::from_str(
             &files
                 .iter()
                 .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
-        .unwrap()
-        .get(KUBE_KEY_SPEC)
-        .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
-        .and_then(|r| r.get(KUBE_KEY_KIND))
-        .and_then(|v| v.as_str())
-        .map(String::from)
         .unwrap();
+        let kz_source_kind = kube_spec_field(&kz_parsed, FLUX_KEY_SOURCE_REF)
+            .and_then(|r| r.get(KUBE_KEY_KIND))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap();
 
         assert_eq!(gr_kind, FLUX_KIND_GIT_REPOSITORY);
         assert_eq!(hr_source_kind, FLUX_KIND_GIT_REPOSITORY);
@@ -6396,9 +6356,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        let health_checks = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
+        let health_checks = kube_spec_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .and_then(|h| h.as_sequence())
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
@@ -6453,22 +6411,21 @@ spec:
         .map(String::from)
         .unwrap();
 
-        let kz_health_kind = serde_yaml::from_str::<serde_yaml::Value>(
+        let kz_parsed: serde_yaml::Value = serde_yaml::from_str(
             &files
                 .iter()
                 .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
-        .unwrap()
-        .get(KUBE_KEY_SPEC)
-        .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
-        .and_then(|h| h.as_sequence())
-        .and_then(|seq| seq.first())
-        .and_then(|e| e.get(KUBE_KEY_KIND))
-        .and_then(|v| v.as_str())
-        .map(String::from)
         .unwrap();
+        let kz_health_kind = kube_spec_field(&kz_parsed, FLUX_KEY_HEALTH_CHECKS)
+            .and_then(|h| h.as_sequence())
+            .and_then(|seq| seq.first())
+            .and_then(|e| e.get(KUBE_KEY_KIND))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap();
 
         assert_eq!(hr_kind, FLUX_KIND_HELM_RELEASE);
         assert_eq!(kz_health_kind, FLUX_KIND_HELM_RELEASE);
@@ -6581,11 +6538,8 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let source_ref = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_CHART))
-            .and_then(|c| c.get(KUBE_KEY_SPEC))
-            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
+        let source_ref = kube_spec_field(&parsed, FLUX_KEY_CHART)
+            .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
             .and_then(|r| r.as_mapping())
             .expect("spec.chart.spec.<FLUX_KEY_SOURCE_REF> mapping present");
         assert!(
@@ -6634,9 +6588,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        let source_ref = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
+        let source_ref = kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
             .and_then(|r| r.as_mapping())
             .expect("spec.<FLUX_KEY_SOURCE_REF> mapping present");
         assert!(
@@ -6723,9 +6675,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let values = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_VALUES))
+        let values = kube_spec_field(&parsed, FLUX_KEY_VALUES)
             .and_then(|v| v.as_mapping())
             .expect("spec.<FLUX_KEY_VALUES> mapping present");
         assert!(
@@ -6861,9 +6811,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let chart = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_CHART))
+        let chart = kube_spec_field(&parsed, FLUX_KEY_CHART)
             .and_then(|v| v.as_mapping())
             .expect("spec.<FLUX_KEY_CHART> mapping present");
         assert!(
@@ -6938,11 +6886,8 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let chart_name = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_CHART))
-            .and_then(|c| c.get(KUBE_KEY_SPEC))
-            .and_then(|s| s.get(FLUX_HELMCHART_TEMPLATE_KEY_CHART))
+        let chart_name = kube_spec_field(&parsed, FLUX_KEY_CHART)
+            .and_then(|c| kube_spec_field(c, FLUX_HELMCHART_TEMPLATE_KEY_CHART))
             .and_then(|n| n.as_str())
             .expect("spec.chart.spec.<FLUX_HELMCHART_TEMPLATE_KEY_CHART> scalar present");
         assert_eq!(
@@ -7036,9 +6981,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        let health_checks = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
+        let health_checks = kube_spec_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .and_then(|v| v.as_sequence())
             .expect("spec.<FLUX_KEY_HEALTH_CHECKS> sequence present");
         assert!(
@@ -7199,10 +7142,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
         assert!(
-            parsed
-                .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get(FLUX_GITREPOSITORY_KEY_REF))
-                .is_some(),
+            kube_spec_field(&parsed, FLUX_GITREPOSITORY_KEY_REF).is_some(),
             "rendered gitrepository.yaml must carry its ref-selection \
              container-axis at the lifted FLUX_GITREPOSITORY_KEY_REF key \
              verbatim (got: {:?})",
@@ -7264,9 +7204,7 @@ spec:
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
-        let url = parsed
-            .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get(FLUX_GITREPOSITORY_KEY_URL))
+        let url = kube_spec_field(&parsed, FLUX_GITREPOSITORY_KEY_URL)
             .and_then(|u| u.as_str())
             .expect(
                 "rendered gitrepository.yaml must carry its remote-URL leaf-scalar \
@@ -7646,9 +7584,7 @@ spec:
                 .expect("gitrepository.yaml present");
             let parsed: serde_yaml::Value =
                 serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
-            let sub_selector = parsed
-                .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get(FLUX_GITREPOSITORY_KEY_REF))
+            let sub_selector = kube_spec_field(&parsed, FLUX_GITREPOSITORY_KEY_REF)
                 .and_then(|r| r.get(expected_key))
                 .and_then(|v| v.as_str())
                 .unwrap_or_else(|| {
@@ -7827,9 +7763,7 @@ spec:
                 .unwrap_or_else(|| panic!("{filename} present"));
             let parsed: serde_yaml::Value = serde_yaml::from_str(&doc.contents)
                 .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
-            let interval = parsed
-                .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get(FLUX_KEY_INTERVAL))
+            let interval = kube_spec_field(&parsed, FLUX_KEY_INTERVAL)
                 .and_then(|v| v.as_str())
                 .unwrap_or_else(|| {
                     panic!(
