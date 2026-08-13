@@ -2435,7 +2435,8 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_kind, kube_name, kube_spec_field, kube_spec_str_field,
+        kube_api_version_is, kube_kind, kube_name, kube_spec_field, kube_spec_seq_field,
+        kube_spec_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -5230,8 +5231,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
-        let health_checks = kube_spec_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
-            .and_then(|h| h.as_sequence())
+        let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
             !health_checks.is_empty(),
@@ -6351,8 +6351,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        let health_checks = kube_spec_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
-            .and_then(|h| h.as_sequence())
+        let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
             !health_checks.is_empty(),
@@ -6414,8 +6413,7 @@ spec:
                 .contents,
         )
         .unwrap();
-        let kz_health_kind = kube_spec_field(&kz_parsed, FLUX_KEY_HEALTH_CHECKS)
-            .and_then(|h| h.as_sequence())
+        let kz_health_kind = kube_spec_seq_field(&kz_parsed, FLUX_KEY_HEALTH_CHECKS)
             .and_then(|seq| seq.first())
             .and_then(|e| e.get(KUBE_KEY_KIND))
             .and_then(|v| v.as_str())
@@ -6976,8 +6974,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        let health_checks = kube_spec_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
-            .and_then(|v| v.as_sequence())
+        let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("spec.<FLUX_KEY_HEALTH_CHECKS> sequence present");
         assert!(
             !health_checks.is_empty(),

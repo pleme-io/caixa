@@ -3276,7 +3276,7 @@ mod tests {
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
         kube_kind_is, kube_metadata, kube_metadata_label, kube_metadata_label_is,
         kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_spec, kube_spec_field,
-        kube_spec_str_field,
+        kube_spec_seq_field, kube_spec_str_field,
     };
     use std::time::Duration;
 
@@ -5438,8 +5438,7 @@ mod tests {
         let rules = policies
             .iter()
             .find_map(|p| {
-                kube_spec_field(p, CILIUM_KEY_INGRESS)
-                    .and_then(|i| i.as_sequence())
+                kube_spec_seq_field(p, CILIUM_KEY_INGRESS)
                     .and_then(|s| s.first())
                     .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
                     .and_then(|p| p.as_sequence())
@@ -6632,8 +6631,7 @@ mod tests {
                     .is_some_and(|k| k == GATEWAY_API_KIND_HTTP_ROUTE)
             })
             .expect("gateway_routes emits at least one HTTPRoute for the fixture Aplicacao");
-        let emitted = kube_spec_field(route, GATEWAY_API_KEY_PARENT_REFS)
-            .and_then(|p| p.as_sequence())
+        let emitted = kube_spec_seq_field(route, GATEWAY_API_KEY_PARENT_REFS)
             .and_then(|s| s.first())
             .and_then(|p| p.get(GATEWAY_API_KEY_NAME))
             .and_then(|v| v.as_str())
@@ -6729,8 +6727,7 @@ mod tests {
         let policies = cilium_network_policies(&c).unwrap();
         assert!(!policies.is_empty());
         for policy in &policies {
-            let selector = kube_spec_field(policy, CILIUM_KEY_INGRESS)
-                .and_then(|i| i.as_sequence())
+            let selector = kube_spec_seq_field(policy, CILIUM_KEY_INGRESS)
                 .and_then(|s| s.first())
                 .and_then(|i| i.get(CILIUM_KEY_FROM_ENDPOINTS))
                 .and_then(|e| e.as_sequence())
@@ -7757,8 +7754,7 @@ mod tests {
              colliding `checkout-cart-to-catalog` objects"
         );
 
-        let to_ports = kube_spec_field(cart_to_catalog[0], CILIUM_KEY_INGRESS)
-            .and_then(|i| i.as_sequence())
+        let to_ports = kube_spec_seq_field(cart_to_catalog[0], CILIUM_KEY_INGRESS)
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
             .and_then(|p| p.as_sequence())
@@ -7794,8 +7790,7 @@ mod tests {
                 .unwrap();
             assert!(endpoint.get(LABEL_PROGRAM).is_some());
             // Source endpoint must include both program + aplicacao labels
-            let from = kube_spec_field(p, CILIUM_KEY_INGRESS)
-                .and_then(|i| i.as_sequence())
+            let from = kube_spec_seq_field(p, CILIUM_KEY_INGRESS)
                 .and_then(|s| s.first())
                 .and_then(|i| i.get(CILIUM_KEY_FROM_ENDPOINTS))
                 .and_then(|e| e.as_sequence())
@@ -7896,8 +7891,7 @@ mod tests {
         // cannot satisfy the rule.
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
-            let from = kube_spec_field(p, CILIUM_KEY_INGRESS)
-                .and_then(|i| i.as_sequence())
+            let from = kube_spec_seq_field(p, CILIUM_KEY_INGRESS)
                 .and_then(|s| s.first())
                 .and_then(|i| i.get(CILIUM_KEY_FROM_ENDPOINTS))
                 .and_then(|e| e.as_sequence())
@@ -7919,8 +7913,7 @@ mod tests {
     fn cilium_http_contracts_emit_l7_rules() {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         let cart_to_catalog = find_by_name(&policies, "checkout-cart-to-catalog").unwrap();
-        let http_rules = kube_spec_field(cart_to_catalog, CILIUM_KEY_INGRESS)
-            .and_then(|i| i.as_sequence())
+        let http_rules = kube_spec_seq_field(cart_to_catalog, CILIUM_KEY_INGRESS)
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
             .and_then(|p| p.as_sequence())
@@ -7949,8 +7942,7 @@ mod tests {
         });
         let policies = cilium_network_policies(&c).unwrap();
         let nats_policy = find_by_name(&policies, "checkout-payment-to-cart").unwrap();
-        let to_ports = kube_spec_field(nats_policy, CILIUM_KEY_INGRESS)
-            .and_then(|i| i.as_sequence())
+        let to_ports = kube_spec_seq_field(nats_policy, CILIUM_KEY_INGRESS)
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
             .and_then(|p| p.as_sequence())
@@ -7982,8 +7974,7 @@ mod tests {
     fn gateway_listener_carries_aplicacao_host() {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).unwrap();
-        let listener = kube_spec_field(gateway, GATEWAY_API_KEY_LISTENERS)
-            .and_then(|l| l.as_sequence())
+        let listener = kube_spec_seq_field(gateway, GATEWAY_API_KEY_LISTENERS)
             .and_then(|s| s.first())
             .unwrap();
         assert_eq!(
@@ -8025,8 +8016,7 @@ mod tests {
         // without coupling the two rebrand cycles.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        let listener = kube_spec_field(gateway, GATEWAY_API_KEY_LISTENERS)
-            .and_then(|l| l.as_sequence())
+        let listener = kube_spec_seq_field(gateway, GATEWAY_API_KEY_LISTENERS)
             .and_then(|s| s.first())
             .expect("first listener present");
         assert_eq!(
@@ -8087,8 +8077,7 @@ mod tests {
         // one canonical caixa-core declaration.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        let parent = kube_spec_field(route, GATEWAY_API_KEY_PARENT_REFS)
-            .and_then(|p| p.as_sequence())
+        let parent = kube_spec_seq_field(route, GATEWAY_API_KEY_PARENT_REFS)
             .and_then(|s| s.first())
             .expect("first parentRef present");
         assert_eq!(
@@ -8129,8 +8118,7 @@ mod tests {
         // consumer per axis without coupling the two rebrand cycles.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        let listener = kube_spec_field(gateway, GATEWAY_API_KEY_LISTENERS)
-            .and_then(|l| l.as_sequence())
+        let listener = kube_spec_seq_field(gateway, GATEWAY_API_KEY_LISTENERS)
             .and_then(|s| s.first())
             .expect("first listener present");
         assert_eq!(
@@ -8177,8 +8165,7 @@ mod tests {
         caixa.entrada.as_mut().unwrap().paths = Vec::new();
         let docs = gateway_routes(&caixa).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        let match_path_value = kube_spec_field(route, KUBE_KEY_RULES)
-            .and_then(|r| r.as_sequence())
+        let match_path_value = kube_spec_seq_field(route, KUBE_KEY_RULES)
             .and_then(|s| s.first())
             .and_then(|r| r.get(GATEWAY_API_KEY_MATCHES))
             .and_then(|m| m.as_sequence())
@@ -8239,9 +8226,8 @@ mod tests {
             let docs = gateway_routes(&caixa).unwrap();
             let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
                 .expect("HTTPRoute present under every :entrada permutation");
-            let rules = kube_spec_field(route, KUBE_KEY_RULES)
-                .and_then(|r| r.as_sequence())
-                .expect("HTTPRoute.spec.rules[] present");
+            let rules =
+                kube_spec_seq_field(route, KUBE_KEY_RULES).expect("HTTPRoute.spec.rules[] present");
             let emitted: Vec<String> = rules
                 .iter()
                 .map(|r| {
@@ -8308,8 +8294,7 @@ mod tests {
             let docs = gateway_routes(&caixa).unwrap();
             let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY)
                 .expect("Gateway present under every :entrada permutation");
-            let listener = kube_spec_field(gateway, GATEWAY_API_KEY_LISTENERS)
-                .and_then(|l| l.as_sequence())
+            let listener = kube_spec_seq_field(gateway, GATEWAY_API_KEY_LISTENERS)
                 .and_then(|s| s.first())
                 .expect("first listener present");
             let emitted = listener
@@ -8362,8 +8347,7 @@ mod tests {
             let docs = gateway_routes(&caixa).unwrap();
             let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
                 .expect("HTTPRoute present under every :entrada permutation");
-            let hostnames = kube_spec_field(route, GATEWAY_API_KEY_HOSTNAMES)
-                .and_then(|h| h.as_sequence())
+            let hostnames = kube_spec_seq_field(route, GATEWAY_API_KEY_HOSTNAMES)
                 .expect("HTTPRoute.spec.hostnames[] present");
             let emitted: Vec<String> = hostnames
                 .iter()
@@ -8410,16 +8394,14 @@ mod tests {
         // plural pin tests immediately above.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        let listener_hostname = kube_spec_field(gateway, GATEWAY_API_KEY_LISTENERS)
-            .and_then(|l| l.as_sequence())
+        let listener_hostname = kube_spec_seq_field(gateway, GATEWAY_API_KEY_LISTENERS)
             .and_then(|s| s.first())
             .and_then(|l| l.get(GATEWAY_API_KEY_HOSTNAME))
             .and_then(|h| h.as_str())
             .expect("Gateway listener carries a hostname scalar")
             .to_string();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        let route_hostnames: Vec<String> = kube_spec_field(route, GATEWAY_API_KEY_HOSTNAMES)
-            .and_then(|h| h.as_sequence())
+        let route_hostnames: Vec<String> = kube_spec_seq_field(route, GATEWAY_API_KEY_HOSTNAMES)
             .expect("HTTPRoute.spec.hostnames[] present")
             .iter()
             .map(|v| {
@@ -8536,8 +8518,7 @@ mod tests {
             let docs = gateway_routes(&caixa).unwrap();
             let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
                 .expect("HTTPRoute present under every :entrada :para permutation");
-            let backend = kube_spec_field(route, KUBE_KEY_RULES)
-                .and_then(|r| r.as_sequence())
+            let backend = kube_spec_seq_field(route, KUBE_KEY_RULES)
                 .and_then(|s| s.first())
                 .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
                 .and_then(|b| b.as_sequence())
@@ -8588,8 +8569,7 @@ mod tests {
         let route_name = kube_name(route)
             .expect("HTTPRoute metadata.name scalar present")
             .to_string();
-        let backend_name = kube_spec_field(route, KUBE_KEY_RULES)
-            .and_then(|r| r.as_sequence())
+        let backend_name = kube_spec_seq_field(route, KUBE_KEY_RULES)
             .and_then(|s| s.first())
             .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
             .and_then(|b| b.as_sequence())
@@ -8660,8 +8640,7 @@ mod tests {
             let docs = gateway_routes(&caixa).unwrap();
             let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
                 .expect("HTTPRoute present under every :entrada :para permutation");
-            let emitted_port = kube_spec_field(route, KUBE_KEY_RULES)
-                .and_then(|r| r.as_sequence())
+            let emitted_port = kube_spec_seq_field(route, KUBE_KEY_RULES)
                 .and_then(|s| s.first())
                 .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
                 .and_then(|b| b.as_sequence())
@@ -8723,8 +8702,7 @@ mod tests {
         let gateway_docs = gateway_routes(&caixa).unwrap();
         let route =
             find_by_kind(&gateway_docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        let httproute_port = kube_spec_field(route, KUBE_KEY_RULES)
-            .and_then(|r| r.as_sequence())
+        let httproute_port = kube_spec_seq_field(route, KUBE_KEY_RULES)
             .and_then(|s| s.first())
             .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
             .and_then(|b| b.as_sequence())
@@ -8755,8 +8733,7 @@ mod tests {
             let Some(destination) = cnp_name.split("-to-").nth(1) else {
                 continue;
             };
-            let cnp_port = kube_spec_field(policy, CILIUM_KEY_INGRESS)
-                .and_then(|i| i.as_sequence())
+            let cnp_port = kube_spec_seq_field(policy, CILIUM_KEY_INGRESS)
                 .and_then(|s| s.first())
                 .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
                 .and_then(|t| t.as_sequence())
@@ -8784,8 +8761,7 @@ mod tests {
     fn httproute_routes_to_entrada_para() {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).unwrap();
-        let backend = kube_spec_field(route, KUBE_KEY_RULES)
-            .and_then(|r| r.as_sequence())
+        let backend = kube_spec_seq_field(route, KUBE_KEY_RULES)
             .and_then(|s| s.first())
             .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
             .and_then(|b| b.as_sequence())
@@ -9197,8 +9173,7 @@ mod tests {
         // skeleton-call shape carried by construction.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        let hostnames = kube_spec_field(route, caixa_core::GATEWAY_API_KEY_HOSTNAMES)
-            .and_then(|h| h.as_sequence())
+        let hostnames = kube_spec_seq_field(route, caixa_core::GATEWAY_API_KEY_HOSTNAMES)
             .expect("HTTPRoute spec.hostnames must be navigable through the lifted constant");
         assert_eq!(
             hostnames.len(),
@@ -9727,8 +9702,7 @@ mod tests {
         docs.iter()
             .filter(|d| kube_kind_is(d, CILIUM_KIND_NETWORK_POLICY))
             .filter_map(|d| {
-                kube_spec_field(d, CILIUM_KEY_INGRESS)
-                    .and_then(|i| i.as_sequence())
+                kube_spec_seq_field(d, CILIUM_KEY_INGRESS)
                     .and_then(|s| s.first())
                     .cloned()
             })
@@ -9931,8 +9905,7 @@ mod tests {
         let policies = cilium_network_policies(&c).unwrap();
         let nats_policy =
             find_by_name(&policies, "checkout-payment-to-cart").expect("pubsub CNP present");
-        let rule = kube_spec_field(nats_policy, CILIUM_KEY_INGRESS)
-            .and_then(|i| i.as_sequence())
+        let rule = kube_spec_seq_field(nats_policy, CILIUM_KEY_INGRESS)
             .and_then(|s| s.first())
             .expect("ingress[0]");
         assert_eq!(
@@ -9966,8 +9939,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         let cart_to_payment =
             find_by_name(&policies, "checkout-cart-to-payment").expect("cart→payment CNP present");
-        let port_value = kube_spec_field(cart_to_payment, CILIUM_KEY_INGRESS)
-            .and_then(|i| i.as_sequence())
+        let port_value = kube_spec_seq_field(cart_to_payment, CILIUM_KEY_INGRESS)
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
             .and_then(|t| t.as_sequence())
@@ -10018,8 +9990,7 @@ mod tests {
         // floor).
         let cart_to_catalog =
             find_by_name(&policies, "checkout-cart-to-catalog").expect("cart→catalog CNP present");
-        let port_value = kube_spec_field(cart_to_catalog, CILIUM_KEY_INGRESS)
-            .and_then(|i| i.as_sequence())
+        let port_value = kube_spec_seq_field(cart_to_catalog, CILIUM_KEY_INGRESS)
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
             .and_then(|t| t.as_sequence())
