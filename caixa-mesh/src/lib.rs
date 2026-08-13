@@ -3274,10 +3274,11 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
-        kube_kind_is, kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
-        kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is,
-        kube_namespace, kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
-        kube_spec_seq_first, kube_spec_str_field, kube_str, kube_u64,
+        kube_kind_is, kube_map, kube_match_label, kube_match_label_is, kube_match_labels,
+        kube_metadata, kube_metadata_label, kube_metadata_label_is, kube_metadata_labels,
+        kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first, kube_spec,
+        kube_spec_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field, kube_str,
+        kube_u64,
     };
     use std::time::Duration;
 
@@ -5543,13 +5544,10 @@ mod tests {
             let matches = kube_seq(rule, caixa_core::GATEWAY_API_KEY_MATCHES)
                 .expect("HTTPRoute per-rule spec.rules[].matches sequence");
             for m in matches {
-                let path = m
-                    .get(caixa_core::GATEWAY_API_KEY_PATH)
-                    .and_then(|p| p.as_mapping())
-                    .expect(
-                        "HTTPRoute per-match spec.rules[].matches[].path must be \
-                         navigable through the lifted GATEWAY_API_KEY_PATH constant",
-                    );
+                let path = kube_map(m, caixa_core::GATEWAY_API_KEY_PATH).expect(
+                    "HTTPRoute per-match spec.rules[].matches[].path must be \
+                     navigable through the lifted GATEWAY_API_KEY_PATH constant",
+                );
                 assert!(
                     path.get(KUBE_KEY_TYPE).is_some(),
                     "per-`HTTPRouteMatch` `path` block must carry \
@@ -7128,8 +7126,7 @@ mod tests {
         entries
             .iter()
             .map(|e| {
-                e.get(M3_KEY_PLACEMENT)
-                    .and_then(|p| p.as_mapping())
+                kube_map(e, M3_KEY_PLACEMENT)
                     .expect("every member entry must carry a placement mapping")
             })
             .collect()
@@ -9248,13 +9245,10 @@ mod tests {
                  nests under",
             );
             for m in matches {
-                let path = m
-                    .get(caixa_core::GATEWAY_API_KEY_PATH)
-                    .and_then(|p| p.as_mapping())
-                    .expect(
-                        "HTTPRoute per-match spec.rules[].matches[].path must be \
-                         navigable through the lifted constant",
-                    );
+                let path = kube_map(m, caixa_core::GATEWAY_API_KEY_PATH).expect(
+                    "HTTPRoute per-match spec.rules[].matches[].path must be \
+                     navigable through the lifted constant",
+                );
                 assert!(
                     !path.is_empty(),
                     "per-match path-matcher mapping must carry the typed \
@@ -9336,9 +9330,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         assert!(!rules.is_empty(), "HTTPRoute must carry at least one rule");
         for rule in &rules {
-            let timeouts = rule
-                .get(GATEWAY_API_KEY_TIMEOUTS)
-                .and_then(|t| t.as_mapping())
+            let timeouts = kube_map(rule, GATEWAY_API_KEY_TIMEOUTS)
                 .expect("rule must carry timeouts mapping when :politicas :timeout is set");
             assert_eq!(
                 timeouts
@@ -9494,9 +9486,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         assert!(!rules.is_empty(), "HTTPRoute must carry at least one rule");
         for rule in &rules {
-            let retry = rule
-                .get(GATEWAY_API_KEY_RETRY)
-                .and_then(|r| r.as_mapping())
+            let retry = kube_map(rule, GATEWAY_API_KEY_RETRY)
                 .expect("rule must carry retry mapping when :politicas :retries is set");
             assert_eq!(
                 retry.get(GATEWAY_API_KEY_ATTEMPTS).and_then(|v| v.as_u64()),
@@ -9688,9 +9678,7 @@ mod tests {
             "CNPs must carry at least one ingress rule"
         );
         for rule in &rules {
-            let auth = rule
-                .get(CILIUM_KEY_AUTHENTICATION)
-                .and_then(|a| a.as_mapping())
+            let auth = kube_map(rule, CILIUM_KEY_AUTHENTICATION)
                 .expect("rule must carry authentication mapping when :mtls-required is set");
             assert_eq!(
                 auth.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
@@ -9747,9 +9735,7 @@ mod tests {
         let rules = cnp_ingress_rules(&policies);
         assert!(!rules.is_empty());
         for rule in &rules {
-            let auth = rule
-                .get(CILIUM_KEY_AUTHENTICATION)
-                .and_then(|a| a.as_mapping())
+            let auth = kube_map(rule, CILIUM_KEY_AUTHENTICATION)
                 .expect("rule must carry authentication mapping for explicit :mtls-required nil");
             assert_eq!(
                 auth.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
