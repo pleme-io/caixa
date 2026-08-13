@@ -2435,8 +2435,8 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_kind, kube_name, kube_spec_field, kube_spec_seq_field,
-        kube_spec_str_field,
+        kube_api_version_is, kube_kind, kube_name, kube_spec_field, kube_spec_map_field,
+        kube_spec_seq_field, kube_spec_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -4965,9 +4965,8 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let values = kube_spec_field(&parsed, FLUX_KEY_VALUES)
-            .and_then(|v| v.as_mapping())
-            .expect("spec.values mapping present");
+        let values =
+            kube_spec_map_field(&parsed, FLUX_KEY_VALUES).expect("spec.values mapping present");
         assert!(
             values.get(DEFAULT_LIBRARY_NAME).is_some(),
             "spec.values must wrap under the lifted DEFAULT_LIBRARY_NAME \
@@ -6581,8 +6580,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        let source_ref = kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
-            .and_then(|r| r.as_mapping())
+        let source_ref = kube_spec_map_field(&parsed, FLUX_KEY_SOURCE_REF)
             .expect("spec.<FLUX_KEY_SOURCE_REF> mapping present");
         assert!(
             !source_ref.is_empty(),
@@ -6668,8 +6666,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let values = kube_spec_field(&parsed, FLUX_KEY_VALUES)
-            .and_then(|v| v.as_mapping())
+        let values = kube_spec_map_field(&parsed, FLUX_KEY_VALUES)
             .expect("spec.<FLUX_KEY_VALUES> mapping present");
         assert!(
             !values.is_empty(),
@@ -6804,8 +6801,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let chart = kube_spec_field(&parsed, FLUX_KEY_CHART)
-            .and_then(|v| v.as_mapping())
+        let chart = kube_spec_map_field(&parsed, FLUX_KEY_CHART)
             .expect("spec.<FLUX_KEY_CHART> mapping present");
         assert!(
             !chart.is_empty(),

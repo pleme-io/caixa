@@ -20677,6 +20677,101 @@ pub fn kube_spec_seq_field<'a>(
     kube_spec_field(value, field).and_then(|v| v.as_sequence())
 }
 
+/// Read the sub-`spec.<field>` YAML sub-mapping on a K8s custom resource
+/// YAML document as `Option<&serde_yaml::Mapping>` — the composed sub-
+/// mapping-arity per-sub-field-mapping accessor peer that stands on the
+/// composed scalar-arity [`kube_spec_field`] (23bd568) accessor, folding
+/// the trailing `.and_then(|v| v.as_mapping())` shape-gate closure into
+/// the helper for callers that always want a mapping (the load-bearing
+/// per-CR body-sub-field mapping readbacks — `spec.values` on the
+/// Flux v2 `HelmRelease` per-cluster override wrap, `spec.chart` on the
+/// Flux v2 `HelmRelease` nested `HelmChartTemplate.spec` sub-document,
+/// `spec.sourceRef` on the Flux v2 `Kustomization` / `HelmChart`
+/// per-CR source reference block, the future per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` emitter's per-policy
+/// `spec.endpointSelector` navigation, and every other sub-`spec.<field>`
+/// nested-object axis the M3.x + M4 renderer set materializes).
+/// Structural mirror of the sibling [`kube_spec_str_field`] (c4fe21d)
+/// and [`kube_spec_seq_field`] (fc64ed7) accessors on the same sub-
+/// `spec.<field>` axis: all three accessors fold a trailing shape-gate
+/// closure onto the composed scalar-arity [`kube_spec_field`] two-hop
+/// navigation, all three stay parametric on the per-`<field>` sub-field
+/// axis-key. Where [`kube_spec_str_field`] closes the `spec.<field>`
+/// string-scalar readback (the leaf-scalar arm) and [`kube_spec_seq_field`]
+/// closes the `spec.<field>` sequence readback (the multi-entry sub-
+/// block arm), this closes the `spec.<field>` sub-mapping readback (the
+/// nested-object sub-block arm). Together the three bracket the three
+/// canonical composed per-`spec.<field>` shape-gate arities every K8s CR
+/// document the emit-side [`kube_resource_skeleton`] renders admits
+/// under its `spec:` body: scalar-string leaves via the first sibling,
+/// ordered sub-sequences via the second sibling, nested-object sub-
+/// mappings via this accessor. Closes the composed shape-gate family on
+/// the sub-`spec.<field>` axis to structural parity with `serde_yaml`'s
+/// own `Value::{as_str, as_sequence, as_mapping}` shape-gate trio on the
+/// outer `Value`.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// [`kube_spec`] outer-arm short-circuit), the `spec:` value is present
+/// but carries a non-Mapping YAML type (the [`kube_spec`] shape-gate
+/// short-circuit), the requested sub-field `<field>` axis-key is absent
+/// from the `spec:` sub-mapping (the [`kube_spec_field`] trailing
+/// `Mapping::get` none-arm), or the sub-field value is present but
+/// carries a non-mapping YAML type (the trailing `.as_mapping()` shape-
+/// gate short-circuit — a schema-invalid per-CR body-sub-field type per
+/// the K8s apiserver's `OpenAPI` schema but tolerated here as `None` so
+/// the readback stays a total function). The returned `&Mapping` borrows
+/// into the input `Value` — the caller decides whether to look up a
+/// nested key (`.get(<KEY>)`), enumerate for length (`.len()`), iterate
+/// (`.iter()`), or check emptiness (`.is_empty()`).
+///
+/// The canonical shape 4 test-side per-CR readback sites in
+/// [`caixa-flux`][flux] previously carried inline as the two-line
+/// composition
+///
+/// ```ignore
+/// kube_spec_field(<value>, <FIELD>)
+///     .and_then(|v| v.as_mapping())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-
+/// key — [`FLUX_KEY_VALUES`] on the per-`HelmRelease` per-cluster
+/// override wrap, [`FLUX_KEY_SOURCE_REF`] on the per-`Kustomization`
+/// bootstrap source reference, [`FLUX_KEY_CHART`] on the per-
+/// `HelmRelease` nested `HelmChartTemplate.spec` sub-document). After
+/// this lift, every routed consumer folds the two-hop-plus-shape-gate
+/// navigation onto `kube_spec_map_field(<value>, <FIELD>)` — the outer
+/// `spec → as_mapping → get(<field>) → as_mapping` walk happens once
+/// inside the helper, and the caller keeps its downstream idiom
+/// (`.get(<KEY>)`, `.is_empty()`, `.len()`, `.expect(...)`) unchanged —
+/// the lift closes the navigation surface, not the per-site readback
+/// posture.
+///
+/// Every future per-CR `spec.<field>` sub-mapping readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
+/// `spec.endpointSelector` navigation, MESH-COMPOSITION §III.2 #3; the
+/// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's `spec.entrada` / `spec.placement` nested-object
+/// readback, §III.2 #5; the future `caixa-otel` per-Servico
+/// OpenTelemetry-Collector CR's `spec.exporters.<name>` nested-object
+/// navigation; every future test-side `spec.<field>` sub-mapping probe
+/// the M3.x + M4 renderer set adds) reaches this same helper by
+/// construction — no per-consumer two-hop-plus-shape-gate chain re-
+/// inline, no per-consumer `KUBE_KEY_SPEC` axis-key drift, no
+/// coordinated rewrite across every per-CR body-sub-field sub-mapping
+/// readback on a future K8s API-machinery rebrand of the top-level
+/// `spec:` axis.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_spec_map_field<'a>(
+    value: &'a serde_yaml::Value,
+    field: &str,
+) -> Option<&'a serde_yaml::Mapping> {
+    kube_spec_field(value, field).and_then(|v| v.as_mapping())
+}
+
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
@@ -42979,6 +43074,305 @@ spec:
                  v.as_sequence())` chain — otherwise the routed caixa-\
                  mesh + caixa-flux per-CR sub-spec-field sequence-\
                  readback sites drift silently at test time"
+            );
+        }
+    }
+
+    // ── kube_spec_map_field lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_spec_map_field_reads_sub_spec_field_mapping() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `spec: { <sub-field>: { ... }, ... }` body sub-
+        // mapping (every K8s CR the emit-side [`kube_resource_skeleton`]
+        // renders with a mapping-shaped `spec.<field>` axis —
+        // `spec.values` on `HelmRelease`, `spec.chart` on `HelmRelease`,
+        // `spec.sourceRef` on `Kustomization`), the composed sub-
+        // mapping-arity accessor returns `Some(<mapping>)` borrowing
+        // into the input Value across the routed per-sub-field readback
+        // axes. Structural mirror of the sibling
+        // `kube_spec_str_field_reads_sub_spec_field_string_scalar` and
+        // `kube_spec_seq_field_reads_sub_spec_field_sequence` pins on
+        // the sub-`spec.<field>` string-scalar and sequence arity axes.
+        let mut values_body = serde_yaml::Mapping::new();
+        values_body.insert_str_key("a", serde_yaml::Value::String("1".into()));
+        values_body.insert_str_key("b", serde_yaml::Value::String("2".into()));
+        let mut source_ref_body = serde_yaml::Mapping::new();
+        source_ref_body.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String("GitRepository".into()),
+        );
+        let empty_map = serde_yaml::Mapping::new();
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_VALUES, serde_yaml::Value::Mapping(values_body));
+        spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::Mapping(source_ref_body),
+        );
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(empty_map));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_map_field(&value, FLUX_KEY_VALUES).map(serde_yaml::Mapping::len),
+            Some(2),
+            "kube_spec_map_field must read spec.values as a two-entry \
+             mapping — the caixa-flux per-`HelmRelease` per-cluster \
+             override wrap sites reach through this axis for per-`\
+             DEFAULT_LIBRARY_NAME`-wrapped override navigation"
+        );
+        assert_eq!(
+            kube_spec_map_field(&value, FLUX_KEY_SOURCE_REF).map(serde_yaml::Mapping::len),
+            Some(1),
+            "kube_spec_map_field must read spec.sourceRef as a one-\
+             entry mapping — the caixa-flux per-`Kustomization` \
+             bootstrap source reference readback reaches through this \
+             axis"
+        );
+        assert_eq!(
+            kube_spec_map_field(&value, FLUX_KEY_CHART).map(serde_yaml::Mapping::len),
+            Some(0),
+            "kube_spec_map_field must read spec.chart as an empty \
+             mapping when the emitter writes a legally-empty block \
+             (distinct from the requested-field-absent None-arm — \
+             empty-mapping-present preserves the caller's `.get(<KEY>)` \
+             lookup contract that always returns None on an empty body)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_map_field_returns_none_when_spec_sub_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_spec_field`] closes on
+        // (which in turn folds through [`kube_spec`]'s outer-arm and
+        // shape-gate) folds through this composed sub-mapping-arity
+        // accessor. Peer of the sibling
+        // `kube_spec_str_field_returns_none_when_spec_sub_block_absent`
+        // and `kube_spec_seq_field_returns_none_when_spec_sub_block_absent`
+        // pins on the composed sub-`spec.<field>` scalar-str-arity and
+        // sequence-arity accessor axes.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_spec_map_field(&shape, FLUX_KEY_VALUES),
+                None,
+                "kube_spec_map_field({shape:?}, <FIELD>) must short-\
+                 circuit to None through the underlying kube_spec_field's \
+                 kube_spec outer-arm when the top-level `spec:` block is \
+                 absent on the outer Value — the composition fold must \
+                 preserve the total-function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_map_field_returns_none_when_spec_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `spec:` value on the outer Value
+        // folds through [`kube_spec`]'s trailing `.as_mapping()` shape-
+        // gate up through [`kube_spec_field`] up through this composed
+        // sub-mapping-arity accessor — the caller's `.get(<KEY>)` /
+        // `.expect(...)` continuation stays a total function.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("spec-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_map_field(&value, FLUX_KEY_VALUES),
+                None,
+                "kube_spec_map_field must return None when the top-\
+                 level `spec:` axis carries a non-Mapping YAML type \
+                 ({non_mapping:?}) — the fold through kube_spec's \
+                 shape-gate arm short-circuits here, and every routed \
+                 caller depends on that None-arm to keep the readback \
+                 total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_map_field_returns_none_when_requested_field_absent() {
+        // The composition's middle per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `spec:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-
+        // `HelmRelease` `spec.values` readback that finds no
+        // `spec.values` sub-field expects None here (routing the "no
+        // overrides" fallback) rather than a panic.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_map_field(&value, FLUX_KEY_VALUES),
+            None,
+            "kube_spec_map_field must return None when the requested \
+             `spec.<field>` axis-key is absent from the sub-mapping — \
+             a `Mapping::get(<KEY>)` miss short-circuits the composed \
+             accessor, and callers rely on the None-arm to route the \
+             fallback path (rather than the wrong-shape arm)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_map_field_returns_none_when_field_carries_non_mapping_type() {
+        // The composition's trailing `.as_mapping()` shape-gate None
+        // arm: a `spec.<field>` axis-key present but carrying a non-
+        // mapping YAML type. Schema-invalid per the K8s apiserver's
+        // OpenAPI schema (the routed readback sites — `spec.values`,
+        // `spec.chart`, `spec.sourceRef` — all pin nested-object sub-
+        // mappings) but tolerated here as None so the readback stays a
+        // total function. Pin the None-arm so a future refactor that
+        // reaches for `.as_mapping().unwrap()` (which would panic on a
+        // scalar axis-value) is a test-visible break, not a runtime
+        // regression at the first schema-invalid CR the reader sees.
+        // Peer of the sibling
+        // `kube_spec_str_field_returns_none_when_field_carries_non_string_type`
+        // and
+        // `kube_spec_seq_field_returns_none_when_field_carries_non_sequence_type`
+        // pins on the composed sub-`spec.<field>` scalar-str-arity and
+        // sequence-arity accessors.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::String("values-as-string".into()),
+            serde_yaml::Value::Sequence(vec![]),
+        ] {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(FLUX_KEY_VALUES, non_mapping.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_map_field(&value, FLUX_KEY_VALUES),
+                None,
+                "kube_spec_map_field must return None when spec.values \
+                 carries a non-mapping YAML type ({non_mapping:?}) — \
+                 the trailing `.as_mapping()` shape gate short-\
+                 circuits here, and every routed caller depends on \
+                 that None-arm to keep the readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_map_field_composes_on_lifted_kube_spec_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_spec_field(value, field).and_then(|v| v.as_mapping())`
+        // — the composed scalar-arity accessor stays load-bearing, this
+        // sub-mapping-arity accessor stands one abstraction step above
+        // it (folding the trailing `.as_mapping()` shape-gate closure).
+        // Pin the delegation-shape byte-for-byte across three
+        // representative sub-field axis-keys so a future refactor that
+        // bypasses [`kube_spec_field`] (a private inline
+        // `.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping()).and_then(|m|
+        // m.get(field)).and_then(|n| n.as_mapping())` chain that would
+        // silently drift on a future rebrand of the outer two-hop
+        // navigation) is a test-visible break. Peer of the sibling
+        // `kube_spec_str_field_composes_on_lifted_kube_spec_field_accessor`
+        // and
+        // `kube_spec_seq_field_composes_on_lifted_kube_spec_field_accessor`
+        // composition pins on the sub-`spec.<field>` scalar-str-arity
+        // and sequence-arity accessors.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            FLUX_KEY_VALUES,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        spec.insert_str_key(
+            FLUX_KEY_CHART,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [FLUX_KEY_VALUES, FLUX_KEY_SOURCE_REF, FLUX_KEY_CHART] {
+            let via_composed = kube_spec_map_field(&value, sub_field);
+            let via_delegation = kube_spec_field(&value, sub_field).and_then(|v| v.as_mapping());
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_spec_map_field(v, {sub_field:?}) must equal the \
+                 delegation-shape `kube_spec_field(v, {sub_field:?})\
+                 .and_then(|v| v.as_mapping())` — the composition pin \
+                 closes the drift surface where a private inline bypass \
+                 silently desynchronizes from the underlying composed \
+                 scalar-arity accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_map_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the prior inline `kube_spec_field(v, F).and_then(|v|
+        // v.as_mapping())` chain the routed caller sites previously
+        // carried. A drift between the composed helper's return and
+        // the inline chain would silently regress the caixa-flux
+        // per-CR sub-spec-field sub-mapping-readback sites' downstream
+        // continuations (`.get(<KEY>)`, `.is_empty()`, `.len()`,
+        // `.expect(...)`) — pin the byte-equivalence across three
+        // representative sub-field axis-keys so the composed helper
+        // remains a drop-in replacement for the routed sites' prior
+        // two-line block.
+        let mut values_body = serde_yaml::Mapping::new();
+        values_body.insert_str_key("enabled", serde_yaml::Value::Bool(true));
+        let mut source_ref_body = serde_yaml::Mapping::new();
+        source_ref_body.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String("GitRepository".into()),
+        );
+        source_ref_body
+            .insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("bootstrap".into()));
+        let mut chart_body = serde_yaml::Mapping::new();
+        chart_body.insert_str_key(
+            KUBE_KEY_SPEC,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_VALUES, serde_yaml::Value::Mapping(values_body));
+        spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::Mapping(source_ref_body),
+        );
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart_body));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [FLUX_KEY_VALUES, FLUX_KEY_SOURCE_REF, FLUX_KEY_CHART] {
+            let via_helper = kube_spec_map_field(&value, sub_field);
+            let via_inline = kube_spec_field(&value, sub_field).and_then(|v| v.as_mapping());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_spec_map_field(v, {sub_field:?}) must yield the \
+                 same Option<&Mapping> as the prior inline \
+                 `kube_spec_field(v, {sub_field:?}).and_then(|v| \
+                 v.as_mapping())` chain — otherwise the routed caixa-\
+                 flux per-CR sub-spec-field sub-mapping-readback sites \
+                 drift silently at test time"
             );
         }
     }
