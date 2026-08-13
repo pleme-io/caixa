@@ -21465,6 +21465,115 @@ pub fn kube_root_seq_field<'a>(
     kube_root_field(value, field).and_then(|v| v.as_sequence())
 }
 
+/// Read the `matchLabels:` string-scalar sub-mapping on a K8s
+/// `LabelSelector`-shaped YAML value (Cilium `EndpointSelector`,
+/// `fromEndpoints[]`, Gateway API selectors, `NetworkPolicy` peers,
+/// RBAC subject selectors, `spec.selector` on every `Deployment` /
+/// `StatefulSet` / `DaemonSet`) as `Option<&serde_yaml::Mapping>` — the
+/// selector-side counterpart of the sub-`metadata.labels` accessor
+/// [`kube_metadata_labels`] (f3d9fcd) on the CR-side of the K8s
+/// label-selection contract. Where [`kube_metadata_labels`] reads the
+/// per-CR labels sub-mapping *the emitted CR carries* (the
+/// selection-target axis), [`kube_match_labels`] reads the
+/// `matchLabels:` sub-mapping *a selector selects on* (the
+/// selection-source axis) — together the two accessors bracket both
+/// sides of the K8s API-machinery's `LabelSelector.matchLabels ⊆
+/// ObjectMeta.labels` selection contract every label-selecting
+/// consumer (Cilium `EndpointSelector` at the CNP data-plane admission
+/// path, `spec.selector.matchLabels` at every `Deployment` /
+/// `StatefulSet` / `DaemonSet` controller-side pod-owner reconciliation,
+/// Gateway API
+/// per-Route parent-selector at the Envoy-side listener attachment
+/// join, `kubectl -l <label>=<value>` grep-by-label at the client-side
+/// selection surface) keys off.
+///
+/// Composes on top of the substrate-primitive [`kube_root_map_field`]
+/// (723f6d7) as `kube_root_map_field(value, KUBE_KEY_MATCH_LABELS)` —
+/// same one-hop `value.get(<field>).and_then(as_mapping)` shape,
+/// structural mirror of the way sibling [`kube_metadata_labels`]
+/// composes on [`kube_metadata_map_field`] (d03cc08) — with the axis-
+/// key pinned inside the helper because the K8s `LabelSelector` schema
+/// pins `matchLabels` as the load-bearing positive-selector sub-block
+/// (paired with `matchExpressions:` for the operator-based selector
+/// arm the V0 [`label_selector`] emitter deliberately excludes,
+/// [`KUBE_KEY_MATCH_LABELS`] docstring at
+/// caixa-core/src/render.rs:10120). Every readback consumer downstream
+/// (`.get(<label>)`, `.len()`, `for (k, _) in selector { ... }`,
+/// `.is_some()` presence probes) drives off the same pinned return;
+/// the pinned axis-key inside the helper mirrors the discipline the
+/// sibling [`kube_metadata_labels`] applies to the sub-`metadata:`
+/// labels sub-block, and mirrors the discipline the sibling top-level
+/// pinned-axis accessors [`kube_kind`] / [`kube_api_version`] /
+/// [`kube_name`] / [`kube_namespace`] apply to their pinned CR-
+/// discriminator coordinates.
+///
+/// Returns `None` on either short-circuit arm the underlying inline
+/// chain closes: the outer `matchLabels:` block is absent (a legally-
+/// admitted arm on `matchExpressions:`-only selectors — the K8s
+/// `LabelSelector` schema pins `matchLabels:` and `matchExpressions:`
+/// as an OR-composed pair, either arm may be omitted), or the
+/// `matchLabels:` value is present but carries a non-Mapping YAML
+/// type (a schema-invalid selector shape per the K8s API-machinery
+/// contract that pins the sub-block as `map[string]string`, but
+/// tolerated here as `None` so the readback stays a total function).
+/// The returned `&Mapping` borrows into the input `Value` — the caller
+/// decides whether to enumerate (`for (k, v) in selector { ... }`),
+/// further-navigate (`selector.get(LABEL_APLICACAO)`), or clone.
+///
+/// The input `value` is the [`serde_yaml::Value`] carrying the
+/// selector's outer surface — e.g. the [`crate::label_selector`] /
+/// [`crate::pleme_program_selector`] /
+/// [`crate::pleme_program_in_aplicacao_selector`] emitter's return, or
+/// a caller-side descended `spec.endpointSelector` /
+/// `spec.ingress[0].fromEndpoints[0]` sub-Value on a rendered
+/// [`crate::CILIUM_KIND_NETWORK_POLICY`]. Unlike the sibling
+/// [`kube_metadata_labels`] which pre-navigates the outer
+/// `metadata:` sub-block inside the helper (composing on
+/// [`kube_metadata_map_field`] which itself pre-navigates
+/// `metadata:`), this accessor takes the LabelSelector-shaped Value
+/// directly — the outer navigation to the selector-Value is caller-
+/// side because a K8s `LabelSelector` appears at many different
+/// per-CR axes (`spec.endpointSelector` on `CiliumNetworkPolicy`,
+/// `spec.ingress[].fromEndpoints[]` on the same, `spec.selector` on
+/// every workload-shaped CR, `spec.parentRefs[]` on Gateway API
+/// Routes, etc.) with no single pinned parent-axis to fold into the
+/// helper.
+///
+/// The canonical shape 5 test-side per-CNP selector-value readback
+/// sites across [`caixa-mesh`][mesh] previously carried inline as the
+/// two-hop composition
+///
+/// ```ignore
+/// <selector_value>
+///     .get(KUBE_KEY_MATCH_LABELS)
+///     .and_then(|m| m.as_mapping())
+/// ```
+///
+/// or its `Option`-lifted `.and_then` variant threaded off the outer
+/// selector-navigating chain. The lift collapses the two-hop chain —
+/// the per-selector `.get(KUBE_KEY_MATCH_LABELS)` axis-key hop, the
+/// trailing `.and_then(|m| m.as_mapping())` shape gate — onto one
+/// accessor the caller reads as intent (`kube_match_labels(
+/// <selector_value>)` — "read this selector's `matchLabels:` sub-
+/// mapping") rather than as an axis-key-hop → shape-gate two-line
+/// chain.
+///
+/// Every future selector-side `matchLabels:` readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-
+/// policy `spec.selector` readback, MESH-COMPOSITION §III.2 #3; the
+/// future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-Aplicacao `spec.selector.matchLabels` reconciler, §III.2 #5;
+/// the future per-tenant CNP filter's per-endpoint selector probe;
+/// the M4 cross-cluster fan-out's per-cluster peer-selector readback)
+/// reaches the same pinned accessor by construction, with no axis-
+/// key argument drift and no re-inlined two-hop chain.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_match_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
+    kube_root_map_field(value, KUBE_KEY_MATCH_LABELS)
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -45455,6 +45564,210 @@ spec:
                  `kube_root_field(v, field).and_then(|v| v.as_sequence())` \
                  — the composed peer and the primitive-plus-shape-gate \
                  composition must resolve pairwise-identical"
+            );
+        }
+    }
+
+    // ── kube_match_labels lift ─────────────────────────────────────────
+
+    #[test]
+    fn kube_match_labels_reads_selector_match_labels_sub_mapping() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `matchLabels: { <label>: <str>, ... }` sub-block
+        // (every LabelSelector-shaped Value the emit-side
+        // [`label_selector`] / [`pleme_program_selector`] /
+        // [`pleme_program_in_aplicacao_selector`] renders), the helper
+        // returns Some(&Mapping) borrowing into the input Value. Pinned
+        // because the caixa-mesh per-CNP `endpointSelector.matchLabels`
+        // + `spec.ingress[0].fromEndpoints[0].matchLabels` selector-
+        // readback sites reach through this exact sub-mapping accessor
+        // for per-label `.get(<label>)` probes + `.len()` cardinality
+        // gates; a drift on the borrowed-mapping contract would
+        // silently regress every routed per-selector selector-value
+        // probe.
+        let mut selector = serde_yaml::Mapping::new();
+        selector.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        selector.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String("cart".into()));
+        let mut outer = serde_yaml::Mapping::new();
+        outer.insert_str_key(
+            KUBE_KEY_MATCH_LABELS,
+            serde_yaml::Value::Mapping(selector.clone()),
+        );
+        let value = serde_yaml::Value::Mapping(outer);
+
+        assert_eq!(
+            kube_match_labels(&value),
+            Some(&selector),
+            "kube_match_labels must read the top-level `matchLabels:` \
+             sub-mapping — the caixa-mesh per-CNP selector-value \
+             readback sites reach through this axis for per-label \
+             lookup + cardinality gates"
+        );
+    }
+
+    #[test]
+    fn kube_match_labels_returns_none_when_match_labels_sub_block_absent() {
+        // The two-way vacuous-None short-circuit's first arm: an outer
+        // Value that legally omits the `matchLabels:` sub-block (the
+        // `matchExpressions:`-only arm of the K8s LabelSelector schema
+        // — [`KUBE_KEY_MATCH_LABELS`] docstring at
+        // caixa-core/src/render.rs:10120 pins matchLabels +
+        // matchExpressions as an OR-composed pair, either arm may be
+        // omitted) short-circuits at the first hop through the
+        // underlying `.get(KUBE_KEY_MATCH_LABELS)`. Pin the None-arm
+        // so a future refactor that reaches for `.get(...).unwrap()`
+        // (which would panic on a matchExpressions-only selector) is a
+        // test-visible break. Peer of the sibling
+        // `kube_metadata_labels_returns_none_when_labels_sub_block_absent`
+        // pin on the CR-side labels axis.
+        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_match_labels(&value),
+            None,
+            "kube_match_labels must short-circuit to None when the \
+             `matchLabels:` sub-block is absent — the prior inline \
+             two-hop chain's first `.get(KUBE_KEY_MATCH_LABELS)` hop \
+             returned None here"
+        );
+
+        // Also verify the shape on non-Mapping outer Value shapes.
+        for shape in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_match_labels(&shape),
+                None,
+                "kube_match_labels({shape:?}) must return None on \
+                 non-Mapping outer shapes — the prior inline chain's \
+                 `.get(KUBE_KEY_MATCH_LABELS)` hop yields None on \
+                 every non-Mapping Value, and the lift must preserve \
+                 that contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_match_labels_returns_none_when_match_labels_carries_non_mapping_type() {
+        // The two-way vacuous-None short-circuit's second arm: a
+        // present-but-non-Mapping `matchLabels:` value (a schema-
+        // invalid selector shape per the K8s API-machinery's
+        // LabelSelector contract, which pins the block as
+        // `map[string]string`, but tolerated here as None so the
+        // readback stays a total function). Pin the trailing shape
+        // gate so a future refactor that reaches for
+        // `.as_mapping().unwrap()` (which would panic on a scalar
+        // matchLabels-value) is a test-visible break, not a runtime
+        // regression at the first schema-invalid selector-Value the
+        // reader sees. Peer of the sibling
+        // `kube_metadata_labels_returns_none_when_labels_carries_non_mapping_type`
+        // pin on the CR-side labels axis.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("matchLabels-as-string".into()),
+        ] {
+            let mut outer = serde_yaml::Mapping::new();
+            outer.insert_str_key(KUBE_KEY_MATCH_LABELS, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(outer);
+            assert_eq!(
+                kube_match_labels(&value),
+                None,
+                "kube_match_labels must return None when `matchLabels:` \
+                 carries a non-Mapping YAML type ({non_mapping:?}) — \
+                 the trailing `.and_then(|m| m.as_mapping())` shape \
+                 gate short-circuited here on the prior inline chain, \
+                 and every routed caller depends on that None-arm to \
+                 keep the readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_match_labels_matches_prior_inline_chain() {
+        // Cross-check the helper's output byte-for-byte against the
+        // prior inline two-hop chain the routed caller previously
+        // carried (`value.get(KUBE_KEY_MATCH_LABELS).and_then(|m|
+        // m.as_mapping())`). A drift between the helper's return and
+        // the inline chain would silently regress the caixa-mesh
+        // per-CNP selector-readback sites' `.get(<label>)` +
+        // `.len()` probes — pin the byte-equivalence so the helper
+        // remains a drop-in replacement for the routed sites' prior
+        // two-line block. Peer of the sibling
+        // `kube_metadata_labels_matches_prior_inline_chain` pin on
+        // the CR-side labels axis.
+        let mut selector = serde_yaml::Mapping::new();
+        selector.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String("catalog".into()));
+        selector.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        let mut outer = serde_yaml::Mapping::new();
+        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_yaml::Value::Mapping(selector));
+        let value = serde_yaml::Value::Mapping(outer);
+
+        let via_helper = kube_match_labels(&value);
+        let via_inline = value
+            .get(KUBE_KEY_MATCH_LABELS)
+            .and_then(|m| m.as_mapping());
+        assert_eq!(
+            via_helper, via_inline,
+            "kube_match_labels(&value) must return the byte-identical \
+             `Option<&Mapping>` the prior inline two-hop chain \
+             `value.get(KUBE_KEY_MATCH_LABELS).and_then(as_mapping)` \
+             produced — the lift is a drop-in for the routed sites' \
+             prior selector-readback path"
+        );
+    }
+
+    #[test]
+    fn kube_match_labels_recomposes_on_lifted_kube_root_map_field() {
+        // Recomposition pin: after the lift, `kube_match_labels`
+        // composes as `kube_root_map_field(v, KUBE_KEY_MATCH_LABELS)`
+        // and must resolve pairwise-identical to that composition
+        // across every selector shape. Structural mirror of the way
+        // sibling `kube_metadata_labels` composes on
+        // `kube_metadata_map_field(_, KUBE_KEY_LABELS)` — the
+        // selector-side sub-mapping accessor stands on the parametric
+        // sub-mapping-arity primitive with its axis-key pinned inside.
+        let mut selector = serde_yaml::Mapping::new();
+        selector.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String("cart".into()));
+        let mut outer = serde_yaml::Mapping::new();
+        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_yaml::Value::Mapping(selector));
+        let value = serde_yaml::Value::Mapping(outer);
+
+        assert_eq!(
+            kube_match_labels(&value),
+            kube_root_map_field(&value, KUBE_KEY_MATCH_LABELS),
+            "kube_match_labels must recompose exactly onto \
+             `kube_root_map_field(v, KUBE_KEY_MATCH_LABELS)` — the \
+             composed peer and the primitive-plus-pinned-axis \
+             composition must resolve pairwise-identical, mirroring \
+             the way sibling `kube_metadata_labels` composes on \
+             `kube_metadata_map_field(_, KUBE_KEY_LABELS)` on the \
+             CR-side labels axis"
+        );
+
+        // Also verify the None arms recompose pairwise.
+        for empty in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+        ] {
+            assert_eq!(
+                kube_match_labels(&empty),
+                kube_root_map_field(&empty, KUBE_KEY_MATCH_LABELS),
+                "kube_match_labels({empty:?}) must recompose pairwise \
+                 to `kube_root_map_field({empty:?}, \
+                 KUBE_KEY_MATCH_LABELS)` on every vacuous-None arm"
             );
         }
     }
