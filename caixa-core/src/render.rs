@@ -20586,6 +20586,97 @@ pub fn kube_spec_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
     kube_spec_field(value, field).and_then(|v| v.as_str())
 }
 
+/// Read the sub-`spec.<field>` YAML sequence on a K8s custom resource YAML
+/// document as `Option<&serde_yaml::Sequence>` — the composed sequence-
+/// arity per-sub-field-sequence accessor peer that stands on the composed
+/// scalar-arity [`kube_spec_field`] (23bd568) accessor, folding the
+/// trailing `.and_then(|v| v.as_sequence())` shape-gate closure into the
+/// helper for callers that always want a sequence (the load-bearing per-
+/// CR body-sub-field sequence readbacks — `spec.ingress[]` on the
+/// `CiliumNetworkPolicy` per-`:contratos` L4/L7 rule fan-out,
+/// `spec.listeners[]` / `spec.parentRefs[]` / `spec.hostnames[]` on the
+/// Gateway API `Gateway` / `HTTPRoute` per-`:entrada` overlay,
+/// `spec.rules[]` on the Gateway API `HTTPRoute` per-rule match/backend
+/// fan-out, `spec.healthChecks[]` on the Flux v2 `Kustomization`
+/// per-CR health-check block). Structural mirror of the sibling
+/// [`kube_spec_str_field`] (c4fe21d) on the same sub-`spec.<field>` axis:
+/// both accessors fold a trailing shape-gate closure onto the composed
+/// scalar-arity [`kube_spec_field`] two-hop navigation, both stay
+/// parametric on the per-`<field>` sub-field axis-key. Where
+/// [`kube_spec_str_field`] closes the `spec.<field>` string-scalar
+/// readback (the leaf-scalar arm), this closes the `spec.<field>`
+/// sequence readback (the multi-entry sub-block arm). Together they
+/// bracket the two canonical composed per-`spec.<field>` shape-gate
+/// arities every K8s CR document the emit-side [`kube_resource_skeleton`]
+/// renders carries under its `spec:` body: scalar-string leaves via the
+/// sibling, ordered sub-sequences via this accessor.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// [`kube_spec`] outer-arm short-circuit), the `spec:` value is present
+/// but carries a non-Mapping YAML type (the [`kube_spec`] shape-gate
+/// short-circuit), the requested sub-field `<field>` axis-key is absent
+/// from the `spec:` sub-mapping (the [`kube_spec_field`] trailing
+/// `Mapping::get` none-arm), or the sub-field value is present but
+/// carries a non-sequence YAML type (the trailing `.as_sequence()`
+/// shape-gate short-circuit — a schema-invalid per-CR body-sub-field
+/// type per the K8s apiserver's `OpenAPI` schema but tolerated here as
+/// `None` so the readback stays a total function). The returned
+/// `&Sequence` borrows into the input `Value` — the caller decides
+/// whether to iterate (`.iter()`), pick the first entry
+/// (`.first()`), enumerate for length (`.len()`), or clone.
+///
+/// The canonical shape ≥30 test-side per-CR readback sites across
+/// [`caixa-mesh`][mesh] + [`caixa-flux`][flux] previously carried inline
+/// as the two-line composition
+///
+/// ```ignore
+/// kube_spec_field(<value>, <FIELD>)
+///     .and_then(|v| v.as_sequence())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-
+/// key — [`CILIUM_KEY_INGRESS`] on the per-CNP ingress-rules readback,
+/// [`GATEWAY_API_KEY_LISTENERS`] on the per-`Gateway` listener-set
+/// readback, [`GATEWAY_API_KEY_PARENT_REFS`] on the per-`HTTPRoute`
+/// parent-`Gateway` readback, [`GATEWAY_API_KEY_HOSTNAMES`] on the
+/// per-`HTTPRoute` host-set readback, [`KUBE_KEY_RULES`] on the per-
+/// `HTTPRoute` rule-set readback, `FLUX_KEY_HEALTH_CHECKS` on the per-
+/// `Kustomization` health-check-set readback). After this lift, every
+/// routed consumer
+/// folds the two-hop-plus-shape-gate navigation onto
+/// `kube_spec_seq_field(<value>, <FIELD>)` — the outer
+/// `spec → as_mapping → get(<field>) → as_sequence` walk happens once
+/// inside the helper, and the caller keeps its downstream idiom
+/// (`.and_then(|s| s.first())`, `.iter().find(...)`, `.expect(...)`,
+/// `.unwrap_or_else(...)`) unchanged — the lift closes the navigation
+/// surface, not the per-site continuation posture.
+///
+/// Every future per-CR `spec.<field>` sequence readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
+/// `spec.rules[]` navigation, MESH-COMPOSITION §III.2 #3; the
+/// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's `spec.membros[]` / `spec.contratos[]` readback, §III.2
+/// #5; the future `caixa-otel` per-Servico OpenTelemetry-Collector CR's
+/// `spec.receivers[]` navigation; every future test-side
+/// `spec.<field>[]` sequence probe the M3.x + M4 renderer set adds)
+/// reaches this same helper by construction — no per-consumer two-hop-
+/// plus-shape-gate chain re-inline, no per-consumer `KUBE_KEY_SPEC`
+/// axis-key drift, no coordinated rewrite across every per-CR body-
+/// sub-field sequence readback on a future K8s API-machinery rebrand of
+/// the top-level `spec:` axis.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_spec_seq_field<'a>(
+    value: &'a serde_yaml::Value,
+    field: &str,
+) -> Option<&'a serde_yaml::Sequence> {
+    kube_spec_field(value, field).and_then(|v| v.as_sequence())
+}
+
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
@@ -42593,6 +42684,301 @@ spec:
                  v.as_str())` chain — otherwise the routed caixa-flux \
                  + caixa-mesh per-CR sub-spec-field string-readback \
                  sites drift silently at test time"
+            );
+        }
+    }
+
+    // ── kube_spec_seq_field lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_spec_seq_field_reads_sub_spec_field_sequence() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `spec: { <sub-field>: [ ... ], ... }` body sub-
+        // mapping (every K8s CR the emit-side [`kube_resource_skeleton`]
+        // renders with a sequence-shaped `spec.<field>` axis —
+        // `spec.ingress[]` on `CiliumNetworkPolicy`, `spec.listeners[]`
+        // / `spec.parentRefs[]` / `spec.hostnames[]` on the Gateway API
+        // `Gateway` / `HTTPRoute`, `spec.rules[]` on the Gateway API
+        // `HTTPRoute` per-rule fan-out), the composed sequence-arity
+        // accessor returns `Some(<sequence>)` borrowing into the input
+        // Value across the routed per-sub-field readback axes.
+        // Structural mirror of the sibling
+        // `kube_spec_str_field_reads_sub_spec_field_string_scalar` pin
+        // on the sub-`spec.<field>` string-scalar arity axis.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            CILIUM_KEY_INGRESS,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("rule-a".into()),
+                serde_yaml::Value::String("rule-b".into()),
+            ]),
+        );
+        spec.insert_str_key(
+            GATEWAY_API_KEY_LISTENERS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-0".into())]),
+        );
+        spec.insert_str_key(
+            GATEWAY_API_KEY_HOSTNAMES,
+            serde_yaml::Value::Sequence(vec![]),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_seq_field(&value, CILIUM_KEY_INGRESS).map(std::vec::Vec::len),
+            Some(2),
+            "kube_spec_seq_field must read spec.ingress as a two-entry \
+             sequence — the caixa-mesh per-CNP ingress-rule fan-out \
+             sites reach through this axis for per-`:contratos` L4/L7 \
+             rule navigation"
+        );
+        assert_eq!(
+            kube_spec_seq_field(&value, GATEWAY_API_KEY_LISTENERS).map(std::vec::Vec::len),
+            Some(1),
+            "kube_spec_seq_field must read spec.listeners as a one-\
+             entry sequence — the caixa-mesh per-Gateway listener-set \
+             pin reaches through this axis"
+        );
+        assert_eq!(
+            kube_spec_seq_field(&value, GATEWAY_API_KEY_HOSTNAMES).map(std::vec::Vec::len),
+            Some(0),
+            "kube_spec_seq_field must read spec.hostnames as an empty \
+             sequence when the emitter writes a legally-empty vector \
+             (distinct from the requested-field-absent None-arm — \
+             empty-sequence-present preserves the caller's `.iter()` \
+             fold contract)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_seq_field_returns_none_when_spec_sub_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_spec_field`] closes on
+        // (which in turn folds through [`kube_spec`]'s outer-arm and
+        // shape-gate) folds through this composed sequence-arity
+        // accessor. Peer of the sibling
+        // `kube_spec_str_field_returns_none_when_spec_sub_block_absent`
+        // pin on the composed sub-`spec.<field>` scalar-str-arity
+        // accessor axis.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_spec_seq_field(&shape, CILIUM_KEY_INGRESS),
+                None,
+                "kube_spec_seq_field({shape:?}, <FIELD>) must short-\
+                 circuit to None through the underlying kube_spec_field's \
+                 kube_spec outer-arm when the top-level `spec:` block is \
+                 absent on the outer Value — the composition fold must \
+                 preserve the total-function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_seq_field_returns_none_when_spec_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `spec:` value on the outer Value
+        // folds through [`kube_spec`]'s trailing `.as_mapping()` shape-
+        // gate up through [`kube_spec_field`] up through this composed
+        // sequence-arity accessor — the caller's `.iter()` /
+        // `.expect(...)` continuation stays a total function.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("spec-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_seq_field(&value, CILIUM_KEY_INGRESS),
+                None,
+                "kube_spec_seq_field must return None when the top-\
+                 level `spec:` axis carries a non-Mapping YAML type \
+                 ({non_mapping:?}) — the fold through kube_spec's \
+                 shape-gate arm short-circuits here, and every routed \
+                 caller depends on that None-arm to keep the readback \
+                 total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_seq_field_returns_none_when_requested_field_absent() {
+        // The composition's middle per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `spec:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-CNP
+        // `spec.ingress` readback that finds no `spec.ingress` sub-field
+        // expects None here (routing the "no ingress rules" fallback)
+        // rather than a panic.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            GATEWAY_API_KEY_LISTENERS,
+            serde_yaml::Value::Sequence(vec![]),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_seq_field(&value, CILIUM_KEY_INGRESS),
+            None,
+            "kube_spec_seq_field must return None when the requested \
+             `spec.<field>` axis-key is absent from the sub-mapping — \
+             a `Mapping::get(<KEY>)` miss short-circuits the composed \
+             accessor, and callers rely on the None-arm to route the \
+             fallback path (rather than the wrong-shape arm)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_seq_field_returns_none_when_field_carries_non_sequence_type() {
+        // The composition's trailing `.as_sequence()` shape-gate None
+        // arm: a `spec.<field>` axis-key present but carrying a non-
+        // sequence YAML type. Schema-invalid per the K8s apiserver's
+        // OpenAPI schema (the routed readback sites — `spec.ingress`,
+        // `spec.listeners`, `spec.parentRefs`, `spec.hostnames`,
+        // `spec.rules` — all pin ordered sequences) but tolerated here
+        // as None so the readback stays a total function. Pin the None-
+        // arm so a future refactor that reaches for
+        // `.as_sequence().unwrap()` (which would panic on a scalar
+        // axis-value) is a test-visible break, not a runtime regression
+        // at the first schema-invalid CR the reader sees. Peer of the
+        // sibling
+        // `kube_spec_str_field_returns_none_when_field_carries_non_string_type`
+        // pin on the composed sub-`spec.<field>` scalar-str-arity
+        // accessor.
+        for non_sequence in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::String("ingress-as-string".into()),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(CILIUM_KEY_INGRESS, non_sequence.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_seq_field(&value, CILIUM_KEY_INGRESS),
+                None,
+                "kube_spec_seq_field must return None when spec.ingress \
+                 carries a non-sequence YAML type ({non_sequence:?}) — \
+                 the trailing `.as_sequence()` shape gate short-circuits \
+                 here, and every routed caller depends on that None-arm \
+                 to keep the readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_seq_field_composes_on_lifted_kube_spec_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_spec_field(value, field).and_then(|v| v.as_sequence())`
+        // — the composed scalar-arity accessor stays load-bearing, this
+        // sequence-arity accessor stands one abstraction step above it
+        // (folding the trailing `.as_sequence()` shape-gate closure).
+        // Pin the delegation-shape byte-for-byte across three
+        // representative sub-field axis-keys so a future refactor that
+        // bypasses [`kube_spec_field`] (a private inline
+        // `.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping()).and_then(|m|
+        // m.get(field)).and_then(|n| n.as_sequence())` chain that would
+        // silently drift on a future rebrand of the outer two-hop
+        // navigation) is a test-visible break. Peer of the sibling
+        // `kube_spec_str_field_composes_on_lifted_kube_spec_field_accessor`
+        // composition pin on the sub-`spec.<field>` scalar-str-arity
+        // axis.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            CILIUM_KEY_INGRESS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-0".into())]),
+        );
+        spec.insert_str_key(
+            GATEWAY_API_KEY_LISTENERS,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("listener-0".into()),
+                serde_yaml::Value::String("listener-1".into()),
+            ]),
+        );
+        spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            CILIUM_KEY_INGRESS,
+            GATEWAY_API_KEY_LISTENERS,
+            KUBE_KEY_RULES,
+        ] {
+            let via_composed = kube_spec_seq_field(&value, sub_field);
+            let via_delegation = kube_spec_field(&value, sub_field).and_then(|v| v.as_sequence());
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_spec_seq_field(v, {sub_field:?}) must equal the \
+                 delegation-shape `kube_spec_field(v, {sub_field:?})\
+                 .and_then(|v| v.as_sequence())` — the composition pin \
+                 closes the drift surface where a private inline bypass \
+                 silently desynchronizes from the underlying composed \
+                 scalar-arity accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_seq_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the prior inline `kube_spec_field(v, F).and_then(|v|
+        // v.as_sequence())` chain the routed caller sites previously
+        // carried. A drift between the composed helper's return and
+        // the inline chain would silently regress the caixa-mesh +
+        // caixa-flux per-CR sub-spec-field sequence-readback sites'
+        // downstream continuations (`.and_then(|s| s.first())`,
+        // `.iter().find(...)`, `.expect(...)`) — pin the byte-
+        // equivalence across three representative sub-field axis-keys
+        // so the composed helper remains a drop-in replacement for the
+        // routed sites' prior two-line block.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            GATEWAY_API_KEY_PARENT_REFS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("gateway-0".into())]),
+        );
+        spec.insert_str_key(
+            GATEWAY_API_KEY_HOSTNAMES,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("a.example.com".into()),
+                serde_yaml::Value::String("b.example.com".into()),
+            ]),
+        );
+        spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            GATEWAY_API_KEY_PARENT_REFS,
+            GATEWAY_API_KEY_HOSTNAMES,
+            KUBE_KEY_RULES,
+        ] {
+            let via_helper = kube_spec_seq_field(&value, sub_field);
+            let via_inline = kube_spec_field(&value, sub_field).and_then(|v| v.as_sequence());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_spec_seq_field(v, {sub_field:?}) must yield the \
+                 same Option<&Sequence> as the prior inline \
+                 `kube_spec_field(v, {sub_field:?}).and_then(|v| \
+                 v.as_sequence())` chain — otherwise the routed caixa-\
+                 mesh + caixa-flux per-CR sub-spec-field sequence-\
+                 readback sites drift silently at test time"
             );
         }
     }
