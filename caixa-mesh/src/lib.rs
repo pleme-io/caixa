@@ -8807,20 +8807,28 @@ mod tests {
             // + `cilium_policy_metadata_iterates_alphabetically`
             // per-CR metadata-sub-mapping-readback sites that fold
             // onto the same substrate accessor. The extracted
-            // `metadata` sub-mapping stays bound for the sibling
-            // `.len()` / `KUBE_KEY_NAME` / `KUBE_KEY_LABELS` per-sub-
-            // key probes below that need the sub-view for shape
-            // assertions the per-axis accessor does not close.
+            // `metadata` sub-mapping stays bound solely for the
+            // sibling `.len()` shape assertion below (a sub-mapping-
+            // arity total-key-count probe the per-axis accessor
+            // family does not close) — the per-`KUBE_KEY_NAME`
+            // scalar-readback + per-`KUBE_KEY_LABELS` present-probe
+            // consult the top-level [`kube_name`] / [`kube_metadata_labels`]
+            // accessors directly on the parent CR, folding onto the
+            // same three-arity (accessor / predicate / navigator)
+            // closure the sibling `kube_namespace` readback below
+            // already routes through.
             let metadata = kube_metadata(p).expect("metadata mapping");
             // metadata carries name + namespace + labels (3 keys) — no
             // accidental extras leak past the skeleton lift.
             assert_eq!(metadata.len(), 3);
-            assert!(
-                metadata
-                    .get(KUBE_KEY_NAME)
-                    .and_then(|v| v.as_str())
-                    .is_some()
-            );
+            // Route the per-CNP `metadata.name` scalar readback
+            // through the substrate-primitive [`kube_name`] pinned
+            // accessor on the parent `p` — sibling convergence to the
+            // peer `gateway_carries_canonical_kube_skeleton_without_labels`
+            // + `httproute_carries_canonical_kube_skeleton_without_labels`
+            // per-CR name-readback sites below that fold onto the
+            // same substrate accessor.
+            assert!(kube_name(p).is_some());
             // Route the per-CNP `metadata.namespace` readback through
             // the substrate-primitive [`kube_namespace`] pinned
             // accessor rather than the raw two-hop
@@ -8829,13 +8837,17 @@ mod tests {
             // — sibling convergence to the caixa-flux
             // `programs_yaml_entry` production readback + the
             // `cluster_bundle` kustomization.yaml pin that fold onto
-            // the same substrate accessor. The extracted `metadata`
-            // sub-mapping stays for the sibling `.len()` /
-            // `KUBE_KEY_LABELS` probes above / below that need the
-            // sub-view for shape assertions the per-axis accessor does
-            // not close.
+            // the same substrate accessor.
             assert_eq!(kube_namespace(p), Some(DEFAULT_NAMESPACE));
-            assert!(metadata.get(KUBE_KEY_LABELS).is_some());
+            // Route the per-CNP `metadata.labels` present-probe
+            // through the substrate-primitive [`kube_metadata_labels`]
+            // pinned accessor on the parent `p` rather than the raw
+            // `metadata.get(KUBE_KEY_LABELS).is_some()` sub-key probe
+            // on the already-extracted `metadata` sub-view — sibling
+            // convergence to the peer Gateway + HTTPRoute
+            // `metadata.labels` absence probes below that fold onto
+            // the same substrate accessor.
+            assert!(kube_metadata_labels(p).is_some());
         }
     }
 
@@ -8859,10 +8871,14 @@ mod tests {
         let metadata = kube_metadata(gateway).expect("metadata mapping");
         // Exactly 2 metadata keys (name + namespace) — labels absent.
         assert_eq!(metadata.len(), 2);
-        assert_eq!(
-            metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
-            Some("checkout")
-        );
+        // Route the per-Gateway `metadata.name` scalar readback
+        // through the substrate-primitive [`kube_name`] pinned
+        // accessor on the parent `gateway` — peer convergence to the
+        // sibling `cilium_policy_carries_canonical_kube_skeleton` +
+        // `httproute_carries_canonical_kube_skeleton_without_labels`
+        // per-CR name-readback sites that migrate through the same
+        // substrate accessor.
+        assert_eq!(kube_name(gateway), Some("checkout"));
         // Route the per-Gateway `metadata.namespace` readback through
         // the substrate-primitive [`kube_namespace`] pinned accessor
         // rather than the raw two-hop
@@ -8872,8 +8888,18 @@ mod tests {
         // `cilium_policy_carries_canonical_kube_skeleton` per-CNP
         // readback that migrates through the same accessor.
         assert_eq!(kube_namespace(gateway), Some(DEFAULT_NAMESPACE));
+        // Route the per-Gateway `metadata.labels` absence probe
+        // through the substrate-primitive [`kube_metadata_labels`]
+        // pinned accessor on the parent `gateway` rather than the
+        // raw `metadata.get(KUBE_KEY_LABELS).is_none()` sub-key probe
+        // on the already-extracted `metadata` sub-view — peer
+        // convergence to the sibling
+        // `httproute_carries_canonical_kube_skeleton_without_labels`
+        // absence probe + the peer CNP `metadata.labels` present-
+        // probe (the labels-carried/labels-skipped duality on the
+        // empty-labels-skip contract from `kube_resource_skeleton`).
         assert!(
-            metadata.get(KUBE_KEY_LABELS).is_none(),
+            kube_metadata_labels(gateway).is_none(),
             "Gateway must not carry metadata.labels (empty-labels-skip \
              contract from kube_resource_skeleton)"
         );
@@ -8908,11 +8934,23 @@ mod tests {
         // substrate accessor.
         let metadata = kube_metadata(route).expect("metadata mapping");
         assert_eq!(metadata.len(), 2);
+        // Route the per-HTTPRoute `metadata.name` scalar readback
+        // through the substrate-primitive [`kube_name`] pinned
+        // accessor on the parent `route` — peer convergence to the
+        // sibling `gateway_carries_canonical_kube_skeleton_without_labels`
+        // + `cilium_policy_carries_canonical_kube_skeleton` per-CR
+        // name-readback sites that migrate through the same substrate
+        // accessor.
         assert_eq!(
-            metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
+            kube_name(route),
             Some(gateway_api_http_route_name("checkout", "cart").as_str())
         );
-        assert!(metadata.get(KUBE_KEY_LABELS).is_none());
+        // Route the per-HTTPRoute `metadata.labels` absence probe
+        // through the substrate-primitive [`kube_metadata_labels`]
+        // pinned accessor on the parent `route` — peer convergence
+        // to the sibling Gateway absence probe on the same empty-
+        // labels-skip contract.
+        assert!(kube_metadata_labels(route).is_none());
     }
 
     #[test]
