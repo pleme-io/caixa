@@ -460,8 +460,20 @@ mod tests {
         let kwargs_shape = r#"(defteia :tipo aws/vpc :nome main :atributos (:tags (:owner "team-a" :team "infra")))"#;
         let m = parse_teia_source(kwargs_shape).unwrap();
         let tags = m.instances[0].atributos.get("tags").unwrap();
+        // Route the per-arm `Object`-arm gate through the
+        // [`gen_platform::IsVariant`]-derived
+        // [`caixa_teia::TeiaValue::is_object`] predicate rather than the
+        // raw `matches!(_, TeiaValue::Object(_))` field-agnostic literal
+        // — sibling to the peer `is_kwargs` predicate's `caixa_ast::
+        // NodeKind::is_keyword` converge above and to the sibling per-
+        // arm projection accessors [`caixa_teia::TeiaValue::as_object`]
+        // (7304ffe) / [`caixa_teia::TeiaValue::as_str`] (7304ffe)
+        // already lifted on this outer-`TeiaValue` sum-type. Byte-
+        // equivalent to the pre-lift form; the converge links this pin
+        // compile-time back to the closed 8-arm partition on the
+        // substrate primitive.
         assert!(
-            matches!(tags, TeiaValue::Object(_)),
+            tags.is_object(),
             "kwargs-shaped list with every even-index atom a :keyword \
              must lower to TeiaValue::Object — is_kwargs predicate \
              converged onto NodeKind::is_keyword derived arm-check"
@@ -472,8 +484,12 @@ mod tests {
         //   literals need the delimiter escape.
         let m = parse_teia_source(non_kwargs_shape).unwrap();
         let things = m.instances[0].atributos.get("things").unwrap();
+        // Sibling `List`-arm gate to the `Object`-arm gate above —
+        // routes through the [`gen_platform::IsVariant`]-derived
+        // [`caixa_teia::TeiaValue::is_list`] predicate on the same
+        // substrate primitive.
         assert!(
-            matches!(things, TeiaValue::List(_)),
+            things.is_list(),
             "non-kwargs-shaped list must lower to TeiaValue::List — the \
              is_kwargs predicate must reject any list whose even-index \
              atoms are not all Keyword arms"

@@ -4,7 +4,29 @@ use std::collections::BTreeMap;
 /// A recursive attribute value — scalars, lists, objects, and typed refs.
 ///
 /// BTreeMap for objects keeps serialization deterministic.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// The [`gen_platform::IsVariant`] derive emits per-arm arm-discriminator
+/// predicates — [`Self::is_str`], [`Self::is_int`], [`Self::is_float`],
+/// [`Self::is_bool`], [`Self::is_list`], [`Self::is_object`],
+/// [`Self::is_ref`], [`Self::is_null`] — so every downstream consumer that
+/// only needs the arm-discriminator projection (not the borrowed field
+/// value) reaches for one typed dispatch on the substrate primitive
+/// rather than a hand-rolled `matches!(x, TeiaValue::X(_))` literal.
+/// Peer of the sibling [`caixa_ast::NodeKind`] (359badc) /
+/// [`caixa_core::WitTarget`] (5d776d8-era) / [`caixa_core::CaixaKind`] /
+/// [`caixa_core::CaixaDialeto`] / [`caixa_core::DepList`] /
+/// [`caixa_core::UpgradeInstruction`] / caixa-ast per-`Trivia`-family /
+/// caixa-ast per-`LexToken`-family / caixa-lint / caixa-provedor /
+/// caixa-theme sibling closed-set-typed enums that already carry the
+/// `gen_platform::IsVariant` discipline — extends the discipline onto
+/// the substrate's IaC-side per-`(defteia …)` attribute value sum-type
+/// every downstream caixa-arch / caixa-pangea / caixa-teia consumer
+/// partitions on. Sibling in shape to the peer per-arm
+/// `Option<&<payload>>` projection accessors [`Self::as_str`] (7304ffe)
+/// / [`Self::as_object`] (7304ffe) already lifted on this same outer-
+/// `TeiaValue` sum-type surface — the arm-discriminator predicate
+/// family the projection-accessor family builds against.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, gen_platform::IsVariant)]
 #[serde(untagged)]
 pub enum TeiaValue {
     Str(String),
@@ -779,6 +801,107 @@ mod tests {
             "TeiaValue::as_object must borrow from the Object arm's \
              BTreeMap backing storage (zero-copy projection)",
         );
+    }
+
+    fn all_teia_value_variants() -> Vec<(TeiaValue, &'static str)> {
+        let mut m = BTreeMap::new();
+        m.insert("k".into(), TeiaValue::Str("v".into()));
+        vec![
+            (TeiaValue::Str("s".into()), "Str"),
+            (TeiaValue::Int(0), "Int"),
+            (TeiaValue::Float(0.0), "Float"),
+            (TeiaValue::Bool(false), "Bool"),
+            (TeiaValue::List(Vec::new()), "List"),
+            (TeiaValue::Object(m), "Object"),
+            (
+                TeiaValue::Ref(TeiaRefRepr {
+                    tipo: "aws/vpc".into(),
+                    nome: "main".into(),
+                    atributo: "id".into(),
+                }),
+                "Ref",
+            ),
+            (TeiaValue::Null, "Null"),
+        ]
+    }
+
+    fn predicate_row(v: &TeiaValue) -> [bool; 8] {
+        [
+            v.is_str(),
+            v.is_int(),
+            v.is_float(),
+            v.is_bool(),
+            v.is_list(),
+            v.is_object(),
+            v.is_ref(),
+            v.is_null(),
+        ]
+    }
+
+    // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+    // derive-generated per-arm predicate partition — for every variant
+    // in `all_teia_value_variants()`, the observed 8-slot predicate row
+    // must equal a one-hot row with the `true` at exactly the same index
+    // as the variant's declaration order. Expected rows are generated
+    // live from the enumeration rather than transcribed by hand, so a
+    // copy-paste flip that reroutes one arm through the wrong predicate
+    // lane trips at the identity-diagonal assertion the way every peer
+    // `caixa_ast::NodeKind` / `caixa_ast::TriviaKind` /
+    // `caixa_ast::LexToken` / `caixa_core::CaixaKind` /
+    // `caixa_core::CaixaDialeto` / `caixa_core::DepList` /
+    // `caixa_core::PathShapeViolation` / `caixa_core::RestartStrategy`
+    // / `caixa_core::WitTarget` partition pin already does on the
+    // sibling caixa-ast / caixa-core surfaces.
+    #[test]
+    fn teia_value_is_variant_predicates_partition_the_arm_set() {
+        let variants = all_teia_value_variants();
+        for (idx, (variant, name)) in variants.iter().enumerate() {
+            let observed = predicate_row(variant);
+            let mut expected = [false; 8];
+            expected[idx] = true;
+            assert_eq!(
+                observed, expected,
+                "TeiaValue::{name} at declaration-order slot {idx} must \
+                 satisfy exactly one is_* predicate (its own); observed \
+                 row must equal the one-hot expected row"
+            );
+        }
+    }
+
+    // Byte-parity pin on the two field-agnostic `matches!` shapes the
+    // per-consumer converge in this run replaces at the caixa-teia
+    // manifest-test surface: the `TeiaValue::Object(_)` gate at the
+    // `is_kwargs_predicate_keys_off_is_keyword_derived_arm_check` per-
+    // `:tags` shape assertion (caixa-teia/src/manifest.rs) and the
+    // `TeiaValue::List(_)` gate at the sibling per-`:things` shape
+    // assertion. Refuses a future accidental split between the derived
+    // predicate and its pre-lift `matches!` shape (a hand-rolled shadow
+    // `impl` that overrides one path, an accidental rebrand of one
+    // converged call site back to the `matches!` form) on the two
+    // load-bearing arm-discriminator axes the manifest-lowerer's
+    // per-attribute shape gate partitions on.
+    #[test]
+    fn teia_value_is_object_and_is_list_byte_equal_pre_lift_matches_shape() {
+        for (variant, name) in all_teia_value_variants() {
+            let via_matches_object = matches!(variant, TeiaValue::Object(_));
+            let via_predicate_object = variant.is_object();
+            assert_eq!(
+                via_predicate_object, via_matches_object,
+                "TeiaValue::{name}.is_object() must byte-equal \
+                 matches!(_, TeiaValue::Object(_)) — otherwise the \
+                 converged call site in caixa-teia manifest tests would \
+                 silently disagree with its pre-lift shape"
+            );
+            let via_matches_list = matches!(variant, TeiaValue::List(_));
+            let via_predicate_list = variant.is_list();
+            assert_eq!(
+                via_predicate_list, via_matches_list,
+                "TeiaValue::{name}.is_list() must byte-equal \
+                 matches!(_, TeiaValue::List(_)) — otherwise the \
+                 converged call site in caixa-teia manifest tests would \
+                 silently disagree with its pre-lift shape"
+            );
+        }
     }
 
     #[test]

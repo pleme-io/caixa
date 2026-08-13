@@ -675,6 +675,7 @@ version = "0.1.80"
 dependencies = [
  "caixa-ast",
  "caixa-core",
+ "gen-platform",
  "iac-forge",
  "pretty_assertions",
  "serde",
