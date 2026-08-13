@@ -22311,6 +22311,110 @@ pub fn kube_map<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a ser
     value.get(field).and_then(serde_yaml::Value::as_mapping)
 }
 
+/// Read a sub-`<field>` YAML scalar-boolean nested one hop under an
+/// arbitrary `&serde_yaml::Value` mapping receiver as `Option<bool>`
+/// — the value-level two-hop navigation primitive that folds
+/// `.get(<field>) → as_bool` into a single helper call. Boolean-arity
+/// peer of the value-level scalar-str [`kube_str`] (a23f61d), scalar-
+/// integer [`kube_u64`] (bfbec1d), sequence-arity [`kube_seq`]
+/// (9c74ddb), and sub-mapping-arity [`kube_map`] (28fa5d8) accessors
+/// on the same value-level two-hop navigation axis: where those four
+/// close the string / unsigned-integer / sequence / sub-mapping
+/// shape-gates on the nested `<field>` axis, this accessor closes the
+/// boolean-arity shape-gate on the same axis, so every routed test-
+/// side + production per-nested-mapping boolean-typed readback (per-
+/// `HelmRelease` `spec.install.createNamespace` first-apply namespace-
+/// seeder toggle, per-`HelmRelease` `spec.upgrade.remediation
+/// .remediateLastFailure` post-retry-exhaustion rollback toggle, the
+/// forthcoming per-`Kustomization` `spec.prune` sweep-what-you-removed
+/// garbage-collection toggle once its outer-arity peer lands, per-
+/// `HelmRelease` `spec.values.<library>.enabled` composition-time
+/// child-chart force-on toggle once the `&Mapping`-receiver peer
+/// lands) now reaches through the same one-line dispatch the scalar-
+/// str, scalar-integer, sequence, and sub-mapping arities already do.
+/// The quintet ([`kube_str`], [`kube_u64`], `kube_bool`, [`kube_seq`],
+/// [`kube_map`]) closes the value-level axis at the five principal K8s
+/// apiserver `OpenAPI` schema shape arities — string, unsigned-
+/// integer, boolean, sequence, sub-mapping — spanning the JSON
+/// scalar-and-container surface every routed value-level
+/// `get → as_*` two-hop navigation walks through.
+///
+/// Returns `None` on any of the three short-circuit arms folded through
+/// the underlying two-hop composition: the receiver `value` carries a
+/// YAML type without a `get(<field>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<field>` axis-key is absent from the receiver's mapping
+/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value
+/// is present but carries a non-boolean YAML type (the trailing
+/// [`serde_yaml::Value::as_bool`] shape-gate short-circuit — a
+/// schema-invalid scalar type per the K8s apiserver's `OpenAPI` schema
+/// but tolerated here as `None` so the readback stays a total
+/// function, mirroring the sibling [`kube_str`] / [`kube_u64`] /
+/// [`kube_seq`] / [`kube_map`] posture). The returned `bool` is a
+/// fresh primitive value (booleans carry no underlying borrow the way
+/// the sibling string-arity accessor preserves) — the caller decides
+/// whether to `assert_eq!(_, Some(<expected>))` for a determinism pin,
+/// `.expect(...)` for a load-bearing toggle identity, or
+/// `.unwrap_or(<default>)` for a substrate-side default fallback.
+///
+/// The canonical shape ~2 test-side per-nested-mapping scalar-`bool`
+/// readback sites in [`caixa-flux`][flux] previously carried inline as
+/// the two-line composition
+///
+/// ```ignore
+/// <value>.get(<FIELD>).and_then(|v| v.as_bool())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field
+/// axis-key — [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] on the per-
+/// `HelmRelease` install-path first-apply namespace-seeder toggle,
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] on the per-
+/// `HelmRelease` upgrade-path post-retry-exhaustion rollback toggle).
+/// After this lift every routed `&Value`-receiver consumer folds the
+/// two-line navigation onto `kube_bool(<value>, <FIELD>)` — the two-
+/// hop `get → as_bool` walk happens once inside the helper, and the
+/// caller keeps its downstream assertion posture (`assert_eq!(_,
+/// Some(<expected>))`, `.expect(...)`, an `if let Some(b) = _` bind)
+/// unchanged — the lift closes the navigation surface, not the per-
+/// site downstream posture.
+///
+/// The two remaining per-nested-boolean readback sites in
+/// [`caixa-flux`][flux] stay out-of-reach at this arity by design: the
+/// per-`Kustomization` `spec.prune` readback ((`spec.<field>`-anchored,
+/// resolves via [`kube_spec_field`] + trailing `.as_bool()` — a
+/// separate `kube_spec_bool_field` lift, one altitude above on the
+/// spec-anchored family) and the per-`HelmRelease` `spec.values
+/// .<library>.enabled` readback (receiver is a `&Mapping` returned
+/// from [`kube_spec_map_field`], not a `&Value` — a peer `Mapping`-
+/// receiver overload would land on a separate lift, mirroring the
+/// same-arity carveout the sibling [`kube_map`] docs already name).
+/// Both are noted here so the future extension trajectory stays
+/// discoverable from this accessor's docstring.
+///
+/// Every future nested `<field>` scalar-`bool` readback the M3.x + M4
+/// renderer set materializes (the future `:politicas :mtls-required`
+/// tristate-arm scalar the mesh-policy overlay lifts alongside the
+/// existing [`CILIUM_KEY_MODE`] discriminator, the future per-
+/// Aplicacao `spec.entrada.tls` per-gateway TLS-toggle scalar the
+/// [`GATEWAY_API_KEY_HOSTNAME`] axis pairs with once TLS lands at
+/// MESH-COMPOSITION §III.4, the future per-`:limits :sandboxed`
+/// per-Servico sandbox-mode toggle the Lunatic per-process sandbox
+/// admits at CAIXA-SDLC §II.3, per-`:contratos` per-edge idempotent-
+/// retries toggle the M4 typed per-edge overlay lifts) reaches this
+/// one helper by construction. No per-consumer two-hop re-inline; no
+/// coordinated rewrite across every nested-scalar-`bool` readback on
+/// a future [`serde_yaml`] surface rebrand or shape-gate shift.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_bool(value: &serde_yaml::Value, field: &str) -> Option<bool> {
+    value.get(field).and_then(serde_yaml::Value::as_bool)
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -48043,6 +48147,227 @@ spec:
              API v1 HTTPPathMatch discriminator-key axis verbatim — a \
              `type:` scalar identifying the path-selection predicate \
              the routed test-side site pins against"
+        );
+    }
+
+    #[test]
+    fn kube_bool_reads_sub_field_scalar_boolean_verbatim() {
+        // Load-bearing contract: given a `&Value` mapping receiver
+        // carrying a nested `<field>: <bool>` scalar-boolean entry at
+        // a per-key axis, the value-level two-hop scalar-`bool`
+        // primitive returns `Some(<bool>)` so the routed determinism-
+        // pin caller reaches the boolean through one dispatch.
+        // Boolean-arity peer of the sibling scalar-str [`kube_str`],
+        // scalar-integer [`kube_u64`], sequence-arity [`kube_seq`],
+        // and sub-mapping-arity [`kube_map`] value-level accessors —
+        // this exercises the same value-level two-hop navigation but
+        // with a boolean shape-gate closing the quintet across the
+        // five principal K8s apiserver OpenAPI schema shape arities.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+            serde_yaml::Value::Bool(true),
+        );
+        inner.insert_str_key(
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            serde_yaml::Value::Bool(false),
+        );
+        let value = serde_yaml::Value::Mapping(inner);
+
+        assert_eq!(
+            kube_bool(&value, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
+            Some(true),
+            "kube_bool must return the sub-field scalar-boolean \
+             verbatim — the routed per-`HelmRelease` install-path \
+             `spec.install.createNamespace` first-apply namespace-\
+             seeder toggle readback site now reaches through this \
+             accessor for the load-bearing Flux v2 helm-controller \
+             per-CR install-path toggle identity pin"
+        );
+        assert_eq!(
+            kube_bool(&value, FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE),
+            Some(false),
+            "kube_bool must return the sub-field scalar-boolean \
+             verbatim across a second axis-key and the opposite \
+             boolean-arm — the routed per-`HelmRelease` upgrade-path \
+             `spec.upgrade.remediation.remediateLastFailure` post-\
+             retry-exhaustion rollback toggle readback site sits here \
+             (pinning that the trailing `.as_bool()` fold-through \
+             preserves both boolean arms, not just the `true` arm)"
+        );
+    }
+
+    #[test]
+    fn kube_bool_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying two-
+        // hop `get → as_bool` closes on folds through this accessor
+        // to `None`. Pin all three arms so a future refactor reaching
+        // for `.as_bool().unwrap()` (which would panic on any of the
+        // three arms) is a test-visible break. Mirrors the sibling
+        // `kube_u64_returns_none_on_every_short_circuit_arm` / `kube_
+        // str_*` / `kube_seq_*` / `kube_map_*` fold-through disciplines
+        // one arity over on the boolean shape-gate.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<field>)` navigation surface.
+        let scalar_receiver = serde_yaml::Value::Bool(true);
+        assert_eq!(
+            kube_bool(&scalar_receiver, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
+            None,
+            "kube_bool must short-circuit to None when the receiver \
+             Value carries a scalar YAML type with no `get` navigation \
+             surface — Value::get's scalar-arm None folds through, \
+             preserving the total-function contract"
+        );
+
+        // Arm 2: requested `<field>` axis-key absent from receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_str_key(
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            serde_yaml::Value::Bool(true),
+        );
+        let missing_field = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_bool(&missing_field, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
+            None,
+            "kube_bool must short-circuit to None when the requested \
+             `<field>` axis-key is absent from the receiver's mapping \
+             — Value::get's trailing miss folds through"
+        );
+
+        // Arm 3: `<field>` present but non-boolean (a scalar-integer,
+        // the wrong-arity shape the sibling [`kube_u64`] axis owns).
+        let mut non_bool = serde_yaml::Mapping::new();
+        non_bool.insert_str_key(
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+            serde_yaml::Value::Number(1u64.into()),
+        );
+        let non_bool_field = serde_yaml::Value::Mapping(non_bool);
+        assert_eq!(
+            kube_bool(&non_bool_field, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
+            None,
+            "kube_bool must short-circuit to None when the `<field>` \
+             value carries a non-`bool` YAML scalar type — the \
+             trailing `.as_bool()` shape-gate fold-through short-\
+             circuits here (mirrors the sibling `kube_u64`'s scalar-\
+             integer-arm-only posture, one axis-arity over — YAML's \
+             `1` is a Number, not a truthy Bool, per serde_yaml's \
+             strict shape-gate posture)"
+        );
+    }
+
+    #[test]
+    fn kube_bool_matches_prior_inline_two_hop_chain() {
+        // Cross-check the value-level primitive's output byte-for-
+        // byte against the prior inline `.get(<F>).and_then(|v| v.
+        // as_bool())` two-hop chain the ~2 routed caller sites in
+        // caixa-flux previously carried. A drift between the helper's
+        // return and the inline chain would silently regress every
+        // downstream determinism-pin (`assert_eq!(_, Some(<expected>))`,
+        // `.expect(...)`) — pin the byte-equivalence across three
+        // representative sub-field axis-keys spanning the Flux v2 per-
+        // `HelmRelease` install-path first-apply toggle axis
+        // (FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE), the Flux v2 per-
+        // `HelmRelease` upgrade-path rollback toggle axis
+        // (FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE), and the Flux
+        // v2 per-`Kustomization` garbage-collection toggle axis
+        // (FLUX_KUSTOMIZATION_KEY_PRUNE — the forthcoming outer-arity
+        // peer's inner axis-key) so the composed helper stays a drop-
+        // in replacement for every current + future routed site's
+        // prior two-line block.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+            serde_yaml::Value::Bool(true),
+        );
+        inner.insert_str_key(
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            serde_yaml::Value::Bool(false),
+        );
+        inner.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        inner.insert_string(GATEWAY_API_KEY_HOSTNAME, "not-a-bool");
+        let value = serde_yaml::Value::Mapping(inner);
+
+        for sub_field in [
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            FLUX_KUSTOMIZATION_KEY_PRUNE,
+            GATEWAY_API_KEY_HOSTNAME,
+        ] {
+            let via_helper = kube_bool(&value, sub_field);
+            let via_inline = value.get(sub_field).and_then(serde_yaml::Value::as_bool);
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_bool(v, {sub_field:?}) must byte-equal the \
+                 prior inline `.get({sub_field:?}).and_then(|v| v.\
+                 as_bool())` two-hop chain — the lift must stay a \
+                 drop-in for every routed caller's downstream \
+                 determinism-pin posture"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_bool_composes_naturally_below_kube_spec_field() {
+        // Composition pin: the two-hop-nested spec-anchored + value-
+        // level scalar-`bool` readback path `spec.<outer>.<inner>` —
+        // e.g. the per-`HelmRelease` `spec.install.createNamespace`
+        // first-apply namespace-seeder toggle the routed caixa-flux
+        // per-CR install-path readback site walks — must compose
+        // byte-equally through `kube_spec_field(v, OUTER).and_then(|o|
+        // kube_bool(o, INNER))` and the equivalent multi-hop inline
+        // chain. Pin the composition on the canonical per-`HelmRelease`
+        // install-path create-namespace outer/inner triple so the
+        // sibling-composition surface stays contract-preserving —
+        // parallels the sibling [`kube_u64`] / [`kube_str`] /
+        // [`kube_map`] composition pins one arity over on the boolean
+        // shape-gate, one composition-shape over on the spec-anchored
+        // outer prelude (matching how the routed caixa-flux caller
+        // sites actually compose the accessor, unlike the sibling
+        // `_composes_naturally_below_kube_seq_first` pins that walk
+        // through a first-entry sequence prelude the routed boolean
+        // sites never traverse).
+        let mut install_map = serde_yaml::Mapping::new();
+        install_map.insert_str_key(
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+            serde_yaml::Value::Bool(true),
+        );
+
+        let mut spec_map = serde_yaml::Mapping::new();
+        spec_map.insert_str_key(
+            FLUX_HELMRELEASE_KEY_INSTALL,
+            serde_yaml::Value::Mapping(install_map),
+        );
+
+        let mut root_map = serde_yaml::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
+        let value = serde_yaml::Value::Mapping(root_map);
+
+        let via_composed = kube_spec_field(&value, FLUX_HELMRELEASE_KEY_INSTALL)
+            .and_then(|i| kube_bool(i, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE));
+        let via_inline = value
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.as_mapping())
+            .and_then(|m| m.get(FLUX_HELMRELEASE_KEY_INSTALL))
+            .and_then(|i| i.get(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE))
+            .and_then(serde_yaml::Value::as_bool);
+        assert_eq!(
+            via_composed, via_inline,
+            "kube_spec_field(v, INSTALL) + kube_bool(i, \
+             CREATE_NAMESPACE) must byte-equal the five-hop inline \
+             chain the routed per-`HelmRelease` `spec.install.\
+             createNamespace` site previously carried below the outer \
+             spec-anchored accessor"
+        );
+        assert_eq!(
+            via_composed,
+            Some(true),
+            "the composed two-hop-nested scalar-`bool` readback must \
+             surface the per-`install.createNamespace` boolean scalar \
+             the fixture seeds — a drop-in for the routed per-\
+             `HelmRelease` install-path first-apply namespace-seeder \
+             determinism-pin site"
         );
     }
 }
