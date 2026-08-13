@@ -2435,7 +2435,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_kind, kube_name, kube_root_seq_field, kube_spec_field,
+        kube_api_version_is, kube_kind, kube_name, kube_root_seq_field, kube_seq, kube_spec_field,
         kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field,
     };
 
@@ -4752,8 +4752,7 @@ spec:
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(inserted);
         let arr = kube_spec_field(&modified, FLUX_KEY_VALUES)
-            .and_then(|v| v.get(FLEET_PROGRAMS_KEY_PROGRAMS))
-            .and_then(|p| p.as_sequence())
+            .and_then(|v| kube_seq(v, FLEET_PROGRAMS_KEY_PROGRAMS))
             .unwrap();
         assert_eq!(arr.len(), 2);
         assert_eq!(
@@ -4783,8 +4782,7 @@ spec:
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(!inserted);
         let arr = kube_spec_field(&modified, FLUX_KEY_VALUES)
-            .and_then(|v| v.get(FLEET_PROGRAMS_KEY_PROGRAMS))
-            .and_then(|p| p.as_sequence())
+            .and_then(|v| kube_seq(v, FLEET_PROGRAMS_KEY_PROGRAMS))
             .unwrap();
         assert_eq!(arr.len(), 2);
         let updated = arr[0]
@@ -4849,10 +4847,8 @@ spec:
             }],
         }];
         let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
-        let upgrade_from = entry
-            .get(M2_KEY_UPGRADE_FROM)
-            .and_then(|u| u.as_sequence())
-            .expect("upgradeFrom propagates as a sequence");
+        let upgrade_from =
+            kube_seq(&entry, M2_KEY_UPGRADE_FROM).expect("upgradeFrom propagates as a sequence");
         assert_eq!(upgrade_from.len(), 1);
         assert_eq!(
             upgrade_from[0]
