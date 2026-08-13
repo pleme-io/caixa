@@ -2435,7 +2435,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_kind, kube_name, kube_spec_field,
+        kube_api_version_is, kube_kind, kube_name, kube_spec_field, kube_spec_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -3698,16 +3698,14 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let path = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH)
-            .and_then(|v| v.as_str())
-            .expect(
-                "spec.path string scalar present; drift on this axis \
+        let path = kube_spec_str_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH).expect(
+            "spec.path string scalar present; drift on this axis \
                  silently unbinds every per-caixa Kustomization from \
                  its paired per-caixa sub-tree of the pleme-io k8s \
                  repository, and the kustomize-controller either \
                  defaults to reconciling the GitRepository root or \
                  refuses to reconcile at all",
-            );
+        );
         // Route the per-caixa `:nome` axis-projection through the
         // substrate-canonical [`Caixa::nome`] `&str`-return accessor
         // rather than the raw `&sample_caixa().nome` `&String`-borrow
@@ -3841,8 +3839,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let emitted = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH)
-            .and_then(|v| v.as_str())
+        let emitted = kube_spec_str_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH)
             .expect("spec.path string scalar present")
             .to_owned();
         // Route the per-caixa `:nome` axis-projection through the
@@ -3962,15 +3959,13 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let timeout = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_TIMEOUT)
-            .and_then(|v| v.as_str())
-            .expect(
-                "spec.timeout string scalar present; drift on this axis \
+        let timeout = kube_spec_str_field(&parsed, FLUX_KUSTOMIZATION_KEY_TIMEOUT).expect(
+            "spec.timeout string scalar present; drift on this axis \
                  silently strips the substrate's chosen reconcile-ceiling \
                  declaration from every emitted per-caixa `Kustomization` \
                  document, letting the kustomize-controller fall back to \
                  the upstream Flux v2 controller-side default cap",
-            );
+        );
         assert_eq!(
             timeout, DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT,
             "spec.timeout must carry the substrate's canonical Flux v2 \
@@ -7204,12 +7199,10 @@ spec:
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
-        let url = kube_spec_field(&parsed, FLUX_GITREPOSITORY_KEY_URL)
-            .and_then(|u| u.as_str())
-            .expect(
-                "rendered gitrepository.yaml must carry its remote-URL leaf-scalar \
+        let url = kube_spec_str_field(&parsed, FLUX_GITREPOSITORY_KEY_URL).expect(
+            "rendered gitrepository.yaml must carry its remote-URL leaf-scalar \
                  axis at the lifted FLUX_GITREPOSITORY_KEY_URL key verbatim",
-            );
+        );
         assert!(
             !url.is_empty(),
             "spec.url leaf-scalar must resolve to a non-empty git-remote clone \
@@ -7763,16 +7756,14 @@ spec:
                 .unwrap_or_else(|| panic!("{filename} present"));
             let parsed: serde_yaml::Value = serde_yaml::from_str(&doc.contents)
                 .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
-            let interval = kube_spec_field(&parsed, FLUX_KEY_INTERVAL)
-                .and_then(|v| v.as_str())
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{filename} spec.<FLUX_KEY_INTERVAL> ({FLUX_KEY_INTERVAL:?}) \
+            let interval = kube_spec_str_field(&parsed, FLUX_KEY_INTERVAL).unwrap_or_else(|| {
+                panic!(
+                    "{filename} spec.<FLUX_KEY_INTERVAL> ({FLUX_KEY_INTERVAL:?}) \
                          scalar present; drift on this axis silently drops the \
                          per-CR reconcile schedule from the Flux v2 controller's \
                          per-CR watch registration",
-                    )
-                });
+                )
+            });
             assert!(
                 !interval.is_empty(),
                 "{filename} spec.<FLUX_KEY_INTERVAL> ({FLUX_KEY_INTERVAL:?}) must \

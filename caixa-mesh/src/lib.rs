@@ -3276,6 +3276,7 @@ mod tests {
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
         kube_kind_is, kube_metadata, kube_metadata_label, kube_metadata_label_is,
         kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_spec, kube_spec_field,
+        kube_spec_str_field,
     };
     use std::time::Duration;
 
@@ -9116,8 +9117,7 @@ mod tests {
         // per-Gateway typed contract onto the controller-choice half.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        let class_name = kube_spec_field(gateway, GATEWAY_API_KEY_GATEWAY_CLASS_NAME)
-            .and_then(|c| c.as_str())
+        let class_name = kube_spec_str_field(gateway, GATEWAY_API_KEY_GATEWAY_CLASS_NAME)
             .expect("Gateway spec.gatewayClassName present");
         assert_eq!(
             class_name,
