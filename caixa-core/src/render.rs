@@ -21839,6 +21839,104 @@ pub fn kube_spec_seq_first<'a>(
     kube_spec_seq_field(value, field).and_then(|s| s.first())
 }
 
+/// Read the first entry of a sub-`<field>[]` YAML sequence nested one
+/// hop under an arbitrary `&serde_yaml::Value` mapping receiver as
+/// `Option<&serde_yaml::Value>` — the value-level three-hop navigation
+/// primitive that folds `.get(<field>) → as_sequence → first` into a
+/// single helper call. Peer of the spec-anchored
+/// [`kube_spec_seq_first`] (b7babfe) at one altitude below: where the
+/// spec-anchored accessor folds the outer `spec → as_mapping →
+/// get(<field>)` prelude before the same sequence-head selector, this
+/// accessor drops the outer three-hop and stays parametric on the
+/// mapping receiver — so a caller already holding a nested `&Value`
+/// (a `spec.ingress[0]` bracket returned from
+/// [`kube_spec_seq_first`], a `spec.rules[0]` first-rule bracket from
+/// the sibling per-`HTTPRoute` readback, any two-hop nested-mapping
+/// bracket the M3 renderer set exposes) reaches for this accessor
+/// directly instead of re-inlining the three-line
+/// `.and_then(|v| v.get(<K>)).and_then(|v| v.as_sequence())
+/// .and_then(|s| s.first())` block. Together with
+/// [`kube_spec_seq_first`] the pair closes the head-selector arity on
+/// both the outer sub-`spec.<field>[]` axis and the inner nested sub-
+/// `<field>[]` axis every routed `spec.<outer>[0].<inner>[0]` readback
+/// (the per-CNP `spec.ingress[0].toPorts[0]` L4-port bracket pair, the
+/// per-CNP `spec.ingress[0].fromEndpoints[0]` source-endpoint
+/// selector bracket, the per-`HTTPRoute` `spec.rules[0].backendRefs[0]`
+/// first-backend pin, the per-`HTTPRoute` `spec.rules[0].matches[0]`
+/// first-match pin, MESH-COMPOSITION §III.2) walks through — the outer
+/// hop via the spec-anchored peer, the inner hop via this one.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying three-hop composition: the receiver `value` carries a
+/// YAML type without a `get(<field>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<field>` axis-key is absent from the receiver's mapping
+/// ([`serde_yaml::Value::get`] trailing miss), the sub-field value is
+/// present but carries a non-sequence YAML type (the trailing
+/// `.as_sequence()` shape-gate short-circuit — a schema-invalid nested-
+/// sub-field type per the K8s apiserver's `OpenAPI` schema but tolerated
+/// here as `None` so the readback stays a total function), or the
+/// sequence is present but empty (the trailing `.first()` head-selector
+/// none-arm — a legally-emitted zero-cardinality sub-block per every
+/// routed inner sub-field's empty arm). The returned `&Value` borrows
+/// into the input `Value` — the caller decides whether to further-
+/// navigate (`.get(<KEY>)`, `.as_str()`, `.as_u64()`,
+/// `.and_then(kube_kind)`) or unwrap.
+///
+/// The canonical shape 20 test-side per-`spec.<outer>[0].<inner>[0]`
+/// readback sites in [`caixa-mesh`][mesh] previously carried inline as
+/// the three-line composition
+///
+/// ```ignore
+/// <value>
+///     .and_then(|v| v.get(<FIELD>))
+///     .and_then(|v| v.as_sequence())
+///     .and_then(|s| s.first())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-
+/// key — [`CILIUM_KEY_TO_PORTS`] / [`CILIUM_KEY_PORTS`] on the per-CNP
+/// L4-tuple `spec.ingress[0].toPorts[0].ports[0]` port-tuple bracket
+/// chain, [`CILIUM_KEY_FROM_ENDPOINTS`] on the per-CNP source-endpoint
+/// selector bracket, [`CILIUM_KEY_HTTP`] on the per-CNP L7 HTTP-rule
+/// bracket, [`GATEWAY_API_KEY_BACKEND_REFS`] on the per-`HTTPRoute`
+/// first-backend bracket, [`GATEWAY_API_KEY_MATCHES`] on the per-
+/// `HTTPRoute` first-match bracket). After this lift every routed
+/// consumer folds the three-line navigation onto
+/// `kube_seq_first(<value>, <FIELD>)` — the three-hop `get →
+/// as_sequence → first` walk happens once inside the helper, and the
+/// caller keeps its downstream continuation idiom (`.get(<KEY>)`,
+/// `.as_u64()`, `.and_then(|v| v.as_str())`, `.and_then(kube_match_labels)`,
+/// `.expect(...)`) unchanged — the lift closes the navigation surface,
+/// not the per-site continuation posture.
+///
+/// Every future nested sub-`<field>[0]` first-entry readback (the
+/// future per-`:politicas` `CiliumClusterwideEnvoyConfig` per-policy
+/// nested bracket chain, the `app-operator`'s per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's nested
+/// `spec.entrada.paths[0]` / `spec.placement.clusters[0]` brackets,
+/// the future `caixa-otel` per-Servico OpenTelemetry-Collector CR's
+/// per-`receivers.<name>.protocols` nested bracket, every future test-
+/// side nested-first probe the M3.x + M4 renderer set adds) reaches
+/// this same helper by construction — no per-consumer three-hop chain
+/// re-inline, no coordinated rewrite across every nested-first bracket
+/// on a future [`serde_yaml`] surface rebrand or a shift in the head-
+/// selector semantics.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_seq_first<'a>(
+    value: &'a serde_yaml::Value,
+    field: &str,
+) -> Option<&'a serde_yaml::Value> {
+    value
+        .get(field)
+        .and_then(|v| v.as_sequence())
+        .and_then(|s| s.first())
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -46484,6 +46582,237 @@ spec:
                  .and_then(|s| s.first())` chain — the lift must stay a \
                  drop-in for every routed caller's downstream \
                  continuation posture"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_seq_first_reads_first_entry_of_nested_sub_field_sequence() {
+        // Load-bearing contract: given a `&Value` mapping receiver
+        // carrying a nested `<field>: [ ... ]` sequence at a per-key
+        // axis, the value-level three-hop primitive returns
+        // `Some(<first>)` borrowing into the input Value across the
+        // routed per-nested-sub-field first-entry readback axes. Peer
+        // of the spec-anchored [`kube_spec_seq_first`] pass-through pin
+        // one altitude below — this exercises the same head-selector
+        // semantics on the inner nested-mapping receiver the
+        // spec-anchored pin exercises on the outer per-CR body.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("to-ports-0".into()),
+                serde_yaml::Value::String("to-ports-1".into()),
+            ]),
+        );
+        inner.insert_str_key(
+            CILIUM_KEY_FROM_ENDPOINTS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("from-endpoints-0".into())]),
+        );
+        let value = serde_yaml::Value::Mapping(inner);
+
+        assert_eq!(
+            kube_seq_first(&value, CILIUM_KEY_TO_PORTS).and_then(|v| v.as_str()),
+            Some("to-ports-0"),
+            "kube_seq_first must read the first entry of a nested \
+             `<field>[]` sequence — the routed per-CNP \
+             `spec.ingress[0].toPorts[0]` L4-tuple bracket reaches \
+             through this axis"
+        );
+        assert_eq!(
+            kube_seq_first(&value, CILIUM_KEY_FROM_ENDPOINTS).and_then(|v| v.as_str()),
+            Some("from-endpoints-0"),
+            "kube_seq_first must read the first entry of a one-entry \
+             nested sequence — same head-selector semantics regardless \
+             of tail cardinality, mirroring the sibling spec-anchored \
+             head-selector contract"
+        );
+    }
+
+    #[test]
+    fn kube_seq_first_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying three-
+        // hop `get → as_sequence → first` closes on folds through this
+        // accessor to `None`. Pin all four arms so a future refactor
+        // that reaches for `.first().unwrap()` (which would panic on
+        // any of the three upstream short-circuits) or that changes
+        // the empty-sequence arm's verdict is a test-visible break.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<field>)` surface (Value::get returns None on scalar
+        // arms — string, bool, number, null — that expose no per-key
+        // lookup).
+        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        assert_eq!(
+            kube_seq_first(&scalar_receiver, CILIUM_KEY_TO_PORTS),
+            None,
+            "kube_seq_first must short-circuit to None when the \
+             receiver Value carries a scalar YAML type with no `get` \
+             navigation surface — Value::get's scalar-arm None folds \
+             through, preserving the total-function contract"
+        );
+
+        // Arm 2: requested `<field>` axis-key absent from receiver's
+        // mapping (Value::get trailing miss).
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_str_key(
+            CILIUM_KEY_FROM_ENDPOINTS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("only-fe".into())]),
+        );
+        let missing_field = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_seq_first(&missing_field, CILIUM_KEY_TO_PORTS),
+            None,
+            "kube_seq_first must short-circuit to None when the \
+             requested `<field>` axis-key is absent from the receiver's \
+             mapping — Value::get's trailing miss folds through"
+        );
+
+        // Arm 3: `<field>` present but non-sequence (trailing
+        // `.as_sequence()` shape-gate short-circuit).
+        let mut non_seq = serde_yaml::Mapping::new();
+        non_seq.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::String("scalar-not-sequence".into()),
+        );
+        let non_seq_field = serde_yaml::Value::Mapping(non_seq);
+        assert_eq!(
+            kube_seq_first(&non_seq_field, CILIUM_KEY_TO_PORTS),
+            None,
+            "kube_seq_first must short-circuit to None when the \
+             `<field>` value carries a non-sequence YAML type — the \
+             trailing `.as_sequence()` shape-gate fold-through short-\
+             circuits here"
+        );
+
+        // Arm 4: sequence present but empty (trailing `.first()`
+        // head-selector empty-arm — distinct from the three upstream
+        // arms, the sequence is legally-emitted, it just carries no
+        // head entry to read).
+        let mut empty = serde_yaml::Mapping::new();
+        empty.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
+        let empty_seq = serde_yaml::Value::Mapping(empty);
+        assert_eq!(
+            kube_seq_first(&empty_seq, CILIUM_KEY_TO_PORTS),
+            None,
+            "kube_seq_first must return None on a present-but-empty \
+             sequence — the trailing `.first()` head-selector folds \
+             the zero-cardinality arm onto the same None verdict \
+             every routed caller downstream treats it as"
+        );
+    }
+
+    #[test]
+    fn kube_seq_first_matches_prior_inline_three_hop_chain() {
+        // Cross-check the value-level primitive's output byte-for-byte
+        // against the prior inline
+        // `.get(<F>).and_then(|v| v.as_sequence()).and_then(|s| s.first())`
+        // three-hop chain the 20 routed caller sites in caixa-mesh
+        // previously carried. A drift between the helper's return and
+        // the inline chain would silently regress every downstream
+        // continuation (`.get(<KEY>)`, `.as_u64()`,
+        // `.and_then(kube_match_labels)`, `.expect(...)`) — pin the
+        // byte-equivalence across four representative sub-field axis-
+        // keys spanning both CNP nested brackets (toPorts,
+        // fromEndpoints) and the Gateway API HTTPRoute nested brackets
+        // (backendRefs, matches) so the composed helper stays a drop-
+        // in replacement for the routed sites' prior three-line block.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("tp-0".into())]),
+        );
+        inner.insert_str_key(
+            CILIUM_KEY_FROM_ENDPOINTS,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("fe-0".into()),
+                serde_yaml::Value::String("fe-1".into()),
+            ]),
+        );
+        inner.insert_str_key(
+            GATEWAY_API_KEY_BACKEND_REFS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("br-0".into())]),
+        );
+        inner.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_yaml::Value::Sequence(vec![]));
+        let value = serde_yaml::Value::Mapping(inner);
+
+        for sub_field in [
+            CILIUM_KEY_TO_PORTS,
+            CILIUM_KEY_FROM_ENDPOINTS,
+            GATEWAY_API_KEY_BACKEND_REFS,
+            GATEWAY_API_KEY_MATCHES,
+        ] {
+            let via_helper = kube_seq_first(&value, sub_field);
+            let via_inline = value
+                .get(sub_field)
+                .and_then(|v| v.as_sequence())
+                .and_then(|s| s.first());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_seq_first(v, {sub_field:?}) must byte-equal the \
+                 prior inline `.get({sub_field:?}).and_then(|v| v.as_sequence())\
+                 .and_then(|s| s.first())` three-hop chain — the lift \
+                 must stay a drop-in for every routed caller's \
+                 downstream continuation posture"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_seq_first_composes_naturally_below_kube_spec_seq_first() {
+        // Peer-composition pin: the two accessors stack cleanly on the
+        // outer `spec.<outer>[0].<inner>[0]` two-hop-nested first-entry
+        // readback path — outer hop via [`kube_spec_seq_first`], inner
+        // hop via this accessor. The four-line
+        // `kube_spec_seq_first(v, OUTER).and_then(|o| o.get(INNER))
+        // .and_then(|s| s.as_sequence()).and_then(|s| s.first())`
+        // becomes the two-line
+        // `kube_spec_seq_first(v, OUTER).and_then(|o| kube_seq_first(o, INNER))`
+        // — pin the two-line composition byte-for-byte against the
+        // four-line inline across the canonical routed sites
+        // (spec.ingress[0].toPorts[0] on CNP, spec.rules[0].backendRefs[0]
+        // on HTTPRoute) so a future refactor bypassing either peer is
+        // a test-visible break.
+        let mut inner_ingress = serde_yaml::Mapping::new();
+        inner_ingress.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("cnp-tp-0".into())]),
+        );
+        let mut inner_rule = serde_yaml::Mapping::new();
+        inner_rule.insert_str_key(
+            GATEWAY_API_KEY_BACKEND_REFS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("route-br-0".into())]),
+        );
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            CILIUM_KEY_INGRESS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_ingress)]),
+        );
+        spec.insert_str_key(
+            KUBE_KEY_RULES,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_rule)]),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for (outer, inner) in [
+            (CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
+            (KUBE_KEY_RULES, GATEWAY_API_KEY_BACKEND_REFS),
+        ] {
+            let via_composed =
+                kube_spec_seq_first(&value, outer).and_then(|o| kube_seq_first(o, inner));
+            let via_inline = kube_spec_seq_first(&value, outer)
+                .and_then(|o| o.get(inner))
+                .and_then(|s| s.as_sequence())
+                .and_then(|s| s.first());
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_spec_seq_first(v, {outer:?}) + kube_seq_first(o, {inner:?}) \
+                 must byte-equal the four-hop inline `.get({inner:?}).as_sequence().first()` \
+                 chain the routed per-`spec.<outer>[0].<inner>[0]` \
+                 sites previously carried below the outer spec-anchored \
+                 first-entry accessor"
             );
         }
     }
