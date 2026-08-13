@@ -22020,6 +22020,104 @@ pub fn kube_seq<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a ser
     value.get(field).and_then(|v| v.as_sequence())
 }
 
+/// Read a sub-`<field>` YAML scalar-str nested one hop under an
+/// arbitrary `&serde_yaml::Value` mapping receiver as `Option<&str>`
+/// — the value-level two-hop navigation primitive that folds
+/// `.get(<field>) → as_str` into a single helper call. Scalar-str-
+/// arity peer of the value-level sequence-arity [`kube_seq`]
+/// (9c74ddb) and value-level first-entry [`kube_seq_first`]
+/// (2d6cb54): the trio spans the value-level per-`<field>` axis at
+/// the three arities every routed test-side + production per-nested-
+/// mapping scalar-typed readback walks through — sequence via
+/// [`kube_seq`], head-entry via [`kube_seq_first`], string-scalar via
+/// this accessor. Structural peer to the spec-anchored
+/// [`kube_spec_str_field`] (c4fe21d), metadata-anchored
+/// [`kube_metadata_str_field`] (18827), and root-anchored
+/// [`kube_root_str_field`] (18921) accessors at one altitude below —
+/// where each of those folds an outer prelude (`spec` /
+/// `metadata` / root shape-gate) before the same trailing
+/// `get → as_str` two-hop, this accessor drops the outer prelude
+/// and stays parametric on the receiver `&Value` — so a caller
+/// already holding a nested `&Value` (a `spec.ingress[0]` bracket
+/// returned from [`kube_spec_seq_first`], a `spec.rules[0]` first-
+/// rule bracket from the sibling per-`HTTPRoute` readback, a
+/// `spec.listeners[0]` first-listener bracket from the sibling
+/// per-`Gateway` readback, a `spec.programs[N]` per-entry aggregate
+/// element returned from [`kube_root_seq_field`] indexing, any
+/// two-hop nested-mapping bracket the M3 renderer set exposes)
+/// reaches for this accessor directly instead of re-inlining the
+/// two-line `.get(<K>).and_then(|v| v.as_str())` block.
+///
+/// Returns `None` on any of the three short-circuit arms folded
+/// through the underlying two-hop composition: the receiver `value`
+/// carries a YAML type without a `get(<field>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms —
+/// string, bool, number, null — that expose no per-key lookup), the
+/// requested `<field>` axis-key is absent from the receiver's
+/// mapping ([`serde_yaml::Value::get`] trailing miss), or the sub-
+/// field value is present but carries a non-string YAML type (the
+/// trailing `.as_str()` shape-gate short-circuit — a schema-invalid
+/// scalar type per the K8s apiserver's `OpenAPI` schema but
+/// tolerated here as `None` so the readback stays a total function).
+/// The returned `&str` borrows into the input `Value` — the caller
+/// decides whether to `assert_eq!(_, Some(<expected>))` for a
+/// determinism pin, thread it through a downstream `Option::map` /
+/// `.filter(|s| _)` predicate, or `.expect(...)` for a load-bearing
+/// scalar identity.
+///
+/// The canonical shape ~18 test-side + production per-nested-
+/// mapping scalar-str readback sites in [`caixa-mesh`][mesh],
+/// [`caixa-flux`][flux], and [`caixa-helm`][helm] previously
+/// carried inline as the two-line composition
+///
+/// ```ignore
+/// <value>.get(<FIELD>).and_then(|v| v.as_str())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field
+/// axis-key — [`KUBE_KEY_PROTOCOL`] on the per-CNP
+/// `toPorts[0].ports[0].protocol:` L4 tuple, `FLEET_PROGRAMS_KEY_APLICACAO`
+/// on the per-programs.yaml-entry parent-Aplicacao label,
+/// [`CILIUM_KEY_PATH`] on the per-CNP L7 HTTP-rule path predicate,
+/// [`GATEWAY_API_KEY_HOSTNAME`] on the per-`Gateway` listener
+/// hostname, [`GATEWAY_API_KEY_NAME`] on the per-`Gateway` listener
+/// name and per-`HTTPRoute` backendRef name, [`FLEET_PROGRAMS_KEY_NAME`]
+/// on the per-fleet-programs entry `name:` axis,
+/// [`KUBE_KEY_NAMESPACE`] on the per-programs-entry namespace-
+/// scoping axis, [`M2_LIMITS_KEY_MEMORY`] / [`M2_LIMITS_KEY_CPU`] /
+/// [`M2_LIMITS_KEY_WALL_CLOCK`] on the per-`:limits` slot rendered-
+/// scalar readbacks). After this lift every routed consumer folds
+/// the two-line navigation onto `kube_str(<value>, <FIELD>)` — the
+/// two-hop `get → as_str` walk happens once inside the helper, and
+/// the caller keeps its downstream assertion posture (`assert_eq!(_,
+/// Some(<expected>))`, `.expect(...)`, an `if let Some(s) = _`
+/// bind) unchanged — the lift closes the navigation surface, not
+/// the per-site downstream posture.
+///
+/// Every future nested `<field>` scalar-str readback the M3.x + M4
+/// renderer set materializes (per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` per-policy scalar-typed fields,
+/// the `app-operator`'s per-Aplicacao materializer's
+/// `spec.entrada.host` / `spec.entrada.paths[N]` per-string-scalar
+/// readbacks, the future `caixa-otel` per-Servico per-`receivers.
+/// <name>.endpoint` scalar-str readback) reaches this one helper by
+/// construction. No per-consumer two-hop re-inline; no coordinated
+/// rewrite across every nested-scalar readback on a future
+/// [`serde_yaml`] surface rebrand or shape-gate shift. The trio
+/// ([`kube_seq`], [`kube_seq_first`], `kube_str`) now closes the
+/// value-level axis at the three principal arities — sequence,
+/// head-entry, string-scalar — matching the closed shape of the
+/// spec/metadata/root-anchored families one altitude above.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_str<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
+    value.get(field).and_then(|v| v.as_str())
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -47087,5 +47185,201 @@ spec:
                  first-entry accessor"
             );
         }
+    }
+
+    #[test]
+    fn kube_str_reads_sub_field_scalar_str_borrowing_into_input_value() {
+        // Load-bearing contract: given a `&Value` mapping receiver
+        // carrying a nested `<field>: "<str>"` scalar-string entry at
+        // a per-key axis, the value-level two-hop scalar-str primitive
+        // returns `Some(<str>)` borrowing into the input Value so the
+        // routed determinism-pin caller reaches the string without a
+        // further clone. Scalar-str peer of the sibling
+        // [`kube_seq`] / [`kube_seq_first`] value-level accessors — this
+        // exercises the same value-level two-hop navigation but with a
+        // string-arity shape-gate instead of a sequence-arity or head-
+        // selector one.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
+        inner.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, "checkout");
+        let value = serde_yaml::Value::Mapping(inner);
+
+        assert_eq!(
+            kube_str(&value, KUBE_KEY_PROTOCOL),
+            Some(KUBE_PROTOCOL_TCP),
+            "kube_str must return the sub-field scalar-str verbatim — \
+             the routed per-CNP `toPorts[0].ports[0].protocol:` L4 \
+             tuple readback site now reaches through this accessor \
+             for the load-bearing K8s core Protocol OpenAPI schema \
+             enum identity pin"
+        );
+        assert_eq!(
+            kube_str(&value, FLEET_PROGRAMS_KEY_APLICACAO),
+            Some("checkout"),
+            "kube_str must return the sub-field scalar-str verbatim \
+             across a second axis-key — the routed per-programs.yaml-\
+             entry parent-Aplicacao label determinism pin sits here"
+        );
+    }
+
+    #[test]
+    fn kube_str_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying two-hop
+        // `get → as_str` closes on folds through this accessor to
+        // `None`. Pin all three arms so a future refactor reaching for
+        // `.as_str().unwrap()` (which would panic on any of the three
+        // arms) is a test-visible break.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<field>)` surface.
+        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        assert_eq!(
+            kube_str(&scalar_receiver, KUBE_KEY_PROTOCOL),
+            None,
+            "kube_str must short-circuit to None when the receiver \
+             Value carries a scalar YAML type with no `get` navigation \
+             surface — Value::get's scalar-arm None folds through, \
+             preserving the total-function contract"
+        );
+
+        // Arm 2: requested `<field>` axis-key absent from receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, "other");
+        let missing_field = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_str(&missing_field, KUBE_KEY_PROTOCOL),
+            None,
+            "kube_str must short-circuit to None when the requested \
+             `<field>` axis-key is absent from the receiver's mapping \
+             — Value::get's trailing miss folds through"
+        );
+
+        // Arm 3: `<field>` present but non-string.
+        let mut non_str = serde_yaml::Mapping::new();
+        non_str.insert_str_key(
+            KUBE_KEY_PROTOCOL,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("not-a-str".into())]),
+        );
+        let non_str_field = serde_yaml::Value::Mapping(non_str);
+        assert_eq!(
+            kube_str(&non_str_field, KUBE_KEY_PROTOCOL),
+            None,
+            "kube_str must short-circuit to None when the `<field>` \
+             value carries a non-string YAML type — the trailing \
+             `.as_str()` shape-gate fold-through short-circuits here"
+        );
+    }
+
+    #[test]
+    fn kube_str_matches_prior_inline_two_hop_chain() {
+        // Cross-check the value-level primitive's output byte-for-byte
+        // against the prior inline `.get(<F>).and_then(|v| v.as_str())`
+        // two-hop chain the ~18 routed caller sites in caixa-mesh +
+        // caixa-flux + caixa-helm previously carried. A drift between
+        // the helper's return and the inline chain would silently
+        // regress every downstream determinism-pin (`assert_eq!(_,
+        // Some(<expected>))`, `.expect(...)`) — pin the byte-
+        // equivalence across four representative sub-field axis-keys
+        // spanning the CNP L4-tuple axis (protocol), the programs.yaml
+        // entry axes (name, aplicacao), and the Gateway API listener
+        // axis (hostname) so the composed helper stays a drop-in
+        // replacement for the routed sites' prior two-line block.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
+        inner.insert_string(FLEET_PROGRAMS_KEY_NAME, "hello-rio");
+        inner.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, "checkout");
+        inner.insert_string(GATEWAY_API_KEY_HOSTNAME, "checkout.quero.cloud");
+        inner.insert_str_key(
+            CILIUM_KEY_HTTP,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("not-a-str".into())]),
+        );
+        let value = serde_yaml::Value::Mapping(inner);
+
+        for sub_field in [
+            KUBE_KEY_PROTOCOL,
+            FLEET_PROGRAMS_KEY_NAME,
+            FLEET_PROGRAMS_KEY_APLICACAO,
+            GATEWAY_API_KEY_HOSTNAME,
+            CILIUM_KEY_HTTP,
+        ] {
+            let via_helper = kube_str(&value, sub_field);
+            let via_inline = value.get(sub_field).and_then(|v| v.as_str());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_str(v, {sub_field:?}) must byte-equal the prior \
+                 inline `.get({sub_field:?}).and_then(|v| v.as_str())` \
+                 two-hop chain — the lift must stay a drop-in for \
+                 every routed caller's downstream determinism-pin \
+                 posture"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_str_composes_naturally_below_kube_seq_first() {
+        // Composition pin: the two-hop-nested spec-anchored + value-
+        // level scalar-str readback path `spec.<outer>[0].<inner>` —
+        // e.g. the per-CNP `spec.ingress[0].fromEndpoints[0].<label>`
+        // per-endpoint-selector scalar-label bracket, the per-`HTTPRoute`
+        // `spec.rules[0].matches[0].path.<field>` L7 match sub-scalar
+        // bracket — must compose byte-equally through
+        // `kube_spec_seq_first(v, OUTER).and_then(|o| kube_str(o, INNER))`
+        // and the equivalent four-hop inline
+        // `.get(<INNER>).as_str()` chain nested under the outer spec-
+        // anchored first-entry accessor. Pin the composition across two
+        // canonical two-hop-nested outer/inner pairs (CNP ingress
+        // fromEndpoints label; HTTPRoute rules matches path-type) so
+        // the sibling-composition surface stays contract-preserving.
+        let mut inner_map = serde_yaml::Mapping::new();
+        inner_map.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
+        let inner_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_map)]);
+
+        let mut outer_map = serde_yaml::Mapping::new();
+        outer_map.insert_str_key(CILIUM_KEY_TO_PORTS, inner_seq);
+
+        let mut spec_map = serde_yaml::Mapping::new();
+        spec_map.insert_str_key(
+            CILIUM_KEY_INGRESS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(outer_map)]),
+        );
+
+        let mut root_map = serde_yaml::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
+        let value = serde_yaml::Value::Mapping(root_map);
+
+        let via_composed = kube_spec_seq_first(&value, CILIUM_KEY_INGRESS)
+            .and_then(|o| kube_seq_first(o, CILIUM_KEY_TO_PORTS))
+            .and_then(|tp| kube_str(tp, KUBE_KEY_PROTOCOL));
+        let via_inline = value
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.as_mapping())
+            .and_then(|m| m.get(CILIUM_KEY_INGRESS))
+            .and_then(|v| v.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|o| o.get(CILIUM_KEY_TO_PORTS))
+            .and_then(|v| v.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|tp| tp.get(KUBE_KEY_PROTOCOL))
+            .and_then(|v| v.as_str());
+        assert_eq!(
+            via_composed, via_inline,
+            "kube_spec_seq_first(v, INGRESS) + kube_seq_first(o, TO_PORTS) \
+             + kube_str(tp, PROTOCOL) must byte-equal the eight-hop \
+             inline `.get(SPEC).as_mapping().get(INGRESS).as_sequence()\
+             .first().get(TO_PORTS).as_sequence().first().get(PROTOCOL)\
+             .as_str()` chain the routed per-`spec.<outer>[0].<inner>\
+             [0].<scalar-str>` sites previously carried below the two \
+             outer sequence-first accessors"
+        );
+        assert_eq!(
+            via_composed,
+            Some(KUBE_PROTOCOL_TCP),
+            "the composed two-hop-nested scalar-str readback must \
+             surface the per-tuple `protocol:` scalar the fixture \
+             seeds — a drop-in for the routed per-CNP L4-tuple \
+             `spec.ingress[0].toPorts[0].protocol` determinism-pin \
+             site"
+        );
     }
 }

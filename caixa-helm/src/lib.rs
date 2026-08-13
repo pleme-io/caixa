@@ -1000,7 +1000,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_CALL, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR,
         M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
-        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK,
+        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, kube_str,
     };
     use std::path::PathBuf;
 
@@ -1439,24 +1439,13 @@ spec:
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let limits = cu_block.get(M2_KEY_LIMITS).expect("limits must propagate");
-        assert_eq!(
-            limits.get(M2_LIMITS_KEY_MEMORY).and_then(|m| m.as_str()),
-            Some("64MiB")
-        );
+        assert_eq!(kube_str(limits, M2_LIMITS_KEY_MEMORY), Some("64MiB"));
         assert_eq!(
             limits.get(M2_LIMITS_KEY_FUEL).and_then(|m| m.as_u64()),
             Some(1_000_000)
         );
-        assert_eq!(
-            limits
-                .get(M2_LIMITS_KEY_WALL_CLOCK)
-                .and_then(|m| m.as_str()),
-            Some("30s")
-        );
-        assert_eq!(
-            limits.get(M2_LIMITS_KEY_CPU).and_then(|m| m.as_str()),
-            Some("500m")
-        );
+        assert_eq!(kube_str(limits, M2_LIMITS_KEY_WALL_CLOCK), Some("30s"));
+        assert_eq!(kube_str(limits, M2_LIMITS_KEY_CPU), Some("500m"));
     }
 
     #[test]
