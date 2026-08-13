@@ -6625,11 +6625,7 @@ mod tests {
         let routes = gateway_routes(&c).unwrap();
         let route = routes
             .iter()
-            .find(|r| {
-                r.get(KUBE_KEY_KIND)
-                    .and_then(|k| k.as_str())
-                    .is_some_and(|k| k == GATEWAY_API_KIND_HTTP_ROUTE)
-            })
+            .find(|r| kube_kind_is(r, GATEWAY_API_KIND_HTTP_ROUTE))
             .expect("gateway_routes emits at least one HTTPRoute for the fixture Aplicacao");
         let emitted = kube_spec_seq_field(route, GATEWAY_API_KEY_PARENT_REFS)
             .and_then(|s| s.first())
@@ -7959,12 +7955,7 @@ mod tests {
         assert_eq!(docs.len(), 2);
         let kinds: Vec<_> = docs
             .iter()
-            .map(|d| {
-                d.get(KUBE_KEY_KIND)
-                    .and_then(|k| k.as_str())
-                    .unwrap()
-                    .to_string()
-            })
+            .map(|d| kube_kind(d).unwrap().to_string())
             .collect();
         assert!(kinds.contains(&GATEWAY_API_KIND_GATEWAY.to_string()));
         assert!(kinds.contains(&GATEWAY_API_KIND_HTTP_ROUTE.to_string()));
@@ -9334,11 +9325,7 @@ mod tests {
         assert_eq!(docs.len(), 7);
         let kinds: Vec<_> = docs
             .iter()
-            .filter_map(|d| {
-                d.get(KUBE_KEY_KIND)
-                    .and_then(|k| k.as_str())
-                    .map(|s| s.to_string())
-            })
+            .filter_map(|d| kube_kind(d).map(|s| s.to_string()))
             .collect();
         // programs entries don't carry `kind:`; cilium + gateway docs do.
         assert!(kinds.contains(&CILIUM_KIND_NETWORK_POLICY.to_string()));
