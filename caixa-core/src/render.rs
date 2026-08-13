@@ -21271,6 +21271,78 @@ pub fn kube_root_map_field<'a>(
     value.get(field).and_then(|v| v.as_mapping())
 }
 
+/// Read a top-level `<field>:` sub-sequence on a K8s custom resource or
+/// helm-values-shaped YAML document as `Option<&serde_yaml::Sequence>` —
+/// the composed sequence-arity per-top-level-field accessor at the root
+/// axis, folding the shape `value.get(field).and_then(|v|
+/// v.as_sequence())` onto one substrate-primitive method call the caller
+/// reads as intent (`kube_root_seq_field(<value>, <FIELD>)` — "read this
+/// document's top-level `<FIELD>:` sequence") rather than as a two-hop
+/// `readback → shape-gate` chain. Structural mirror at the root axis of
+/// the sibling composed sequence-arity accessors on the sub-axes:
+/// [`kube_metadata_seq_field`] (139a94b) on the sub-`metadata.<field>`
+/// axis and [`kube_spec_seq_field`] (fc64ed7) on the sub-`spec.<field>`
+/// axis — same trailing `.as_sequence()` shape-gate closure folded onto
+/// the readback, differing only in which axis the caller navigates (top-
+/// level `<field>:` here, sub-`metadata.<field>` on the metadata peer,
+/// sub-`spec.<field>` on the spec peer). The root-level variant needs
+/// no outer shape gate on `value` itself — [`serde_yaml::Value::get`]
+/// already short-circuits to `None` on non-Mapping outer values — so
+/// the composition folds on one hop rather than the two hops the sub-
+/// axis peers close. Peer of [`kube_root_str_field`] (ae83f4e) on the
+/// string-scalar-arity root axis and [`kube_root_map_field`] (723f6d7)
+/// on the sub-mapping-arity root axis: the three together close the
+/// root-axis `{str, seq, map}` three-arity family to structural parity
+/// with the sub-`metadata:` `{str, seq, map}` and sub-`spec:` `{str,
+/// seq, map}` three-arity families already closed at the sub-axis
+/// level.
+///
+/// Returns `None` on either short-circuit arm the underlying inline
+/// chain closes: the requested top-level `<field>:` axis-key is absent
+/// (a legally-omitted top-level sub-block — e.g. a values.yaml document
+/// that carries no `programs:` sequence yet, a `List`-shaped document
+/// whose `items:` sequence is absent, a bare `HelmRelease` that carries
+/// no root-level `programs:` when the emitter routes through
+/// `spec.values.programs` instead), or the top-level `<field>:` value
+/// is present but carries a non-sequence YAML type (a schema-invalid
+/// top-level sub-block per the fleet-programs / `HelmRelease` values
+/// contract that pins `programs:` as a Sequence, but tolerated here as
+/// `None` so the readback stays a total function). The returned
+/// `&Sequence` borrows into the input `Value` — the caller decides
+/// whether to iterate (`.iter()`), pick the first entry (`.first()`),
+/// enumerate for length (`.len()`), or clone.
+///
+/// The `field` axis stays parametric (rather than pinned to
+/// [`FLEET_PROGRAMS_KEY_PROGRAMS`] as a separate helper) so the same
+/// lift closes every top-level sequence-shaped axis a future emitter
+/// surfaces: a root-level `items:` readback on a `List`-shaped multi-
+/// doc envelope, a root-level `documents:` readback on a hypothetical
+/// M4 aggregator envelope the future `app-operator` per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer emits
+/// (MESH-COMPOSITION §III.2 #5), a root-level `imports:` readback on
+/// a future `lacre.lisp` closure-manifest envelope — each new top-
+/// level sequence axis reaches this helper with a new axis-key const,
+/// not a fresh per-axis helper.
+///
+/// Two identical-shape test-side call sites in [`caixa-flux`] converge
+/// onto this helper — the [`caixa_flux::upsert_into_programs_yaml`]
+/// round-trip pins at [`caixa_flux::tests::upsert_inserts_new_entry`]
+/// and [`caixa_flux::tests::upsert_replaces_existing_entry`] both
+/// reach through the root-level `programs:` sequence readback on the
+/// bare-values.yaml shape, and both re-derived the same two-hop
+/// `.get(FLEET_PROGRAMS_KEY_PROGRAMS).unwrap().as_sequence().unwrap()`
+/// chain inline. Post-lift each site composes as
+/// `kube_root_seq_field(&modified, FLEET_PROGRAMS_KEY_PROGRAMS).unwrap()`
+/// — the shape they now name is the substrate primitive rather than the
+/// hand-spelled readback chain.
+#[must_use]
+pub fn kube_root_seq_field<'a>(
+    value: &'a serde_yaml::Value,
+    field: &str,
+) -> Option<&'a serde_yaml::Sequence> {
+    value.get(field).and_then(|v| v.as_sequence())
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -44832,6 +44904,188 @@ spec:
                  prior inline `value.get(field).and_then(|v| \
                  v.as_mapping())` chain across the pinned canonical \
                  axes and the open-ended parametric axes — any \
+                 divergence indicates the composition drifted"
+            );
+        }
+    }
+
+    // ── kube_root_seq_field lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_root_seq_field_reads_top_level_field_sequence() {
+        // The lift's load-bearing contract: given a Value carrying the
+        // canonical fleet-programs values.yaml shape (top-level
+        // `programs:` sequence — the bare-values.yaml shape every
+        // [`caixa_flux::upsert_into_programs_yaml`] round-trip pin
+        // navigates), the composed sequence-arity root-axis accessor
+        // returns `Some(<sequence>)` borrowing into the input Value
+        // across the canonical pinned axis
+        // ([`FLEET_PROGRAMS_KEY_PROGRAMS`]) plus an open-ended peer
+        // axis-key (`items`, mirroring a `List`-shaped multi-doc
+        // envelope) that the parametric `<field>` axis leaves reachable
+        // without a fresh helper. Structural mirror of the sibling
+        // `kube_root_map_field_reads_top_level_field_mapping` pin on
+        // the peer sub-mapping-arity root axis.
+        let mut program = serde_yaml::Mapping::new();
+        program.insert_str_key(
+            FLEET_PROGRAMS_KEY_NAME,
+            serde_yaml::Value::String("hello-rio".into()),
+        );
+        let programs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(program)]);
+        let items = serde_yaml::Value::Sequence(vec![]);
+        let mut values = serde_yaml::Mapping::new();
+        values.insert_str_key(FLEET_PROGRAMS_KEY_PROGRAMS, programs);
+        values.insert_str_key("items", items);
+        let value = serde_yaml::Value::Mapping(values);
+
+        assert_eq!(
+            kube_root_seq_field(&value, FLEET_PROGRAMS_KEY_PROGRAMS).map(Vec::len),
+            Some(1),
+            "kube_root_seq_field must read the top-level `programs:` \
+             sequence as a one-entry sequence — the canonical fleet-\
+             programs values.yaml pinned axis that the two \
+             `caixa_flux::upsert_into_programs_yaml` round-trip pins \
+             now compose on"
+        );
+        assert_eq!(
+            kube_root_seq_field(&value, "items").map(Vec::len),
+            Some(0),
+            "kube_root_seq_field must read the top-level `items:` \
+             sequence as an empty sequence when the emitter writes a \
+             legally-empty block — the parametric `<field>` axis stays \
+             open-ended so a future `List`-shaped multi-doc envelope's \
+             `items:` navigation reaches the same helper with a \
+             different key"
+        );
+    }
+
+    #[test]
+    fn kube_root_seq_field_returns_none_when_field_absent() {
+        // Short-circuit arm 1: the requested top-level `<field>:`
+        // axis-key is absent from the outer Mapping (a legally-omitted
+        // top-level sub-block — e.g. a values.yaml document that
+        // carries no `programs:` sequence yet, or a bare status-scoped
+        // document that carries no root-level sequence axis). The
+        // helper folds this to `None` so the readback stays a total
+        // function. Structural mirror of the sibling
+        // `kube_root_map_field_returns_none_when_field_absent` pin on
+        // the peer sub-mapping-arity root axis.
+        let mut values = serde_yaml::Mapping::new();
+        values.insert_str_key(HELM_VALUES_KEY_ENABLED, serde_yaml::Value::Bool(true));
+        let value = serde_yaml::Value::Mapping(values);
+
+        assert_eq!(
+            kube_root_seq_field(&value, FLEET_PROGRAMS_KEY_PROGRAMS),
+            None,
+            "kube_root_seq_field must short-circuit to None when the \
+             requested top-level axis-key is absent from the outer \
+             Mapping"
+        );
+    }
+
+    #[test]
+    fn kube_root_seq_field_returns_none_when_field_carries_non_sequence_type() {
+        // Short-circuit arm 2: the requested top-level `<field>:`
+        // value is present but carries a non-sequence YAML type (a
+        // schema-invalid top-level sub-block per the fleet-programs
+        // values contract that pins `programs:` as a Sequence, but
+        // tolerated here as `None` so the readback stays a total
+        // function). Pin the None-arm across representative non-
+        // sequence shapes so a future refactor that reaches for
+        // `.as_sequence().unwrap()` (which would panic on a scalar
+        // axis-value) is a test-visible break, not a runtime
+        // regression at the first schema-invalid document the reader
+        // sees.
+        for non_sequence in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(false),
+            serde_yaml::Value::Number(serde_yaml::Number::from(0_u64)),
+            serde_yaml::Value::String("programs-as-string".into()),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut values = serde_yaml::Mapping::new();
+            values.insert_str_key(FLEET_PROGRAMS_KEY_PROGRAMS, non_sequence.clone());
+            let value = serde_yaml::Value::Mapping(values);
+            assert_eq!(
+                kube_root_seq_field(&value, FLEET_PROGRAMS_KEY_PROGRAMS),
+                None,
+                "kube_root_seq_field must short-circuit to None when \
+                 the top-level `programs:` axis-key carries a non-\
+                 sequence YAML type ({non_sequence:?}) — the trailing \
+                 `.as_sequence()` shape-gate closure inside the helper \
+                 folds this to None"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_seq_field_short_circuits_when_outer_value_is_non_mapping() {
+        // Third short-circuit: the outer `value` itself carries a non-
+        // Mapping YAML type. Unlike the sub-`metadata:` / sub-`spec:`
+        // seq peers which need an explicit `.as_mapping()` gate on the
+        // outer sub-block, the root-axis variant needs no explicit
+        // outer shape gate — [`serde_yaml::Value::get`] already short-
+        // circuits to None on non-Mapping outer values. Pin the None-
+        // arm across the five non-Mapping outer shapes so a future
+        // serde_yaml revision that changes the `Value::get` outer-
+        // shape contract lights up here rather than silently
+        // desynchronizing the root axis from its sub-axis peers.
+        // Structural mirror of the sibling
+        // `kube_root_map_field_short_circuits_when_outer_value_is_non_mapping`
+        // pin on the peer sub-mapping-arity root axis.
+        let outer_shapes = [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::String("not-a-mapping".into()),
+            serde_yaml::Value::Sequence(vec![]),
+        ];
+        for outer in outer_shapes {
+            assert_eq!(
+                kube_root_seq_field(&outer, FLEET_PROGRAMS_KEY_PROGRAMS),
+                None,
+                "kube_root_seq_field must short-circuit to None on \
+                 every non-Mapping outer Value shape — Value::get \
+                 handles the outer-shape gate the sub-axis peers \
+                 close explicitly"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_seq_field_matches_prior_inline_chain() {
+        // Byte-equivalence pin: the lifted `kube_root_seq_field`
+        // helper resolves exactly the same `Option<&Sequence>` as the
+        // two-hop `value.get(field).and_then(|v| v.as_sequence())`
+        // inline chain the two [`caixa_flux::upsert_into_programs_yaml`]
+        // round-trip test pins previously each carried inline. A
+        // future refactor that mistakenly desynchronizes the lifted
+        // primitive from that inline shape lights up here rather than
+        // silently splitting the two pinned peers back apart across
+        // the substrate. Structural mirror of the sibling
+        // `kube_root_map_field_matches_prior_inline_chain` pin on the
+        // peer sub-mapping-arity root axis.
+        let mut program = serde_yaml::Mapping::new();
+        program.insert_str_key(
+            FLEET_PROGRAMS_KEY_NAME,
+            serde_yaml::Value::String("hello-rio".into()),
+        );
+        let mut values = serde_yaml::Mapping::new();
+        values.insert_str_key(
+            FLEET_PROGRAMS_KEY_PROGRAMS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(program)]),
+        );
+        values.insert_str_key("items", serde_yaml::Value::Sequence(vec![]));
+        let value = serde_yaml::Value::Mapping(values);
+
+        for field in [FLEET_PROGRAMS_KEY_PROGRAMS, "items", "documents"] {
+            assert_eq!(
+                kube_root_seq_field(&value, field),
+                value.get(field).and_then(|v| v.as_sequence()),
+                "kube_root_seq_field must be byte-equivalent to the \
+                 prior inline `value.get(field).and_then(|v| \
+                 v.as_sequence())` chain across the pinned canonical \
+                 axis and the open-ended parametric axes — any \
                  divergence indicates the composition drifted"
             );
         }
