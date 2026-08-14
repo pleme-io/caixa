@@ -6597,8 +6597,7 @@ mod tests {
             .find(|r| kube_kind_is(r, GATEWAY_API_KIND_HTTP_ROUTE))
             .expect("gateway_routes emits at least one HTTPRoute for the fixture Aplicacao");
         let emitted = kube_spec_seq_first(route, GATEWAY_API_KEY_PARENT_REFS)
-            .and_then(|p| p.get(GATEWAY_API_KEY_NAME))
-            .and_then(|v| v.as_str())
+            .and_then(|p| kube_str(p, GATEWAY_API_KEY_NAME))
             .expect("HTTPRoute spec.parentRefs[0].name is a string");
         assert_eq!(
             emitted,
@@ -7726,8 +7725,7 @@ mod tests {
             .filter_map(|tp| {
                 tp.get(KUBE_KEY_RULES)
                     .and_then(|r| kube_seq_first(r, CILIUM_KEY_HTTP))
-                    .and_then(|rule| rule.get(CILIUM_KEY_PATH))
-                    .and_then(|v| v.as_str())
+                    .and_then(|rule| kube_str(rule, CILIUM_KEY_PATH))
             })
             .collect();
         assert!(
@@ -8113,8 +8111,7 @@ mod tests {
         let match_path_value = kube_spec_seq_first(route, KUBE_KEY_RULES)
             .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_MATCHES))
             .and_then(|m| m.get(GATEWAY_API_KEY_PATH))
-            .and_then(|p| p.get(GATEWAY_API_KEY_VALUE))
-            .and_then(|v| v.as_str())
+            .and_then(|p| kube_str(p, GATEWAY_API_KEY_VALUE))
             .expect("HTTPRoute rules[0].matches[0].path.value present");
         assert_eq!(
             match_path_value, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
@@ -8175,8 +8172,7 @@ mod tests {
                 .map(|r| {
                     kube_seq_first(r, GATEWAY_API_KEY_MATCHES)
                         .and_then(|m| m.get(GATEWAY_API_KEY_PATH))
-                        .and_then(|p| p.get(GATEWAY_API_KEY_VALUE))
-                        .and_then(|v| v.as_str())
+                        .and_then(|p| kube_str(p, GATEWAY_API_KEY_VALUE))
                         .expect("each HTTPRoute rule carries a matches[0].path.value scalar")
                         .to_string()
                 })
@@ -8332,8 +8328,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         let listener_hostname = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS)
-            .and_then(|l| l.get(GATEWAY_API_KEY_HOSTNAME))
-            .and_then(|h| h.as_str())
+            .and_then(|l| kube_str(l, GATEWAY_API_KEY_HOSTNAME))
             .expect("Gateway listener carries a hostname scalar")
             .to_string();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
@@ -8502,8 +8497,7 @@ mod tests {
             .to_string();
         let backend_name = kube_spec_seq_first(route, KUBE_KEY_RULES)
             .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
-            .and_then(|b| b.get(GATEWAY_API_KEY_NAME))
-            .and_then(|n| n.as_str())
+            .and_then(|b| kube_str(b, GATEWAY_API_KEY_NAME))
             .expect("first HTTPRoute rule's first backendRef.name scalar present")
             .to_string();
         assert_eq!(
@@ -8656,8 +8650,7 @@ mod tests {
             let cnp_port = kube_spec_seq_first(policy, CILIUM_KEY_INGRESS)
                 .and_then(|i| kube_seq_first(i, CILIUM_KEY_TO_PORTS))
                 .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
-                .and_then(|p| p.get(KUBE_KEY_PORT))
-                .and_then(|v| v.as_str())
+                .and_then(|p| kube_str(p, KUBE_KEY_PORT))
                 .expect("CNP toPorts[0].ports[0].port present");
             assert_eq!(
                 cnp_port,
@@ -9358,8 +9351,7 @@ mod tests {
         for rule in &rules {
             let req = rule
                 .get(GATEWAY_API_KEY_TIMEOUTS)
-                .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
-                .and_then(|v| v.as_str())
+                .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST))
                 .expect("each of the 3 rules carries timeouts.request");
             assert_eq!(req, "30s");
         }
@@ -9383,8 +9375,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
-                    .and_then(|v| v.as_str()),
+                    .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST)),
                 Some("90s")
             );
         }
@@ -9408,8 +9399,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
-                    .and_then(|v| v.as_str()),
+                    .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST)),
                 Some("1m")
             );
         }
@@ -9588,8 +9578,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
-                    .and_then(|v| v.as_str()),
+                    .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST)),
                 Some("15s")
             );
             assert!(
@@ -9743,8 +9732,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(CILIUM_KEY_AUTHENTICATION)
-                    .and_then(|a| a.get(CILIUM_KEY_MODE))
-                    .and_then(|v| v.as_str()),
+                    .and_then(|a| kube_str(a, CILIUM_KEY_MODE)),
                 Some(CILIUM_AUTH_MODE_REQUIRED),
                 "every CNP's ingress rule must carry the authentication overlay"
             );
@@ -9817,8 +9805,7 @@ mod tests {
         let rule = kube_spec_seq_first(nats_policy, CILIUM_KEY_INGRESS).expect("ingress[0]");
         assert_eq!(
             rule.get(CILIUM_KEY_AUTHENTICATION)
-                .and_then(|a| a.get(CILIUM_KEY_MODE))
-                .and_then(|v| v.as_str()),
+                .and_then(|a| kube_str(a, CILIUM_KEY_MODE)),
             Some(CILIUM_AUTH_MODE_REQUIRED)
         );
     }
@@ -9849,8 +9836,7 @@ mod tests {
         let port_value = kube_spec_seq_first(cart_to_payment, CILIUM_KEY_INGRESS)
             .and_then(|i| kube_seq_first(i, CILIUM_KEY_TO_PORTS))
             .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
-            .and_then(|p| p.get(KUBE_KEY_PORT))
-            .and_then(|v| v.as_str())
+            .and_then(|p| kube_str(p, KUBE_KEY_PORT))
             .expect("toPorts[0].ports[0].port present");
         assert_eq!(
             port_value,
@@ -9895,8 +9881,7 @@ mod tests {
         let port_value = kube_spec_seq_first(cart_to_catalog, CILIUM_KEY_INGRESS)
             .and_then(|i| kube_seq_first(i, CILIUM_KEY_TO_PORTS))
             .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
-            .and_then(|p| p.get(KUBE_KEY_PORT))
-            .and_then(|v| v.as_str())
+            .and_then(|p| kube_str(p, KUBE_KEY_PORT))
             .expect("toPorts[0].ports[0].port present");
         assert_eq!(
             port_value,

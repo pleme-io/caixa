@@ -5092,9 +5092,7 @@ spec:
              the bootstrap kustomize-controller's watch window"
         );
         assert_eq!(
-            kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
-                .and_then(|r| r.get("name"))
-                .and_then(|n| n.as_str()),
+            kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF).and_then(|r| kube_str(r, "name")),
             Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
             "kustomization.yaml spec.sourceRef.name must spell the lifted \
              DEFAULT_FLUX_SYSTEM_NAMESPACE ({DEFAULT_FLUX_SYSTEM_NAMESPACE:?}); \
@@ -7520,8 +7518,7 @@ spec:
             let parsed: serde_yaml::Value =
                 serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
             let sub_selector = kube_spec_field(&parsed, FLUX_GITREPOSITORY_KEY_REF)
-                .and_then(|r| r.get(expected_key))
-                .and_then(|v| v.as_str())
+                .and_then(|r| kube_str(r, expected_key))
                 .unwrap_or_else(|| {
                     panic!(
                         "spec.ref.{expected_key:?} missing or non-string \
