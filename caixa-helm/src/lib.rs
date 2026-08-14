@@ -1000,7 +1000,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_CALL, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR,
         M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
-        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, kube_str, kube_u64,
+        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, kube_str, kube_u64, mapping_string_keys,
     };
     use std::path::PathBuf;
 
@@ -1188,10 +1188,7 @@ spec:
              (got top-level keys: {keys:?})",
             keys = parsed
                 .as_mapping()
-                .map(|m| m
-                    .keys()
-                    .filter_map(|k| k.as_str().map(str::to_string))
-                    .collect::<Vec<_>>())
+                .map(mapping_string_keys)
                 .unwrap_or_default()
         );
         assert!(
@@ -2022,10 +2019,7 @@ spec:
                  drifted per-dep sub-mapping field and the per-dep resolver \
                  falls back to the parsed-shape defaults); the emitted mapping \
                  keys are {keys:?}",
-                keys = mapping
-                    .keys()
-                    .filter_map(|k| k.as_str().map(str::to_string))
-                    .collect::<Vec<_>>()
+                keys = mapping_string_keys(mapping)
             );
         }
     }
@@ -2113,10 +2107,7 @@ spec:
              `helm dependency build` / `helm template` time far from the \
              drift site with no field naming the top-level-list-key-drift \
              root cause); the emitted top-level mapping keys are {keys:?}",
-            keys = mapping
-                .keys()
-                .filter_map(|k| k.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
+            keys = mapping_string_keys(mapping)
         );
     }
 

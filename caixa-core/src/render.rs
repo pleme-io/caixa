@@ -18717,6 +18717,119 @@ pub fn string_keyed_entries(
         .filter_map(|(k, v)| k.as_str().map(|s| (s, v)))
 }
 
+/// Collect the string-shaped keys of a [`serde_yaml::Mapping`] as owned
+/// [`String`]s — the canonical shape the assert-side diagnostic
+/// blocks routed across [`caixa-mesh`][mesh]'s per-`Placement` /
+/// [`caixa-helm`][helm]'s per-`Chart.yaml` / per-`ChartDependency` /
+/// per-`values.yaml` serde-derive drift-detection pins previously
+/// reached for as the three-line composition
+///
+/// ```ignore
+/// keys = <mapping>
+///     .keys()
+///     .filter_map(|k| k.as_str().map(str::to_string))
+///     .collect::<Vec<_>>()
+/// ```
+///
+/// around a one-token semantic payload (the receiver `<mapping>`
+/// bracket the assert's failure-message wants a full string-keyed
+/// enumeration off — the [`serde_yaml::Value::to_value(&Placement)
+/// .as_mapping()`] bracket the four `caixa-mesh` per-`Placement`
+/// pins compare `M3_PLACEMENT_KEY_ESTRATEGIA` /
+/// `M3_PLACEMENT_KEY_CLUSTERS` / `M3_PLACEMENT_KEY_AFFINITY` /
+/// `M3_PLACEMENT_KEY_SHARD_KEY` `contains_key` presence against, the
+/// [`caixa-helm`] cluster-bundle `values.yaml` parsed
+/// [`serde_yaml::Value::as_mapping()`] bracket the
+/// `HELM_VALUES_KEY_ENABLED` /
+/// `COMPUTEUNIT_SPEC_KEY_MODULE|TRIGGER|CAPABILITIES` presence pins
+/// enumerate on failure, the [`caixa-helm`] per-`ChartDependency`
+/// serde-derive round-trip mapping the
+/// `HELM_CHART_DEPENDENCY_KEY_NAME|VERSION|REPOSITORY|ALIAS` tetrad
+/// probe against, the [`caixa-helm`] per-`Chart.yaml` top-level
+/// dependency-list-container `HELM_CHART_KEY_DEPENDENCIES`
+/// contains-key pin). The three-line composition folds three
+/// stacked axes (`.keys()` bare iterator, per-key
+/// `.and_then(|k| k.as_str())` shape gate, per-borrowed-`&str`
+/// `.map(str::to_string)` ownership promotion, terminal
+/// `.collect::<Vec<_>>()` type-witness) around one semantic
+/// concern: "give me every string-shape key of this mapping as
+/// owned `String`s so the assert's diagnostic can quote them
+/// back". After this lift every routed consumer folds the three
+/// stacked axes onto `mapping_string_keys(<mapping>)` — one method
+/// name naming the intent, one call site reachable through the
+/// same substrate primitive by every future routed drift-detection
+/// assert.
+///
+/// Owned [`Vec<String>`] on purpose — the assert-side consumers
+/// interpolate the result through `{keys:?}` inside a `format!`-like
+/// macro invocation whose lifetime must outlive both the outer
+/// `mapping` borrow (which typically ends at the end of the same
+/// `assert!` expression) and the substrate primitive itself. A
+/// borrowed-`Vec<&str>` peer that mirrors the sibling
+/// [`string_keyed_entries`] iterator's borrow contract (a peer the
+/// 5-site `metadata.iter().filter_map(|(k, _)| k.as_str()).collect
+/// ::<Vec<&str>>()` shape carries — the caixa-core skeleton-shape
+/// alphabetical-order pins on the emit-side render-determinism
+/// contract THEORY.md §V.2.7 pins) would land on a separate lift, one
+/// altitude down on the ownership-arity axis, if the routed caller
+/// surface ever grows dense enough on that receiver-arm to justify
+/// it — the same-arity carveout the sibling [`kube_map`] docs
+/// already name for the [`serde_yaml::Mapping`]-receiver overload
+/// axis.
+///
+/// Non-string-shape keys ([`serde_yaml::Value::Number`] /
+/// [`serde_yaml::Value::Bool`] / [`serde_yaml::Value::Mapping`] /
+/// [`serde_yaml::Value::Sequence`] / [`serde_yaml::Value::Null`] /
+/// [`serde_yaml::Value::Tagged`] arms [`serde_yaml`] admits at the
+/// [`serde_yaml::Value::key`] axis position) are silently dropped —
+/// the same behavior the seven routed inline sites carried via the
+/// per-key `.and_then(|k| k.as_str())` shape-gate short-circuit,
+/// and mirroring the sibling [`string_keyed_entries`] iterator's
+/// drop-not-panic contract on the same axis. The dropped keys never
+/// reach the downstream K8s YAML-key surface (which requires string
+/// keys) anyway, so their absence from the diagnostic mirrors the
+/// runtime shape the assert protects.
+///
+/// Peer to [`string_keyed_entries`] on the sibling read-side
+/// sub-mapping introspection axis: [`string_keyed_entries`] yields
+/// a borrowed `(&str, &Value)` iterator for the two production
+/// per-Servico `spec.*`-splice consumers routed at emit time (the
+/// [`caixa_flux::programs_yaml_entry`] / [`caixa_helm::build_values_yaml`]
+/// pair), while `mapping_string_keys` closes the owned-[`Vec<String>`]
+/// key-only arity for the seven test-side drift-detection asserts
+/// routed at diagnostic time. Together the two partition the sub-
+/// mapping-key enumeration axis at both arities — the per-entry
+/// `(key, value)` production splice via the sibling iterator, the
+/// key-only owned-scalar diagnostic via this accessor.
+///
+/// Every future serde-derive drift-detection assert the M3.x + M4
+/// renderer set materializes (per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` per-policy sub-block presence pins,
+/// per-`app-operator` `mesh.pleme.io/v1alpha1/Aplicacao` CR schema
+/// pins, per-`caixa-otel` OpenTelemetry-Collector `service.pipelines
+/// .traces.receivers[]` per-`grpc` / `http` sub-block presence pins,
+/// every future per-K8s-CR schema-key drift-detection assert the
+/// M3.x + M4 renderer set adds) reaches this one helper by
+/// construction. No per-consumer three-line collect re-inline; no
+/// per-consumer `.and_then(|k| k.as_str())` shape-gate drift; no
+/// coordinated rewrite across every diagnostic sub-mapping key
+/// enumeration on a future [`serde_yaml`] surface rebrand of the
+/// key-shape axis (a versioned [`serde_yaml::Value::Tagged`] arm at
+/// the key position for Server-Side-Apply per-field ownership
+/// annotations, a shift in the [`serde_yaml::Mapping::keys`] iterator
+/// borrow contract).
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn mapping_string_keys(mapping: &serde_yaml::Mapping) -> Vec<String> {
+    mapping
+        .keys()
+        .filter_map(|k| k.as_str().map(str::to_string))
+        .collect()
+}
+
 /// Read the string-scalar value at `metadata.<field>` on a K8s custom
 /// resource YAML document, returning `None` when either the top-level
 /// [`KUBE_KEY_METADATA`] block is absent (a defensively-tolerated
@@ -40996,6 +41109,145 @@ spec:
              if let Some(k.as_str())` walk — otherwise the two routed \
              renderers drift silently at ComputeUnit-YAML-`spec.*`-splice \
              time"
+        );
+    }
+
+    #[test]
+    fn mapping_string_keys_collects_string_shaped_keys_in_insertion_order() {
+        // The lift's load-bearing contract: given a Mapping with three
+        // string-shaped keys inserted in a fixed order, yield a
+        // Vec<String> that byte-preserves both the ownership arity
+        // (owned String, not &str — the seven routed test-side assert
+        // consumers interpolate through `{keys:?}` whose lifetime must
+        // outlive the outer `mapping` borrow) and the insertion order
+        // (Mapping preserves insertion order the same way `serde_yaml`
+        // renders the emitted document, so the diagnostic quotes the
+        // keys back in the same shape the routed renderer emitted).
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(M3_PLACEMENT_KEY_ESTRATEGIA, "Sharded");
+        m.insert_string(M3_PLACEMENT_KEY_CLUSTERS, "rio,mar");
+        m.insert_string(M3_PLACEMENT_KEY_SHARD_KEY, "$tenantId");
+        let keys = mapping_string_keys(&m);
+        assert_eq!(
+            keys,
+            vec![
+                M3_PLACEMENT_KEY_ESTRATEGIA.to_string(),
+                M3_PLACEMENT_KEY_CLUSTERS.to_string(),
+                M3_PLACEMENT_KEY_SHARD_KEY.to_string(),
+            ],
+            "mapping_string_keys must yield every string-shaped key in \
+             the underlying Mapping's insertion order — every routed \
+             test-side assert reaches through the yielded shape as the \
+             `{{keys:?}}` interpolation on drift-detection failure, so \
+             the caller reads the same key sequence the emitted document \
+             carries"
+        );
+    }
+
+    #[test]
+    fn mapping_string_keys_drops_non_string_keys() {
+        // serde_yaml permits arbitrary Value keys — Number, Bool,
+        // Sequence, Mapping — that don't round-trip through the K8s
+        // YAML-key surface (which requires string keys). The seven
+        // routed inline sites previously carried the per-key
+        // `.and_then(|k| k.as_str())` shape-gate filter to silently
+        // drop these; pin the lift's filter contract so a future
+        // refactor that reaches for `.as_str().unwrap()` on the keys
+        // iterator (which would panic on a numeric key) is a test-
+        // visible break, not a runtime regression at the first
+        // drift-detection diagnostic that enumerates a Mapping whose
+        // serialization carries one. Same drop-not-panic contract as
+        // the sibling `string_keyed_entries` (18711) iterator carries
+        // on the paired production-side sub-mapping `spec.*`-splice
+        // axis.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(KUBE_KEY_NAME, "kept-1");
+        m.insert(
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::String("dropped-number-key".into()),
+        );
+        m.insert(
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::String("dropped-bool-key".into()),
+        );
+        m.insert_string(KUBE_KEY_NAMESPACE, "kept-2");
+        let keys = mapping_string_keys(&m);
+        assert_eq!(
+            keys,
+            vec![KUBE_KEY_NAME.to_string(), KUBE_KEY_NAMESPACE.to_string()],
+            "mapping_string_keys must silently drop non-string-shape \
+             keys (Value::Number, Value::Bool, Value::Mapping, \
+             Value::Sequence, Value::Null keys) — the K8s YAML-key \
+             surface downstream requires string keys, and every routed \
+             assert-side diagnostic reached through the per-key \
+             `.and_then(|k| k.as_str())` shape-gate expected exactly this \
+             drop-not-panic contract"
+        );
+    }
+
+    #[test]
+    fn mapping_string_keys_on_empty_mapping_yields_empty_vec() {
+        // Cardinality-arm pin: an empty Mapping yields an empty
+        // Vec<String>. The routed assert-side diagnostic sites all
+        // interpolate the returned Vec via `{keys:?}` on drift-
+        // detection failure — a fresh-empty Mapping (a serde_yaml::to_value
+        // on a struct whose every field carried `#[serde(skip_serializing_if)]`
+        // and every field's slot resolved to the skip arm) must render
+        // as `[]` rather than raise, so the diagnostic on such a
+        // regression names the empty-emit shape explicitly rather
+        // than short-circuiting the outer assert.
+        let m = serde_yaml::Mapping::new();
+        let keys = mapping_string_keys(&m);
+        assert!(
+            keys.is_empty(),
+            "mapping_string_keys on an empty Mapping must yield an \
+             empty Vec so the routed assert-side `{{keys:?}}` \
+             diagnostic renders `[]` on drift-detection failure rather \
+             than raising or short-circuiting the outer assert; got {keys:?}"
+        );
+    }
+
+    #[test]
+    fn mapping_string_keys_matches_prior_inline_collect() {
+        // Cross-check the helper's yielded Vec against the prior
+        // three-line inline `<mapping>.keys().filter_map(|k|
+        // k.as_str().map(str::to_string)).collect::<Vec<_>>()` block
+        // the seven routed test-side drift-detection asserts (four in
+        // caixa-mesh's per-Placement serde-derive pins, three in
+        // caixa-helm's per-values.yaml + per-ChartDependency +
+        // per-Chart.yaml serde-derive pins) previously carried
+        // verbatim. A drift between the helper's yielded Vec and the
+        // inline collect would silently regress every routed
+        // diagnostic — pin the byte-equivalence so the helper remains
+        // a drop-in replacement for all seven prior three-line
+        // blocks, matching the discipline the sibling
+        // `string_keyed_entries_matches_prior_inline_walk` pin
+        // established on the paired production-side sub-mapping
+        // splice axis.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_NAME, "pleme-computeunit");
+        m.insert(
+            serde_yaml::Value::Number(1.into()),
+            serde_yaml::Value::String("silently-dropped".into()),
+        );
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_VERSION, "0.1.0");
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_REPOSITORY, "oci://ghcr.io");
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_ALIAS, "cu");
+
+        let via_helper = mapping_string_keys(&m);
+        let via_inline: Vec<String> = m
+            .keys()
+            .filter_map(|k| k.as_str().map(str::to_string))
+            .collect();
+
+        assert_eq!(
+            via_helper, via_inline,
+            "mapping_string_keys must yield the same Vec<String> as \
+             the prior inline `.keys().filter_map(|k| \
+             k.as_str().map(str::to_string)).collect::<Vec<_>>()` block \
+             — otherwise the seven routed test-side drift-detection \
+             diagnostics regress silently on the interpolated \
+             `{{keys:?}}` failure-message shape"
         );
     }
 
