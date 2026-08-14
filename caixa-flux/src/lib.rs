@@ -2435,8 +2435,8 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_bool, kube_kind, kube_name, kube_root_seq_field, kube_seq,
-        kube_spec_bool_field, kube_spec_field, kube_spec_map_field, kube_spec_seq_field,
+        kube_api_version_is, kube_bool, kube_kind, kube_map, kube_name, kube_root_seq_field,
+        kube_seq, kube_spec_bool_field, kube_spec_field, kube_spec_map_field, kube_spec_seq_field,
         kube_spec_seq_first, kube_spec_str_field, kube_str, kube_u64,
     };
 
@@ -4706,11 +4706,10 @@ programs:
         assert!(!inserted, "second time should be replace");
         let arr = kube_root_seq_field(&modified, FLEET_PROGRAMS_KEY_PROGRAMS).unwrap();
         assert_eq!(arr.len(), 2, "no new entry added");
-        let updated_module = arr[0]
-            .get(COMPUTEUNIT_SPEC_KEY_MODULE)
-            .unwrap()
-            .get(COMPUTEUNIT_MODULE_KEY_SOURCE)
-            .and_then(|s| s.as_str());
+        let updated_module = kube_str(
+            arr[0].get(COMPUTEUNIT_SPEC_KEY_MODULE).unwrap(),
+            COMPUTEUNIT_MODULE_KEY_SOURCE,
+        );
         assert_eq!(
             updated_module,
             Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0")
@@ -4777,11 +4776,10 @@ spec:
             .and_then(|v| kube_seq(v, FLEET_PROGRAMS_KEY_PROGRAMS))
             .unwrap();
         assert_eq!(arr.len(), 2);
-        let updated = arr[0]
-            .get(COMPUTEUNIT_SPEC_KEY_MODULE)
-            .unwrap()
-            .get(COMPUTEUNIT_MODULE_KEY_SOURCE)
-            .and_then(|s| s.as_str());
+        let updated = kube_str(
+            arr[0].get(COMPUTEUNIT_SPEC_KEY_MODULE).unwrap(),
+            COMPUTEUNIT_MODULE_KEY_SOURCE,
+        );
         assert_eq!(updated, Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0"));
     }
 
@@ -4815,9 +4813,7 @@ spec:
         let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
         let behavior = entry.get(M2_KEY_BEHAVIOR).expect("behavior propagates");
         assert_eq!(
-            behavior
-                .get(M2_BEHAVIOR_KEY_ON_INIT)
-                .and_then(|v| v.as_str()),
+            kube_str(behavior, M2_BEHAVIOR_KEY_ON_INIT),
             Some("lib/init.lisp")
         );
     }
@@ -4837,9 +4833,7 @@ spec:
             kube_seq(&entry, M2_KEY_UPGRADE_FROM).expect("upgradeFrom propagates as a sequence");
         assert_eq!(upgrade_from.len(), 1);
         assert_eq!(
-            upgrade_from[0]
-                .get(M2_UPGRADE_FROM_KEY_FROM)
-                .and_then(|f| f.as_str()),
+            kube_str(&upgrade_from[0], M2_UPGRADE_FROM_KEY_FROM),
             Some("0.0.9")
         );
     }
@@ -4951,14 +4945,9 @@ spec:
         // overlay — the per-cluster override the bundle path threads
         // through. Pin the round-trip so a refactor that hoists the
         // overlay out of the wrap can't silently drop it.
-        let wrapped = values
-            .get(DEFAULT_LIBRARY_NAME)
-            .and_then(|v| v.as_mapping())
-            .expect("wrapped library mapping");
+        let wrapped = kube_map(values, DEFAULT_LIBRARY_NAME).expect("wrapped library mapping");
         assert_eq!(
-            wrapped
-                .get(HELM_VALUES_KEY_ENABLED)
-                .and_then(|v| v.as_bool()),
+            kube_bool(wrapped, HELM_VALUES_KEY_ENABLED),
             Some(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT),
             "cluster_bundle helmrelease.yaml `spec.values.<library>.enabled` \
              overlay must resolve to the lifted \
@@ -7848,15 +7837,12 @@ spec:
         // path.
         let caixa = sample_caixa();
         let entry = programs_yaml_entry(&caixa, &sample_cu_yaml()).unwrap();
-        let emitted = entry
-            .get(FLEET_PROGRAMS_KEY_NAME)
-            .and_then(|n| n.as_str())
-            .expect(
-                "programs.yaml entry must carry a `name:` scalar — drift here \
-                 silently splits the substrate-operator-side fleet-programs \
-                 aggregator's per-entry identity from every peer read-side \
-                 consumer of `Caixa::nome`",
-            );
+        let emitted = kube_str(&entry, FLEET_PROGRAMS_KEY_NAME).expect(
+            "programs.yaml entry must carry a `name:` scalar — drift here \
+             silently splits the substrate-operator-side fleet-programs \
+             aggregator's per-entry identity from every peer read-side \
+             consumer of `Caixa::nome`",
+        );
         assert_eq!(
             emitted,
             caixa.nome(),
