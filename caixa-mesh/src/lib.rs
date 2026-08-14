@@ -7174,7 +7174,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(M3_PLACEMENT_KEY_ESTRATEGIA).and_then(|v| v.as_str()),
+                kube_str(p, M3_PLACEMENT_KEY_ESTRATEGIA),
                 Some(M3_PLACEMENT_ESTRATEGIA_REPLICATED),
                 "placement.estrategia must round-trip the typed PlacementStrategy variant"
             );
@@ -7212,7 +7212,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(M3_PLACEMENT_KEY_AFFINITY).and_then(|v| v.as_str()),
+                kube_str(p, M3_PLACEMENT_KEY_AFFINITY),
                 Some("data-locality")
             );
         }
@@ -7269,13 +7269,10 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(M3_PLACEMENT_KEY_ESTRATEGIA).and_then(|v| v.as_str()),
+                kube_str(p, M3_PLACEMENT_KEY_ESTRATEGIA),
                 Some(M3_PLACEMENT_ESTRATEGIA_SHARDED)
             );
-            assert_eq!(
-                p.get(M3_PLACEMENT_KEY_SHARD_KEY).and_then(|v| v.as_str()),
-                Some("$tenantId")
-            );
+            assert_eq!(kube_str(p, M3_PLACEMENT_KEY_SHARD_KEY), Some("$tenantId"));
         }
     }
 
@@ -9489,7 +9486,7 @@ mod tests {
             let retry = kube_map(rule, GATEWAY_API_KEY_RETRY)
                 .expect("rule must carry retry mapping when :politicas :retries is set");
             assert_eq!(
-                retry.get(GATEWAY_API_KEY_ATTEMPTS).and_then(|v| v.as_u64()),
+                kube_u64(retry, GATEWAY_API_KEY_ATTEMPTS),
                 Some(3),
                 "retry.attempts must round-trip the typed :retries value"
             );
@@ -9681,7 +9678,7 @@ mod tests {
             let auth = kube_map(rule, CILIUM_KEY_AUTHENTICATION)
                 .expect("rule must carry authentication mapping when :mtls-required is set");
             assert_eq!(
-                auth.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
+                kube_str(auth, CILIUM_KEY_MODE),
                 Some(CILIUM_AUTH_MODE_REQUIRED)
             );
         }
@@ -9738,7 +9735,7 @@ mod tests {
             let auth = kube_map(rule, CILIUM_KEY_AUTHENTICATION)
                 .expect("rule must carry authentication mapping for explicit :mtls-required nil");
             assert_eq!(
-                auth.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
+                kube_str(auth, CILIUM_KEY_MODE),
                 Some(CILIUM_AUTH_MODE_DISABLED)
             );
         }
