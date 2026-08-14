@@ -22149,6 +22149,80 @@ pub fn kube_seq_first<'a>(
         .and_then(|s| s.first())
 }
 
+mod kube_receiver_sealed {
+    pub trait Sealed {}
+    impl Sealed for serde_yaml::Value {}
+    impl Sealed for serde_yaml::Mapping {}
+}
+
+/// Sealed dispatch surface for the value-level primitive receiver-arms
+/// — [`serde_yaml::Value`] and [`serde_yaml::Mapping`] — the two YAML
+/// container-shape types every routed value-level two-hop `get → as_*`
+/// primitive ([`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`],
+/// [`kube_map`]) accepts as its first argument. Where the sibling
+/// spec/metadata/root-anchored families always sit on a per-CR
+/// `&serde_yaml::Value` because the outer prelude gates on the
+/// document-shape `apiVersion + kind + metadata + spec` skeleton, the
+/// value-level family drops the outer prelude and stays parametric on
+/// whichever container-shape the caller already holds — a `&Value` for
+/// a nested-mapping bracket returned from
+/// [`kube_spec_seq_first`] / [`kube_seq_first`], or a `&Mapping` for a
+/// sub-block already lifted through [`kube_map`] / [`kube_metadata`] /
+/// [`kube_spec`] / [`kube_match_labels`]. Before this trait landed
+/// every caller holding a `&Mapping` re-inlined the two-line
+/// `<mapping>.get(<FIELD>).and_then(|v| v.as_<arity>())` chain because
+/// the primitive family only accepted `&Value` — 7 test-side
+/// receiver-`&Mapping` readback sites in [`caixa-mesh`][mesh]
+/// (per-`placement.<field>` M3 fan-out scalar readbacks on the
+/// [`placement_blocks`][pb] helper's `Vec<&Mapping>` output, per-
+/// `retry.attempts` `HTTPRoute` mesh-policy overlay readback on the
+/// [`kube_map`]-lifted `retry:` sub-block, per-`authentication.mode`
+/// `CiliumNetworkPolicy` mTLS overlay readbacks on the [`kube_map`]-
+/// lifted `authentication:` sub-block) sat on the wrong side of the
+/// receiver-arm axis at the same-shape two-hop navigation the `&Value`-
+/// receiver sites already reached through one call.
+///
+/// Sealed via [`kube_receiver_sealed::Sealed`] so downstream crates
+/// cannot extend the receiver-arm axis past the two `serde_yaml`
+/// container-shape types the value-level primitive family walks
+/// through — the trait is a substrate-internal dispatch surface, not
+/// an authoring extension point. The [`serde_yaml::Mapping`] impl
+/// exists precisely because [`serde_yaml::Value::get`] and
+/// [`serde_yaml::Mapping::get`] carry the same shape at the same
+/// arity (`.get(<field>) → Option<&Value>`); the trait method
+/// [`field_value`](KubeReceiver::field_value) is the one-hop
+/// navigation the value-level quintet composes on and both `serde_yaml`
+/// types back with an inherent `Mapping::get` / `Value::get` call.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+/// [pb]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+pub trait KubeReceiver: kube_receiver_sealed::Sealed {
+    /// Look up `field` on the receiver and return the resulting
+    /// `Option<&Value>` — the one-hop navigation the value-level
+    /// primitive quintet ([`kube_str`], [`kube_u64`], [`kube_bool`],
+    /// [`kube_seq`], [`kube_map`]) composes on. Both
+    /// [`serde_yaml::Value`] and [`serde_yaml::Mapping`] expose an
+    /// inherent `.get(<field>)` returning `Option<&Value>` at the same
+    /// shape; this trait method is the dispatch surface the generic
+    /// primitives call through so a caller holding either container-
+    /// arm reaches the same one-line dispatch.
+    fn field_value(&self, field: &str) -> Option<&serde_yaml::Value>;
+}
+
+impl KubeReceiver for serde_yaml::Value {
+    #[inline]
+    fn field_value(&self, field: &str) -> Option<&serde_yaml::Value> {
+        self.get(field)
+    }
+}
+
+impl KubeReceiver for serde_yaml::Mapping {
+    #[inline]
+    fn field_value(&self, field: &str) -> Option<&serde_yaml::Value> {
+        self.get(field)
+    }
+}
+
 /// Read a sub-`<field>[]` YAML sequence nested one hop under an
 /// arbitrary `&serde_yaml::Value` mapping receiver as
 /// `Option<&serde_yaml::Sequence>` — the value-level two-hop navigation
@@ -22228,8 +22302,11 @@ pub fn kube_seq_first<'a>(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_seq<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a serde_yaml::Sequence> {
-    value.get(field).and_then(|v| v.as_sequence())
+pub fn kube_seq<'a, R: KubeReceiver + ?Sized>(
+    recv: &'a R,
+    field: &str,
+) -> Option<&'a serde_yaml::Sequence> {
+    recv.field_value(field).and_then(|v| v.as_sequence())
 }
 
 /// Read a sub-`<field>` YAML scalar-str nested one hop under an
@@ -22326,8 +22403,8 @@ pub fn kube_seq<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a ser
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_str<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
-    value.get(field).and_then(|v| v.as_str())
+pub fn kube_str<'a, R: KubeReceiver + ?Sized>(recv: &'a R, field: &str) -> Option<&'a str> {
+    recv.field_value(field).and_then(|v| v.as_str())
 }
 
 /// Read a sub-`<field>` YAML scalar-integer nested one hop under an
@@ -22415,8 +22492,8 @@ pub fn kube_str<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_u64(value: &serde_yaml::Value, field: &str) -> Option<u64> {
-    value.get(field).and_then(serde_yaml::Value::as_u64)
+pub fn kube_u64<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<u64> {
+    recv.field_value(field).and_then(serde_yaml::Value::as_u64)
 }
 
 /// Read a sub-`<field>` YAML mapping nested one hop under an arbitrary
@@ -22519,8 +22596,12 @@ pub fn kube_u64(value: &serde_yaml::Value, field: &str) -> Option<u64> {
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_map<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a serde_yaml::Mapping> {
-    value.get(field).and_then(serde_yaml::Value::as_mapping)
+pub fn kube_map<'a, R: KubeReceiver + ?Sized>(
+    recv: &'a R,
+    field: &str,
+) -> Option<&'a serde_yaml::Mapping> {
+    recv.field_value(field)
+        .and_then(serde_yaml::Value::as_mapping)
 }
 
 /// Read a sub-`<field>` YAML scalar-boolean nested one hop under an
@@ -22623,8 +22704,8 @@ pub fn kube_map<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a ser
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_bool(value: &serde_yaml::Value, field: &str) -> Option<bool> {
-    value.get(field).and_then(serde_yaml::Value::as_bool)
+pub fn kube_bool<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<bool> {
+    recv.field_value(field).and_then(serde_yaml::Value::as_bool)
 }
 
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
@@ -49184,6 +49265,165 @@ spec:
              the fixture seeds — a drop-in for the routed per-\
              `HelmRelease` install-path first-apply namespace-seeder \
              determinism-pin site"
+        );
+    }
+
+    #[test]
+    fn value_level_quintet_dispatches_through_kube_receiver_mapping_arm() {
+        // Receiver-arm closure pin: the value-level quintet
+        // ([`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`],
+        // [`kube_map`]) now accepts either receiver-arm the
+        // [`KubeReceiver`] sealed trait admits — [`serde_yaml::Value`]
+        // (the pre-existing arm the ~103 routed callsites already
+        // reach through) and [`serde_yaml::Mapping`] (the new arm the
+        // 7 routed test-side receiver-`&Mapping` callsites in
+        // [`caixa-mesh`] fold onto after this lift). Before the trait
+        // landed the 7 sites re-inlined the two-line
+        // `<mapping>.get(<FIELD>).and_then(|v| v.as_<arity>())` chain
+        // around a one-token `<FIELD>` semantic payload because the
+        // quintet's `value: &Value` signature could not accept the
+        // `&Mapping` returned from
+        // [`kube_map`] / [`kube_metadata`] / [`kube_spec`] /
+        // [`kube_match_labels`]. This pin exercises each of the five
+        // arities on a fresh `serde_yaml::Mapping` receiver so a
+        // future refactor that breaks the [`KubeReceiver`] impl for
+        // [`serde_yaml::Mapping`] (or accidentally reverts the
+        // quintet's signature to the concrete `&Value` receiver-arm)
+        // surfaces here.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+
+        let mut receiver = serde_yaml::Mapping::new();
+        receiver.insert_str_key(
+            M3_PLACEMENT_KEY_ESTRATEGIA,
+            serde_yaml::Value::String(M3_PLACEMENT_ESTRATEGIA_REPLICATED.into()),
+        );
+        receiver.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(serde_yaml::Number::from(3u64)),
+        );
+        receiver.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        receiver.insert_str_key(
+            M3_PLACEMENT_KEY_CLUSTERS,
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("rio".into()),
+                serde_yaml::Value::String("mar".into()),
+            ]),
+        );
+        receiver.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+
+        assert_eq!(
+            kube_str(&receiver, M3_PLACEMENT_KEY_ESTRATEGIA),
+            Some(M3_PLACEMENT_ESTRATEGIA_REPLICATED),
+            "kube_str must dispatch through the &Mapping receiver-arm \
+             at the string-scalar arity — the drop-in the 6 routed \
+             caixa-mesh test-side scalar-str readback sites \
+             (placement.estrategia / .affinity / .shardKey on the \
+             [`placement_blocks`] output, authentication.mode on the \
+             [`kube_map`]-lifted CNP auth block) fold onto"
+        );
+        assert_eq!(
+            kube_u64(&receiver, GATEWAY_API_KEY_ATTEMPTS),
+            Some(3),
+            "kube_u64 must dispatch through the &Mapping receiver-arm \
+             at the unsigned-integer-scalar arity — the drop-in the \
+             routed caixa-mesh test-side per-`retry.attempts` \
+             HTTPRoute mesh-policy overlay readback site folds onto"
+        );
+        assert_eq!(
+            kube_bool(&receiver, FLUX_KUSTOMIZATION_KEY_PRUNE),
+            Some(true),
+            "kube_bool must dispatch through the &Mapping receiver-arm \
+             at the boolean-scalar arity — future routed sites holding \
+             a &Mapping already lifted through [`kube_spec`] / \
+             [`kube_map`] reach this same one-line dispatch"
+        );
+        let clusters = kube_seq(&receiver, M3_PLACEMENT_KEY_CLUSTERS)
+            .expect("kube_seq must return the placement.clusters sequence");
+        assert_eq!(
+            clusters.len(),
+            2,
+            "kube_seq must dispatch through the &Mapping receiver-arm \
+             at the sequence arity — every future routed &Mapping-arm \
+             sequence readback reaches through this same helper"
+        );
+        let metadata = kube_map(&receiver, KUBE_KEY_METADATA)
+            .expect("kube_map must return the metadata sub-mapping");
+        assert_eq!(
+            kube_str(metadata, KUBE_KEY_NAME),
+            Some("cart"),
+            "kube_map must dispatch through the &Mapping receiver-arm \
+             at the sub-mapping arity — chained onto a downstream \
+             kube_str on the returned &Mapping the composition stays \
+             a drop-in for the routed `metadata.<field>` readback path"
+        );
+    }
+
+    #[test]
+    fn value_level_quintet_mapping_arm_byte_equals_value_arm() {
+        // Cross-arm byte-equality pin: given the same underlying YAML
+        // content, dispatching each of the five value-level primitives
+        // through the [`KubeReceiver`] `&Mapping` arm must return the
+        // identical `Option<_>` verdict the pre-existing `&Value` arm
+        // returns — the [`serde_yaml::Value::Mapping`] wrapper the
+        // `&Value` arm walks through is a pass-through around the same
+        // `&Mapping` the new arm operates on directly, so a
+        // discrepancy would indicate the trait's dispatch surface
+        // drifted from the inherent `get` on either receiver-arm. Pin
+        // the byte-equivalence across all five arities so a future
+        // refactor that swaps one arm's dispatch shape (e.g. replacing
+        // `Mapping::get<I: Index>` with a different key-lookup shape)
+        // is a test-visible break.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("catalog".into()));
+        m.insert_str_key(
+            KUBE_KEY_PORT,
+            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+        );
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(false));
+        m.insert_str_key(
+            KUBE_KEY_LABELS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("app".into())]),
+        );
+        let mut sub = serde_yaml::Mapping::new();
+        sub.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Service".into()));
+        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(sub));
+
+        let value = serde_yaml::Value::Mapping(m.clone());
+
+        assert_eq!(
+            kube_str(&m, KUBE_KEY_NAME),
+            kube_str(&value, KUBE_KEY_NAME),
+            "kube_str must byte-equal on the two receiver-arms — the \
+             &Mapping arm dispatches through the same one-hop lookup \
+             the &Value arm's `Value::Mapping` unwrap-then-lookup lands \
+             at, so the returned Option<&str> stays identical across \
+             arms"
+        );
+        assert_eq!(
+            kube_u64(&m, KUBE_KEY_PORT),
+            kube_u64(&value, KUBE_KEY_PORT),
+            "kube_u64 must byte-equal on the two receiver-arms — same \
+             cross-arm dispatch contract as the sibling scalar-str \
+             arity"
+        );
+        assert_eq!(
+            kube_bool(&m, FLUX_KUSTOMIZATION_KEY_PRUNE),
+            kube_bool(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
+            "kube_bool must byte-equal on the two receiver-arms — same \
+             cross-arm dispatch contract as the sibling scalar arities"
+        );
+        assert_eq!(
+            kube_seq(&m, KUBE_KEY_LABELS),
+            kube_seq(&value, KUBE_KEY_LABELS),
+            "kube_seq must byte-equal on the two receiver-arms — same \
+             cross-arm dispatch contract as the sibling scalar arities"
+        );
+        assert_eq!(
+            kube_map(&m, KUBE_KEY_METADATA),
+            kube_map(&value, KUBE_KEY_METADATA),
+            "kube_map must byte-equal on the two receiver-arms — same \
+             cross-arm dispatch contract as the sibling scalar arities"
         );
     }
 }
