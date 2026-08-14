@@ -20896,6 +20896,97 @@ pub fn kube_spec_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
     kube_spec_field(value, field).and_then(serde_yaml::Value::as_bool)
 }
 
+/// Read the sub-`spec.<field>` YAML scalar-integer on a K8s custom
+/// resource YAML document as `Option<u64>` — the composed integer-arity
+/// per-sub-field-u64 accessor peer that stands on the composed
+/// scalar-arity [`kube_spec_field`] (23bd568) accessor, folding the
+/// trailing `.and_then(|v| v.as_u64())` shape-gate closure into the
+/// helper for callers that always want a `u64` scalar (the load-bearing
+/// per-CR body-sub-field integer-typed count readbacks — the future
+/// per-`HelmRelease` `spec.retries` operator-side install-path retry
+/// cap, the future per-`HTTPRoute` `spec.attempts` retry-attempt cap
+/// once the Gateway API v1.x retry sub-block promotes to the
+/// per-`HTTPRoute` `spec:` altitude the operator-facing pin bracket
+/// admits, the future per-`Gateway` `spec.listeners[0].port` external-
+/// listener port scalar the emit-side [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`]
+/// substrate default pairs with when the M4 per-cluster fan-out lifts
+/// the multi-listener port axis to the top-level `spec:` altitude, plus
+/// every forthcoming per-CR `spec.<field>` integer-count leaf-scalar
+/// axis the M3.x + M4 renderer set materializes — the future per-
+/// `:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
+/// `spec.maxRequests` circuit-breaker count MESH-COMPOSITION §III.2 #3
+/// admits, the `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/
+/// Aplicacao` CR materializer's `spec.<count>` integer-scalar readbacks
+/// §III.2 #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
+/// Collector CR's `spec.grpc.max_recv_msg_size_mib` byte-count scalar).
+/// Structural mirror of the sibling [`kube_spec_str_field`] (c4fe21d),
+/// [`kube_spec_seq_field`] (fc64ed7), [`kube_spec_map_field`] (27fc2ee),
+/// and [`kube_spec_bool_field`] (4f6fc93) accessors on the same sub-
+/// `spec.<field>` axis: all five accessors fold a trailing shape-gate
+/// closure onto the composed scalar-arity [`kube_spec_field`] two-hop
+/// navigation, all five stay parametric on the per-`<field>` sub-field
+/// axis-key. Where [`kube_spec_str_field`] closes the `spec.<field>`
+/// string-scalar readback (the leaf-scalar-str arm),
+/// [`kube_spec_seq_field`] closes the `spec.<field>` sequence readback
+/// (the multi-entry sub-block arm), [`kube_spec_map_field`] closes the
+/// `spec.<field>` sub-mapping readback (the nested-object sub-block
+/// arm), and [`kube_spec_bool_field`] closes the `spec.<field>`
+/// scalar-boolean readback (the leaf-toggle arm), this closes the
+/// `spec.<field>` scalar-integer readback (the leaf-count arm).
+/// Together the five bracket the five canonical composed per-
+/// `spec.<field>` shape-gate arities every K8s CR document the emit-
+/// side [`kube_resource_skeleton`] renders admits under its `spec:`
+/// body: scalar-string leaves via the first sibling, ordered sub-
+/// sequences via the second sibling, nested-object sub-mappings via
+/// the third sibling, scalar-boolean leaf-toggles via the fourth
+/// sibling, scalar-integer leaf-counts via this accessor. Closes the
+/// composed shape-gate family on the sub-`spec.<field>` axis at five
+/// arities to structural parity with the value-level primitive quintet
+/// ([`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`], [`kube_map`])
+/// on the one-hop nested-mapping axis, one altitude down.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// [`kube_spec`] outer-arm short-circuit), the `spec:` value is present
+/// but carries a non-Mapping YAML type (the [`kube_spec`] shape-gate
+/// short-circuit), the requested sub-field `<field>` axis-key is absent
+/// from the `spec:` sub-mapping (the [`kube_spec_field`] trailing
+/// `Mapping::get` none-arm), or the sub-field value is present but
+/// carries a non-integer YAML type (the trailing `.as_u64()` shape-
+/// gate short-circuit — a schema-invalid per-CR body-sub-field type per
+/// the K8s apiserver's `OpenAPI` schema but tolerated here as `None`
+/// so the readback stays a total function, mirroring the sibling
+/// [`kube_spec_str_field`] / [`kube_spec_seq_field`] / [`kube_spec_map_field`]
+/// / [`kube_spec_bool_field`] posture). The returned `u64` is a fresh
+/// primitive value (integers carry no underlying borrow the way the
+/// sibling string-arity accessor preserves) — the caller decides
+/// whether to `assert_eq!(_, Some(<expected>))` for a determinism pin,
+/// `.expect(...)` for a load-bearing count identity, or
+/// `.unwrap_or(<default>)` for a substrate-side default fallback.
+///
+/// Every future per-CR `spec.<field>` scalar-integer readback (the
+/// forthcoming per-`HelmRelease` `spec.retries` operator-side install-
+/// path retry cap readback, the forthcoming per-`Gateway`
+/// `spec.listeners[0].port` external-listener port scalar readback, the
+/// future per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's
+/// per-policy integer-count gate readbacks MESH-COMPOSITION §III.2 #3
+/// admits, the `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/
+/// Aplicacao` CR materializer's `spec.<count>` scalar-integer readbacks
+/// §III.2 #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
+/// Collector CR's `spec.<count>` scalar-integer navigation; every
+/// future test-side `spec.<field>` scalar-integer probe the M3.x + M4
+/// renderer set adds) reaches this same helper by construction — no
+/// per-consumer two-hop-plus-shape-gate chain re-inline, no per-
+/// consumer `KUBE_KEY_SPEC` axis-key drift, no coordinated rewrite
+/// across every per-CR body-sub-field scalar-integer readback on a
+/// future K8s API-machinery rebrand of the top-level `spec:` axis.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_spec_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64> {
+    kube_spec_field(value, field).and_then(serde_yaml::Value::as_u64)
+}
+
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
@@ -46159,6 +46250,309 @@ spec:
                  flux per-CR sub-spec-field boolean-readback site \
                  (the `cluster_bundle_kustomization_prune_pins_lifted_true` \
                  determinism-pin) drifts silently at test time"
+            );
+        }
+    }
+
+    // ── kube_spec_u64_field lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_spec_u64_field_reads_sub_spec_field_u64_scalar() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `spec: { <sub-field>: <u64>, ... }` body sub-
+        // mapping (every K8s CR the emit-side [`kube_resource_skeleton`]
+        // renders with an integer-shaped `spec.<field>` leaf-count axis
+        // — the forthcoming per-`HelmRelease` `spec.retries` operator-
+        // side install-path retry cap, the forthcoming per-`Gateway`
+        // `spec.listeners[0].port` external-listener port scalar, the
+        // future per-`HTTPRoute` `spec.attempts` retry-attempt cap once
+        // the Gateway API v1.x retry sub-block promotes to the per-
+        // `HTTPRoute` `spec:` altitude), the composed integer-arity
+        // accessor returns `Some(<u64>)` across the routed per-sub-
+        // field readback axes. Pin two distinct integer values (`3` at
+        // [`FLUX_HELMRELEASE_KEY_RETRIES`], `8080` at [`KUBE_KEY_PORT`])
+        // so the trailing `.as_u64()` fold-through preserves both a
+        // single-digit count and a multi-digit port — the sibling
+        // `kube_u64_reads_sub_field_scalar_u64_verbatim` pin one
+        // altitude down on the value-level quintet already validates
+        // the integer shape-gate; this pin validates the same axis one
+        // altitude up on the spec-anchored quintet. Structural mirror
+        // of the sibling
+        // `kube_spec_str_field_reads_sub_spec_field_string_scalar`,
+        // `kube_spec_seq_field_reads_sub_spec_field_sequence`,
+        // `kube_spec_map_field_reads_sub_spec_field_mapping`, and
+        // `kube_spec_bool_field_reads_sub_spec_field_boolean_scalar`
+        // pins on the peer sub-`spec.<field>` string-scalar / sequence /
+        // sub-mapping / boolean-arity axes.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
+        spec.insert_number(KUBE_KEY_PORT, 8080u64);
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
+            Some(3),
+            "kube_spec_u64_field must read spec.retries as the \
+             single-digit count verbatim — the caixa-flux per-\
+             `HelmRelease` install-path retry-cap readback site reaches \
+             through this axis for the load-bearing Flux v2 helm-\
+             controller per-CR retry-ceiling identity pin"
+        );
+        assert_eq!(
+            kube_spec_u64_field(&value, KUBE_KEY_PORT),
+            Some(8080),
+            "kube_spec_u64_field must read a second axis-key on a \
+             multi-digit port scalar — pinning that the trailing \
+             `.as_u64()` fold-through preserves both a single-digit \
+             count and a multi-digit port (mirroring the sibling \
+             `kube_u64_reads_sub_field_scalar_u64_verbatim` pin's \
+             cross-magnitude coverage one altitude down on the value-\
+             level quintet)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_u64_field_returns_none_when_spec_sub_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_spec_field`] closes
+        // on (which in turn folds through [`kube_spec`]'s outer-arm
+        // and shape-gate) folds through this composed integer-arity
+        // accessor. Peer of the sibling
+        // `kube_spec_str_field_returns_none_when_spec_sub_block_absent`,
+        // `kube_spec_seq_field_returns_none_when_spec_sub_block_absent`,
+        // `kube_spec_map_field_returns_none_when_spec_sub_block_absent`,
+        // and `kube_spec_bool_field_returns_none_when_spec_sub_block_absent`
+        // pins on the peer sub-`spec.<field>` scalar-str / sequence /
+        // sub-mapping / boolean-arity accessor axes.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_spec_u64_field(&shape, FLUX_HELMRELEASE_KEY_RETRIES),
+                None,
+                "kube_spec_u64_field({shape:?}, <FIELD>) must short-\
+                 circuit to None through the underlying kube_spec_field's \
+                 kube_spec outer-arm when the top-level `spec:` block is \
+                 absent on the outer Value — the composition fold must \
+                 preserve the total-function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_u64_field_returns_none_when_spec_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `spec:` value on the outer Value
+        // folds through [`kube_spec`]'s trailing `.as_mapping()` shape-
+        // gate up through [`kube_spec_field`] up through this composed
+        // integer-arity accessor — the caller's `.expect(...)` /
+        // `assert_eq!(_, Some(<expected>))` continuation stays a total
+        // function.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("spec-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
+                None,
+                "kube_spec_u64_field must return None when the top-\
+                 level `spec:` axis carries a non-Mapping YAML type \
+                 ({non_mapping:?}) — the fold through kube_spec's \
+                 shape-gate arm short-circuits here, and every routed \
+                 caller depends on that None-arm to keep the readback \
+                 total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_u64_field_returns_none_when_requested_field_absent() {
+        // The composition's middle per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `spec:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-
+        // `HelmRelease` `spec.retries` readback that finds no `retries`
+        // sub-field expects None here (routing the "no explicit retry
+        // cap opt-in" fallback to the Flux v2 helm-controller's own
+        // scalar-default) rather than a panic.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_number(KUBE_KEY_PORT, 8080u64);
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
+            None,
+            "kube_spec_u64_field must return None when the requested \
+             `spec.<field>` axis-key is absent from the sub-mapping — \
+             a `Mapping::get(<KEY>)` miss short-circuits the composed \
+             accessor, and callers rely on the None-arm to route the \
+             fallback path (rather than the wrong-shape arm)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_u64_field_returns_none_when_field_carries_non_u64_type() {
+        // The composition's trailing `.as_u64()` shape-gate None arm:
+        // a `spec.<field>` axis-key present but carrying a non-integer
+        // YAML type. Schema-invalid per the K8s apiserver's OpenAPI
+        // schema (every routed `spec.<count>` axis pins integer leaves)
+        // but tolerated here as None so the readback stays a total
+        // function. Pin the None-arm so a future refactor that reaches
+        // for `.as_u64().unwrap()` (which would panic on a scalar-
+        // string or bool axis-value) is a test-visible break, not a
+        // runtime regression at the first schema-invalid CR the reader
+        // sees. Peer of the sibling
+        // `kube_spec_str_field_returns_none_when_field_carries_non_string_type`,
+        // `kube_spec_seq_field_returns_none_when_field_carries_non_sequence_type`,
+        // `kube_spec_map_field_returns_none_when_field_carries_non_mapping_type`,
+        // and
+        // `kube_spec_bool_field_returns_none_when_field_carries_non_boolean_type`
+        // pins on the composed sub-`spec.<field>` scalar-str / sequence /
+        // sub-mapping / boolean-arity accessors.
+        for non_u64 in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("3".into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(FLUX_HELMRELEASE_KEY_RETRIES, non_u64.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
+                None,
+                "kube_spec_u64_field must return None when spec.retries \
+                 carries a non-integer YAML type ({non_u64:?}) — the \
+                 trailing `.as_u64()` shape gate short-circuits here, \
+                 and every routed caller depends on that None-arm to \
+                 keep the readback total (YAML's `\"3\"` is a String and \
+                 `true` is a Bool per serde_yaml's strict shape-gate \
+                 posture, not coercible integers)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_u64_field_composes_on_lifted_kube_spec_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_spec_field(value, field).and_then(|v| v.as_u64())` —
+        // the composed scalar-arity accessor stays load-bearing, this
+        // integer-arity accessor stands one abstraction step above it
+        // (folding the trailing `.as_u64()` shape-gate closure). Pin
+        // the delegation-shape byte-for-byte across three
+        // representative sub-field axis-keys so a future refactor that
+        // bypasses [`kube_spec_field`] (a private inline
+        // `.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping()).and_then(|m|
+        // m.get(field)).and_then(|n| n.as_u64())` chain that would
+        // silently drift on a future rebrand of the outer two-hop
+        // navigation) is a test-visible break. Peer of the sibling
+        // `kube_spec_str_field_composes_on_lifted_kube_spec_field_accessor`,
+        // `kube_spec_seq_field_composes_on_lifted_kube_spec_field_accessor`,
+        // `kube_spec_map_field_composes_on_lifted_kube_spec_field_accessor`,
+        // and
+        // `kube_spec_bool_field_composes_on_lifted_kube_spec_field_accessor`
+        // composition pins on the sub-`spec.<field>` scalar-str-arity /
+        // sequence-arity / sub-mapping-arity / boolean-arity accessors.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
+        spec.insert_number(KUBE_KEY_PORT, 8080u64);
+        spec.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            FLUX_HELMRELEASE_KEY_RETRIES,
+            KUBE_KEY_PORT,
+            GATEWAY_API_KEY_ATTEMPTS,
+        ] {
+            let via_composed = kube_spec_u64_field(&value, sub_field);
+            let via_delegation =
+                kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_u64);
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_spec_u64_field(v, {sub_field:?}) must equal the \
+                 delegation-shape `kube_spec_field(v, {sub_field:?})\
+                 .and_then(|v| v.as_u64())` — the composition pin \
+                 closes the drift surface where a private inline bypass \
+                 silently desynchronizes from the underlying composed \
+                 scalar-arity accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_u64_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the prior inline `kube_spec_field(v, F).and_then(|v|
+        // v.as_u64())` chain the forthcoming routed caller sites (the
+        // per-`HelmRelease` `spec.retries` install-path retry-cap
+        // readback the sibling caixa-flux
+        // `cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`
+        // determinism-pin's deeper `spec.install.remediation.retries`
+        // chain will simplify onto once the retry-cap axis promotes to
+        // the top-level `spec.<field>` altitude, the per-`Gateway`
+        // `spec.listeners[0].port` external-listener port readback) will
+        // carry. A drift between the composed helper's return and the
+        // inline chain would silently regress every future determinism-
+        // pin (`.expect(...)`, `assert_eq!(_, Some(<expected>))`) — pin
+        // the byte-equivalence across three routed integer axes so the
+        // composed helper stays a drop-in replacement for every current
+        // + future routed site's prior two-line block. Mirrors the
+        // sibling `kube_spec_str_field_matches_prior_inline_chain`,
+        // `kube_spec_seq_field_matches_prior_inline_chain`,
+        // `kube_spec_map_field_matches_prior_inline_chain`, and
+        // `kube_spec_bool_field_matches_prior_inline_chain` pins one
+        // arity over on the composed sub-`spec.<field>` integer-arity.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
+        spec.insert_number(KUBE_KEY_PORT, 8080u64);
+        spec.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
+        // Off-shape axes route through the same composed helper — the
+        // present-key + wrong-shape arm's None-fold must also stay
+        // byte-identical to the inline chain, not just the present-and-
+        // correctly-typed arm.
+        spec.insert_string("chartName", "hello-rio");
+        spec.insert_str_key("prune", serde_yaml::Value::Bool(true));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            FLUX_HELMRELEASE_KEY_RETRIES,
+            KUBE_KEY_PORT,
+            GATEWAY_API_KEY_ATTEMPTS,
+            "chartName", // present-but-non-u64 arm (String)
+            "prune",     // present-but-non-u64 arm (Bool)
+            "missing",   // absent arm
+        ] {
+            let via_helper = kube_spec_u64_field(&value, sub_field);
+            let via_inline = kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_u64);
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_spec_u64_field(v, {sub_field:?}) must yield the \
+                 same Option<u64> as the prior inline \
+                 `kube_spec_field(v, {sub_field:?}).and_then(|v| \
+                 v.as_u64())` chain — otherwise a future routed caixa-\
+                 flux / caixa-mesh per-CR sub-spec-field integer-\
+                 readback site drifts silently at test time"
             );
         }
     }
