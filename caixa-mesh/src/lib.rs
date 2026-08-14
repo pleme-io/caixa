@@ -3274,10 +3274,10 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is,
-        kube_field, kube_field_str, kube_kind, kube_kind_is, kube_map, kube_match_label,
-        kube_match_label_is, kube_match_labels, kube_metadata, kube_metadata_label,
-        kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is, kube_namespace,
-        kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
+        kube_field, kube_field_str, kube_field_u64, kube_kind, kube_kind_is, kube_map,
+        kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
+        kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is,
+        kube_namespace, kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
         kube_spec_seq_first, kube_spec_seq_first_seq_first,
         kube_spec_seq_first_seq_first_seq_first, kube_spec_seq_first_str, kube_spec_str_field,
         kube_str, kube_u64, mapping_str_keys, mapping_string_keys,
@@ -9511,9 +9511,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         assert_eq!(rules.len(), 3);
         for rule in &rules {
-            let attempts = rule
-                .get(GATEWAY_API_KEY_RETRY)
-                .and_then(|r| kube_u64(r, GATEWAY_API_KEY_ATTEMPTS))
+            let attempts = kube_field_u64(rule, GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS)
                 .expect("each of the 3 rules carries retry.attempts");
             assert_eq!(attempts, 3);
         }
@@ -9535,8 +9533,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get(GATEWAY_API_KEY_RETRY)
-                    .and_then(|r| kube_u64(r, GATEWAY_API_KEY_ATTEMPTS)),
+                kube_field_u64(rule, GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
                 Some(5),
                 "retry.attempts must round-trip the typed :retries value verbatim"
             );
@@ -9606,8 +9603,7 @@ mod tests {
                 "timeouts: must be absent when only :retries is set"
             );
             assert_eq!(
-                rule.get(GATEWAY_API_KEY_RETRY)
-                    .and_then(|r| kube_u64(r, GATEWAY_API_KEY_ATTEMPTS)),
+                kube_field_u64(rule, GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
                 Some(2)
             );
         }

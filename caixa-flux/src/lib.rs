@@ -2435,9 +2435,9 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_bool, kube_field, kube_kind, kube_map, kube_name,
+        kube_api_version_is, kube_bool, kube_field, kube_field_u64, kube_kind, kube_map, kube_name,
         kube_root_seq_field, kube_seq, kube_spec_bool_field, kube_spec_field, kube_spec_map_field,
-        kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field, kube_str, kube_u64,
+        kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field, kube_str,
     };
 
     fn sample_caixa() -> Caixa {
@@ -3034,8 +3034,13 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let install_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_INSTALL)
-            .and_then(|i| kube_field(i, FLUX_HELMRELEASE_KEY_REMEDIATION))
-            .and_then(|r| kube_u64(r, FLUX_HELMRELEASE_KEY_RETRIES))
+            .and_then(|i| {
+                kube_field_u64(
+                    i,
+                    FLUX_HELMRELEASE_KEY_REMEDIATION,
+                    FLUX_HELMRELEASE_KEY_RETRIES,
+                )
+            })
             .expect(
                 "spec.install.remediation.retries scalar present; drift on \
                  this axis silently splits the substrate's canonical retry-\
@@ -3090,8 +3095,13 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let upgrade_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
-            .and_then(|u| kube_field(u, FLUX_HELMRELEASE_KEY_REMEDIATION))
-            .and_then(|r| kube_u64(r, FLUX_HELMRELEASE_KEY_RETRIES))
+            .and_then(|u| {
+                kube_field_u64(
+                    u,
+                    FLUX_HELMRELEASE_KEY_REMEDIATION,
+                    FLUX_HELMRELEASE_KEY_RETRIES,
+                )
+            })
             .expect(
                 "spec.upgrade.remediation.retries scalar present; drift on \
                  this axis silently splits the substrate's canonical retry-\
