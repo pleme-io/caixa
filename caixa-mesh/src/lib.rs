@@ -3274,8 +3274,8 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is,
-        kube_field, kube_field_str, kube_field_u64, kube_kind, kube_kind_is, kube_map,
-        kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
+        kube_field, kube_field_field, kube_field_str, kube_field_u64, kube_kind, kube_kind_is,
+        kube_map, kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
         kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is,
         kube_namespace, kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
         kube_spec_seq_first, kube_spec_seq_first_seq_first,
@@ -9552,8 +9552,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let rules = httproute_rules(&docs);
         for rule in &rules {
-            let attempts = kube_field(rule, GATEWAY_API_KEY_RETRY)
-                .and_then(|r| kube_field(r, GATEWAY_API_KEY_ATTEMPTS))
+            let attempts = kube_field_field(rule, GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS)
                 .expect("retry.attempts present");
             assert!(
                 attempts.is_u64() || attempts.is_i64(),
@@ -9913,8 +9912,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         let rules = cnp_ingress_rules(&policies);
         for rule in &rules {
-            let mode = kube_field(rule, CILIUM_KEY_AUTHENTICATION)
-                .and_then(|a| kube_field(a, CILIUM_KEY_MODE))
+            let mode = kube_field_field(rule, CILIUM_KEY_AUTHENTICATION, CILIUM_KEY_MODE)
                 .expect("authentication.mode present");
             assert!(
                 mode.is_string(),

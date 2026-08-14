@@ -2435,10 +2435,10 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_bool, kube_field, kube_field_bool, kube_field_u64, kube_kind,
-        kube_map, kube_name, kube_root_seq_field, kube_seq, kube_spec_bool_field, kube_spec_field,
-        kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field,
-        kube_str,
+        kube_api_version_is, kube_bool, kube_field_bool, kube_field_field, kube_field_u64,
+        kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq, kube_spec_bool_field,
+        kube_spec_field, kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first,
+        kube_spec_str_field, kube_str,
     };
 
     fn sample_caixa() -> Caixa {
@@ -4444,9 +4444,12 @@ spec:
         assert!(entry.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());
         assert!(entry.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some());
         assert!(
-            kube_field(&entry, COMPUTEUNIT_SPEC_KEY_MODULE)
-                .and_then(|m| kube_field(m, COMPUTEUNIT_MODULE_KEY_SOURCE))
-                .is_some(),
+            kube_field_field(
+                &entry,
+                COMPUTEUNIT_SPEC_KEY_MODULE,
+                COMPUTEUNIT_MODULE_KEY_SOURCE
+            )
+            .is_some(),
             "module.source must propagate verbatim"
         );
     }
