@@ -3278,8 +3278,8 @@ mod tests {
         kube_match_labels, kube_metadata, kube_metadata_label, kube_metadata_label_is,
         kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first,
         kube_spec, kube_spec_field, kube_spec_seq_field, kube_spec_seq_first,
-        kube_spec_seq_first_seq_first, kube_spec_str_field, kube_str, kube_u64,
-        mapping_string_keys,
+        kube_spec_seq_first_seq_first, kube_spec_seq_first_seq_first_seq_first,
+        kube_spec_str_field, kube_str, kube_u64, mapping_string_keys,
     };
     use std::time::Duration;
 
@@ -4359,8 +4359,14 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         let port_tuple = policies
             .first()
-            .and_then(|p| kube_spec_seq_first_seq_first(p, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS))
-            .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
+            .and_then(|p| {
+                kube_spec_seq_first_seq_first_seq_first(
+                    p,
+                    CILIUM_KEY_INGRESS,
+                    CILIUM_KEY_TO_PORTS,
+                    CILIUM_KEY_PORTS,
+                )
+            })
             .expect("spec.ingress[0].toPorts[0].ports[0] port-tuple");
         assert_eq!(
             kube_str(port_tuple, KUBE_KEY_PROTOCOL),
@@ -8641,11 +8647,14 @@ mod tests {
             let Some(destination) = cnp_name.split("-to-").nth(1) else {
                 continue;
             };
-            let cnp_port =
-                kube_spec_seq_first_seq_first(policy, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS)
-                    .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
-                    .and_then(|p| kube_str(p, KUBE_KEY_PORT))
-                    .expect("CNP toPorts[0].ports[0].port present");
+            let cnp_port = kube_spec_seq_first_seq_first_seq_first(
+                policy,
+                CILIUM_KEY_INGRESS,
+                CILIUM_KEY_TO_PORTS,
+                CILIUM_KEY_PORTS,
+            )
+            .and_then(|p| kube_str(p, KUBE_KEY_PORT))
+            .expect("CNP toPorts[0].ports[0].port present");
             assert_eq!(
                 cnp_port,
                 spec.port_for_destination(destination).to_string(),
@@ -9826,11 +9835,14 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         let cart_to_payment =
             find_by_name(&policies, "checkout-cart-to-payment").expect("cart→payment CNP present");
-        let port_value =
-            kube_spec_seq_first_seq_first(cart_to_payment, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS)
-                .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
-                .and_then(|p| kube_str(p, KUBE_KEY_PORT))
-                .expect("toPorts[0].ports[0].port present");
+        let port_value = kube_spec_seq_first_seq_first_seq_first(
+            cart_to_payment,
+            CILIUM_KEY_INGRESS,
+            CILIUM_KEY_TO_PORTS,
+            CILIUM_KEY_PORTS,
+        )
+        .and_then(|p| kube_str(p, KUBE_KEY_PORT))
+        .expect("toPorts[0].ports[0].port present");
         assert_eq!(
             port_value,
             DEFAULT_SERVICO_PORT.to_string(),
@@ -9871,11 +9883,14 @@ mod tests {
         // floor).
         let cart_to_catalog =
             find_by_name(&policies, "checkout-cart-to-catalog").expect("cart→catalog CNP present");
-        let port_value =
-            kube_spec_seq_first_seq_first(cart_to_catalog, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS)
-                .and_then(|tp| kube_seq_first(tp, CILIUM_KEY_PORTS))
-                .and_then(|p| kube_str(p, KUBE_KEY_PORT))
-                .expect("toPorts[0].ports[0].port present");
+        let port_value = kube_spec_seq_first_seq_first_seq_first(
+            cart_to_catalog,
+            CILIUM_KEY_INGRESS,
+            CILIUM_KEY_TO_PORTS,
+            CILIUM_KEY_PORTS,
+        )
+        .and_then(|p| kube_str(p, KUBE_KEY_PORT))
+        .expect("toPorts[0].ports[0].port present");
         assert_eq!(
             port_value,
             spec.port_for_destination("catalog").to_string(),
