@@ -21564,6 +21564,94 @@ pub fn kube_metadata_seq_field<'a>(
     kube_metadata_field(value, field).and_then(|v| v.as_sequence())
 }
 
+/// Read the sub-`metadata.<field>` YAML scalar-integer on a K8s custom
+/// resource YAML document as `Option<u64>` — the composed integer-arity
+/// per-sub-field-u64 accessor peer that stands on the composed
+/// scalar-arity [`kube_metadata_field`] accessor, folding the trailing
+/// `.and_then(|v| v.as_u64())` shape-gate closure into the helper for
+/// callers that always want a `u64` scalar (the K8s API-machinery
+/// [`ObjectMeta`][om]-flavoured sub-`metadata:` integer axes —
+/// `metadata.generation` on every CR the apiserver stamps with a
+/// monotonic per-revision counter the optimistic-concurrency-control
+/// / SSA reconciler-loop compares generations against
+/// `metadata.observedGeneration`; `metadata.deletionGracePeriodSeconds`
+/// on every CR whose deletion carries a bounded pre-delete grace
+/// window the API-machinery pins as an integer-seconds axis; every
+/// future per-CR `metadata.<count>` integer-scalar axis the
+/// [`ObjectMeta`][om] contract admits). Structural mirror of the
+/// sibling [`kube_spec_u64_field`] on the sub-`spec.<field>` axis and
+/// of the sibling [`kube_root_u64_field`] on the top-level `<field>:`
+/// axis: all three accessors fold a trailing `.as_u64()` shape-gate
+/// closure onto their axis's composed scalar-Value accessor primitive
+/// ([`kube_metadata_field`] here, [`kube_spec_field`] on the spec peer,
+/// [`kube_root_field`] on the root peer), all three stay parametric on
+/// the per-`<field>` sub-field axis-key. Closes the four-arity shape-
+/// gate family on the sub-`metadata:` axis to structural parity with
+/// the sub-`spec:` axis's five-arity closed family
+/// (`{str, seq, map, bool, u64}`): the pre-existing
+/// [`kube_metadata_str_field`] scalar-string arm, the
+/// [`kube_metadata_seq_field`] sequence arm, the
+/// [`kube_metadata_map_field`] sub-mapping arm, and this
+/// [`kube_metadata_u64_field`] scalar-integer arm now all compose on
+/// the same [`kube_metadata_field`] two-hop
+/// `metadata → as_mapping → get(<field>)` primitive.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying composition: the outer `metadata:` block is absent
+/// (the [`kube_metadata`] outer-arm short-circuit — a legally-omitted
+/// per-CR identity sub-block on `List`-shaped documents or on external
+/// YAML shapes that carry no [`ObjectMeta`][om]-flavoured header),
+/// the `metadata:` value is present but carries a non-Mapping YAML
+/// type (the [`kube_metadata`] shape-gate short-circuit — a schema-
+/// invalid identity shape per the K8s API-machinery contract tolerated
+/// here as `None` so the readback stays a total function), the
+/// requested sub-field `<field>` axis-key is absent from the
+/// `metadata:` sub-mapping (the [`kube_metadata_field`] trailing
+/// `Mapping::get` none-arm — a legally-omitted per-metadata-axis
+/// surface on a CR that carries other identity sub-fields but not this
+/// one — e.g. a freshly-authored CR the apiserver has not yet stamped
+/// with a `metadata.generation` counter), or the sub-field value is
+/// present but carries a non-integer YAML type (the trailing
+/// `.as_u64()` shape-gate short-circuit — a schema-invalid per-CR
+/// identity-sub-field type per the K8s apiserver's `OpenAPI` schema
+/// but tolerated here as `None` so the readback stays a total
+/// function, mirroring the sibling [`kube_spec_u64_field`] posture).
+/// The returned `u64` is a fresh primitive value (integers carry no
+/// underlying borrow the way the sibling string-arity accessor
+/// preserves) — the caller decides whether to `assert_eq!(_,
+/// Some(<expected>))` for a determinism pin, `.expect(...)` for a
+/// load-bearing counter identity, or `.unwrap_or(<default>)` for a
+/// substrate-side default fallback.
+///
+/// The `field` axis stays parametric (rather than pinned to a specific
+/// canonical sub-field like `metadata.generation` as a separate helper)
+/// because the K8s API-machinery [`ObjectMeta`][om] contract admits an
+/// open-ended per-CR identity integer-field surface — one helper covers
+/// every integer-shaped `ObjectMeta` axis today (`metadata.generation`
+/// for optimistic-concurrency-control / SSA reconciler-loop generation
+/// vs. observedGeneration comparisons, `metadata.deletionGracePeriodSeconds`
+/// for pre-delete-hook coordination bounded grace windows) with the
+/// axis-key threaded through the call. Every future per-CR
+/// `metadata.<field>` scalar-integer readback (the future
+/// `caixa-operator`'s per-`Caixa`/`Lacre`/`CaixaBuild` CR reconciler's
+/// `metadata.generation` navigation for the build-lifecycle
+/// generation-vs-observedGeneration reconcile pin; the future
+/// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR materializer's `metadata.deletionGracePeriodSeconds` readback for
+/// the controller-owned pre-delete-hook contract; every future test-
+/// side `metadata.<field>` scalar-integer probe the M3.x + M4 renderer
+/// set adds) reaches this same helper by construction — no per-consumer
+/// three-hop chain re-inline, no per-consumer [`KUBE_KEY_METADATA`]
+/// axis-key drift, no coordinated rewrite across every per-CR
+/// identity-sub-field scalar-integer readback on a future K8s API-
+/// machinery rebrand of the top-level `metadata:` axis.
+///
+/// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
+#[must_use]
+pub fn kube_metadata_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64> {
+    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_u64)
+}
+
 /// Read a top-level `<field>:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the composed
 /// sub-mapping-arity per-top-level-field accessor at the root axis,
@@ -46473,6 +46561,309 @@ spec:
                  chain — otherwise every future routed per-CR \
                  sub-metadata-field sequence-readback site drifts \
                  silently at test time"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_u64_field_reads_sub_metadata_field_u64_scalar() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `metadata: { <sub-field>: <u64>, ... }` identity
+        // sub-block (every K8s CR the apiserver stamps with an
+        // integer-shaped `metadata.<field>` axis — `metadata.generation`
+        // on every CR the apiserver stamps with a monotonic per-revision
+        // counter the SSA / optimistic-concurrency-control reconciler
+        // compares against `metadata.observedGeneration`,
+        // `metadata.deletionGracePeriodSeconds` on every CR whose
+        // deletion carries a bounded pre-delete grace window), the
+        // composed integer-arity accessor returns `Some(<u64>)` across
+        // the routed per-sub-field readback axes. Pin two distinct
+        // integer values (a single-digit `7` at "generation", a
+        // multi-digit `30` at "deletionGracePeriodSeconds") so the
+        // trailing `.as_u64()` fold-through preserves both a
+        // single-digit counter and a multi-digit grace-second window —
+        // the sibling `kube_u64_reads_sub_field_scalar_u64_verbatim`
+        // pin one altitude down on the value-level quintet already
+        // validates the integer shape-gate; this pin validates the same
+        // axis one altitude up on the metadata-anchored family.
+        // Structural mirror of the sibling
+        // `kube_spec_u64_field_reads_sub_spec_field_u64_scalar` pin on
+        // the sub-`spec.<field>` integer-arity axis and of the sibling
+        // `kube_metadata_seq_field_reads_sub_metadata_field_sequence`
+        // pin on the peer sequence-arity axis of the same `metadata:`
+        // sub-block.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_number("generation", 7u64);
+        metadata.insert_number("deletionGracePeriodSeconds", 30u64);
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_metadata_u64_field(&value, "generation"),
+            Some(7),
+            "kube_metadata_u64_field must read metadata.generation as \
+             the single-digit counter verbatim — the future caixa-\
+             operator per-`Caixa`/`Lacre`/`CaixaBuild` CR reconciler's \
+             generation-vs-observedGeneration reconcile pin reaches \
+             through this axis for the SSA / optimistic-concurrency-\
+             control identity contract"
+        );
+        assert_eq!(
+            kube_metadata_u64_field(&value, "deletionGracePeriodSeconds"),
+            Some(30),
+            "kube_metadata_u64_field must read a second axis-key on a \
+             multi-digit grace-second scalar — pinning that the \
+             trailing `.as_u64()` fold-through preserves both a \
+             single-digit counter and a multi-digit grace window \
+             (mirroring the sibling `kube_spec_u64_field_reads_\
+             sub_spec_field_u64_scalar` cross-magnitude coverage on \
+             the sub-`spec:` axis one axis over)"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_u64_field_returns_none_when_metadata_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_metadata_field`]
+        // closes on (which in turn folds through [`kube_metadata`]'s
+        // outer-arm and shape-gate) folds through this composed
+        // integer-arity accessor. Peer of the sibling
+        // `kube_metadata_seq_field_returns_none_when_metadata_block_absent`
+        // pin on the composed sub-`metadata.<field>` sequence-arity
+        // accessor axis and of the sibling
+        // `kube_spec_u64_field_returns_none_when_spec_sub_block_absent`
+        // pin on the composed sub-`spec.<field>` integer-arity accessor
+        // axis one axis over.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_metadata_u64_field(&shape, "generation"),
+                None,
+                "kube_metadata_u64_field({shape:?}, <FIELD>) must \
+                 short-circuit to None through the underlying \
+                 kube_metadata_field's kube_metadata outer-arm when the \
+                 top-level `metadata:` block is absent on the outer \
+                 Value — the composition fold must preserve the total-\
+                 function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_u64_field_returns_none_when_metadata_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `metadata:` value on the outer
+        // Value folds through [`kube_metadata`]'s trailing
+        // `.as_mapping()` shape-gate up through
+        // [`kube_metadata_field`] up through this composed integer-
+        // arity accessor — the caller's `.expect(...)` /
+        // `assert_eq!(_, Some(<expected>))` continuation stays a total
+        // function.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("metadata-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_metadata_u64_field(&value, "generation"),
+                None,
+                "kube_metadata_u64_field must return None when the \
+                 top-level `metadata:` axis carries a non-Mapping YAML \
+                 type ({non_mapping:?}) — the fold through \
+                 kube_metadata's shape-gate arm short-circuits here, \
+                 and every routed caller depends on that None-arm to \
+                 keep the readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_u64_field_returns_none_when_requested_field_absent() {
+        // The composition's middle per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `metadata:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-CR
+        // `metadata.generation` readback that finds no `generation`
+        // sub-field (e.g. a freshly-authored CR the apiserver has not
+        // yet stamped with a per-revision counter) expects None here
+        // (routing the "no observed generation yet" fallback the
+        // reconciler-loop takes on first-write) rather than a panic.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_metadata_u64_field(&value, "generation"),
+            None,
+            "kube_metadata_u64_field must return None when the \
+             requested `metadata.<field>` axis-key is absent from the \
+             sub-mapping — a `Mapping::get(<KEY>)` miss short-circuits \
+             the composed accessor, and callers rely on the None-arm \
+             to route the fallback path (rather than the wrong-shape \
+             arm)"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_u64_field_returns_none_when_field_carries_non_u64_type() {
+        // The composition's trailing `.as_u64()` shape-gate None arm:
+        // a `metadata.<field>` axis-key present but carrying a
+        // non-integer YAML type. Schema-invalid per the K8s apiserver's
+        // OpenAPI schema (the K8s [`ObjectMeta`] `generation` /
+        // `deletionGracePeriodSeconds` axes pin integer leaves) but
+        // tolerated here as None so the readback stays a total function.
+        // Pin the None-arm so a future refactor that reaches for
+        // `.as_u64().unwrap()` (which would panic on a scalar-string or
+        // bool axis-value) is a test-visible break, not a runtime
+        // regression at the first schema-invalid CR the reader sees.
+        // Peer of the sibling
+        // `kube_metadata_seq_field_returns_none_when_field_carries_non_sequence_type`
+        // pin on the sub-`metadata.<field>` sequence-arity accessor
+        // axis and of the sibling
+        // `kube_spec_u64_field_returns_none_when_field_carries_non_u64_type`
+        // pin on the sub-`spec.<field>` integer-arity accessor axis one
+        // axis over.
+        for non_u64 in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("7".into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key("generation", non_u64.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_metadata_u64_field(&value, "generation"),
+                None,
+                "kube_metadata_u64_field must return None when \
+                 metadata.generation carries a non-integer YAML type \
+                 ({non_u64:?}) — the trailing `.as_u64()` shape gate \
+                 short-circuits here, and every routed caller depends \
+                 on that None-arm to keep the readback total (YAML's \
+                 `\"7\"` is a String and `true` is a Bool per \
+                 serde_yaml's strict shape-gate posture, not coercible \
+                 integers)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_u64_field_composes_on_lifted_kube_metadata_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_metadata_field(value, field).and_then(|v| v.as_u64())`
+        // — the composed scalar-arity accessor stays load-bearing, this
+        // integer-arity accessor stands one abstraction step above it
+        // (folding the trailing `.as_u64()` shape-gate closure). Pin
+        // the delegation-shape byte-for-byte across two representative
+        // sub-field axis-keys so a future refactor that bypasses
+        // [`kube_metadata_field`] (a private inline
+        // `.get(KUBE_KEY_METADATA).and_then(|m| m.as_mapping())
+        // .and_then(|m| m.get(field)).and_then(|n| n.as_u64())` chain
+        // that would silently drift on a future rebrand of the outer
+        // two-hop navigation) is a test-visible break. Peer of the
+        // sibling
+        // `kube_spec_u64_field_composes_on_lifted_kube_spec_field_accessor`
+        // composition pin on the sub-`spec.<field>` integer-arity
+        // accessor axis and of the sibling
+        // `kube_metadata_seq_field_composes_on_lifted_kube_metadata_field_accessor`
+        // composition pin on the peer sub-`metadata.<field>` sequence-
+        // arity accessor axis of the same `metadata:` sub-block.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_number("generation", 7u64);
+        metadata.insert_number("deletionGracePeriodSeconds", 30u64);
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in ["generation", "deletionGracePeriodSeconds"] {
+            let via_composed = kube_metadata_u64_field(&value, sub_field);
+            let via_delegation =
+                kube_metadata_field(&value, sub_field).and_then(serde_yaml::Value::as_u64);
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_metadata_u64_field(v, {sub_field:?}) must equal \
+                 the delegation-shape `kube_metadata_field(v, \
+                 {sub_field:?}).and_then(|v| v.as_u64())` — the \
+                 composition pin closes the drift surface where a \
+                 private inline bypass silently desynchronizes from \
+                 the underlying composed scalar-arity accessor's \
+                 contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_u64_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the raw
+        // `value.get(KUBE_KEY_METADATA).and_then(|m|
+        // m.get(<FIELD>)).and_then(|n| n.as_u64())` three-hop chain
+        // every future routed per-CR `metadata.<field>` integer-
+        // readback site would otherwise re-inline. Pin the byte-
+        // equivalence across a mix of matching and off-shape axis-keys
+        // (present-and-integer, present-but-non-integer, and absent) so
+        // the composed helper stays a drop-in replacement for every
+        // future routed site's prior two-line block regardless of which
+        // short-circuit arm each per-caller CR happens to carry.
+        // Mirrors the sibling `kube_spec_u64_field_matches_prior_inline_chain`
+        // pin one axis over on the composed sub-`spec.<field>` integer-
+        // arity and of the sibling
+        // `kube_metadata_seq_field_matches_prior_inline_chain` pin on
+        // the peer sequence-arity of the same `metadata:` sub-block.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_number("generation", 7u64);
+        metadata.insert_number("deletionGracePeriodSeconds", 30u64);
+        // Off-shape axes route through the same composed helper — the
+        // present-key + wrong-shape arm's None-fold must also stay
+        // byte-identical to the inline chain, not just the present-and-
+        // correctly-typed arm.
+        metadata.insert_string(KUBE_KEY_NAME, "cart");
+        metadata.insert_str_key(KUBE_KEY_LABELS, {
+            let mut labels = serde_yaml::Mapping::new();
+            labels.insert_string("app", "cart");
+            serde_yaml::Value::Mapping(labels)
+        });
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            "generation",                 // present-and-integer arm
+            "deletionGracePeriodSeconds", // present-and-integer arm (multi-digit)
+            KUBE_KEY_NAME,                // present-but-non-u64 arm (String)
+            KUBE_KEY_LABELS,              // present-but-non-u64 arm (Mapping)
+            "missing",                    // absent arm
+        ] {
+            let via_helper = kube_metadata_u64_field(&value, sub_field);
+            let via_inline = value
+                .get(KUBE_KEY_METADATA)
+                .and_then(|m| m.get(sub_field))
+                .and_then(serde_yaml::Value::as_u64);
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_metadata_u64_field(v, {sub_field:?}) must yield \
+                 the same Option<u64> as the raw \
+                 `value.get(KUBE_KEY_METADATA).and_then(|m| \
+                 m.get({sub_field:?})).and_then(|n| n.as_u64())` chain \
+                 — otherwise every future routed per-CR sub-metadata-\
+                 field integer-readback site drifts silently at test \
+                 time"
             );
         }
     }
