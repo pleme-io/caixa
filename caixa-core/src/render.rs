@@ -21568,6 +21568,115 @@ pub fn kube_root_seq_field<'a>(
     kube_root_field(value, field).and_then(|v| v.as_sequence())
 }
 
+/// Read a top-level `<field>:` scalar-boolean leaf-toggle on a K8s
+/// custom resource or helm-values-shaped YAML document as
+/// `Option<bool>` — the composed scalar-boolean root-axis accessor
+/// that folds the shape `value.get(field).and_then(|v| v.as_bool())`
+/// onto one substrate-primitive method call the caller reads as
+/// intent (`kube_root_bool_field(<value>, <FIELD>)` — "read this
+/// document's top-level `<FIELD>:` boolean scalar") rather than as a
+/// two-hop `readback → shape-gate` chain.
+///
+/// Structural mirror of the sibling [`kube_spec_bool_field`] (4f6fc93)
+/// on the sub-`spec.<field>` axis and the value-level [`kube_bool`]
+/// (4785e45) primitive one altitude down: the three peers all fold
+/// the trailing `.as_bool()` shape-gate closure onto the axis's
+/// scalar-Value accessor primitive, differing only in which outer
+/// walk the axis carries ([`kube_spec_field`]'s two-hop `spec →
+/// as_mapping → get(<field>)` on the spec-anchored peer, the direct
+/// one-hop `value.get(field)` on the root-anchored peer here, the
+/// same `value.get(field)` on the value-level primitive). Peer of
+/// the shape-gated root-axis siblings [`kube_root_str_field`]
+/// (ae83f4e) on the string-scalar arity, [`kube_root_map_field`]
+/// (723f6d7) on the sub-mapping arity, and [`kube_root_seq_field`]
+/// (d61e46e) on the sequence arity: the four together close the
+/// root-axis `{str, seq, map, bool}` four-arity shape-gate family to
+/// structural parity with the sub-`spec:` `{str, seq, map, bool}`
+/// four-arity family already closed at the sub-axis level
+/// (`c4fe21d` — str; `fc64ed7` — seq; `27fc2ee` — map;
+/// `4f6fc93` — bool). The root-level variant needs no outer shape
+/// gate on `value` itself — [`serde_yaml::Value::get`] already
+/// short-circuits to `None` on non-Mapping outer values — so the
+/// composition folds on one hop rather than the two hops the
+/// spec-anchored peer closes.
+///
+/// Returns `None` on any of the three short-circuit arms folded
+/// through the underlying composition: the outer `value` itself
+/// carries a non-Mapping YAML type (the [`kube_root_field`]
+/// `Value::get` outer-arm short-circuit — `Value::Null`,
+/// `Value::String`, `Value::Sequence`, `Value::Number`,
+/// `Value::Bool`, `Value::Tagged` — [`serde_yaml::Value::get`]
+/// gates the outer shape without a separate `.as_mapping()`
+/// closure), the requested top-level `<field>:` axis-key is absent
+/// from the outer Mapping (the [`kube_root_field`] trailing
+/// `Value::get` none-arm — a legally-omitted top-level scalar-
+/// boolean sub-block per the document's shape contract), or the
+/// top-level `<field>:` value is present but carries a non-boolean
+/// YAML type (the trailing `.as_bool()` shape-gate short-circuit —
+/// a schema-invalid top-level sub-block per the CR's `OpenAPI`
+/// schema but tolerated here as `None` so the readback stays a
+/// total function, mirroring the sibling
+/// [`kube_root_str_field`] / [`kube_root_seq_field`] /
+/// [`kube_root_map_field`] posture). The returned `bool` is a fresh
+/// primitive value (booleans carry no underlying borrow the way the
+/// sibling string / sequence / mapping accessors preserve) — the
+/// caller decides whether to `assert_eq!(_, Some(<expected>))` for
+/// a determinism pin, `.expect(...)` for a load-bearing toggle
+/// identity, or `.unwrap_or(<default>)` for a substrate-side
+/// default fallback.
+///
+/// The `field` axis stays parametric (rather than pinned to a
+/// specific canonical scalar-boolean top-level axis-key as a
+/// separate helper) so the same lift closes every top-level
+/// scalar-boolean sub-block a future per-CR emitter surfaces: the
+/// forecast future Flux-controller CR's top-level `paused:` toggle
+/// the sibling [`kube_root_field`] docstring at
+/// caixa-core/src/render.rs:21472 already forecasts, a top-level
+/// `disabled:` opt-out on a future feature-flag envelope shape,
+/// the hypothetical `enabled:` mode-gate on a per-cluster helm-
+/// values-shaped envelope the future M4 aggregator materializes —
+/// each new top-level scalar-boolean axis reaches this helper with
+/// a new [`KUBE_KEY_<AXIS>`] const, not a fresh per-arity helper.
+///
+/// Every future top-level `<field>:` scalar-boolean readback the
+/// M3.x + M4 renderer set materializes (the forecast top-level
+/// `paused:` / `disabled:` / `enabled:` toggles above, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's top-level
+/// scalar-boolean navigation MESH-COMPOSITION §III.2 #5 admits, the
+/// `app-operator`'s per-Aplicacao CR reader for a top-level
+/// scalar-boolean toggle, every future test-side top-level
+/// `<field>:` boolean-scalar probe the caixa-flux / caixa-mesh /
+/// caixa-helm crates add) reaches this one accessor primitive by
+/// construction — no per-consumer two-hop-plus-shape-gate re-inline,
+/// no per-consumer axis-key drift, no coordinated rewrite across
+/// every top-level scalar-boolean readback on a future
+/// [`serde_yaml`] surface rebrand or shape-gate shift. Closes the
+/// four-arity shape-gate closure on the top-level axis to
+/// structural parity with the sub-`spec.<field>` four-arity closure
+/// established at 4f6fc93.
+#[must_use]
+pub fn kube_root_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bool> {
+    // Post-lift body: composes on the substrate-primitive
+    // [`kube_root_field`] parametric root-axis scalar-Value accessor
+    // rather than re-inlining the two-hop `value.get(field)
+    // .and_then(|v| v.as_bool())` chain. Structural mirror at the
+    // root axis of the way sibling [`kube_metadata_seq_field`]
+    // (139a94b), [`kube_metadata_map_field`] (d03cc08),
+    // [`kube_metadata_str_field`] (6809867) each compose on
+    // [`kube_metadata_field`] (450f1ff), the way sibling
+    // [`kube_spec_bool_field`] (4f6fc93), [`kube_spec_map_field`]
+    // (27fc2ee), [`kube_spec_seq_field`] (fc64ed7),
+    // [`kube_spec_str_field`] (c4fe21d) each compose on
+    // [`kube_spec_field`] (23bd568), and the way sibling
+    // [`kube_root_seq_field`] (d61e46e), [`kube_root_map_field`]
+    // (723f6d7), [`kube_root_str_field`] (ae83f4e) each compose on
+    // [`kube_root_field`] (c456d97) — each shape-gate arity peer
+    // folds its trailing `.as_bool()` / `.as_str()` / `.as_mapping()`
+    // / `.as_sequence()` closure onto its axis's scalar-Value
+    // accessor primitive.
+    kube_root_field(value, field).and_then(serde_yaml::Value::as_bool)
+}
+
 /// Read the `matchLabels:` string-scalar sub-mapping on a K8s
 /// `LabelSelector`-shaped YAML value (Cilium `EndpointSelector`,
 /// `fromEndpoints[]`, Gateway API selectors, `NetworkPolicy` peers,
@@ -46554,6 +46663,318 @@ spec:
                  v.as_sequence())` chain across the pinned canonical \
                  axis and the open-ended parametric axes — any \
                  divergence indicates the composition drifted"
+            );
+        }
+    }
+
+    // ── kube_root_bool_field lift ───────────────────────────────────────
+
+    #[test]
+    fn kube_root_bool_field_reads_top_level_field_boolean_scalar() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level scalar-boolean leaf-toggle (the hypothetical
+        // future Flux-controller CR's `paused:` axis the sibling
+        // [`kube_root_field`] docstring forecasts at
+        // caixa-core/src/render.rs:21472, and every forthcoming
+        // top-level `disabled:` / `enabled:` toggle a per-CR emitter
+        // materializes at MESH-COMPOSITION §III.2 #5), the composed
+        // boolean-arity root-axis accessor returns `Some(<bool>)`
+        // across the pinned scalar-boolean axes. Pin both boolean
+        // arms (`true` and `false` across two axis-keys) so the
+        // trailing `.as_bool()` fold-through preserves both arms —
+        // the sibling `kube_bool_reads_sub_field_scalar_boolean_verbatim`
+        // pin one altitude down on the value-level primitive quintet
+        // already validates the boolean shape-gate; this pin validates
+        // the same axis one altitude up on the root-anchored quartet.
+        // Structural mirror of the sibling
+        // `kube_root_str_field_reads_api_version_and_kind_string_scalars`,
+        // `kube_root_map_field_reads_top_level_field_mapping`, and
+        // `kube_root_seq_field_reads_top_level_field_sequence` pins on
+        // the peer root-axis string-scalar / sub-mapping / sequence
+        // arity axes.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key("paused", serde_yaml::Value::Bool(true));
+        cr.insert_str_key("disabled", serde_yaml::Value::Bool(false));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_bool_field(&value, "paused"),
+            Some(true),
+            "kube_root_bool_field must read a top-level scalar-boolean \
+             leaf-toggle as the true arm verbatim — the forthcoming \
+             per-CR emitter's forecast top-level `paused:` toggle \
+             readback site reaches through this axis"
+        );
+        assert_eq!(
+            kube_root_bool_field(&value, "disabled"),
+            Some(false),
+            "kube_root_bool_field must read a second axis-key on the \
+             opposite boolean arm — pinning that the trailing \
+             `.as_bool()` fold-through preserves both arms, not just \
+             the `true` arm (mirroring the sibling \
+             `kube_bool_reads_sub_field_scalar_boolean_verbatim` pin's \
+             both-arm coverage one altitude down on the value-level \
+             quintet, and the sibling \
+             `kube_spec_bool_field_reads_sub_spec_field_boolean_scalar` \
+             pin's both-arm coverage one altitude over on the sub-\
+             `spec.<field>` quartet)"
+        );
+    }
+
+    #[test]
+    fn kube_root_bool_field_returns_none_when_field_absent() {
+        // Short-circuit arm 1: the requested top-level `<field>:`
+        // axis-key is absent from the outer Mapping (a legally-
+        // omitted top-level scalar-boolean sub-block — e.g. a bare
+        // CR that carries no `paused:` toggle when the axis is opt-
+        // in, routing the "no explicit override" fallback to the
+        // controller's own default). The helper folds this to `None`
+        // so the readback stays a total function. Structural mirror
+        // of the sibling
+        // `kube_root_str_field_returns_none_when_field_absent`,
+        // `kube_root_map_field_returns_none_when_field_absent`, and
+        // `kube_root_seq_field_returns_none_when_field_absent` pins
+        // on the peer root-axis shape-gate accessors.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key("enabled", serde_yaml::Value::Bool(true));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_bool_field(&value, "paused"),
+            None,
+            "kube_root_bool_field must short-circuit to None when the \
+             requested top-level scalar-boolean axis-key is absent \
+             from the outer Mapping — the fallback path routes off \
+             the None-arm rather than the wrong-shape arm"
+        );
+    }
+
+    #[test]
+    fn kube_root_bool_field_returns_none_when_field_carries_non_boolean_type() {
+        // Short-circuit arm 2: the requested top-level `<field>:`
+        // axis-key is present but carries a non-boolean YAML type
+        // (a schema-invalid top-level sub-block per the CR's
+        // `OpenAPI` schema — a scalar-integer where the schema
+        // pins a scalar-boolean, a scalar-string `"true"` that
+        // `serde_yaml`'s strict shape-gate posture does NOT coerce
+        // to `Value::Bool(true)`, a nested Mapping or Sequence at a
+        // toggle axis). Pin the None-arm across representative
+        // non-boolean shapes so a future refactor that reaches for
+        // `.as_bool().unwrap()` (which would panic on a scalar-
+        // integer or scalar-string axis-value) is a test-visible
+        // break. Peer of the sibling
+        // `kube_spec_bool_field_returns_none_when_field_carries_non_boolean_type`
+        // pin on the sub-`spec.<field>` boolean-arity accessor, and
+        // of the peer shape-gate root-axis
+        // `kube_root_seq_field_returns_none_when_field_carries_non_sequence_type`
+        // pin on the sequence-arity variant.
+        for non_bool in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(1u64.into()),
+            serde_yaml::Value::String("true".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key("paused", non_bool.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_root_bool_field(&value, "paused"),
+                None,
+                "kube_root_bool_field must short-circuit to None when \
+                 the top-level `paused:` axis-key carries a non-\
+                 boolean YAML type ({non_bool:?}) — the trailing \
+                 `.as_bool()` shape gate short-circuits here (YAML's \
+                 `1` is a Number and `\"true\"` is a String per \
+                 serde_yaml's strict shape-gate posture, not truthy \
+                 Bools)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_bool_field_short_circuits_when_outer_value_is_non_mapping() {
+        // Short-circuit arm 3: the outer `value` itself carries a
+        // non-Mapping YAML type. Unlike the sub-`metadata:` /
+        // sub-`spec:` boolean-arity peers which need an explicit
+        // `.as_mapping()` gate on the outer sub-block, the root-axis
+        // variant needs no explicit outer shape gate —
+        // [`serde_yaml::Value::get`] already short-circuits to None
+        // on non-Mapping outer values. Pin the None-arm across the
+        // five non-Mapping outer shapes so a future serde_yaml
+        // revision that changes the `Value::get` outer-shape
+        // contract lights up here rather than silently
+        // desynchronizing the root-axis boolean-arity accessor from
+        // its shape-gate peers. Structural mirror of the sibling
+        // `kube_root_str_field_returns_none_when_field_carries_non_string_type`
+        // + `kube_root_map_field_short_circuits_when_outer_value_is_non_mapping`
+        // + `kube_root_seq_field_short_circuits_when_outer_value_is_non_mapping`
+        // pins on the peer root-axis shape-gate accessors.
+        let outer_shapes = [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::String("not-a-mapping".into()),
+            serde_yaml::Value::Sequence(vec![]),
+        ];
+        for outer in outer_shapes {
+            assert_eq!(
+                kube_root_bool_field(&outer, "paused"),
+                None,
+                "kube_root_bool_field must short-circuit to None on \
+                 every non-Mapping outer Value shape — Value::get \
+                 handles the outer-shape gate the sub-axis peers \
+                 close explicitly"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_bool_field_composes_on_lifted_kube_root_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_root_field(value, field).and_then(|v| v.as_bool())` —
+        // the composed scalar-arity accessor stays load-bearing, this
+        // boolean-arity accessor stands one abstraction step above it
+        // (folding the trailing `.as_bool()` shape-gate closure). Pin
+        // the delegation-shape byte-for-byte across three
+        // representative top-level axis-keys so a future refactor
+        // that bypasses [`kube_root_field`] (a private inline
+        // `.get(field).and_then(|v| v.as_bool())` chain that would
+        // silently drift on a future rebrand of the outer one-hop
+        // navigation) is a test-visible break. Peer of the sibling
+        // `kube_root_str_field_recomposes_on_lifted_kube_root_field`,
+        // `kube_root_map_field_recomposes_on_lifted_kube_root_field`,
+        // and `kube_root_seq_field_recomposes_on_lifted_kube_root_field`
+        // pins on the peer root-axis shape-gate accessors, and of the
+        // sibling
+        // `kube_spec_bool_field_composes_on_lifted_kube_spec_field_accessor`
+        // pin on the sub-`spec.<field>` boolean-arity accessor.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key("paused", serde_yaml::Value::Bool(true));
+        cr.insert_str_key("disabled", serde_yaml::Value::Bool(false));
+        cr.insert_str_key("enabled", serde_yaml::Value::Bool(true));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for field in ["paused", "disabled", "enabled"] {
+            let via_composed = kube_root_bool_field(&value, field);
+            let via_delegation =
+                kube_root_field(&value, field).and_then(serde_yaml::Value::as_bool);
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_root_bool_field(v, {field:?}) must equal the \
+                 delegation-shape `kube_root_field(v, {field:?})\
+                 .and_then(|v| v.as_bool())` — the composition pin \
+                 closes the drift surface where a private inline \
+                 bypass silently desynchronizes from the underlying \
+                 composed scalar-Value accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_bool_field_matches_prior_inline_chain() {
+        // Byte-equivalence pin: the lifted `kube_root_bool_field`
+        // helper resolves exactly the same `Option<bool>` as the
+        // two-hop `value.get(field).and_then(|v| v.as_bool())`
+        // inline chain every future routed caller would otherwise
+        // re-derive. Structural mirror of the sibling
+        // `kube_root_str_field_matches_prior_inline_chain` +
+        // `kube_root_map_field_matches_prior_inline_chain` +
+        // `kube_root_seq_field_matches_prior_inline_chain` pins on
+        // the peer root-axis shape-gate accessors, and of the
+        // sibling `kube_spec_bool_field_matches_prior_inline_chain`
+        // pin on the sub-`spec.<field>` boolean-arity accessor.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key("paused", serde_yaml::Value::Bool(true));
+        cr.insert_str_key("disabled", serde_yaml::Value::Bool(false));
+        cr.insert_str_key("wrong_shape", serde_yaml::Value::String("true".into()));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for field in ["paused", "disabled", "wrong_shape", "absent"] {
+            assert_eq!(
+                kube_root_bool_field(&value, field),
+                value.get(field).and_then(serde_yaml::Value::as_bool),
+                "kube_root_bool_field(v, {field:?}) must yield the \
+                 same Option<bool> as the prior inline \
+                 `value.get({field:?}).and_then(|v| v.as_bool())` \
+                 chain — otherwise any future routed top-level \
+                 scalar-boolean readback site drifts silently at \
+                 test time"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_bool_field_closes_root_axis_quartet_with_shape_gate_peers() {
+        // Family-closure pin: with `kube_root_bool_field` lifted,
+        // the root-axis shape-gate accessor family closes at four
+        // arities — `kube_root_str_field` (str, ae83f4e),
+        // `kube_root_seq_field` (seq, d61e46e),
+        // `kube_root_map_field` (map, 723f6d7), and
+        // `kube_root_bool_field` (bool, this lift) — to structural
+        // parity with the sub-`spec.<field>` four-arity family
+        // closed at 4f6fc93 (`kube_spec_str_field` +
+        // `kube_spec_seq_field` + `kube_spec_map_field` +
+        // `kube_spec_bool_field`). Pin the four-way parity by
+        // driving all four accessors against the same top-level CR
+        // shape and asserting each returns `Some(<arity>)` on its
+        // pinned axis and `None` on every off-arity axis — a fold-
+        // through cross-check that no arity leaks between the four
+        // shape-gate peers.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key("str_axis", serde_yaml::Value::String("value".into()));
+        cr.insert_str_key("seq_axis", serde_yaml::Value::Sequence(vec![]));
+        cr.insert_str_key(
+            "map_axis",
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        cr.insert_str_key("bool_axis", serde_yaml::Value::Bool(true));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        // On-arity: each shape-gate peer returns Some on its own
+        // axis.
+        assert_eq!(kube_root_str_field(&value, "str_axis"), Some("value"));
+        assert!(kube_root_seq_field(&value, "seq_axis").is_some());
+        assert!(kube_root_map_field(&value, "map_axis").is_some());
+        assert_eq!(kube_root_bool_field(&value, "bool_axis"), Some(true));
+
+        // Off-arity: no shape-gate peer accepts an axis of a
+        // different arity. The four together partition the four
+        // canonical shape-gate arities without overlap.
+        for off_axis in ["seq_axis", "map_axis", "bool_axis"] {
+            assert_eq!(
+                kube_root_str_field(&value, off_axis),
+                None,
+                "kube_root_str_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the four \
+                 shape-gate peers"
+            );
+        }
+        for off_axis in ["str_axis", "map_axis", "bool_axis"] {
+            assert_eq!(
+                kube_root_seq_field(&value, off_axis),
+                None,
+                "kube_root_seq_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the four \
+                 shape-gate peers"
+            );
+        }
+        for off_axis in ["str_axis", "seq_axis", "bool_axis"] {
+            assert_eq!(
+                kube_root_map_field(&value, off_axis),
+                None,
+                "kube_root_map_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the four \
+                 shape-gate peers"
+            );
+        }
+        for off_axis in ["str_axis", "seq_axis", "map_axis"] {
+            assert_eq!(
+                kube_root_bool_field(&value, off_axis),
+                None,
+                "kube_root_bool_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the four \
+                 shape-gate peers"
             );
         }
     }
