@@ -23801,13 +23801,12 @@ pub fn kube_field_bool<R: KubeReceiver + ?Sized>(
 /// sibling [`kube_field_str`] opened at the string arity, the sibling
 /// [`kube_field_u64`] closed at the integer arity, and the sibling
 /// [`kube_field_bool`] closed at the boolean arity — the remaining
-/// `kube_field_map` composed sub-mapping-tail readback will close the
-/// last shape-gate arity in a follow-up run, matching the closed
-/// shape of the value-level primitive family ([`kube_field`],
-/// [`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`],
-/// [`kube_map`]) one altitude below where the shape-gated variants
-/// already span the axis. Alongside the composed raw-tail
-/// [`kube_field_field`] (cb5d862) peer this now spans the composed
+/// sub-mapping-arity peer [`kube_field_map`] closes the last shape-
+/// gate arity, matching the closed shape of the value-level primitive
+/// family ([`kube_field`], [`kube_str`], [`kube_u64`], [`kube_bool`],
+/// [`kube_seq`], [`kube_map`]) one altitude below where the shape-
+/// gated variants already span the axis. Alongside the composed raw-
+/// tail [`kube_field_field`] (cb5d862) peer this now spans the composed
 /// value-level three-hop navigation surface at every arity the K8s
 /// apiserver `OpenAPI` schema partitions on at the sequence altitude —
 /// raw-`Value` via [`kube_field_field`], sequence via `kube_field_seq`.
@@ -23952,6 +23951,106 @@ pub fn kube_field_field<'a, R: KubeReceiver + ?Sized>(
     inner_field: &str,
 ) -> Option<&'a serde_yaml::Value> {
     kube_field(recv, field).and_then(|v| kube_field(v, inner_field))
+}
+
+/// Read a sub-`<mid>.<tail>` YAML sub-mapping nested two hops under an
+/// arbitrary [`KubeReceiver`] as `Option<&serde_yaml::Mapping>` — the
+/// value-level three-hop navigation primitive that folds `.get(<mid>)
+/// .and_then(|v| v.get(<tail>)).and_then(|v| v.as_mapping())` into a
+/// single helper call. Exactly `kube_field(recv, mid).and_then(|v|
+/// kube_map(v, tail))` — the composed peer of the value-level
+/// [`kube_field`] (e04c234) one-hop pass-through and the value-level
+/// sub-mapping-arity [`kube_map`] (28fa5d8) two-hop accessor. Sub-
+/// mapping-arity sibling of the composed scalar-str [`kube_field_str`]
+/// (1c68424), composed scalar-`u64` [`kube_field_u64`] (e6fca52),
+/// composed scalar-`bool` [`kube_field_bool`] (261894b), composed
+/// sequence-tail [`kube_field_seq`] (a45bd8b), and composed raw-tail
+/// [`kube_field_field`] (cb5d862) accessors on the same three-hop
+/// axis: where those five composed accessors fold a trailing
+/// `.as_str()` / `.as_u64()` / `.as_bool()` / `.as_sequence()` shape-
+/// gate (or pass through the raw `&Value` tail) onto the two-hop-
+/// nested navigation, this accessor folds the trailing `.as_mapping()`
+/// shape-gate on the same navigation, so every routed two-hop
+/// `.and_then(|X| kube_field(X, <MID>)).and_then(|Y| kube_map(Y,
+/// <TAIL>))` middle-hop-plus-sub-mapping-tail block (the canonical
+/// per-K8s-document `metadata.labels` per-resource-label-block readback
+/// on the [`KUBE_KEY_METADATA`] middle-hop + [`KUBE_KEY_LABELS`] tail
+/// axis the sibling specialization [`kube_metadata_labels`] already
+/// pins from the root, the future per-`HTTPRoute` per-rule
+/// `matches[<i>].path` per-match path-selection sub-mapping readback
+/// once the M4 typed per-match overlay lands, the future per-CNP
+/// `spec.egress[<i>].authentication` per-egress auth sub-mapping
+/// readback under an egress-authentication overlay, the future per-
+/// `HelmRelease` per-`spec.values.<library>` per-child-chart sub-
+/// mapping readback once the [`&Mapping`]-receiver overlay peer lands)
+/// folds onto one dispatch.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying three-hop composition: the receiver carries a YAML
+/// type without a `get(<mid>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
+/// the `<mid>` sub-field value is present but carries a YAML shape
+/// with no `get(<tail>)` navigation surface (a scalar arm at the
+/// middle-hop altitude — the inner [`serde_yaml::Value::get`] scalar-
+/// arm `None` folds through), or the `<tail>` value is present but
+/// carries a non-mapping YAML type (the trailing `.as_mapping()`
+/// shape-gate short-circuit — a schema-invalid nested type per the
+/// K8s apiserver's `OpenAPI` schema but tolerated here as `None` so
+/// the readback stays a total function, mirroring the sibling
+/// [`kube_field_str`] / [`kube_field_u64`] / [`kube_field_bool`] /
+/// [`kube_field_seq`] posture). The returned `&Mapping` borrows into
+/// the input receiver — the caller decides whether to `.iter()` for
+/// a per-key enumeration, `.contains_key(<K>)` for a presence probe,
+/// `.get(<K>)` for a downstream `.and_then` continuation, or
+/// `.expect(...)` for a load-bearing full-sub-mapping bind.
+///
+/// Closes the composed value-level shape-gated family at the fifth
+/// and final of the shape-gate arities the four sibling shape-gated
+/// composed accessors opened — with this sub-mapping-arity peer the
+/// family now spans str, u64, bool, sequence, and sub-mapping at the
+/// two-hop-nested altitude, matching the closed shape of the spec-
+/// anchored family one altitude above where [`kube_spec_field`] plus
+/// the shape-gated [`kube_spec_str_field`] / [`kube_spec_u64_field`]
+/// / [`kube_spec_bool_field`] / [`kube_spec_seq_field`] /
+/// [`kube_spec_map_field`] variants already span the axis, and the
+/// closed shape of the value-level primitive family ([`kube_field`],
+/// [`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`],
+/// [`kube_map`]) one altitude below where the value-level primitives
+/// already span the K8s apiserver `OpenAPI` schema shape arities the
+/// two-hop navigation resolves through. The routed producer-side
+/// specialization [`kube_metadata_labels`] on the canonical
+/// `metadata.labels` per-K8s-document axis (already lifted) is the
+/// natural composition-symmetric peer at the M2/M3 metadata altitude
+/// that this generic composed accessor closes at the composed value-
+/// level altitude.
+///
+/// Every future nested `<mid>.<tail>` sub-mapping readback the M3.x +
+/// M4 renderer set materializes (the future per-`:contratos` per-edge
+/// WIT-attribute nested sub-mapping once the M4 typed per-edge overlay
+/// lands, the future per-Aplicacao
+/// `spec.placement.affinity.podAffinity` nested pod-affinity sub-
+/// mapping readback under a placement-shape probe, the future
+/// `caixa-otel` per-Servico per-`processors.<name>.config` nested
+/// processor-config sub-mapping probe, every future test-side nested-
+/// sub-mapping readback the M3.x + M4 renderer set adds under
+/// `.contains_key(<K>)` / `.iter()` / `.get(<K>).and_then(...)`
+/// enumeration) reaches this one helper by construction. No per-
+/// consumer two-hop re-inline; no coordinated rewrite across every
+/// nested-sub-mapping readback on a future [`serde_yaml`] surface
+/// rebrand or shape-gate shift. Symmetric closure of the composed
+/// value-level shape-gated family the four prior lifts opened.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_field_map<'a, R: KubeReceiver + ?Sized>(
+    recv: &'a R,
+    field: &str,
+    map_field: &str,
+) -> Option<&'a serde_yaml::Mapping> {
+    kube_field(recv, field).and_then(|v| kube_map(v, map_field))
 }
 
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
@@ -52538,6 +52637,213 @@ spec:
                  the middle-hop-scalar arm (`name.attempts` — middle-\
                  hop `name` is a scalar), and the outer-miss arm \
                  (`never-inserted-mid`)"
+            );
+        }
+    }
+
+    // ── kube_field_map lift ─────────────────────────────────────────
+
+    #[test]
+    fn kube_field_map_reads_two_hop_nested_mapping_borrowing_into_input_value() {
+        // Load-bearing positive-path contract: given a `&Value` mapping
+        // receiver carrying a nested `<mid>.<tail>: <map>` two-hop sub-
+        // mapping bracket the canonical per-K8s-document `metadata
+        // .labels` per-resource-label-block walk traverses (the routed
+        // per-resource label surface the sibling specialization
+        // `kube_metadata_labels` already pins from the root, keyed on
+        // `KUBE_KEY_METADATA` middle-hop and `KUBE_KEY_LABELS` sub-
+        // mapping-tail — the per-K8s-document `metadata.labels` sub-
+        // mapping every downstream per-label enumeration or per-label
+        // presence pin walks), the composed value-level three-hop
+        // `_field_map` accessor returns the sub-mapping leaf borrowing
+        // into the input `Value`. Structural mirror of the sibling
+        // composed scalar-str
+        // `kube_field_str_reads_two_hop_scalar_string_borrowing_into_input_value`,
+        // composed scalar-integer
+        // `kube_field_u64_reads_two_hop_scalar_integer_verbatim`,
+        // composed scalar-boolean
+        // `kube_field_bool_reads_two_hop_scalar_boolean_verbatim`,
+        // composed sequence-tail
+        // `kube_field_seq_reads_two_hop_nested_sequence_borrowing_into_input_value`,
+        // and composed raw-tail
+        // `kube_field_field_reads_two_hop_raw_value_borrowing_into_input_value`
+        // positive-path pins one arity over on the same three-hop axis
+        // and the value-level
+        // `kube_map`-anchored composition-symmetric pin one altitude
+        // down on the one-hop sub-mapping accessor.
+        let mut labels_body = serde_yaml::Mapping::new();
+        labels_body.insert_string(LABEL_APLICACAO, "shop");
+
+        let mut metadata_body = serde_yaml::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
+
+        let mut root_map = serde_yaml::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+        let value = serde_yaml::Value::Mapping(root_map);
+
+        let labels = kube_field_map(&value, KUBE_KEY_METADATA, KUBE_KEY_LABELS)
+            .expect("kube_field_map must read the two-hop `metadata.labels` sub-mapping verbatim");
+        assert!(
+            labels.contains_key(LABEL_APLICACAO),
+            "kube_field_map must return the underlying `&Mapping` with \
+             its keys preserved — the canonical per-K8s-document \
+             `metadata.labels` per-label presence pin sits on a \
+             `.contains_key(<LABEL>)` assertion here"
+        );
+        assert_eq!(
+            labels.get(LABEL_APLICACAO).and_then(|v| v.as_str()),
+            Some("shop"),
+            "the returned `&Mapping` must borrow into the input `Value` \
+             — the routed per-K8s-document per-label scalar-str readback \
+             walks the entries via `.get(<LABEL>).and_then(|v| v.as_str())` \
+             on each key directly"
+        );
+    }
+
+    #[test]
+    fn kube_field_map_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying three-
+        // hop `get → get → as_mapping` closes on folds through this
+        // composed helper to `None`. Pin all four arms so a future
+        // refactor reaching for a `.expect(...)` chain that assumes any
+        // hop is total is a test-visible break at this pin rather than
+        // a runtime panic at the consumer site. Structural mirror of
+        // the sibling
+        // `kube_field_str_returns_none_on_every_short_circuit_arm`,
+        // `kube_field_u64_returns_none_on_every_short_circuit_arm`,
+        // `kube_field_bool_returns_none_on_every_short_circuit_arm`,
+        // and `kube_field_seq_returns_none_on_every_short_circuit_arm`
+        // fold-through pins one arity over on the same three-hop axis
+        // — the fourth arm is the trailing `.as_mapping()` shape-gate
+        // short-circuit (the sub-mapping-arity shape-gate mirror of
+        // the sibling scalar-`str` / `-u64` / `-bool` / sequence-tail
+        // trailing shape-gates).
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<mid>)` navigation surface — the outer `kube_field`'s
+        // scalar-arm `None` folds through.
+        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        assert_eq!(
+            kube_field_map(&scalar_receiver, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
+            None,
+            "kube_field_map must short-circuit to None when the \
+             receiver Value carries a scalar YAML type with no `get` \
+             navigation surface — the outer kube_field's scalar-arm \
+             None folds through"
+        );
+
+        // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_string(KUBE_KEY_NAME, "other");
+        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_field_map(&missing_mid, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
+            None,
+            "kube_field_map must short-circuit to None when the \
+             requested `<mid>` middle-hop axis-key is absent from the \
+             receiver's mapping — the outer kube_field's trailing miss \
+             folds through"
+        );
+
+        // Arm 3: `<mid>` middle-hop value present but carries a YAML
+        // shape with no `get(<tail>)` navigation surface (the inner
+        // scalar-arm `None` folds through).
+        let mut scalar_mid = serde_yaml::Mapping::new();
+        scalar_mid.insert_string(KUBE_KEY_METADATA, "scalar-not-mapping");
+        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        assert_eq!(
+            kube_field_map(&scalar_mid_value, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
+            None,
+            "kube_field_map must short-circuit to None when the \
+             `<mid>` sub-field carries a YAML shape with no per-key \
+             `get(<tail>)` surface — the inner kube_map's scalar-arm \
+             None folds through the middle-hop navigation"
+        );
+
+        // Arm 4: `<tail>` value present but non-mapping. Pin across
+        // the representative non-mapping YAML shapes the trailing
+        // `.as_mapping()` shape-gate rejects.
+        for non_map in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::String("scalar-not-mapping".into()),
+            serde_yaml::Value::Sequence(vec![]),
+        ] {
+            let mut metadata_body = serde_yaml::Mapping::new();
+            metadata_body.insert_str_key(KUBE_KEY_LABELS, non_map.clone());
+            let mut root_map = serde_yaml::Mapping::new();
+            root_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+            let value = serde_yaml::Value::Mapping(root_map);
+            assert_eq!(
+                kube_field_map(&value, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
+                None,
+                "kube_field_map must short-circuit to None when the \
+                 `<tail>` value is non-mapping ({non_map:?}) — the \
+                 trailing kube_map `.as_mapping()` shape-gate short-\
+                 circuits"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_map_matches_prior_inline_two_line_composition() {
+        // Byte-equivalence pin: the lifted `kube_field_map` helper
+        // resolves exactly the same `Option<&Mapping>` as the two-line
+        // `kube_field(v, MID).and_then(|X| kube_map(X, TAIL))` inline
+        // composition every future routed caller site walks (the
+        // canonical per-K8s-document `metadata.labels` per-resource-
+        // label-block readback the sibling specialization
+        // `kube_metadata_labels` already pins from the root, every
+        // future nested-sub-mapping readback the M3.x + M4 renderer
+        // set materializes under `.contains_key(<K>)` / `.iter()` /
+        // `.get(<K>).and_then(...)` enumeration). A drift between the
+        // composed helper's return and the two-line inline composition
+        // would silently regress every downstream enumeration posture
+        // (`.contains_key(<K>)`, `.iter()`, `.get(<K>).and_then(...)`,
+        // `.expect(...)`) — pin the byte-equivalence across the
+        // canonical composed axis so the composed helper stays a drop-
+        // in replacement for every future routed caller's prior two-
+        // line composition. Structural mirror of the sibling
+        // `kube_field_str_matches_prior_inline_two_line_composition`,
+        // `kube_field_u64_matches_prior_inline_two_line_composition`,
+        // `kube_field_bool_matches_prior_inline_two_line_composition`,
+        // `kube_field_seq_matches_prior_inline_two_line_composition`,
+        // and `kube_field_field_matches_prior_inline_two_line_composition`
+        // pins on the composed shape-gated peers one arity over.
+        let mut labels_body = serde_yaml::Mapping::new();
+        labels_body.insert_string(LABEL_APLICACAO, "shop");
+        let mut metadata_body = serde_yaml::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
+        let mut root_map = serde_yaml::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+        // Sibling non-target axes so the same fixture drives the
+        // present-key + missing-key + middle-hop-non-mapping arms of
+        // the equivalence.
+        root_map.insert_string(KUBE_KEY_NAME, "labels");
+        let value = serde_yaml::Value::Mapping(root_map);
+
+        for (mid, tail) in [
+            (KUBE_KEY_METADATA, KUBE_KEY_LABELS),
+            (KUBE_KEY_METADATA, KUBE_KEY_NAME),
+            (KUBE_KEY_NAME, KUBE_KEY_LABELS),
+            ("never-inserted-mid", KUBE_KEY_LABELS),
+        ] {
+            let via_composed = kube_field_map(&value, mid, tail);
+            let via_inline = kube_field(&value, mid).and_then(|v| kube_map(v, tail));
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_field_map(v, {mid:?}, {tail:?}) must byte-equal \
+                 the prior two-line `kube_field(v, {mid:?}).and_then\
+                 (|X| kube_map(X, {tail:?}))` composition — the lift \
+                 must stay a drop-in for every future routed caller's \
+                 downstream enumeration posture, spanning the present-\
+                 key path (`metadata.labels`), the middle-hop-non-\
+                 mapping-tail arm (`metadata.name` — tail is a scalar, \
+                 not a mapping), the middle-hop-scalar arm (`name.\
+                 labels` — middle-hop `name` is a scalar), and the \
+                 outer-miss arm (`never-inserted-mid`)"
             );
         }
     }
