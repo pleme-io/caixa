@@ -23726,6 +23726,116 @@ pub fn kube_field_bool<R: KubeReceiver + ?Sized>(
     kube_field(recv, field).and_then(|v| kube_bool(v, scalar_field))
 }
 
+/// Read a sub-`<mid>.<tail>[]` YAML sequence nested two hops under an
+/// arbitrary [`KubeReceiver`] as `Option<&serde_yaml::Sequence>` — the
+/// value-level three-hop navigation primitive that folds `.get(<mid>)
+/// .and_then(|v| v.get(<tail>)).and_then(|v| v.as_sequence())` into a
+/// single helper call. Exactly `kube_field(recv, mid).and_then(|v|
+/// kube_seq(v, tail))` — the composed peer of the value-level
+/// [`kube_field`] (e04c234) one-hop pass-through and the value-level
+/// sequence-arity [`kube_seq`] (9c74ddb) two-hop accessor. Sequence-
+/// arity sibling of the composed scalar-str [`kube_field_str`]
+/// (1c68424), composed scalar-`u64` [`kube_field_u64`] (e6fca52), and
+/// composed scalar-`bool` [`kube_field_bool`] (261894b) accessors on
+/// the same three-hop axis: where those composed accessors fold a
+/// trailing `.as_str()` / `.as_u64()` / `.as_bool()` shape-gate onto
+/// the two-hop-nested navigation, this accessor folds the trailing
+/// `.as_sequence()` shape-gate on the same navigation, so every routed
+/// two-hop `.and_then(|X| kube_field(X, <MID>)).and_then(|Y| kube_seq
+/// (Y, <TAIL>))` middle-hop-plus-sequence-tail block (per-CNP
+/// `spec.ingress[<i>].toPorts[<j>].rules.http` L7 HTTP-rule-list read
+/// on the Cilium side, per-`HTTPRoute` future `spec.rules[<i>]
+/// .matches[<j>].headers` per-match header-predicate-list read once
+/// the header-match overlay lands, per-`HelmRelease` future
+/// `spec.postRenderers.kustomize.patches` per-CR post-render patch-
+/// list read once the postRenderers overlay lifts) folds onto one
+/// dispatch.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying three-hop composition: the receiver carries a YAML
+/// type without a `get(<mid>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
+/// the `<mid>` sub-field value is present but carries a YAML shape with
+/// no `get(<tail>)` navigation surface (a scalar arm at the middle-hop
+/// altitude — the inner [`serde_yaml::Value::get`] scalar-arm `None`
+/// folds through), or the `<tail>` value is present but carries a non-
+/// sequence YAML type (the trailing `.as_sequence()` shape-gate short-
+/// circuit — a schema-invalid nested type per the K8s apiserver's
+/// `OpenAPI` schema but tolerated here as `None` so the readback stays
+/// a total function, mirroring the sibling [`kube_field_str`] /
+/// [`kube_field_u64`] / [`kube_field_bool`] posture). The returned
+/// `&Sequence` borrows into the input receiver — the caller decides
+/// whether to `.iter()` for a per-entry walk, `.len()` for a length
+/// assertion, `.is_empty()` for an emptiness probe, or `.expect(...)`
+/// for a load-bearing full-sequence bind.
+///
+/// The canonical shape 1 test-side per-nested-`<mid>.<tail>[]`
+/// sequence readback site in [`caixa-mesh`][mesh] (the per-CNP
+/// `spec.ingress[0].toPorts[0].rules.http` L7-HTTP-rule-list-container
+/// readback keyed on [`crate::KUBE_KEY_RULES`] middle-hop and
+/// [`crate::CILIUM_KEY_HTTP`] sequence-tail — the per-`toPorts[]`
+/// L7-HTTP-rule-list container Cilium §L7 partitions the per-CNP L7
+/// URL-path predicate list across, chained below the outer
+/// [`kube_spec_seq_first_seq_first`] two-hop-nested `spec.ingress[0]
+/// .toPorts[0]` bracket the routed `cilium_http_contracts_emit_l7_rules`
+/// determinism pin walks) previously carried inline as the two-line
+/// middle-hop-plus-sequence-tail block
+///
+/// ```ignore
+/// <value>
+///     .and_then(|X| kube_field(X, <MID>))
+///     .and_then(|Y| kube_seq(Y, <TAIL>))
+///     ...
+/// ```
+///
+/// After this lift every routed consumer folds the two-line composition
+/// onto `kube_field_seq(<value>, <MID>, <TAIL>)` — the three-hop
+/// `get → get → as_sequence` walk happens once inside the helper, and
+/// the caller keeps its downstream posture (`.iter()`, `.len()`,
+/// `.is_empty()`, `.expect(...)`, an `if let Some(s) = _` bind)
+/// unchanged — the lift closes the navigation surface, not the per-
+/// site downstream posture. Closes the composed value-level shape-
+/// gated family at the fourth of the value-level primitive arities the
+/// sibling [`kube_field_str`] opened at the string arity, the sibling
+/// [`kube_field_u64`] closed at the integer arity, and the sibling
+/// [`kube_field_bool`] closed at the boolean arity — the remaining
+/// `kube_field_map` composed sub-mapping-tail readback will close the
+/// last shape-gate arity in a follow-up run, matching the closed
+/// shape of the value-level primitive family ([`kube_field`],
+/// [`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`],
+/// [`kube_map`]) one altitude below where the shape-gated variants
+/// already span the axis. Alongside the composed raw-tail
+/// [`kube_field_field`] (cb5d862) peer this now spans the composed
+/// value-level three-hop navigation surface at every arity the K8s
+/// apiserver `OpenAPI` schema partitions on at the sequence altitude —
+/// raw-`Value` via [`kube_field_field`], sequence via `kube_field_seq`.
+///
+/// Every future nested `<mid>.<tail>[]` sequence readback the M3.x +
+/// M4 renderer set materializes (the future per-`:contratos` per-edge
+/// WIT-attribute nested sub-sequence once the M4 typed per-edge
+/// overlay lands, the future per-Aplicacao
+/// `spec.placement.affinity.nodeAffinity[]` nested node-affinity list
+/// readback under a placement-shape probe, the future `caixa-otel`
+/// per-Servico per-`processors.<name>.filters[]` nested processor-
+/// filter-list probe, every future test-side nested-`[]` sequence
+/// readback the M3.x + M4 renderer set adds under `.iter()` / `.len()`
+/// / `.is_empty()` enumeration) reaches this one helper by
+/// construction. No per-consumer two-hop re-inline; no coordinated
+/// rewrite across every nested-sequence readback on a future
+/// [`serde_yaml`] surface rebrand or shape-gate shift.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_field_seq<'a, R: KubeReceiver + ?Sized>(
+    recv: &'a R,
+    field: &str,
+    seq_field: &str,
+) -> Option<&'a serde_yaml::Sequence> {
+    kube_field(recv, field).and_then(|v| kube_seq(v, seq_field))
+}
+
 /// Read a sub-`<mid>.<tail>` raw `&serde_yaml::Value` nested two hops
 /// under an arbitrary [`KubeReceiver`] as `Option<&Value>` — the value-
 /// level three-hop navigation primitive that folds `.get(<mid>)
@@ -52050,6 +52160,207 @@ spec:
                  boolean arm (`name.remediateLastFailure` — middle-hop \
                  `name` is a scalar), and the outer-miss arm \
                  (`never-inserted-mid`)"
+            );
+        }
+    }
+
+    // ── kube_field_seq lift ─────────────────────────────────────────
+
+    #[test]
+    fn kube_field_seq_reads_two_hop_nested_sequence_borrowing_into_input_value() {
+        // Load-bearing positive-path contract: given a `&Value` mapping
+        // receiver carrying a nested `<mid>.<tail>[]` two-hop sequence
+        // bracket a per-CNP `rules.http` L7-HTTP-rule-list container
+        // walk (the routed `cilium_http_contracts_emit_l7_rules`
+        // per-`toPorts[]` L7-HTTP-rule-list-container determinism pin,
+        // keyed on `KUBE_KEY_RULES` middle-hop and `CILIUM_KEY_HTTP`
+        // sequence-tail — the per-`toPorts[]` L7-HTTP-rule container
+        // Cilium §L7 partitions the per-CNP L7 URL-path predicate list
+        // across), the composed value-level three-hop `_field_seq`
+        // accessor returns the sequence leaf borrowing into the input
+        // `Value`. Structural mirror of the sibling composed scalar-str
+        // `kube_field_str_reads_two_hop_scalar_string_borrowing_into_input_value`,
+        // composed scalar-integer
+        // `kube_field_u64_reads_two_hop_scalar_integer_verbatim`,
+        // composed scalar-boolean
+        // `kube_field_bool_reads_two_hop_scalar_boolean_verbatim`, and
+        // composed raw-tail
+        // `kube_field_field_reads_two_hop_raw_value_borrowing_into_input_value`
+        // positive-path pins one arity over on the same three-hop axis
+        // and the value-level
+        // `kube_seq_reads_sub_field_sequence_borrowing_into_input_value`
+        // pin one altitude down on the one-hop sequence accessor.
+        let mut http_rule = serde_yaml::Mapping::new();
+        http_rule.insert_string(CILIUM_KEY_PATH, "/products/:id");
+        let http_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]);
+
+        let mut rules_body = serde_yaml::Mapping::new();
+        rules_body.insert_str_key(CILIUM_KEY_HTTP, http_seq);
+
+        let mut to_ports_entry = serde_yaml::Mapping::new();
+        to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules_body));
+        let value = serde_yaml::Value::Mapping(to_ports_entry);
+
+        let http_rules = kube_field_seq(&value, KUBE_KEY_RULES, CILIUM_KEY_HTTP)
+            .expect("kube_field_seq must read the two-hop `rules.http` sequence verbatim");
+        assert_eq!(
+            http_rules.len(),
+            1,
+            "kube_field_seq must return the underlying `&Sequence` with \
+             its cardinality preserved — the routed per-`toPorts[]` \
+             L7-HTTP-rule-list-container determinism pin sits on a \
+             `.len()` assertion here"
+        );
+        assert_eq!(
+            kube_str(&http_rules[0], CILIUM_KEY_PATH),
+            Some("/products/:id"),
+            "the returned `&Sequence` must borrow into the input `Value` \
+             — the routed per-CNP L7 URL-path predicate readback walks \
+             the entries via `kube_str` on each element directly"
+        );
+    }
+
+    #[test]
+    fn kube_field_seq_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying three-
+        // hop `get → get → as_sequence` closes on folds through this
+        // composed helper to `None`. Pin all four arms so a future
+        // refactor reaching for a `.expect(...)` chain that assumes any
+        // hop is total is a test-visible break at this pin rather than
+        // a runtime panic at the consumer site. Structural mirror of
+        // the sibling
+        // `kube_field_str_returns_none_on_every_short_circuit_arm`,
+        // `kube_field_u64_returns_none_on_every_short_circuit_arm`, and
+        // `kube_field_bool_returns_none_on_every_short_circuit_arm`
+        // fold-through pins one arity over on the same three-hop axis
+        // — the fourth arm is the trailing `.as_sequence()` shape-gate
+        // short-circuit (the sequence-arity shape-gate mirror of the
+        // sibling scalar-`str` / `-u64` / `-bool` trailing shape-gates).
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<mid>)` navigation surface — the outer `kube_field`'s
+        // scalar-arm `None` folds through.
+        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        assert_eq!(
+            kube_field_seq(&scalar_receiver, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
+            None,
+            "kube_field_seq must short-circuit to None when the \
+             receiver Value carries a scalar YAML type with no `get` \
+             navigation surface — the outer kube_field's scalar-arm \
+             None folds through"
+        );
+
+        // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_string(KUBE_KEY_NAME, "other");
+        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_field_seq(&missing_mid, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
+            None,
+            "kube_field_seq must short-circuit to None when the \
+             requested `<mid>` middle-hop axis-key is absent from the \
+             receiver's mapping — the outer kube_field's trailing miss \
+             folds through"
+        );
+
+        // Arm 3: `<mid>` middle-hop value present but carries a YAML
+        // shape with no `get(<tail>)` navigation surface (the inner
+        // scalar-arm `None` folds through).
+        let mut scalar_mid = serde_yaml::Mapping::new();
+        scalar_mid.insert_string(KUBE_KEY_RULES, "scalar-not-mapping");
+        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        assert_eq!(
+            kube_field_seq(&scalar_mid_value, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
+            None,
+            "kube_field_seq must short-circuit to None when the \
+             `<mid>` sub-field carries a YAML shape with no per-key \
+             `get(<tail>)` surface — the inner kube_seq's scalar-arm \
+             None folds through the middle-hop navigation"
+        );
+
+        // Arm 4: `<tail>` value present but non-sequence. Pin across
+        // the representative non-sequence YAML shapes the trailing
+        // `.as_sequence()` shape-gate rejects.
+        for non_seq in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::String("scalar-not-sequence".into()),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut rules_body = serde_yaml::Mapping::new();
+            rules_body.insert_str_key(CILIUM_KEY_HTTP, non_seq.clone());
+            let mut to_ports_entry = serde_yaml::Mapping::new();
+            to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules_body));
+            let value = serde_yaml::Value::Mapping(to_ports_entry);
+            assert_eq!(
+                kube_field_seq(&value, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
+                None,
+                "kube_field_seq must short-circuit to None when the \
+                 `<tail>` value is non-sequence ({non_seq:?}) — the \
+                 trailing kube_seq `.as_sequence()` shape-gate short-\
+                 circuits"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_seq_matches_prior_inline_two_line_composition() {
+        // Byte-equivalence pin: the lifted `kube_field_seq` helper
+        // resolves exactly the same `Option<&Sequence>` as the two-line
+        // `kube_field(v, MID).and_then(|X| kube_seq(X, TAIL))` inline
+        // composition the 1 routed caller site in caixa-mesh (the
+        // per-CNP `spec.ingress[0].toPorts[0].rules.http` L7-HTTP-rule-
+        // list-container readback at
+        // `cilium_http_contracts_emit_l7_rules`, chained below the
+        // outer `kube_spec_seq_first_seq_first` two-hop-nested
+        // `spec.ingress[0].toPorts[0]` bracket) previously carried. A
+        // drift between the composed helper's return and the two-line
+        // inline composition would silently regress every downstream
+        // enumeration posture (`.len()`, `.iter()`, `.is_empty()`,
+        // `.expect(...)`) — pin the byte-equivalence across the
+        // canonical composed axis so the composed helper stays a drop-
+        // in replacement for the routed site's prior two-line
+        // composition. Structural mirror of the sibling
+        // `kube_field_str_matches_prior_inline_two_line_composition`,
+        // `kube_field_u64_matches_prior_inline_two_line_composition`,
+        // `kube_field_bool_matches_prior_inline_two_line_composition`,
+        // and `kube_field_field_matches_prior_inline_two_line_composition`
+        // pins on the composed shape-gated peers one arity over.
+        let mut http_rule = serde_yaml::Mapping::new();
+        http_rule.insert_string(CILIUM_KEY_PATH, "/search");
+        let http_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]);
+        let mut rules_body = serde_yaml::Mapping::new();
+        rules_body.insert_str_key(CILIUM_KEY_HTTP, http_seq);
+        let mut to_ports_entry = serde_yaml::Mapping::new();
+        to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules_body));
+        // Sibling non-target axes so the same fixture drives the
+        // present-key + missing-key + middle-hop-non-mapping arms of
+        // the equivalence.
+        to_ports_entry.insert_string(KUBE_KEY_NAME, "rules");
+        let value = serde_yaml::Value::Mapping(to_ports_entry);
+
+        for (mid, tail) in [
+            (KUBE_KEY_RULES, CILIUM_KEY_HTTP),
+            (KUBE_KEY_RULES, CILIUM_KEY_PATH),
+            (KUBE_KEY_NAME, CILIUM_KEY_HTTP),
+            ("never-inserted-mid", CILIUM_KEY_HTTP),
+        ] {
+            let via_composed = kube_field_seq(&value, mid, tail);
+            let via_inline = kube_field(&value, mid).and_then(|v| kube_seq(v, tail));
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_field_seq(v, {mid:?}, {tail:?}) must byte-equal \
+                 the prior two-line `kube_field(v, {mid:?}).and_then\
+                 (|X| kube_seq(X, {tail:?}))` composition — the lift \
+                 must stay a drop-in for every routed caller's \
+                 downstream enumeration posture, spanning the present-\
+                 key path (`rules.http`), the middle-hop-non-sequence-\
+                 tail arm (`rules.path` — tail is a mapping, not a \
+                 sequence), the middle-hop-scalar arm (`name.http` — \
+                 middle-hop `name` is a scalar), and the outer-miss \
+                 arm (`never-inserted-mid`)"
             );
         }
     }
