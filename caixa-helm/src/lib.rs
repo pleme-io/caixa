@@ -1840,7 +1840,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(HELM_CHART_KEY_TYPE.to_string())),
+            mapping.contains_key(HELM_CHART_KEY_TYPE),
             "rendered Chart.yaml must carry a top-level {HELM_CHART_KEY_TYPE:?} \
              axis-key — a drift on the `#[serde(rename = {HELM_CHART_KEY_TYPE:?})]` \
              attribute at ChartYaml's `chart_type` field silently reroutes the \
@@ -1890,9 +1890,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(
-                HELM_CHART_KEY_APP_VERSION.to_string()
-            )),
+            mapping.contains_key(HELM_CHART_KEY_APP_VERSION),
             "rendered Chart.yaml must carry a top-level \
              {HELM_CHART_KEY_APP_VERSION:?} axis-key — a drift on the \
              `#[serde(rename = {HELM_CHART_KEY_APP_VERSION:?})]` attribute at \
@@ -1949,9 +1947,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(
-                HELM_CHART_KEY_API_VERSION.to_string()
-            )),
+            mapping.contains_key(HELM_CHART_KEY_API_VERSION),
             "rendered Chart.yaml must carry a top-level \
              {HELM_CHART_KEY_API_VERSION:?} axis-key — a drift on the \
              `#[serde(rename = {HELM_CHART_KEY_API_VERSION:?})]` attribute at \
@@ -2015,7 +2011,7 @@ spec:
             HELM_CHART_DEPENDENCY_KEY_ALIAS,
         ] {
             assert!(
-                mapping.contains_key(serde_yaml::Value::String(key.to_string())),
+                mapping.contains_key(key),
                 "serialized ChartDependency must carry a top-level {key:?} \
                  axis-key — a drift on the `ChartDependency` struct's serde \
                  field-name (a Rust-side rename, an added \
@@ -2101,9 +2097,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(
-                HELM_CHART_KEY_DEPENDENCIES.to_string()
-            )),
+            mapping.contains_key(HELM_CHART_KEY_DEPENDENCIES),
             "rendered Chart.yaml must carry a top-level \
              {HELM_CHART_KEY_DEPENDENCIES:?} axis-key — a drift on the \
              `ChartYaml.dependencies` field's serde field-name (a Rust-side \
@@ -3002,6 +2996,96 @@ spec:
              per-edition pre-release-tag overlay) that lands on the \
              accessor. Full contents:\n{contents}",
             contents = readme_file.contents,
+        );
+    }
+
+    #[test]
+    fn contains_key_bare_str_key_byte_equals_value_string_wrapped_form_across_swept_axis_keys() {
+        // Per-crate fail-before-pass-after equivalence pin covering the
+        // five test-side `assert!(mapping.contains_key(<KEY>))`
+        // drift-detection sites that this commit swept off the
+        // three-token `serde_yaml::Value::String(<KEY>.to_string())`
+        // wrapped shape onto the shorter bare-`&str` form
+        // ([`HELM_CHART_KEY_TYPE`] on the per-Chart.yaml top-level
+        // chart-kind discriminator axis, [`HELM_CHART_KEY_APP_VERSION`]
+        // on the underlying-application-version axis,
+        // [`HELM_CHART_KEY_API_VERSION`] on the chart-schema-apiVersion
+        // axis, the per-`dependencies[]`-entry tetrad iterator
+        // ([`HELM_CHART_DEPENDENCY_KEY_NAME`] /
+        // [`HELM_CHART_DEPENDENCY_KEY_VERSION`] /
+        // [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
+        // [`HELM_CHART_DEPENDENCY_KEY_ALIAS`]), and
+        // [`HELM_CHART_KEY_DEPENDENCIES`] on the top-level
+        // dependency-list container axis).
+        //
+        // The equivalence is a serde_yaml crate-level property (the
+        // `impl Index for str` and `impl Index for Value` paths both
+        // route through the same `HashLikeValue(&str)` bucket lookup)
+        // pinned at the caixa-core-side sibling
+        // `mapping_get_bare_str_key_byte_equals_value_string_wrapped_form`'s
+        // trailing `contains_key` parity block for the generic axis
+        // (0e84fb9). This pin lifts the same equivalence to the
+        // caixa-helm-side lifted axis-key set every swept site keys
+        // off, so a future `serde_yaml` upgrade whose `Index for str`
+        // path diverges from `Index for Value` for the specific
+        // key-string byte-shape at any of the seven swept keys is a
+        // caixa-helm-build-time failure naming the offending axis-key,
+        // not a silent regression that would let the swept
+        // `assert!(_.contains_key(K))` shape probes drift past the
+        // emitter's [`MappingExt::insert_str_key`]-promoted key.
+        //
+        // Peer to the caixa-core-side
+        // `mapping_get_bare_str_key_byte_equals_value_string_wrapped_form`
+        // pin (0e84fb9) on the generic `contains_key` parity axis —
+        // the two together partition the equivalence-pin surface
+        // exactly on the axis-key set specificity: caixa-core-side pin
+        // covers the generic KUBE_KEY_KIND / KUBE_KEY_SPEC probe;
+        // this caixa-helm-side pin covers the seven Chart.yaml-shape
+        // axis-keys the swept sites key off.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(HELM_CHART_KEY_TYPE, "application");
+        m.insert_string(HELM_CHART_KEY_APP_VERSION, "1.0.0");
+        m.insert_string(HELM_CHART_KEY_API_VERSION, "v2");
+        m.insert_string(HELM_CHART_KEY_DEPENDENCIES, "placeholder");
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_NAME, "pleme-computeunit");
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_VERSION, "0.1.0");
+        m.insert_string(
+            HELM_CHART_DEPENDENCY_KEY_REPOSITORY,
+            "oci://ghcr.io/pleme-io",
+        );
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_ALIAS, "cu");
+        for key in [
+            HELM_CHART_KEY_TYPE,
+            HELM_CHART_KEY_APP_VERSION,
+            HELM_CHART_KEY_API_VERSION,
+            HELM_CHART_KEY_DEPENDENCIES,
+            HELM_CHART_DEPENDENCY_KEY_NAME,
+            HELM_CHART_DEPENDENCY_KEY_VERSION,
+            HELM_CHART_DEPENDENCY_KEY_REPOSITORY,
+            HELM_CHART_DEPENDENCY_KEY_ALIAS,
+        ] {
+            // Present-key path: both forms find the same insertion.
+            assert_eq!(
+                m.contains_key(key),
+                m.contains_key(serde_yaml::Value::String(key.to_string())),
+                "present-key mapping.contains_key({key:?}) via bare-&str must \
+                 byte-equal mapping.contains_key(Value::String({key:?}.to_string())) \
+                 — otherwise the swept `assert!(_.contains_key({key:?}))` sites \
+                 in this file drift silently past the emitter's `insert_str_key` \
+                 promotion at every downstream drift-detection pin call site"
+            );
+        }
+        // Absent-key path: both forms return false on a key that was
+        // never inserted (mirroring the peer caixa-core-side
+        // KUBE_KEY_SPEC absent-key parity assertion).
+        let absent = "this_key_never_appears_in_any_chart_yaml_axis";
+        assert_eq!(
+            m.contains_key(absent),
+            m.contains_key(serde_yaml::Value::String(absent.to_string())),
+            "absent-key mapping.contains_key(<bare-&str>) must byte-equal \
+             absent-key mapping.contains_key(Value::String(<key>.to_string())) \
+             — otherwise a future swept drift-detection pin's absent-key arm \
+             could silently disagree between the two forms"
         );
     }
 
