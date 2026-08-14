@@ -2436,8 +2436,8 @@ mod tests {
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
         kube_api_version_is, kube_bool, kube_kind, kube_name, kube_root_seq_field, kube_seq,
-        kube_spec_field, kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first,
-        kube_spec_str_field, kube_str, kube_u64,
+        kube_spec_bool_field, kube_spec_field, kube_spec_map_field, kube_spec_seq_field,
+        kube_spec_seq_first, kube_spec_str_field, kube_str, kube_u64,
     };
 
     fn sample_caixa() -> Caixa {
@@ -3535,16 +3535,14 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
-        let prune = kube_spec_field(&parsed, FLUX_KUSTOMIZATION_KEY_PRUNE)
-            .and_then(|v| v.as_bool())
-            .expect(
-                "spec.prune boolean scalar present; drift on this axis \
+        let prune = kube_spec_bool_field(&parsed, FLUX_KUSTOMIZATION_KEY_PRUNE).expect(
+            "spec.prune boolean scalar present; drift on this axis \
                  silently drops the substrate's chosen sweep-what-you-\
                  removed semantic from every emitted per-caixa \
                  `Kustomization` document, leaving per-caixa resources \
                  the source manifest set previously reconciled but no \
                  longer carries dangling in the cluster",
-            );
+        );
         assert_eq!(
             prune, FLUX_KUSTOMIZATION_PRUNE_DEFAULT,
             "spec.prune must carry the lifted \
