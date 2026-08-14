@@ -20793,6 +20793,109 @@ pub fn kube_spec_map_field<'a>(
     kube_spec_field(value, field).and_then(|v| v.as_mapping())
 }
 
+/// Read the sub-`spec.<field>` YAML scalar-boolean on a K8s custom
+/// resource YAML document as `Option<bool>` — the composed boolean-arity
+/// per-sub-field-boolean accessor peer that stands on the composed
+/// scalar-arity [`kube_spec_field`] (23bd568) accessor, folding the
+/// trailing `.and_then(|v| v.as_bool())` shape-gate closure into the
+/// helper for callers that always want a boolean scalar (the load-
+/// bearing per-CR body-sub-field boolean-typed toggle readbacks — the
+/// per-`Kustomization` `spec.prune` sweep-what-you-removed garbage-
+/// collection toggle the Flux v2 kustomize-controller keys off to sweep
+/// per-caixa resources the source manifest set previously reconciled
+/// but no longer carries, plus every forthcoming per-CR `spec.<field>`
+/// boolean-toggle axis the M3.x + M4 renderer set materializes — the
+/// per-`Kustomization` `spec.suspend` reconcile-loop-halt toggle, the
+/// per-`HelmRelease` `spec.suspend` install-path-halt toggle, the
+/// future per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's `spec.tls` per-gateway TLS-toggle scalar the
+/// [`GATEWAY_API_KEY_HOSTNAME`] axis pairs with once TLS lands at
+/// MESH-COMPOSITION §III.4). Structural mirror of the sibling
+/// [`kube_spec_str_field`] (c4fe21d), [`kube_spec_seq_field`] (fc64ed7),
+/// and [`kube_spec_map_field`] (27fc2ee) accessors on the same sub-
+/// `spec.<field>` axis: all four accessors fold a trailing shape-gate
+/// closure onto the composed scalar-arity [`kube_spec_field`] two-hop
+/// navigation, all four stay parametric on the per-`<field>` sub-field
+/// axis-key. Where [`kube_spec_str_field`] closes the `spec.<field>`
+/// string-scalar readback (the leaf-scalar-str arm), [`kube_spec_seq_field`]
+/// closes the `spec.<field>` sequence readback (the multi-entry sub-
+/// block arm), and [`kube_spec_map_field`] closes the `spec.<field>`
+/// sub-mapping readback (the nested-object sub-block arm), this
+/// closes the `spec.<field>` scalar-boolean readback (the leaf-toggle
+/// arm). Together the four bracket the four canonical composed per-
+/// `spec.<field>` shape-gate arities every K8s CR document the emit-
+/// side [`kube_resource_skeleton`] renders admits under its `spec:`
+/// body: scalar-string leaves via the first sibling, ordered sub-
+/// sequences via the second sibling, nested-object sub-mappings via
+/// the third sibling, scalar-boolean leaf-toggles via this accessor.
+/// Closes the composed shape-gate family on the sub-`spec.<field>`
+/// axis to structural parity with the value-level primitive quintet
+/// ([`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`], [`kube_map`])
+/// on the one-hop nested-mapping axis, one altitude down.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// [`kube_spec`] outer-arm short-circuit), the `spec:` value is present
+/// but carries a non-Mapping YAML type (the [`kube_spec`] shape-gate
+/// short-circuit), the requested sub-field `<field>` axis-key is absent
+/// from the `spec:` sub-mapping (the [`kube_spec_field`] trailing
+/// `Mapping::get` none-arm), or the sub-field value is present but
+/// carries a non-boolean YAML type (the trailing `.as_bool()` shape-
+/// gate short-circuit — a schema-invalid per-CR body-sub-field type per
+/// the K8s apiserver's `OpenAPI` schema but tolerated here as `None`
+/// so the readback stays a total function, mirroring the sibling
+/// [`kube_spec_str_field`] / [`kube_spec_seq_field`] / [`kube_spec_map_field`]
+/// posture). The returned `bool` is a fresh primitive value (booleans
+/// carry no underlying borrow the way the sibling string-arity
+/// accessor preserves) — the caller decides whether to
+/// `assert_eq!(_, Some(<expected>))` for a determinism pin,
+/// `.expect(...)` for a load-bearing toggle identity, or
+/// `.unwrap_or(<default>)` for a substrate-side default fallback.
+///
+/// The canonical shape 1 test-side per-CR readback site in
+/// [`caixa-flux`][flux] previously carried inline as the two-line
+/// composition
+///
+/// ```ignore
+/// kube_spec_field(<value>, <FIELD>)
+///     .and_then(|v| v.as_bool())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-
+/// key — [`FLUX_KUSTOMIZATION_KEY_PRUNE`] on the per-`Kustomization`
+/// sweep-what-you-removed garbage-collection toggle readback). After
+/// this lift, every routed consumer folds the two-hop-plus-shape-gate
+/// navigation onto `kube_spec_bool_field(<value>, <FIELD>)` — the
+/// outer `spec → as_mapping → get(<field>) → as_bool` walk happens
+/// once inside the helper, and the caller keeps its downstream idiom
+/// (`.expect(...)`, `assert_eq!(_, Some(<expected>))`,
+/// `.unwrap_or(<default>)`) unchanged — the lift closes the navigation
+/// surface, not the per-site downstream posture.
+///
+/// Every future per-CR `spec.<field>` scalar-boolean readback (the
+/// forthcoming per-`Kustomization` `spec.suspend` reconcile-loop-halt
+/// toggle readback, the forthcoming per-`HelmRelease` `spec.suspend`
+/// install-path-halt toggle readback, the future per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` emitter's per-policy scalar-boolean
+/// gate readbacks MESH-COMPOSITION §III.2 #3 admits, the
+/// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR materializer's `spec.<toggle>` scalar-boolean readbacks §III.2
+/// #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
+/// Collector CR's `spec.<toggle>` scalar-boolean navigation; every
+/// future test-side `spec.<field>` scalar-boolean probe the M3.x + M4
+/// renderer set adds) reaches this same helper by construction — no
+/// per-consumer two-hop-plus-shape-gate chain re-inline, no per-
+/// consumer `KUBE_KEY_SPEC` axis-key drift, no coordinated rewrite
+/// across every per-CR body-sub-field scalar-boolean readback on a
+/// future K8s API-machinery rebrand of the top-level `spec:` axis.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_spec_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bool> {
+    kube_spec_field(value, field).and_then(serde_yaml::Value::as_bool)
+}
+
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
@@ -45468,6 +45571,298 @@ spec:
                  v.as_mapping())` chain — otherwise the routed caixa-\
                  flux per-CR sub-spec-field sub-mapping-readback sites \
                  drift silently at test time"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_bool_field_reads_sub_spec_field_boolean_scalar() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `spec: { <sub-field>: <bool>, ... }` body sub-
+        // mapping (every K8s CR the emit-side [`kube_resource_skeleton`]
+        // renders with a boolean-shaped `spec.<field>` leaf-toggle axis
+        // — the per-`Kustomization` `spec.prune` sweep-what-you-removed
+        // garbage-collection toggle, the forthcoming per-`Kustomization`
+        // and per-`HelmRelease` `spec.suspend` reconcile-loop-halt
+        // toggles), the composed boolean-arity accessor returns
+        // `Some(<bool>)` across the routed per-sub-field readback axes.
+        // Pin both boolean arms (`true` for the routed
+        // `Kustomization.spec.prune` axis, `false` for the paired
+        // forthcoming `spec.suspend` axis) so the trailing `.as_bool()`
+        // fold-through preserves both arms — the sibling
+        // `kube_bool_reads_sub_field_scalar_boolean_verbatim` pin one
+        // altitude down on the value-level quintet already validates
+        // the boolean shape-gate; this pin validates the same axis
+        // one altitude up on the spec-anchored quartet. Structural
+        // mirror of the sibling
+        // `kube_spec_str_field_reads_sub_spec_field_string_scalar`,
+        // `kube_spec_seq_field_reads_sub_spec_field_sequence`, and
+        // `kube_spec_map_field_reads_sub_spec_field_mapping` pins on
+        // the peer sub-`spec.<field>` string-scalar / sequence / sub-
+        // mapping arity axes.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        spec.insert_string(FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE, "false");
+        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
+            Some(true),
+            "kube_spec_bool_field must read spec.prune as the true \
+             arm verbatim — the caixa-flux per-`Kustomization` \
+             sweep-what-you-removed garbage-collection toggle readback \
+             site reaches through this axis for the load-bearing Flux \
+             v2 kustomize-controller per-CR garbage-collection identity \
+             pin"
+        );
+        assert_eq!(
+            kube_spec_bool_field(&value, "suspend"),
+            Some(false),
+            "kube_spec_bool_field must read a second axis-key on the \
+             opposite boolean arm — pinning that the trailing \
+             `.as_bool()` fold-through preserves both arms, not just \
+             the `true` arm (mirroring the sibling \
+             `kube_bool_reads_sub_field_scalar_boolean_verbatim` pin's \
+             both-arm coverage one altitude down on the value-level \
+             quintet)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_bool_field_returns_none_when_spec_sub_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_spec_field`] closes
+        // on (which in turn folds through [`kube_spec`]'s outer-arm
+        // and shape-gate) folds through this composed boolean-arity
+        // accessor. Peer of the sibling
+        // `kube_spec_str_field_returns_none_when_spec_sub_block_absent`,
+        // `kube_spec_seq_field_returns_none_when_spec_sub_block_absent`,
+        // and `kube_spec_map_field_returns_none_when_spec_sub_block_absent`
+        // pins on the peer sub-`spec.<field>` scalar-str / sequence /
+        // sub-mapping-arity accessor axes.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_spec_bool_field(&shape, FLUX_KUSTOMIZATION_KEY_PRUNE),
+                None,
+                "kube_spec_bool_field({shape:?}, <FIELD>) must short-\
+                 circuit to None through the underlying kube_spec_field's \
+                 kube_spec outer-arm when the top-level `spec:` block is \
+                 absent on the outer Value — the composition fold must \
+                 preserve the total-function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_bool_field_returns_none_when_spec_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `spec:` value on the outer Value
+        // folds through [`kube_spec`]'s trailing `.as_mapping()` shape-
+        // gate up through [`kube_spec_field`] up through this composed
+        // boolean-arity accessor — the caller's `.expect(...)` /
+        // `assert_eq!(_, Some(<expected>))` continuation stays a total
+        // function.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("spec-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
+                None,
+                "kube_spec_bool_field must return None when the top-\
+                 level `spec:` axis carries a non-Mapping YAML type \
+                 ({non_mapping:?}) — the fold through kube_spec's \
+                 shape-gate arm short-circuits here, and every routed \
+                 caller depends on that None-arm to keep the readback \
+                 total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_bool_field_returns_none_when_requested_field_absent() {
+        // The composition's middle per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `spec:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-
+        // `Kustomization` `spec.prune` readback that finds no `prune`
+        // sub-field expects None here (routing the "no explicit
+        // sweep-what-you-removed opt-in" fallback to the Flux v2
+        // controller's own `false`-shaped default) rather than a panic.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
+            None,
+            "kube_spec_bool_field must return None when the requested \
+             `spec.<field>` axis-key is absent from the sub-mapping — \
+             a `Mapping::get(<KEY>)` miss short-circuits the composed \
+             accessor, and callers rely on the None-arm to route the \
+             fallback path (rather than the wrong-shape arm)"
+        );
+    }
+
+    #[test]
+    fn kube_spec_bool_field_returns_none_when_field_carries_non_boolean_type() {
+        // The composition's trailing `.as_bool()` shape-gate None arm:
+        // a `spec.<field>` axis-key present but carrying a non-boolean
+        // YAML type. Schema-invalid per the K8s apiserver's OpenAPI
+        // schema (the routed `spec.prune` axis and every forthcoming
+        // `spec.suspend` axis all pin scalar-boolean leaves) but
+        // tolerated here as None so the readback stays a total
+        // function. Pin the None-arm so a future refactor that reaches
+        // for `.as_bool().unwrap()` (which would panic on a scalar-
+        // integer or string axis-value) is a test-visible break, not a
+        // runtime regression at the first schema-invalid CR the reader
+        // sees. Peer of the sibling
+        // `kube_spec_str_field_returns_none_when_field_carries_non_string_type`,
+        // `kube_spec_seq_field_returns_none_when_field_carries_non_sequence_type`,
+        // and
+        // `kube_spec_map_field_returns_none_when_field_carries_non_mapping_type`
+        // pins on the composed sub-`spec.<field>` scalar-str-arity /
+        // sequence-arity / sub-mapping-arity accessors.
+        for non_bool in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(1u64.into()),
+            serde_yaml::Value::String("true".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, non_bool.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
+                None,
+                "kube_spec_bool_field must return None when spec.prune \
+                 carries a non-boolean YAML type ({non_bool:?}) — the \
+                 trailing `.as_bool()` shape gate short-circuits here, \
+                 and every routed caller depends on that None-arm to \
+                 keep the readback total (YAML's `1` is a Number and \
+                 `\"true\"` is a String per serde_yaml's strict shape-\
+                 gate posture, not truthy Bools)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_bool_field_composes_on_lifted_kube_spec_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_spec_field(value, field).and_then(|v| v.as_bool())` —
+        // the composed scalar-arity accessor stays load-bearing, this
+        // boolean-arity accessor stands one abstraction step above it
+        // (folding the trailing `.as_bool()` shape-gate closure). Pin
+        // the delegation-shape byte-for-byte across three
+        // representative sub-field axis-keys so a future refactor that
+        // bypasses [`kube_spec_field`] (a private inline
+        // `.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping()).and_then(|m|
+        // m.get(field)).and_then(|n| n.as_bool())` chain that would
+        // silently drift on a future rebrand of the outer two-hop
+        // navigation) is a test-visible break. Peer of the sibling
+        // `kube_spec_str_field_composes_on_lifted_kube_spec_field_accessor`,
+        // `kube_spec_seq_field_composes_on_lifted_kube_spec_field_accessor`,
+        // and
+        // `kube_spec_map_field_composes_on_lifted_kube_spec_field_accessor`
+        // composition pins on the sub-`spec.<field>` scalar-str-arity /
+        // sequence-arity / sub-mapping-arity accessors.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
+        spec.insert_str_key(
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+            serde_yaml::Value::Bool(true),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            FLUX_KUSTOMIZATION_KEY_PRUNE,
+            "suspend",
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+        ] {
+            let via_composed = kube_spec_bool_field(&value, sub_field);
+            let via_delegation =
+                kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_bool);
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_spec_bool_field(v, {sub_field:?}) must equal the \
+                 delegation-shape `kube_spec_field(v, {sub_field:?})\
+                 .and_then(|v| v.as_bool())` — the composition pin \
+                 closes the drift surface where a private inline bypass \
+                 silently desynchronizes from the underlying composed \
+                 scalar-arity accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_bool_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the prior inline `kube_spec_field(v, F).and_then(|v|
+        // v.as_bool())` chain the sole routed caller site (the caixa-
+        // flux `cluster_bundle_kustomization_prune_pins_lifted_true`
+        // determinism-pin's per-`Kustomization` `spec.prune` readback)
+        // previously carried. A drift between the composed helper's
+        // return and the inline chain would silently regress every
+        // downstream determinism-pin (`.expect(...)`,
+        // `assert_eq!(_, Some(<expected>))`) — pin the byte-equivalence
+        // across the routed `spec.prune` axis plus two forthcoming
+        // per-`Kustomization` / per-`HelmRelease` `spec.suspend`
+        // reconcile-loop-halt toggle axes the M3.x renderer set admits
+        // once suspend-mode lands so the composed helper stays a drop-
+        // in replacement for every current + future routed site's prior
+        // two-line block. Mirrors the sibling
+        // `kube_spec_str_field_matches_prior_inline_chain`,
+        // `kube_spec_seq_field_matches_prior_inline_chain`, and
+        // `kube_spec_map_field_matches_prior_inline_chain` pins one
+        // arity over on the composed sub-`spec.<field>` boolean-arity.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
+        spec.insert_string(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE, "true");
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            FLUX_KUSTOMIZATION_KEY_PRUNE,
+            "suspend",
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+        ] {
+            let via_helper = kube_spec_bool_field(&value, sub_field);
+            let via_inline =
+                kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_bool);
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_spec_bool_field(v, {sub_field:?}) must yield the \
+                 same Option<bool> as the prior inline \
+                 `kube_spec_field(v, {sub_field:?}).and_then(|v| \
+                 v.as_bool())` chain — otherwise the routed caixa-\
+                 flux per-CR sub-spec-field boolean-readback site \
+                 (the `cluster_bundle_kustomization_prune_pins_lifted_true` \
+                 determinism-pin) drifts silently at test time"
             );
         }
     }
