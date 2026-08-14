@@ -2435,9 +2435,10 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_bool, kube_field, kube_field_u64, kube_kind, kube_map, kube_name,
-        kube_root_seq_field, kube_seq, kube_spec_bool_field, kube_spec_field, kube_spec_map_field,
-        kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field, kube_str,
+        kube_api_version_is, kube_bool, kube_field, kube_field_bool, kube_field_u64, kube_kind,
+        kube_map, kube_name, kube_root_seq_field, kube_seq, kube_spec_bool_field, kube_spec_field,
+        kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field,
+        kube_str,
     };
 
     fn sample_caixa() -> Caixa {
@@ -3161,8 +3162,13 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let remediate_last_failure = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
-            .and_then(|u| kube_field(u, FLUX_HELMRELEASE_KEY_REMEDIATION))
-            .and_then(|r| kube_bool(r, FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE))
+            .and_then(|u| {
+                kube_field_bool(
+                    u,
+                    FLUX_HELMRELEASE_KEY_REMEDIATION,
+                    FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+                )
+            })
             .expect(
                 "spec.upgrade.remediation.remediateLastFailure boolean scalar \
                  present; drift on this axis silently drops the substrate's \
