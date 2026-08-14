@@ -3279,7 +3279,7 @@ mod tests {
         kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first,
         kube_spec, kube_spec_field, kube_spec_seq_field, kube_spec_seq_first,
         kube_spec_seq_first_seq_first, kube_spec_seq_first_seq_first_seq_first,
-        kube_spec_str_field, kube_str, kube_u64, mapping_string_keys,
+        kube_spec_str_field, kube_str, kube_u64, mapping_str_keys, mapping_string_keys,
     };
     use std::time::Duration;
 
@@ -9249,7 +9249,7 @@ mod tests {
             // pins the alphabetical-iteration determinism contract
             // this test protects (THEORY.md §V.2.7).
             let metadata = kube_metadata(p).expect("metadata mapping");
-            let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
+            let keys = mapping_str_keys(metadata);
             assert_eq!(
                 keys,
                 vec![KUBE_KEY_LABELS, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE],
