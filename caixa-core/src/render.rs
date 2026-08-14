@@ -18830,6 +18830,55 @@ pub fn mapping_string_keys(mapping: &serde_yaml::Mapping) -> Vec<String> {
         .collect()
 }
 
+/// Collect the string-shaped keys of a [`serde_yaml::Mapping`] as
+/// borrowed [`&str`] slices — the borrowed-arity peer of
+/// [`mapping_string_keys`] on the emit-side render-determinism assert
+/// axis (THEORY.md §V.2.7). The five routed test-side call sites — the
+/// [`caixa-mesh`][mesh] per-CNP `metadata:` alphabetical-iteration
+/// pin, the [`caixa-core`] `yaml_string_mapping` /
+/// `label_selector` per-`BTreeMap` alphabetical-iteration pins, and
+/// the two [`kube_resource_skeleton`] top-level + `metadata:`
+/// insertion-order pins — previously carried the three-line
+///
+/// ```ignore
+/// let keys: Vec<&str> = <mapping>
+///     .iter()
+///     .filter_map(|(k, _)| k.as_str())
+///     .collect();
+/// ```
+///
+/// composition around the same one-token semantic concern the sibling
+/// [`mapping_string_keys`] closes at the owned-`Vec<String>` altitude:
+/// "give me every string-shape key of this mapping, in the mapping's
+/// natural iteration order". The two together partition the
+/// key-only enumeration axis at both ownership arities — the owned
+/// scalar for the assert-side `{keys:?}` interpolation whose lifetime
+/// must outlive the outer mapping borrow, the borrowed slice for the
+/// assert-side `assert_eq!(keys, vec![<KEY_CONST>, ...])` byte-compare
+/// whose lifetime is bounded by the surrounding assert expression.
+///
+/// The borrowed altitude the paired docstring on
+/// [`mapping_string_keys`] named as a "future lift, one altitude down
+/// on the ownership-arity axis, if the routed caller surface ever
+/// grows dense enough on that receiver-arm to justify it" — landed
+/// here on the exact 5-site threshold the sibling docstring called
+/// out, mirroring the discipline the paired production-side
+/// [`string_keyed_entries`] borrowed-`(&str, &Value)` iterator carries
+/// on the sibling entry-arity axis.
+///
+/// Non-string-shape keys ([`serde_yaml::Value::Number`] /
+/// [`serde_yaml::Value::Bool`] / [`serde_yaml::Value::Mapping`] /
+/// [`serde_yaml::Value::Sequence`] / [`serde_yaml::Value::Null`] /
+/// [`serde_yaml::Value::Tagged`] arms) are silently dropped — the
+/// same drop-not-panic contract the sibling
+/// [`mapping_string_keys`] + [`string_keyed_entries`] pair enforces.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn mapping_str_keys(mapping: &serde_yaml::Mapping) -> Vec<&str> {
+    mapping.keys().filter_map(|k| k.as_str()).collect()
+}
+
 /// Read the string-scalar value at `metadata.<field>` on a K8s custom
 /// resource YAML document, returning `None` when either the top-level
 /// [`KUBE_KEY_METADATA`] block is absent (a defensively-tolerated
@@ -31933,7 +31982,7 @@ mod tests {
         input.insert("mango", "m".to_string());
         let v = yaml_string_mapping(input);
         let m = v.as_mapping().expect("mapping shape");
-        let keys: Vec<&str> = m.iter().filter_map(|(k, _)| k.as_str()).collect();
+        let keys = mapping_str_keys(m);
         assert_eq!(keys, vec!["apple", "mango", "zebra"]);
     }
 
@@ -32187,7 +32236,7 @@ mod tests {
             .and_then(|m| m.get(KUBE_KEY_MATCH_LABELS))
             .and_then(|v| v.as_mapping())
             .unwrap();
-        let keys: Vec<&str> = inner.iter().filter_map(|(k, _)| k.as_str()).collect();
+        let keys = mapping_str_keys(inner);
         assert_eq!(keys, vec!["apple", "mango", "zebra"]);
     }
 
@@ -32339,7 +32388,7 @@ mod tests {
             .get(KUBE_KEY_METADATA)
             .and_then(|v| v.as_mapping())
             .unwrap();
-        let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
+        let keys = mapping_str_keys(metadata);
         assert_eq!(
             keys,
             vec![KUBE_KEY_LABELS, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE]
@@ -32361,7 +32410,7 @@ mod tests {
             DEFAULT_NAMESPACE,
             BTreeMap::new(),
         );
-        let keys: Vec<&str> = skel.iter().filter_map(|(k, _)| k.as_str()).collect();
+        let keys = mapping_str_keys(&skel);
         assert_eq!(
             keys,
             vec![KUBE_KEY_API_VERSION, KUBE_KEY_KIND, KUBE_KEY_METADATA]
@@ -41436,6 +41485,156 @@ spec:
              diagnostics regress silently on the interpolated \
              `{{keys:?}}` failure-message shape"
         );
+    }
+
+    #[test]
+    fn mapping_str_keys_collects_string_shaped_keys_in_iteration_order() {
+        // Load-bearing contract on the borrowed altitude — given a
+        // Mapping with three string-shaped keys inserted in a fixed
+        // order, yield a `Vec<&str>` that borrows into the input and
+        // preserves the mapping's natural iteration order. Mirrors the
+        // sibling `mapping_string_keys` insertion-order pin, but on the
+        // borrowed arity every routed test-side
+        // `assert_eq!(keys, vec![<KEY_CONST>, ...])` byte-compare
+        // reaches through.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(KUBE_KEY_API_VERSION, "cilium.io/v2");
+        m.insert_string(KUBE_KEY_KIND, "CiliumNetworkPolicy");
+        m.insert_string(KUBE_KEY_METADATA, "…");
+        let keys = mapping_str_keys(&m);
+        assert_eq!(
+            keys,
+            vec![KUBE_KEY_API_VERSION, KUBE_KEY_KIND, KUBE_KEY_METADATA],
+            "mapping_str_keys must yield every string-shaped key as \
+             borrowed `&str` slices in the underlying Mapping's \
+             iteration order — every routed test-side assert reaches \
+             through the yielded shape as the byte-compare against the \
+             expected `Vec<&str>` of `<KEY_CONST>` axis-tokens"
+        );
+    }
+
+    #[test]
+    fn mapping_str_keys_drops_non_string_keys() {
+        // Same drop-not-panic contract the sibling
+        // `mapping_string_keys` + `string_keyed_entries` peers enforce
+        // on the paired owned + entry-arity axes: serde_yaml admits
+        // arbitrary Value keys at the key position, and the routed
+        // inline sites' per-key `.filter_map(|(k, _)| k.as_str())`
+        // shape-gate silently drops the ones that don't round-trip
+        // through the K8s YAML-key surface. Pin the lift's filter
+        // contract so a future refactor that reaches for
+        // `.as_str().unwrap()` (which would panic on a numeric key)
+        // is a test-visible break, not a runtime regression at the
+        // first drift-detection diagnostic.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(KUBE_KEY_LABELS, "kept-1");
+        m.insert(
+            serde_yaml::Value::Number(7.into()),
+            serde_yaml::Value::String("dropped-number-key".into()),
+        );
+        m.insert(
+            serde_yaml::Value::Bool(false),
+            serde_yaml::Value::String("dropped-bool-key".into()),
+        );
+        m.insert_string(KUBE_KEY_NAME, "kept-2");
+        let keys = mapping_str_keys(&m);
+        assert_eq!(
+            keys,
+            vec![KUBE_KEY_LABELS, KUBE_KEY_NAME],
+            "mapping_str_keys must silently drop non-string-shape keys \
+             (Value::Number, Value::Bool, Value::Mapping, \
+             Value::Sequence, Value::Null keys) — the K8s YAML-key \
+             surface downstream requires string keys, and every routed \
+             assert-side byte-compare reached through the per-key \
+             `.filter_map(|(k, _)| k.as_str())` shape-gate expected \
+             exactly this drop-not-panic contract"
+        );
+    }
+
+    #[test]
+    fn mapping_str_keys_on_empty_mapping_yields_empty_vec() {
+        // Cardinality-arm pin on the borrowed altitude: an empty
+        // Mapping yields an empty `Vec<&str>`. Sibling to the paired
+        // `mapping_string_keys` empty-arm pin, closing the empty-
+        // cardinality behavior at both ownership arities on the same
+        // key-only enumeration axis.
+        let m = serde_yaml::Mapping::new();
+        let keys = mapping_str_keys(&m);
+        assert!(
+            keys.is_empty(),
+            "mapping_str_keys on an empty Mapping must yield an empty \
+             `Vec<&str>` so the routed assert-side byte-compare against \
+             an empty `vec![]` on drift-detection failure renders \
+             cleanly rather than raising; got {keys:?}"
+        );
+    }
+
+    #[test]
+    fn mapping_str_keys_matches_prior_inline_iter_filter_map_collect() {
+        // Byte-equivalence pin against the prior three-line inline
+        // `<mapping>.iter().filter_map(|(k, _)|
+        // k.as_str()).collect::<Vec<&str>>()` block the five routed
+        // test-side sites (the caixa-mesh per-CNP `metadata:` alpha-
+        // pin, the two caixa-core `yaml_string_mapping` /
+        // `label_selector` per-`BTreeMap` alpha-pins, the two
+        // `kube_resource_skeleton` insertion-order pins) previously
+        // carried verbatim. A drift between the helper's yielded
+        // Vec and the inline collect would silently regress every
+        // routed diagnostic — mirrors the discipline the sibling
+        // `mapping_string_keys_matches_prior_inline_collect` pin
+        // established on the owned-`Vec<String>` altitude.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_NAME, "pleme-computeunit");
+        m.insert(
+            serde_yaml::Value::Number(3.into()),
+            serde_yaml::Value::String("silently-dropped".into()),
+        );
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_VERSION, "0.1.0");
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_REPOSITORY, "oci://ghcr.io");
+        m.insert_string(HELM_CHART_DEPENDENCY_KEY_ALIAS, "cu");
+
+        let via_helper = mapping_str_keys(&m);
+        let via_inline: Vec<&str> = m.iter().filter_map(|(k, _)| k.as_str()).collect();
+
+        assert_eq!(
+            via_helper, via_inline,
+            "mapping_str_keys must yield the same Vec<&str> as the \
+             prior inline `.iter().filter_map(|(k, _)| \
+             k.as_str()).collect::<Vec<&str>>()` block — otherwise \
+             the five routed test-side drift-detection byte-compares \
+             regress silently on the interpolated `vec![<KEY_CONST>, \
+             ...]` expected-shape assertion"
+        );
+    }
+
+    #[test]
+    fn mapping_str_keys_borrows_into_input_mapping() {
+        // Ownership-arity pin: the returned `Vec<&str>` borrows into
+        // the input mapping (not into the caller's local scope), so the
+        // returned slices remain valid for the whole outer mapping
+        // borrow but not beyond it. Mirrors the sibling
+        // `string_keyed_entries` iterator's borrow contract on the
+        // paired entry-arity axis, distinguishing this helper's
+        // `Vec<&str>` return from the owned `Vec<String>` the sibling
+        // `mapping_string_keys` returns.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(KUBE_KEY_NAME, "value-1");
+        m.insert_string(KUBE_KEY_NAMESPACE, "value-2");
+        let keys = mapping_str_keys(&m);
+        // Each yielded &str must point back into `m`'s owned key
+        // storage — reachable via the mapping's own `.keys()` iterator
+        // and comparable by pointer identity on the underlying `str`.
+        for (yielded, from_mapping) in keys.iter().zip(m.keys()) {
+            let from_mapping_str = from_mapping.as_str().expect("string key");
+            assert!(
+                std::ptr::eq::<str>(*yielded, from_mapping_str),
+                "mapping_str_keys must yield &str borrows that point \
+                 back into the input Mapping's own key storage (byte-\
+                 identical pointer address), not into a per-call \
+                 temporary — the returned slices' lifetime is bounded \
+                 by the input mapping's borrow"
+            );
+        }
     }
 
     #[test]
