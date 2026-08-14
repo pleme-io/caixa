@@ -3278,7 +3278,7 @@ mod tests {
         kube_match_labels, kube_metadata, kube_metadata_label, kube_metadata_label_is,
         kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first,
         kube_spec, kube_spec_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_str_field,
-        kube_str, kube_u64,
+        kube_str, kube_u64, mapping_string_keys,
     };
     use std::time::Duration;
 
@@ -7379,10 +7379,7 @@ mod tests {
             mapping.contains_key(M3_PLACEMENT_KEY_ESTRATEGIA),
             "Placement's serde derive must emit the estrategia axis under the exact key \
              the lifted M3_PLACEMENT_KEY_ESTRATEGIA const carries; got mapping keys: {keys:?}",
-            keys = mapping
-                .keys()
-                .filter_map(|k| k.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
+            keys = mapping_string_keys(mapping)
         );
     }
 
@@ -7449,10 +7446,7 @@ mod tests {
             mapping.contains_key(M3_PLACEMENT_KEY_CLUSTERS),
             "Placement's serde derive must emit the clusters axis under the exact key \
              the lifted M3_PLACEMENT_KEY_CLUSTERS const carries; got mapping keys: {keys:?}",
-            keys = mapping
-                .keys()
-                .filter_map(|k| k.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
+            keys = mapping_string_keys(mapping)
         );
     }
 
@@ -7532,10 +7526,7 @@ mod tests {
             "Placement's serde derive must emit the affinity axis under the exact key \
              the lifted M3_PLACEMENT_KEY_AFFINITY const carries when the typed slot \
              resolves to `Some(_)`; got mapping keys: {keys:?}",
-            keys = mapping
-                .keys()
-                .filter_map(|k| k.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
+            keys = mapping_string_keys(mapping)
         );
     }
 
@@ -7625,10 +7616,7 @@ mod tests {
             "Placement's serde derive must emit the shard_key axis under the exact key \
              the lifted M3_PLACEMENT_KEY_SHARD_KEY const carries when the typed slot \
              resolves to `Some(_)`; got mapping keys: {keys:?}",
-            keys = mapping
-                .keys()
-                .filter_map(|k| k.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
+            keys = mapping_string_keys(mapping)
         );
     }
 
