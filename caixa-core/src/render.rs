@@ -21768,6 +21768,111 @@ pub fn kube_root_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
     kube_root_field(value, field).and_then(serde_yaml::Value::as_bool)
 }
 
+/// Read a top-level `<field>:` scalar-integer on a K8s custom resource or
+/// helm-values-shaped YAML document as `Option<u64>` — the composed
+/// integer-arity per-top-level-field-u64 accessor peer at the root axis
+/// that folds the shape `value.get(field).and_then(|v| v.as_u64())` onto
+/// one substrate-primitive method call the caller reads as intent
+/// (`kube_root_u64_field(<value>, <FIELD>)` — "read this document's
+/// top-level `<FIELD>:` integer scalar") rather than as a two-hop
+/// `readback → shape-gate` chain.
+///
+/// Structural mirror of the sibling [`kube_spec_u64_field`] (e09f5ad) on
+/// the sub-`spec.<field>` axis and the value-level [`kube_u64`] (bfbec1d)
+/// primitive one altitude down: the three peers all fold the trailing
+/// `.as_u64()` shape-gate closure onto the axis's scalar-Value accessor
+/// primitive, differing only in which outer walk the axis carries
+/// ([`kube_spec_field`]'s two-hop `spec → as_mapping → get(<field>)` on
+/// the spec-anchored peer, the direct one-hop `value.get(field)` on the
+/// root-anchored peer here, the same `value.get(field)` on the
+/// value-level primitive). Peer of the shape-gated root-axis siblings
+/// [`kube_root_str_field`] (ae83f4e) on the string-scalar arity,
+/// [`kube_root_map_field`] (723f6d7) on the sub-mapping arity,
+/// [`kube_root_seq_field`] (d61e46e) on the sequence arity, and
+/// [`kube_root_bool_field`] (d166d7f) on the scalar-boolean arity: the
+/// five together close the root-axis `{str, seq, map, bool, u64}`
+/// five-arity shape-gate family to structural parity with the
+/// sub-`spec:` `{str, seq, map, bool, u64}` five-arity family already
+/// closed at the sub-axis level (`c4fe21d` — str; `fc64ed7` — seq;
+/// `27fc2ee` — map; `4f6fc93` — bool; `e09f5ad` — u64). The root-level
+/// variant needs no outer shape gate on `value` itself —
+/// [`serde_yaml::Value::get`] already short-circuits to `None` on
+/// non-Mapping outer values — so the composition folds on one hop rather
+/// than the two hops the spec-anchored peer closes.
+///
+/// Returns `None` on any of the three short-circuit arms folded through
+/// the underlying composition: the outer `value` itself carries a
+/// non-Mapping YAML type (the [`kube_root_field`] `Value::get` outer-arm
+/// short-circuit — `Value::Null`, `Value::String`, `Value::Sequence`,
+/// `Value::Number`, `Value::Bool`, `Value::Tagged` —
+/// [`serde_yaml::Value::get`] gates the outer shape without a separate
+/// `.as_mapping()` closure), the requested top-level `<field>:` axis-key
+/// is absent from the outer Mapping (the [`kube_root_field`] trailing
+/// `Value::get` none-arm — a legally-omitted top-level scalar-integer
+/// sub-block per the document's shape contract), or the top-level
+/// `<field>:` value is present but carries a non-integer YAML type (the
+/// trailing `.as_u64()` shape-gate short-circuit — a schema-invalid
+/// top-level sub-block per the CR's `OpenAPI` schema, including YAML
+/// `"3"` String and `true` Bool which `serde_yaml`'s strict shape-gate
+/// posture does not coerce to integers, but tolerated here as `None` so
+/// the readback stays a total function, mirroring the sibling
+/// [`kube_root_str_field`] / [`kube_root_seq_field`] /
+/// [`kube_root_map_field`] / [`kube_root_bool_field`] posture). The
+/// returned `u64` is a fresh primitive value (integers carry no
+/// underlying borrow the way the sibling string / sequence / mapping
+/// accessors preserve) — the caller decides whether to
+/// `assert_eq!(_, Some(<expected>))` for a determinism pin,
+/// `.expect(...)` for a load-bearing count identity, or
+/// `.unwrap_or(<default>)` for a substrate-side default fallback.
+///
+/// The `field` axis stays parametric (rather than pinned to a specific
+/// canonical scalar-integer top-level axis-key as a separate helper) so
+/// the same lift closes every top-level scalar-integer sub-block a
+/// future per-CR emitter surfaces: the forecast top-level `port: <n>`
+/// scalar on a hypothetical simplified `ServiceLike` shape the sibling
+/// [`kube_root_field`] docstring at caixa-core/src/render.rs:21472
+/// already forecasts, a top-level `replicas: <n>` scalar on a future
+/// per-controller CR envelope, the hypothetical `count: <n>` counter on
+/// a per-cluster helm-values-shaped envelope the future M4 aggregator
+/// materializes — each new top-level scalar-integer axis reaches this
+/// helper with a new [`KUBE_KEY_<AXIS>`] const, not a fresh per-arity
+/// helper.
+///
+/// Every future top-level `<field>:` scalar-integer readback the
+/// M3.x + M4 renderer set materializes (the forecast top-level
+/// `port:` / `replicas:` / `count:` scalars above, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's top-level
+/// scalar-integer navigation MESH-COMPOSITION §III.2 #5 admits, the
+/// `app-operator`'s per-Aplicacao CR reader for a top-level
+/// scalar-integer counter, every future test-side top-level `<field>:`
+/// integer-scalar probe the caixa-flux / caixa-mesh / caixa-helm crates
+/// add) reaches this one accessor primitive by construction — no
+/// per-consumer two-hop-plus-shape-gate re-inline, no per-consumer
+/// axis-key drift, no coordinated rewrite across every top-level
+/// scalar-integer readback on a future [`serde_yaml`] surface rebrand
+/// or shape-gate shift. Closes the five-arity shape-gate closure on the
+/// top-level axis to structural parity with the sub-`spec.<field>`
+/// five-arity closure established at e09f5ad.
+#[must_use]
+pub fn kube_root_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64> {
+    // Post-lift body: composes on the substrate-primitive
+    // [`kube_root_field`] parametric root-axis scalar-Value accessor
+    // rather than re-inlining the two-hop `value.get(field)
+    // .and_then(|v| v.as_u64())` chain. Structural mirror at the root
+    // axis of the way sibling [`kube_spec_u64_field`] (e09f5ad) composes
+    // on [`kube_spec_field`] (23bd568) one altitude over on the
+    // sub-`spec.<field>` axis, and the way sibling
+    // [`kube_root_bool_field`] (d166d7f), [`kube_root_seq_field`]
+    // (d61e46e), [`kube_root_map_field`] (723f6d7),
+    // [`kube_root_str_field`] (ae83f4e) each compose on
+    // [`kube_root_field`] (c456d97) at the peer shape-gate arities on
+    // the same root axis — each shape-gate arity peer folds its
+    // trailing `.as_u64()` / `.as_bool()` / `.as_str()` /
+    // `.as_mapping()` / `.as_sequence()` closure onto its axis's
+    // scalar-Value accessor primitive.
+    kube_root_field(value, field).and_then(serde_yaml::Value::as_u64)
+}
+
 /// Read the `matchLabels:` string-scalar sub-mapping on a K8s
 /// `LabelSelector`-shaped YAML value (Cilium `EndpointSelector`,
 /// `fromEndpoints[]`, Gateway API selectors, `NetworkPolicy` peers,
@@ -47555,6 +47660,346 @@ spec:
                 None,
                 "kube_root_bool_field must reject the {off_axis:?} \
                  off-arity axis — no leakage between the four \
+                 shape-gate peers"
+            );
+        }
+    }
+
+    // ── kube_root_u64_field lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_root_u64_field_reads_top_level_field_u64_scalar() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level scalar-integer leaf-count (the hypothetical future
+        // top-level `port: <n>` scalar on a simplified `ServiceLike`
+        // shape the sibling [`kube_root_field`] docstring forecasts at
+        // caixa-core/src/render.rs:21472, and every forthcoming
+        // top-level `replicas:` / `count:` counter a per-CR emitter
+        // materializes at MESH-COMPOSITION §III.2 #5), the composed
+        // integer-arity root-axis accessor returns `Some(<u64>)` across
+        // the pinned scalar-integer axes. Pin two distinct integer
+        // magnitudes (`3` at [`FLUX_HELMRELEASE_KEY_RETRIES`], `8080` at
+        // [`KUBE_KEY_PORT`]) so the trailing `.as_u64()` fold-through
+        // preserves both a single-digit count and a multi-digit port —
+        // the sibling `kube_u64_reads_sub_field_scalar_u64_verbatim`
+        // pin one altitude down on the value-level primitive quintet
+        // already validates the integer shape-gate; this pin validates
+        // the same axis one altitude up on the root-anchored quintet.
+        // Structural mirror of the sibling
+        // `kube_root_str_field_reads_api_version_and_kind_string_scalars`,
+        // `kube_root_map_field_reads_top_level_field_mapping`,
+        // `kube_root_seq_field_reads_top_level_field_sequence`, and
+        // `kube_root_bool_field_reads_top_level_field_boolean_scalar`
+        // pins on the peer root-axis string-scalar / sub-mapping /
+        // sequence / boolean arity axes.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
+        cr.insert_number(KUBE_KEY_PORT, 8080u64);
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
+            Some(3),
+            "kube_root_u64_field must read a top-level scalar-integer \
+             leaf-count as the single-digit count verbatim — the \
+             forthcoming per-CR emitter's forecast top-level count \
+             readback site reaches through this axis"
+        );
+        assert_eq!(
+            kube_root_u64_field(&value, KUBE_KEY_PORT),
+            Some(8080),
+            "kube_root_u64_field must read a second axis-key on a \
+             multi-digit port scalar — pinning that the trailing \
+             `.as_u64()` fold-through preserves both a single-digit \
+             count and a multi-digit port (mirroring the sibling \
+             `kube_u64_reads_sub_field_scalar_u64_verbatim` pin's \
+             cross-magnitude coverage one altitude down on the value-\
+             level quintet, and the sibling \
+             `kube_spec_u64_field_reads_sub_spec_field_u64_scalar` pin's \
+             cross-magnitude coverage one altitude over on the sub-\
+             `spec.<field>` quintet)"
+        );
+    }
+
+    #[test]
+    fn kube_root_u64_field_returns_none_when_field_absent() {
+        // Short-circuit arm 1: the requested top-level `<field>:`
+        // axis-key is absent from the outer Mapping (a legally-omitted
+        // top-level scalar-integer sub-block — e.g. a bare CR that
+        // carries no `port:` scalar when the axis is opt-in, routing
+        // the "no explicit override" fallback to the controller's own
+        // default). The helper folds this to `None` so the readback
+        // stays a total function. Structural mirror of the sibling
+        // `kube_root_str_field_returns_none_when_field_absent`,
+        // `kube_root_map_field_returns_none_when_field_absent`,
+        // `kube_root_seq_field_returns_none_when_field_absent`, and
+        // `kube_root_bool_field_returns_none_when_field_absent` pins
+        // on the peer root-axis shape-gate accessors.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_u64_field(&value, KUBE_KEY_PORT),
+            None,
+            "kube_root_u64_field must short-circuit to None when the \
+             requested top-level scalar-integer axis-key is absent from \
+             the outer Mapping — the fallback path routes off the \
+             None-arm rather than the wrong-shape arm"
+        );
+    }
+
+    #[test]
+    fn kube_root_u64_field_returns_none_when_field_carries_non_u64_type() {
+        // Short-circuit arm 2: the requested top-level `<field>:`
+        // axis-key is present but carries a non-integer YAML type (a
+        // schema-invalid top-level sub-block per the CR's `OpenAPI`
+        // schema — a scalar-boolean where the schema pins a
+        // scalar-integer, a scalar-string `"3"` that `serde_yaml`'s
+        // strict shape-gate posture does NOT coerce to
+        // `Value::Number(3)`, a nested Mapping or Sequence at a
+        // count axis). Pin the None-arm across representative
+        // non-integer shapes so a future refactor that reaches for
+        // `.as_u64().unwrap()` (which would panic on a scalar-string
+        // or scalar-boolean axis-value) is a test-visible break. Peer
+        // of the sibling
+        // `kube_spec_u64_field_returns_none_when_field_carries_non_u64_type`
+        // pin on the sub-`spec.<field>` integer-arity accessor, and of
+        // the peer shape-gate root-axis
+        // `kube_root_bool_field_returns_none_when_field_carries_non_boolean_type`
+        // pin on the boolean-arity variant.
+        for non_u64 in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("3".into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_PORT, non_u64.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_root_u64_field(&value, KUBE_KEY_PORT),
+                None,
+                "kube_root_u64_field must short-circuit to None when \
+                 the top-level `port:` axis-key carries a non-integer \
+                 YAML type ({non_u64:?}) — the trailing `.as_u64()` \
+                 shape gate short-circuits here (YAML's `\"3\"` is a \
+                 String and `true` is a Bool per serde_yaml's strict \
+                 shape-gate posture, not coercible integers)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_u64_field_short_circuits_when_outer_value_is_non_mapping() {
+        // Short-circuit arm 3: the outer `value` itself carries a
+        // non-Mapping YAML type. Unlike the sub-`metadata:` /
+        // sub-`spec:` integer-arity peers which need an explicit
+        // `.as_mapping()` gate on the outer sub-block, the root-axis
+        // variant needs no explicit outer shape gate —
+        // [`serde_yaml::Value::get`] already short-circuits to None on
+        // non-Mapping outer values. Pin the None-arm across the five
+        // non-Mapping outer shapes so a future serde_yaml revision
+        // that changes the `Value::get` outer-shape contract lights up
+        // here rather than silently desynchronizing the root-axis
+        // integer-arity accessor from its shape-gate peers. Structural
+        // mirror of the sibling
+        // `kube_root_str_field_returns_none_when_field_carries_non_string_type`
+        // + `kube_root_map_field_short_circuits_when_outer_value_is_non_mapping`
+        // + `kube_root_seq_field_short_circuits_when_outer_value_is_non_mapping`
+        // + `kube_root_bool_field_short_circuits_when_outer_value_is_non_mapping`
+        // pins on the peer root-axis shape-gate accessors.
+        let outer_shapes = [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::String("not-a-mapping".into()),
+            serde_yaml::Value::Sequence(vec![]),
+        ];
+        for outer in outer_shapes {
+            assert_eq!(
+                kube_root_u64_field(&outer, KUBE_KEY_PORT),
+                None,
+                "kube_root_u64_field must short-circuit to None on \
+                 every non-Mapping outer Value shape — Value::get \
+                 handles the outer-shape gate the sub-axis peers close \
+                 explicitly"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_u64_field_composes_on_lifted_kube_root_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_root_field(value, field).and_then(|v| v.as_u64())` —
+        // the composed scalar-arity accessor stays load-bearing, this
+        // integer-arity accessor stands one abstraction step above it
+        // (folding the trailing `.as_u64()` shape-gate closure). Pin
+        // the delegation-shape byte-for-byte across three
+        // representative top-level integer axis-keys so a future
+        // refactor that bypasses [`kube_root_field`] (a private inline
+        // `.get(field).and_then(|v| v.as_u64())` chain that would
+        // silently drift on a future rebrand of the outer one-hop
+        // navigation) is a test-visible break. Peer of the sibling
+        // `kube_root_str_field_recomposes_on_lifted_kube_root_field`,
+        // `kube_root_map_field_recomposes_on_lifted_kube_root_field`,
+        // `kube_root_seq_field_recomposes_on_lifted_kube_root_field`,
+        // and
+        // `kube_root_bool_field_composes_on_lifted_kube_root_field_accessor`
+        // pins on the peer root-axis shape-gate accessors, and of the
+        // sibling
+        // `kube_spec_u64_field_composes_on_lifted_kube_spec_field_accessor`
+        // pin on the sub-`spec.<field>` integer-arity accessor.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
+        cr.insert_number(KUBE_KEY_PORT, 8080u64);
+        cr.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for field in [
+            FLUX_HELMRELEASE_KEY_RETRIES,
+            KUBE_KEY_PORT,
+            GATEWAY_API_KEY_ATTEMPTS,
+        ] {
+            let via_composed = kube_root_u64_field(&value, field);
+            let via_delegation = kube_root_field(&value, field).and_then(serde_yaml::Value::as_u64);
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_root_u64_field(v, {field:?}) must equal the \
+                 delegation-shape `kube_root_field(v, {field:?})\
+                 .and_then(|v| v.as_u64())` — the composition pin \
+                 closes the drift surface where a private inline bypass \
+                 silently desynchronizes from the underlying composed \
+                 scalar-Value accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_u64_field_matches_prior_inline_chain() {
+        // Byte-equivalence pin: the lifted `kube_root_u64_field` helper
+        // resolves exactly the same `Option<u64>` as the two-hop
+        // `value.get(field).and_then(|v| v.as_u64())` inline chain
+        // every future routed caller would otherwise re-derive.
+        // Structural mirror of the sibling
+        // `kube_root_str_field_matches_prior_inline_chain` +
+        // `kube_root_map_field_matches_prior_inline_chain` +
+        // `kube_root_seq_field_matches_prior_inline_chain` +
+        // `kube_root_bool_field_matches_prior_inline_chain` pins on
+        // the peer root-axis shape-gate accessors, and of the sibling
+        // `kube_spec_u64_field_matches_prior_inline_chain` pin on the
+        // sub-`spec.<field>` integer-arity accessor.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
+        cr.insert_number(KUBE_KEY_PORT, 8080u64);
+        cr.insert_str_key("wrong_shape", serde_yaml::Value::String("3".into()));
+        cr.insert_str_key("wrong_shape_bool", serde_yaml::Value::Bool(true));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for field in [
+            FLUX_HELMRELEASE_KEY_RETRIES,
+            KUBE_KEY_PORT,
+            "wrong_shape",
+            "wrong_shape_bool",
+            "absent",
+        ] {
+            assert_eq!(
+                kube_root_u64_field(&value, field),
+                value.get(field).and_then(serde_yaml::Value::as_u64),
+                "kube_root_u64_field(v, {field:?}) must yield the same \
+                 Option<u64> as the prior inline \
+                 `value.get({field:?}).and_then(|v| v.as_u64())` chain \
+                 — otherwise any future routed top-level scalar-integer \
+                 readback site drifts silently at test time"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_u64_field_closes_root_axis_quintet_with_shape_gate_peers() {
+        // Family-closure pin: with `kube_root_u64_field` lifted, the
+        // root-axis shape-gate accessor family closes at five arities
+        // — `kube_root_str_field` (str, ae83f4e),
+        // `kube_root_seq_field` (seq, d61e46e),
+        // `kube_root_map_field` (map, 723f6d7),
+        // `kube_root_bool_field` (bool, d166d7f), and
+        // `kube_root_u64_field` (u64, this lift) — to structural
+        // parity with the sub-`spec.<field>` five-arity family closed
+        // at e09f5ad (`kube_spec_str_field` + `kube_spec_seq_field` +
+        // `kube_spec_map_field` + `kube_spec_bool_field` +
+        // `kube_spec_u64_field`). Pin the five-way parity by driving
+        // all five accessors against the same top-level CR shape and
+        // asserting each returns `Some(<arity>)` on its pinned axis
+        // and `None` on every off-arity axis — a fold-through
+        // cross-check that no arity leaks between the five shape-gate
+        // peers. Supersedes the prior four-arity
+        // `kube_root_bool_field_closes_root_axis_quartet_with_shape_gate_peers`
+        // pin's coverage at the fifth arity without disturbing that
+        // pin's historical closure at four.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key("str_axis", serde_yaml::Value::String("value".into()));
+        cr.insert_str_key("seq_axis", serde_yaml::Value::Sequence(vec![]));
+        cr.insert_str_key(
+            "map_axis",
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        cr.insert_str_key("bool_axis", serde_yaml::Value::Bool(true));
+        cr.insert_number("u64_axis", 42u64);
+        let value = serde_yaml::Value::Mapping(cr);
+
+        // On-arity: each shape-gate peer returns Some on its own axis.
+        assert_eq!(kube_root_str_field(&value, "str_axis"), Some("value"));
+        assert!(kube_root_seq_field(&value, "seq_axis").is_some());
+        assert!(kube_root_map_field(&value, "map_axis").is_some());
+        assert_eq!(kube_root_bool_field(&value, "bool_axis"), Some(true));
+        assert_eq!(kube_root_u64_field(&value, "u64_axis"), Some(42));
+
+        // Off-arity: no shape-gate peer accepts an axis of a different
+        // arity. The five together partition the five canonical
+        // shape-gate arities without overlap.
+        for off_axis in ["seq_axis", "map_axis", "bool_axis", "u64_axis"] {
+            assert_eq!(
+                kube_root_str_field(&value, off_axis),
+                None,
+                "kube_root_str_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the five \
+                 shape-gate peers"
+            );
+        }
+        for off_axis in ["str_axis", "map_axis", "bool_axis", "u64_axis"] {
+            assert_eq!(
+                kube_root_seq_field(&value, off_axis),
+                None,
+                "kube_root_seq_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the five \
+                 shape-gate peers"
+            );
+        }
+        for off_axis in ["str_axis", "seq_axis", "bool_axis", "u64_axis"] {
+            assert_eq!(
+                kube_root_map_field(&value, off_axis),
+                None,
+                "kube_root_map_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the five \
+                 shape-gate peers"
+            );
+        }
+        for off_axis in ["str_axis", "seq_axis", "map_axis", "u64_axis"] {
+            assert_eq!(
+                kube_root_bool_field(&value, off_axis),
+                None,
+                "kube_root_bool_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the five \
+                 shape-gate peers"
+            );
+        }
+        for off_axis in ["str_axis", "seq_axis", "map_axis", "bool_axis"] {
+            assert_eq!(
+                kube_root_u64_field(&value, off_axis),
+                None,
+                "kube_root_u64_field must reject the {off_axis:?} \
+                 off-arity axis — no leakage between the five \
                  shape-gate peers"
             );
         }
