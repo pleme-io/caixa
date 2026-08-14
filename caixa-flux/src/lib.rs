@@ -2438,7 +2438,7 @@ mod tests {
         kube_api_version_is, kube_bool, kube_field_bool, kube_field_field, kube_field_u64,
         kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq, kube_spec_bool_field,
         kube_spec_field, kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first,
-        kube_spec_str_field, kube_str,
+        kube_spec_spec_field, kube_spec_str_field, kube_str,
     };
 
     fn sample_caixa() -> Caixa {
@@ -6098,8 +6098,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let source_ref_kind = kube_spec_field(&parsed, FLUX_KEY_CHART)
-            .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
+        let source_ref_kind = kube_spec_spec_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
             .expect("helmrelease.yaml spec.chart.spec.sourceRef.kind present");
         assert_eq!(
@@ -6183,8 +6182,7 @@ spec:
                 .contents,
         )
         .unwrap();
-        let hr_source_kind = kube_spec_field(&hr_parsed, FLUX_KEY_CHART)
-            .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
+        let hr_source_kind = kube_spec_spec_field(&hr_parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
             .map(String::from)
             .unwrap();
@@ -6495,8 +6493,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let source_ref = kube_spec_field(&parsed, FLUX_KEY_CHART)
-            .and_then(|c| kube_spec_field(c, FLUX_KEY_SOURCE_REF))
+        let source_ref = kube_spec_spec_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .and_then(|r| r.as_mapping())
             .expect("spec.chart.spec.<FLUX_KEY_SOURCE_REF> mapping present");
         assert!(
@@ -6840,10 +6837,10 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let chart_name = kube_spec_field(&parsed, FLUX_KEY_CHART)
-            .and_then(|c| kube_spec_field(c, FLUX_HELMCHART_TEMPLATE_KEY_CHART))
-            .and_then(|n| n.as_str())
-            .expect("spec.chart.spec.<FLUX_HELMCHART_TEMPLATE_KEY_CHART> scalar present");
+        let chart_name =
+            kube_spec_spec_field(&parsed, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART)
+                .and_then(|n| n.as_str())
+                .expect("spec.chart.spec.<FLUX_HELMCHART_TEMPLATE_KEY_CHART> scalar present");
         assert_eq!(
             chart_name,
             opts.chart_path,
