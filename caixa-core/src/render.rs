@@ -23633,6 +23633,99 @@ pub fn kube_field_u64<R: KubeReceiver + ?Sized>(
     kube_field(recv, field).and_then(|v| kube_u64(v, scalar_field))
 }
 
+/// Read a sub-`<mid>.<tail>` YAML scalar-`bool` nested two hops under an
+/// arbitrary [`KubeReceiver`] as `Option<bool>` — the value-level three-
+/// hop navigation primitive that folds `.get(<mid>).and_then(|v|
+/// v.get(<tail>)).and_then(|v| v.as_bool())` into a single helper call.
+/// Exactly `kube_field(recv, mid).and_then(|v| kube_bool(v, tail))` — the
+/// composed peer of the value-level [`kube_field`] (e04c234) one-hop
+/// pass-through and the value-level scalar-`bool` [`kube_bool`] (d166d7f)
+/// two-hop accessor. Boolean-arity sibling of the composed scalar-str
+/// [`kube_field_str`] (1c68424) and composed scalar-`u64`
+/// [`kube_field_u64`] (e6fca52) accessors on the same three-hop axis:
+/// where those composed accessors fold a trailing `.as_str()` /
+/// `.as_u64()` shape-gate onto the two-hop-nested navigation, this
+/// accessor folds the trailing `.as_bool()` shape-gate on the same
+/// navigation, so every routed two-hop `.and_then(|X| kube_field(X,
+/// <MID>)).and_then(|Y| kube_bool(Y, <TAIL>))` middle-hop-plus-boolean-
+/// tail block (per-`HelmRelease` `upgrade.remediation.remediateLastFailure`
+/// upgrade-path post-retry-exhaustion rollback toggle on the Flux v2
+/// side, per-`HelmRelease` future `install.remediation.remediateLastFailure`
+/// install-path composed-remediation toggle once that install-path peer
+/// lands, per-`:contratos` future `retry.idempotent` typed per-edge
+/// idempotent-retries toggle once the M4 typed per-edge overlay lifts)
+/// folds onto one dispatch.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying three-hop composition: the receiver carries a YAML
+/// type without a `get(<mid>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
+/// the `<mid>` sub-field value is present but carries a YAML shape with
+/// no `get(<tail>)` navigation surface (a scalar arm at the middle-hop
+/// altitude — the inner [`serde_yaml::Value::get`] scalar-arm `None`
+/// folds through), or the `<tail>` scalar value is present but carries
+/// a non-`bool` YAML type (the trailing `.as_bool()` shape-gate short-
+/// circuit — a schema-invalid scalar type per the K8s apiserver's
+/// `OpenAPI` schema but tolerated here as `None` so the readback stays
+/// a total function, mirroring the sibling [`kube_field_str`] /
+/// [`kube_field_u64`] posture). The returned `bool` is a fresh
+/// primitive value (booleans carry no underlying borrow the way the
+/// sibling composed scalar-str accessor preserves) — the caller decides
+/// whether to `assert_eq!(_, Some(<expected>))` for a determinism pin,
+/// `.expect(...)` for a load-bearing toggle identity, or
+/// `.unwrap_or(<default>)` for a substrate-side default fallback.
+///
+/// The canonical shape 1 test-side per-nested-`<mid>.<tail>` scalar-
+/// `bool` readback site in [`caixa-flux`][flux] (the per-`HelmRelease`
+/// `spec.upgrade.remediation.remediateLastFailure` upgrade-path
+/// post-retry-exhaustion rollback-toggle determinism pin, keyed on
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] middle-hop and
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] scalar-tail — the
+/// one Flux v2 `HelmRelease.spec.upgrade.remediation.remediateLastFailure`
+/// per-CR remediation-toggle position the substrate seeds under a single
+/// canonical [`FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`]
+/// constant so a terminally-failed upgrade rolls back to the prior
+/// last-known-good release once the paired retry-cap ceiling is
+/// exhausted) previously carried inline as the two-line
+/// middle-hop-plus-boolean-tail block
+///
+/// ```ignore
+/// <value>
+///     .and_then(|X| kube_field(X, <MID>))
+///     .and_then(|Y| kube_bool(Y, <TAIL>))
+///     ...
+/// ```
+///
+/// After this lift every routed consumer folds the two-line composition
+/// onto `kube_field_bool(<value>, <MID>, <TAIL>)` — the three-hop
+/// `get → get → as_bool` walk happens once inside the helper, and the
+/// caller keeps its downstream posture (`.expect(...)`, `.unwrap_or
+/// (<default>)`, `assert_eq!(_, Some(<toggle>))`, an `if let Some(b) =
+/// _` bind) unchanged — the lift closes the navigation surface, not
+/// the per-site downstream posture. Closes the composed value-level
+/// scalar-tail family at the third of the five value-level primitive
+/// quintet arities the sibling [`kube_field_str`] opened at the string
+/// arity and the sibling [`kube_field_u64`] closed at the integer
+/// arity — the remaining `kube_field_<X>` variants (`kube_field_seq`
+/// for the per-CNP `ingress[0].toPorts[<i>].rules.http` composed
+/// sequence-tail readback, `kube_field_map` for future composed sub-
+/// mapping-tail readbacks) will close at each remaining shape-gate
+/// arity in follow-up runs, mirroring the closed shape of the
+/// spec-anchored composed family ([`kube_spec_seq_first_str`]
+/// 64253b1) one altitude above.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_field_bool<R: KubeReceiver + ?Sized>(
+    recv: &R,
+    field: &str,
+    scalar_field: &str,
+) -> Option<bool> {
+    kube_field(recv, field).and_then(|v| kube_bool(v, scalar_field))
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -51613,6 +51706,231 @@ spec:
                  mapping-tail arm (`retry.hostname` — tail absent), \
                  the tail-non-integer arm (`name.attempts` — middle-\
                  hop `name` is a scalar), and the outer-miss arm \
+                 (`never-inserted-mid`)"
+            );
+        }
+    }
+
+    // ── kube_field_bool lift ────────────────────────────────────────
+
+    #[test]
+    fn kube_field_bool_reads_two_hop_scalar_boolean_verbatim() {
+        // Load-bearing positive-path contract: given a `&Value` mapping
+        // receiver carrying a nested `<mid>.<tail>: <bool>` two-hop
+        // scalar-boolean bracket a per-`HelmRelease`
+        // `upgrade.remediation.remediateLastFailure` post-retry-
+        // exhaustion rollback-toggle readback traverses (the routed
+        // `cluster_bundle_helmrelease_upgrade_remediation_remediate_last_failure_pins_lifted_true`
+        // pin keyed on `FLUX_HELMRELEASE_KEY_REMEDIATION` middle-hop and
+        // `FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE` scalar-tail, Flux
+        // v2 helm-controller `HelmRelease.spec.upgrade.remediation`
+        // sub-container), the composed value-level three-hop `_field_bool`
+        // accessor returns the boolean leaf verbatim. Boolean-arity
+        // sibling of the composed scalar-str
+        // `kube_field_str_reads_two_hop_scalar_string_borrowing_into_input_value`
+        // and composed scalar-integer
+        // `kube_field_u64_reads_two_hop_scalar_integer_verbatim`
+        // positive-path pins one arity over on the same three-hop axis
+        // and the value-level
+        // `kube_bool_reads_sub_field_scalar_boolean_verbatim`
+        // pin one altitude down on the one-hop scalar-`bool` accessor.
+        let mut remediation_map = serde_yaml::Mapping::new();
+        remediation_map.insert_str_key(
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            serde_yaml::Value::Bool(true),
+        );
+        let mut upgrade_entry = serde_yaml::Mapping::new();
+        upgrade_entry.insert_str_key(
+            FLUX_HELMRELEASE_KEY_REMEDIATION,
+            serde_yaml::Value::Mapping(remediation_map),
+        );
+        let value = serde_yaml::Value::Mapping(upgrade_entry);
+
+        assert_eq!(
+            kube_field_bool(
+                &value,
+                FLUX_HELMRELEASE_KEY_REMEDIATION,
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            ),
+            Some(true),
+            "kube_field_bool must read the two-hop \
+             `remediation.remediateLastFailure` scalar verbatim — the \
+             routed per-`HelmRelease` upgrade-path post-retry-exhaustion \
+             rollback-toggle readback site reaches through this axis for \
+             the lifted `FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT` \
+             determinism pin"
+        );
+    }
+
+    #[test]
+    fn kube_field_bool_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying three-hop
+        // `get → get → as_bool` closes on folds through this composed
+        // helper to `None`. Pin all four arms so a future refactor
+        // reaching for a `.expect(...)` chain that assumes any hop is
+        // total is a test-visible break at this pin rather than a
+        // runtime panic at the consumer site. Structural mirror of the
+        // sibling `kube_field_str_returns_none_on_every_short_circuit_arm`
+        // and `kube_field_u64_returns_none_on_every_short_circuit_arm`
+        // fold-through pins one arity over on the same three-hop axis.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<mid>)` navigation surface — the outer `kube_field`'s
+        // scalar-arm `None` folds through.
+        let scalar_receiver = serde_yaml::Value::Bool(true);
+        assert_eq!(
+            kube_field_bool(
+                &scalar_receiver,
+                FLUX_HELMRELEASE_KEY_REMEDIATION,
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            ),
+            None,
+            "kube_field_bool must short-circuit to None when the \
+             receiver Value carries a scalar YAML type with no `get` \
+             navigation surface — the outer kube_field's scalar-arm \
+             None folds through"
+        );
+
+        // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_string(GATEWAY_API_KEY_NAME, "other");
+        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_field_bool(
+                &missing_mid,
+                FLUX_HELMRELEASE_KEY_REMEDIATION,
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            ),
+            None,
+            "kube_field_bool must short-circuit to None when the \
+             requested `<mid>` middle-hop axis-key is absent from the \
+             receiver's mapping — the outer kube_field's trailing miss \
+             folds through"
+        );
+
+        // Arm 3: `<mid>` middle-hop value present but carries a YAML
+        // shape with no `get(<tail>)` navigation surface (the inner
+        // scalar-arm `None` folds through).
+        let mut scalar_mid = serde_yaml::Mapping::new();
+        scalar_mid.insert_string(FLUX_HELMRELEASE_KEY_REMEDIATION, "scalar-not-mapping");
+        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        assert_eq!(
+            kube_field_bool(
+                &scalar_mid_value,
+                FLUX_HELMRELEASE_KEY_REMEDIATION,
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            ),
+            None,
+            "kube_field_bool must short-circuit to None when the \
+             `<mid>` sub-field carries a YAML shape with no per-key \
+             `get(<tail>)` surface — the inner kube_bool's scalar-arm \
+             None folds through the middle-hop navigation"
+        );
+
+        // Arm 4: `<tail>` scalar-tail value present but non-`bool`.
+        // Pin across the representative non-boolean YAML shapes the
+        // trailing `.as_bool()` shape-gate rejects.
+        for non_bool in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("true".into()),
+            serde_yaml::Value::Number(serde_yaml::Number::from(1_u64)),
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Bool(true)]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut remediation_map = serde_yaml::Mapping::new();
+            remediation_map.insert_str_key(
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+                non_bool.clone(),
+            );
+            let mut upgrade_entry = serde_yaml::Mapping::new();
+            upgrade_entry.insert_str_key(
+                FLUX_HELMRELEASE_KEY_REMEDIATION,
+                serde_yaml::Value::Mapping(remediation_map),
+            );
+            let value = serde_yaml::Value::Mapping(upgrade_entry);
+            assert_eq!(
+                kube_field_bool(
+                    &value,
+                    FLUX_HELMRELEASE_KEY_REMEDIATION,
+                    FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+                ),
+                None,
+                "kube_field_bool must short-circuit to None when the \
+                 `<tail>` scalar-tail value is non-`bool` ({non_bool:?}) \
+                 — the trailing kube_bool `.as_bool()` shape-gate short-\
+                 circuits"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_bool_matches_prior_inline_two_line_composition() {
+        // Byte-equivalence pin: the lifted `kube_field_bool` helper
+        // resolves exactly the same `Option<bool>` as the two-line
+        // `kube_field(v, MID).and_then(|X| kube_bool(X, TAIL))` inline
+        // composition the 1 routed caller site in caixa-flux (the per-
+        // `HelmRelease` upgrade-path post-retry-exhaustion rollback-
+        // toggle pin at
+        // `cluster_bundle_helmrelease_upgrade_remediation_remediate_last_failure_pins_lifted_true`,
+        // on the `spec.upgrade.remediation.remediateLastFailure` two-hop
+        // axis under the `kube_spec_field(_, UPGRADE)` outer prelude)
+        // previously carried. A drift between the composed helper's
+        // return and the two-line inline composition would silently
+        // regress every downstream continuation (`.expect(...)`,
+        // `.unwrap_or(<default>)`, `== Some(<toggle>)`) — pin the byte-
+        // equivalence across the canonical composed axis so the composed
+        // helper stays a drop-in replacement for the routed site's prior
+        // two-line composition. Structural mirror of the sibling
+        // `kube_field_str_matches_prior_inline_two_line_composition` and
+        // `kube_field_u64_matches_prior_inline_two_line_composition`
+        // pins on the composed scalar-str-family and scalar-integer-
+        // family peers one arity over.
+        let mut remediation_map = serde_yaml::Mapping::new();
+        remediation_map.insert_str_key(
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            serde_yaml::Value::Bool(true),
+        );
+        let mut upgrade_entry = serde_yaml::Mapping::new();
+        upgrade_entry.insert_str_key(
+            FLUX_HELMRELEASE_KEY_REMEDIATION,
+            serde_yaml::Value::Mapping(remediation_map),
+        );
+        // Sibling non-target axes so the same fixture drives the
+        // present-key + missing-key + non-boolean arms of the
+        // equivalence.
+        upgrade_entry.insert_string(GATEWAY_API_KEY_NAME, "upgrade");
+        let value = serde_yaml::Value::Mapping(upgrade_entry);
+
+        for (mid, tail) in [
+            (
+                FLUX_HELMRELEASE_KEY_REMEDIATION,
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            ),
+            (FLUX_HELMRELEASE_KEY_REMEDIATION, GATEWAY_API_KEY_HOSTNAME),
+            (
+                GATEWAY_API_KEY_NAME,
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            ),
+            (
+                "never-inserted-mid",
+                FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            ),
+        ] {
+            let via_composed = kube_field_bool(&value, mid, tail);
+            let via_inline = kube_field(&value, mid).and_then(|v| kube_bool(v, tail));
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_field_bool(v, {mid:?}, {tail:?}) must byte-equal \
+                 the prior two-line `kube_field(v, {mid:?}).and_then\
+                 (|X| kube_bool(X, {tail:?}))` composition — the lift \
+                 must stay a drop-in for every routed caller's \
+                 downstream continuation posture, spanning the present-\
+                 key path (`remediation.remediateLastFailure`), the \
+                 middle-hop-non-mapping-tail arm \
+                 (`remediation.hostname` — tail absent), the tail-non-\
+                 boolean arm (`name.remediateLastFailure` — middle-hop \
+                 `name` is a scalar), and the outer-miss arm \
                  (`never-inserted-mid`)"
             );
         }
