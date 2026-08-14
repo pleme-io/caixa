@@ -3274,11 +3274,11 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is,
-        kube_field, kube_field_field, kube_field_str, kube_field_u64, kube_kind, kube_kind_is,
-        kube_map, kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata,
-        kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_name, kube_name_is,
-        kube_namespace, kube_seq, kube_seq_first, kube_spec, kube_spec_field, kube_spec_seq_field,
-        kube_spec_seq_first, kube_spec_seq_first_seq_first,
+        kube_field, kube_field_field, kube_field_seq, kube_field_str, kube_field_u64, kube_kind,
+        kube_kind_is, kube_map, kube_match_label, kube_match_label_is, kube_match_labels,
+        kube_metadata, kube_metadata_label, kube_metadata_label_is, kube_metadata_labels,
+        kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first, kube_spec,
+        kube_spec_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_seq_first_seq_first,
         kube_spec_seq_first_seq_first_seq_first, kube_spec_seq_first_str, kube_spec_str_field,
         kube_str, kube_u64, mapping_str_keys, mapping_string_keys,
     };
@@ -7880,8 +7880,7 @@ mod tests {
         let cart_to_catalog = find_by_name(&policies, "checkout-cart-to-catalog").unwrap();
         let http_rules =
             kube_spec_seq_first_seq_first(cart_to_catalog, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS)
-                .and_then(|p| kube_field(p, KUBE_KEY_RULES))
-                .and_then(|r| kube_seq(r, CILIUM_KEY_HTTP))
+                .and_then(|p| kube_field_seq(p, KUBE_KEY_RULES, CILIUM_KEY_HTTP))
                 .unwrap();
         assert_eq!(http_rules.len(), 1);
         assert_eq!(
