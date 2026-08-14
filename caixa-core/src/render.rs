@@ -23458,6 +23458,89 @@ pub fn kube_bool<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<bool
     recv.field_value(field).and_then(serde_yaml::Value::as_bool)
 }
 
+/// Read a sub-`<mid>.<tail>` YAML scalar-str nested two hops under an
+/// arbitrary [`KubeReceiver`] as `Option<&str>` — the value-level three-
+/// hop navigation primitive that folds `.get(<mid>).and_then(|v|
+/// v.get(<tail>)).and_then(|v| v.as_str())` into a single helper call.
+/// Exactly `kube_field(recv, mid).and_then(|v| kube_str(v, tail))` —
+/// the composed peer of the value-level [`kube_field`] (e04c234) one-hop
+/// pass-through and the value-level scalar-str [`kube_str`] (a23f61d)
+/// two-hop accessor. Structural mirror of the spec-anchored
+/// [`kube_spec_seq_first_str`] (64253b1) at one altitude above: where
+/// that composed accessor folds an outer `spec → as_mapping → get(<seq>)
+/// → as_sequence → first` prelude before the same trailing scalar-str
+/// hop, this accessor drops the outer prelude and stays parametric on
+/// the receiver — so a caller already holding a nested `&Value` (a
+/// `spec.rules[0].matches[0]` bracket from the per-`HTTPRoute` readback,
+/// a `spec.ingress[0].toPorts[0]` bracket from the per-CNP L4-tuple
+/// readback, any nested-mapping bracket the M3 renderer set exposes)
+/// reaches for this composed accessor directly instead of re-inlining
+/// the two-line
+/// `.and_then(|X| kube_field(X, <MID>)).and_then(|Y| kube_str(Y, <TAIL>))`
+/// middle-hop-plus-scalar-tail block.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying three-hop composition: the receiver carries a YAML
+/// type without a `get(<mid>)` navigation surface
+/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// bool, number, null — that expose no per-key lookup), the requested
+/// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
+/// the `<mid>` sub-field value is present but carries a YAML shape with
+/// no `get(<tail>)` navigation surface (a scalar arm at the middle-hop
+/// altitude — the inner [`serde_yaml::Value::get`] scalar-arm `None`
+/// folds through), or the `<tail>` scalar value is present but carries
+/// a non-string YAML type (the trailing `.as_str()` shape-gate short-
+/// circuit — a schema-invalid scalar type per the K8s apiserver's
+/// `OpenAPI` schema but tolerated here as `None` so the readback stays
+/// a total function). The returned `&str` borrows into the input
+/// receiver — the caller decides whether to `assert_eq!(_,
+/// Some(<expected>))` for a determinism pin, thread through a
+/// `.expect(...)` for a load-bearing scalar identity, or run a further
+/// `.to_string()` / `.unwrap_or_else(...)` continuation.
+///
+/// The canonical shape 2 test-side per-nested-`<mid>.<tail>` scalar-
+/// str readback sites in [`caixa-mesh`][mesh] (the per-`HTTPRoute`
+/// `spec.rules[0].matches[0].path.value` catch-all match-path pin and
+/// the per-`HTTPRoute` per-rule `matches[0].path.value` per-rule match-
+/// path list pin, both keyed on [`GATEWAY_API_KEY_PATH`] middle-hop and
+/// [`GATEWAY_API_KEY_VALUE`] scalar-tail — the two `HTTPPathMatch`
+/// container-then-scalar readbacks Gateway API §2.2 partitions the L7
+/// URL-path predicate across) previously carried inline as the two-line
+/// middle-hop-plus-scalar-tail block
+///
+/// ```ignore
+/// <value>
+///     .and_then(|X| kube_field(X, <MID>))
+///     .and_then(|Y| kube_str(Y, <TAIL>))
+///     ...
+/// ```
+///
+/// After this lift every routed consumer folds the two-line composition
+/// onto `kube_field_str(<value>, <MID>, <TAIL>)` — the three-hop
+/// `get → get → as_str` walk happens once inside the helper, and the
+/// caller keeps its downstream posture (`.expect(...)`, `.to_string()`,
+/// `.map(str::to_owned)`, an `if let Some(s) = _` bind) unchanged — the
+/// lift closes the navigation surface, not the per-site downstream
+/// posture. Opens the composed value-level scalar-tail family the
+/// sibling `kube_field_<X>` variants (future `kube_field_u64` for the
+/// per-`HelmRelease` `install.remediation.retries` / `upgrade.
+/// remediation.retries` composed integer-tail readbacks, future
+/// `kube_field_bool` for the per-`HelmRelease` `install.remediation.
+/// remediateLastFailure` composed boolean-tail readback, future
+/// `kube_field_seq` for the per-CNP `ingress[0].toPorts[<i>].rules`
+/// composed sequence-tail readback) will close at each remaining arity
+/// of the value-level primitive quintet.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_field_str<'a, R: KubeReceiver + ?Sized>(
+    recv: &'a R,
+    field: &str,
+    scalar_field: &str,
+) -> Option<&'a str> {
+    kube_field(recv, field).and_then(|v| kube_str(v, scalar_field))
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -51081,6 +51164,179 @@ spec:
              `spec.ingress[0].toPorts[0].protocol` determinism-pin \
              site"
         );
+    }
+
+    // ── kube_field_str lift ─────────────────────────────────────────
+
+    #[test]
+    fn kube_field_str_reads_two_hop_scalar_string_borrowing_into_input_value() {
+        // Load-bearing positive-path contract: given a `&Value` mapping
+        // receiver carrying a nested `<mid>.<tail>: "<str>"` two-hop
+        // scalar-string bracket a per-`HTTPRoute` `HTTPPathMatch`
+        // `path.value` L7 URL-path readback traverses (the routed
+        // catch-all match-path pin and the per-rule match-path list pin
+        // both keyed on `GATEWAY_API_KEY_PATH` middle-hop and
+        // `GATEWAY_API_KEY_VALUE` scalar-tail, Gateway API §2.2), the
+        // composed value-level three-hop `_field_str` accessor returns
+        // the string leaf borrowing into the input `Value`. Structural
+        // mirror of the sibling
+        // `kube_spec_seq_first_str_reads_first_entry_string_scalar_of_sub_spec_field_sequence`
+        // positive-path pin one altitude up on the spec-anchored axis
+        // and the value-level `kube_str_reads_sub_field_scalar_str_borrowing_into_input_value`
+        // pin one altitude down on the one-hop scalar-str accessor.
+        let mut path_map = serde_yaml::Mapping::new();
+        path_map.insert_string(GATEWAY_API_KEY_VALUE, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH);
+        let mut match_entry = serde_yaml::Mapping::new();
+        match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_map));
+        let value = serde_yaml::Value::Mapping(match_entry);
+
+        assert_eq!(
+            kube_field_str(&value, GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE),
+            Some(GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH),
+            "kube_field_str must read the two-hop `path.value` scalar \
+             verbatim — the routed per-`HTTPRoute` `HTTPPathMatch` L7 \
+             URL-path readback site reaches through this axis for the \
+             catch-all `/` determinism pin"
+        );
+    }
+
+    #[test]
+    fn kube_field_str_returns_none_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying three-hop
+        // `get → get → as_str` closes on folds through this composed
+        // helper to `None`. Pin all four arms so a future refactor
+        // reaching for a `.expect(...)` chain that assumes any hop is
+        // total is a test-visible break at this pin rather than a
+        // runtime panic at the consumer site.
+
+        // Arm 1: receiver carries a scalar YAML type with no
+        // `get(<mid>)` navigation surface — the outer `kube_field`'s
+        // scalar-arm `None` folds through.
+        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        assert_eq!(
+            kube_field_str(
+                &scalar_receiver,
+                GATEWAY_API_KEY_PATH,
+                GATEWAY_API_KEY_VALUE,
+            ),
+            None,
+            "kube_field_str must short-circuit to None when the \
+             receiver Value carries a scalar YAML type with no `get` \
+             navigation surface — the outer kube_field's scalar-arm \
+             None folds through"
+        );
+
+        // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_string(GATEWAY_API_KEY_NAME, "other");
+        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        assert_eq!(
+            kube_field_str(&missing_mid, GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE,),
+            None,
+            "kube_field_str must short-circuit to None when the \
+             requested `<mid>` middle-hop axis-key is absent from the \
+             receiver's mapping — the outer kube_field's trailing miss \
+             folds through"
+        );
+
+        // Arm 3: `<mid>` middle-hop value present but carries a YAML
+        // shape with no `get(<tail>)` navigation surface (the inner
+        // scalar-arm `None` folds through).
+        let mut scalar_mid = serde_yaml::Mapping::new();
+        scalar_mid.insert_string(GATEWAY_API_KEY_PATH, "scalar-not-mapping");
+        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        assert_eq!(
+            kube_field_str(
+                &scalar_mid_value,
+                GATEWAY_API_KEY_PATH,
+                GATEWAY_API_KEY_VALUE,
+            ),
+            None,
+            "kube_field_str must short-circuit to None when the \
+             `<mid>` sub-field carries a YAML shape with no per-key \
+             `get(<tail>)` surface — the inner kube_str's scalar-arm \
+             None folds through the middle-hop navigation"
+        );
+
+        // Arm 4: `<tail>` scalar-tail value present but non-string.
+        // Pin across the representative non-string YAML shapes the
+        // trailing `.as_str()` shape-gate rejects.
+        for non_str in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("wrapped".into())]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut path_map = serde_yaml::Mapping::new();
+            path_map.insert_str_key(GATEWAY_API_KEY_VALUE, non_str.clone());
+            let mut match_entry = serde_yaml::Mapping::new();
+            match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_map));
+            let value = serde_yaml::Value::Mapping(match_entry);
+            assert_eq!(
+                kube_field_str(&value, GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE),
+                None,
+                "kube_field_str must short-circuit to None when the \
+                 `<tail>` scalar-tail value is non-string ({non_str:?}) \
+                 — the trailing kube_str `.as_str()` shape-gate short-\
+                 circuits"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_str_matches_prior_inline_two_line_composition() {
+        // Byte-equivalence pin: the lifted `kube_field_str` helper
+        // resolves exactly the same `Option<&str>` as the two-line
+        // `kube_field(v, MID).and_then(|X| kube_str(X, TAIL))` inline
+        // composition the 2 routed caller sites in caixa-mesh (the per-
+        // `HTTPRoute` catch-all match-path pin at
+        // `httproute_catch_all_path_routes_through_lifted_default_http_route_path`
+        // and the per-rule match-path list pin at
+        // `httproute_path_list_routes_through_lifted_entrada_resolved_paths`,
+        // both on the `HTTPPathMatch.path.value` two-hop axis)
+        // previously carried. A drift between the composed helper's
+        // return and the two-line inline composition would silently
+        // regress every downstream continuation (`.expect(...)`,
+        // `.to_string()`, `== Some(<value>)`) — pin the byte-equivalence
+        // across the canonical composed axis so the composed helper
+        // stays a drop-in replacement for the routed sites' prior two-
+        // line composition. Structural mirror of the sibling
+        // `kube_spec_seq_first_str_matches_prior_inline_two_hop_composition`
+        // pin on the spec-anchored composed-family peer.
+        let mut path_map = serde_yaml::Mapping::new();
+        path_map.insert_string(GATEWAY_API_KEY_VALUE, "/api/cart");
+        let mut match_entry = serde_yaml::Mapping::new();
+        match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_map));
+        // Sibling non-target axes so the same fixture drives the
+        // present-key + missing-key + non-string arms of the
+        // equivalence.
+        match_entry.insert_string(GATEWAY_API_KEY_NAME, "http");
+        let value = serde_yaml::Value::Mapping(match_entry);
+
+        for (mid, tail) in [
+            (GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE),
+            (GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_HOSTNAME),
+            (GATEWAY_API_KEY_NAME, GATEWAY_API_KEY_VALUE),
+            ("never-inserted-mid", GATEWAY_API_KEY_VALUE),
+        ] {
+            let via_composed = kube_field_str(&value, mid, tail);
+            let via_inline = kube_field(&value, mid).and_then(|v| kube_str(v, tail));
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_field_str(v, {mid:?}, {tail:?}) must byte-equal \
+                 the prior two-line `kube_field(v, {mid:?}).and_then\
+                 (|X| kube_str(X, {tail:?}))` composition — the lift \
+                 must stay a drop-in for every routed caller's \
+                 downstream continuation posture, spanning the present-\
+                 key path (`path.value`), the middle-hop-non-mapping \
+                 arm (`path` present but `path.hostname` absent), the \
+                 tail-non-string arm (`name.value` — middle-hop `name` \
+                 is a scalar), and the outer-miss arm (`never-inserted-\
+                 mid`)"
+            );
+        }
     }
 
     #[test]
