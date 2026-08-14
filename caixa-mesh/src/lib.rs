@@ -3279,7 +3279,8 @@ mod tests {
         kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first,
         kube_spec, kube_spec_field, kube_spec_seq_field, kube_spec_seq_first,
         kube_spec_seq_first_seq_first, kube_spec_seq_first_seq_first_seq_first,
-        kube_spec_str_field, kube_str, kube_u64, mapping_str_keys, mapping_string_keys,
+        kube_spec_seq_first_str, kube_spec_str_field, kube_str, kube_u64, mapping_str_keys,
+        mapping_string_keys,
     };
     use std::time::Duration;
 
@@ -6605,9 +6606,9 @@ mod tests {
             .iter()
             .find(|r| kube_kind_is(r, GATEWAY_API_KIND_HTTP_ROUTE))
             .expect("gateway_routes emits at least one HTTPRoute for the fixture Aplicacao");
-        let emitted = kube_spec_seq_first(route, GATEWAY_API_KEY_PARENT_REFS)
-            .and_then(|p| kube_str(p, GATEWAY_API_KEY_NAME))
-            .expect("HTTPRoute spec.parentRefs[0].name is a string");
+        let emitted =
+            kube_spec_seq_first_str(route, GATEWAY_API_KEY_PARENT_REFS, GATEWAY_API_KEY_NAME)
+                .expect("HTTPRoute spec.parentRefs[0].name is a string");
         assert_eq!(
             emitted,
             c.nome(),
@@ -7964,10 +7965,8 @@ mod tests {
         // without coupling the two rebrand cycles.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        let listener = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS)
-            .expect("first listener present");
         assert_eq!(
-            kube_str(listener, GATEWAY_API_KEY_NAME),
+            kube_spec_seq_first_str(gateway, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_NAME),
             Some(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME),
             "the Gateway per-listener name-discriminator scalar must render \
              the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME constant \
@@ -8024,10 +8023,12 @@ mod tests {
         // one canonical caixa-core declaration.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        let parent = kube_spec_seq_first(route, GATEWAY_API_KEY_PARENT_REFS)
-            .expect("first parentRef present");
         assert_eq!(
-            kube_str(parent, GATEWAY_API_KEY_SECTION_NAME),
+            kube_spec_seq_first_str(
+                route,
+                GATEWAY_API_KEY_PARENT_REFS,
+                GATEWAY_API_KEY_SECTION_NAME,
+            ),
             Some(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME),
             "the HTTPRoute per-parentRef listener-selector scalar must \
              render the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME \
@@ -8230,10 +8231,12 @@ mod tests {
             let docs = gateway_routes(&caixa).unwrap();
             let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY)
                 .expect("Gateway present under every :entrada permutation");
-            let listener = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS)
-                .expect("first listener present");
-            let emitted = kube_str(listener, GATEWAY_API_KEY_HOSTNAME)
-                .expect("Gateway listener carries a hostname scalar");
+            let emitted = kube_spec_seq_first_str(
+                gateway,
+                GATEWAY_API_KEY_LISTENERS,
+                GATEWAY_API_KEY_HOSTNAME,
+            )
+            .expect("Gateway listener carries a hostname scalar");
             assert_eq!(
                 emitted, expected,
                 "Gateway per-listener singular `hostname:` scalar must \
@@ -8327,10 +8330,10 @@ mod tests {
         // plural pin tests immediately above.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        let listener_hostname = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS)
-            .and_then(|l| kube_str(l, GATEWAY_API_KEY_HOSTNAME))
-            .expect("Gateway listener carries a hostname scalar")
-            .to_string();
+        let listener_hostname =
+            kube_spec_seq_first_str(gateway, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME)
+                .expect("Gateway listener carries a hostname scalar")
+                .to_string();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         let route_hostnames: Vec<String> = kube_spec_seq_field(route, GATEWAY_API_KEY_HOSTNAMES)
             .expect("HTTPRoute.spec.hostnames[] present")

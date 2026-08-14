@@ -22596,6 +22596,105 @@ pub fn kube_spec_seq_first_seq_first_seq_first<'a>(
     kube_spec_seq_first_seq_first(value, outer, mid).and_then(|tp| kube_seq_first(tp, innermost))
 }
 
+/// Read a scalar-string leaf nested one hop below the first entry of a
+/// sub-`spec.<seq_field>[]` YAML sequence on a K8s custom resource YAML
+/// document as `Option<&str>` — the composed scalar-str-arity per-
+/// `spec.<F>[0].<G>` accessor peer that stands on the composed
+/// [`kube_spec_seq_first`] (b7babfe) sub-`spec.<F>[]` head-selector and
+/// folds the trailing `.and_then(|v| kube_str(v, <G>))` scalar readback
+/// closure into one helper call the caller reads as intent
+/// (`kube_spec_seq_first_str(<value>, <SEQ>, <SCALAR>)` — "read the
+/// scalar `<SCALAR>:` string leaf on the first entry of `spec.<SEQ>[]`")
+/// rather than as a two-line
+/// `kube_spec_seq_first(<value>, <SEQ>).and_then(|v| kube_str(v,
+/// <SCALAR>))` navigation chain.
+///
+/// Structural mirror of the sibling [`kube_spec_str_field`] (c4fe21d) one
+/// altitude up on the direct sub-`spec.<field>` axis — where the sibling
+/// closes the string-scalar readback on the two-hop
+/// `spec → as_mapping → get(<field>) → as_str` walk, this closes the
+/// same string-scalar readback on the four-hop
+/// `spec → as_mapping → get(<seq_field>) → as_sequence → first →
+/// get(<scalar_field>) → as_str` walk one altitude deeper on the nested-
+/// first-entry axis. Peer of the composed head-selector siblings
+/// [`kube_spec_seq_first`] (b7babfe) at the raw-`&Value` first-entry
+/// arity, [`kube_spec_seq_first_seq_first`] (2ee7fc9) at the nested
+/// double-first arity, and [`kube_spec_seq_first_seq_first_seq_first`]
+/// (3ffa061) at the triple-first arity: the four together close the
+/// composed head-selector family on both the raw-value and the string-
+/// scalar tail arities the every routed `spec.<seq>[0].<scalar>` per-
+/// entry-scalar readback (the per-Gateway `spec.listeners[0].hostname` /
+/// `spec.listeners[0].name` / `spec.listeners[0].protocol` scalar
+/// readbacks, the per-`HTTPRoute` `spec.parentRefs[0].name` /
+/// `spec.parentRefs[0].sectionName` scalar readbacks, MESH-COMPOSITION
+/// §III.2) walks through — the raw-value hop via the sibling head-
+/// selector, the trailing string-scalar hop via this accessor.
+///
+/// Returns `None` on any of the six short-circuit arms folded through
+/// the underlying composition: the five outer arms
+/// ([`kube_spec_seq_first`]'s missing top-level `spec:` sub-block /
+/// non-mapping `spec:` axis / missing `<seq_field>` sub-field on `spec:`
+/// / non-sequence `<seq_field>` sub-field / present-but-empty
+/// `<seq_field>[]` sequence), plus the trailing [`kube_str`] arm's
+/// composite short-circuits (missing `<scalar_field>` sub-field on the
+/// first outer entry / non-string `<scalar_field>` sub-field — the
+/// [`serde_yaml::Value::get`] scalar-arm short-circuit does not reach
+/// the trailing leg because the outer [`kube_spec_seq_first`] hop only
+/// yields a `&Value` that came out of a `Mapping` position on the outer
+/// sequence). The returned `&str` borrows into the input `Value` — the
+/// caller decides whether to compare (`==`), clone (`.to_string()`),
+/// unwrap-then-panic (`.expect(...)`), or route a fallback
+/// (`.unwrap_or(...)`).
+///
+/// The canonical shape 5 test-side per-`spec.<seq_field>[0].
+/// <scalar_field>` string-scalar readback sites in [`caixa-mesh`][mesh]
+/// previously carried inline as the two-line composition
+///
+/// ```ignore
+/// kube_spec_seq_first(<value>, <SEQ>)
+///     .and_then(|v| kube_str(v, <SCALAR>))
+///     ...
+/// ```
+///
+/// (or, on three call sites, the two-statement bound-then-scalar form
+/// `let x = kube_spec_seq_first(v, SEQ).expect(...); kube_str(x,
+/// SCALAR)`) across the two canonical composed axes
+/// ([`GATEWAY_API_KEY_LISTENERS`] + [`GATEWAY_API_KEY_HOSTNAME`] /
+/// [`GATEWAY_API_KEY_NAME`] on the per-`Gateway` first-listener scalar
+/// readbacks, [`GATEWAY_API_KEY_PARENT_REFS`] + [`GATEWAY_API_KEY_NAME`]
+/// / [`GATEWAY_API_KEY_SECTION_NAME`] on the per-`HTTPRoute` first-
+/// parentRef scalar readbacks). After this lift every routed consumer
+/// folds the two-line composition onto `kube_spec_seq_first_str(<value>,
+/// <SEQ>, <SCALAR>)` — the head-selector and the trailing scalar
+/// readback both happen once inside the helper, and the caller keeps
+/// its downstream idiom (`.expect(...)`, `.unwrap_or_else(...)`,
+/// `== Some(<VALUE>)`, `assert_eq!(.., Some(<VALUE>))`) unchanged — the
+/// lift closes the composed navigation surface, not the per-site error-
+/// handling posture.
+///
+/// Every future per-`spec.<seq>[0].<scalar>` string-scalar readback (the
+/// future per-`:politicas` `CiliumClusterwideEnvoyConfig` per-policy
+/// `spec.rules[0].name` navigation MESH-COMPOSITION §III.2 #3 admits,
+/// the `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR materializer's per-`spec.<axis>[0].<sub>` first-entry-scalar
+/// navigation §III.2 #5, every future test-side `spec.<seq>[0].<scalar>`
+/// string-scalar probe the M3.x + M4 renderer set adds) reaches this
+/// same helper by construction — no per-consumer two-line composition
+/// re-inline, no coordinated rewrite across every nested-first-entry
+/// string-scalar readback on a future [`serde_yaml`] surface rebrand or
+/// a shift in either constituent primitive's head-selector or shape-
+/// gate semantics.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_spec_seq_first_str<'a>(
+    value: &'a serde_yaml::Value,
+    seq_field: &str,
+    scalar_field: &str,
+) -> Option<&'a str> {
+    kube_spec_seq_first(value, seq_field).and_then(|v| kube_str(v, scalar_field))
+}
+
 /// Read the first entry of a sub-`<field>[]` YAML sequence nested one
 /// hop under an arbitrary `&serde_yaml::Value` mapping receiver as
 /// `Option<&serde_yaml::Value>` — the value-level three-hop navigation
@@ -50568,6 +50667,224 @@ spec:
              composition — the lift must stay a drop-in for every \
              routed caller's downstream continuation posture"
         );
+    }
+
+    // ── kube_spec_seq_first_str lift ────────────────────────────────────
+
+    #[test]
+    fn kube_spec_seq_first_str_reads_first_entry_string_scalar_of_sub_spec_field_sequence() {
+        // Load-bearing positive-path contract: given a CR body carrying
+        // the canonical `spec.<seq>[0].<scalar>` first-entry-then-scalar
+        // bracket a per-Gateway listener-set / per-`HTTPRoute` parent-
+        // ref-set readback traverses, the composed four-hop-plus-scalar
+        // `_spec_seq_first_str` accessor returns the string leaf borrowing
+        // into the input `Value` — the actual per-first-entry scalar
+        // (`spec.listeners[0].hostname` on the per-`Gateway` Aplicacao-
+        // host determinism pin, `spec.parentRefs[0].name` on the per-
+        // `HTTPRoute` parent-Gateway resolution pin, MESH-COMPOSITION
+        // §III.2). Structural mirror of the sibling
+        // `kube_spec_str_field_reads_sub_spec_field_str_scalar` positive-
+        // path pin one altitude up on the direct sub-`spec.<field>` axis
+        // and the value-level
+        // `kube_str_reads_sub_field_scalar_str_borrowing_into_input_value`
+        // pin one altitude down on the raw-receiver quintet.
+        let mut first_entry = serde_yaml::Mapping::new();
+        first_entry.insert_string(GATEWAY_API_KEY_HOSTNAME, "checkout.quero.cloud");
+        first_entry.insert_string(GATEWAY_API_KEY_NAME, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME);
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            GATEWAY_API_KEY_LISTENERS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(first_entry)]),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_seq_first_str(&value, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME,),
+            Some("checkout.quero.cloud"),
+            "kube_spec_seq_first_str must read the first-listener \
+             `hostname:` scalar verbatim — the routed per-`Gateway` \
+             Aplicacao-host determinism pin's `spec.listeners[0].hostname` \
+             readback site reaches through this axis"
+        );
+        assert_eq!(
+            kube_spec_seq_first_str(&value, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_NAME),
+            Some(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME),
+            "kube_spec_seq_first_str must read a second scalar axis-key on \
+             the same first entry — pinning that the trailing `.as_str()` \
+             fold-through preserves both the hostname and the listener-\
+             name axis-keys under the same first-entry bracket"
+        );
+    }
+
+    #[test]
+    fn kube_spec_seq_first_str_returns_none_on_outer_short_circuit_arms() {
+        // Fold-through contract on the five outer arms
+        // [`kube_spec_seq_first`] already closes: any outer short-circuit
+        // must collapse the composed helper to `None` too, so the
+        // caller's downstream `.expect(...)` / `== Some(<value>)` posture
+        // short-circuits vacuously without a bad-shape unwrap.
+
+        // Outer arm 1: no top-level `spec:` sub-block.
+        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_spec_seq_first_str(&bare, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME,),
+            None,
+            "kube_spec_seq_first_str must short-circuit to None when the \
+             top-level `spec:` sub-block is absent — the outer \
+             kube_spec_seq_first hop's missing-spec arm folds through"
+        );
+
+        // Outer arm 2: `<seq_field>` absent on `spec:`.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            KUBE_KEY_RULES,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("r0".into())]),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let no_listeners = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_seq_first_str(
+                &no_listeners,
+                GATEWAY_API_KEY_LISTENERS,
+                GATEWAY_API_KEY_HOSTNAME,
+            ),
+            None,
+            "kube_spec_seq_first_str must short-circuit to None when \
+             `<seq_field>` is absent on `spec:` — the outer \
+             kube_spec_seq_first hop's missing-outer arm folds through"
+        );
+
+        // Outer arm 3: `<seq_field>[]` present-but-empty.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            GATEWAY_API_KEY_LISTENERS,
+            serde_yaml::Value::Sequence(vec![]),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let empty_listeners = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_seq_first_str(
+                &empty_listeners,
+                GATEWAY_API_KEY_LISTENERS,
+                GATEWAY_API_KEY_HOSTNAME,
+            ),
+            None,
+            "kube_spec_seq_first_str must short-circuit to None when \
+             `<seq_field>[]` is present-but-empty — the outer \
+             kube_spec_seq_first hop's empty-outer arm folds through"
+        );
+    }
+
+    #[test]
+    fn kube_spec_seq_first_str_returns_none_on_trailing_scalar_short_circuit_arms() {
+        // Fold-through contract on the trailing [`kube_str`] arms: given
+        // a valid outer navigation reaching a first-entry `&Value`
+        // mapping receiver, any trailing scalar short-circuit (missing
+        // `<scalar_field>` sub-field, non-string `<scalar_field>` sub-
+        // field) must collapse the composed helper to `None` too — the
+        // trailing [`kube_str`] hop's own short-circuits fold through
+        // the outer composition unchanged.
+
+        // Helper: build the `spec.<seq>[0]` first-entry bracket with a
+        // per-first-entry mapping the test picks.
+        let build_cr = |first_entry: serde_yaml::Value| -> serde_yaml::Value {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(
+                GATEWAY_API_KEY_LISTENERS,
+                serde_yaml::Value::Sequence(vec![first_entry]),
+            );
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            serde_yaml::Value::Mapping(cr)
+        };
+
+        // Trailing arm 1: `<scalar_field>` sub-field absent on the first
+        // outer entry.
+        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        assert_eq!(
+            kube_spec_seq_first_str(&value, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME,),
+            None,
+            "kube_spec_seq_first_str must short-circuit to None when \
+             `<scalar_field>` is absent on the first outer entry — the \
+             trailing kube_str `.get(<scalar_field>)` miss folds through"
+        );
+
+        // Trailing arm 2: `<scalar_field>` sub-field present but non-
+        // string. Pin across the representative non-string YAML shapes
+        // the trailing `.as_str()` shape-gate rejects.
+        for non_str in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("wrapped".into())]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut first_entry = serde_yaml::Mapping::new();
+            first_entry.insert_str_key(GATEWAY_API_KEY_HOSTNAME, non_str.clone());
+            let value = build_cr(serde_yaml::Value::Mapping(first_entry));
+            assert_eq!(
+                kube_spec_seq_first_str(
+                    &value,
+                    GATEWAY_API_KEY_LISTENERS,
+                    GATEWAY_API_KEY_HOSTNAME,
+                ),
+                None,
+                "kube_spec_seq_first_str must short-circuit to None when \
+                 `<scalar_field>` is non-string ({non_str:?}) — the \
+                 trailing kube_str `.as_str()` shape-gate short-circuits"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_spec_seq_first_str_matches_prior_inline_two_hop_composition() {
+        // Byte-equivalence pin: the lifted `kube_spec_seq_first_str`
+        // helper resolves exactly the same `Option<&str>` as the two-
+        // line `kube_spec_seq_first(v, SEQ).and_then(|v| kube_str(v,
+        // SCALAR))` inline composition the 5 routed caller sites in
+        // caixa-mesh previously carried. A drift between the composed
+        // helper's return and the two-line inline composition would
+        // silently regress every downstream continuation (`.expect(...)`,
+        // `== Some(<value>)`, `.to_string()`, `.unwrap_or_else(...)`) —
+        // pin the byte-equivalence across the canonical composed axes
+        // so the composed helper stays a drop-in replacement for the
+        // routed sites' prior two-line composition. Structural mirror of
+        // the sibling
+        // `kube_spec_seq_first_seq_first_seq_first_matches_prior_inline_two_hop_composition`
+        // pin on the nested-first-entry-family peer.
+        let mut first_entry = serde_yaml::Mapping::new();
+        first_entry.insert_string(GATEWAY_API_KEY_HOSTNAME, "checkout.quero.cloud");
+        first_entry.insert_string(GATEWAY_API_KEY_NAME, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME);
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            GATEWAY_API_KEY_LISTENERS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(first_entry)]),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for (seq_field, scalar_field) in [
+            (GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME),
+            (GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_NAME),
+        ] {
+            let via_composed = kube_spec_seq_first_str(&value, seq_field, scalar_field);
+            let via_inline =
+                kube_spec_seq_first(&value, seq_field).and_then(|v| kube_str(v, scalar_field));
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_spec_seq_first_str(v, {seq_field:?}, \
+                 {scalar_field:?}) must byte-equal the prior two-line \
+                 `kube_spec_seq_first(v, {seq_field:?}).and_then(|v| \
+                 kube_str(v, {scalar_field:?}))` composition — the lift \
+                 must stay a drop-in for every routed caller's downstream \
+                 continuation posture"
+            );
+        }
     }
 
     #[test]
