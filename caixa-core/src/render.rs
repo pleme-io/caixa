@@ -20507,7 +20507,7 @@ pub fn kube_spec_field<'a>(
     value: &'a serde_yaml::Value,
     field: &str,
 ) -> Option<&'a serde_yaml::Value> {
-    kube_spec(value).and_then(|s| s.get(field))
+    kube_spec(value).and_then(|s| kube_field(s, field))
 }
 
 /// Read the sub-`spec.<field>` string-scalar on a K8s custom resource YAML
@@ -21123,7 +21123,7 @@ pub fn kube_metadata_field<'a>(
     value: &'a serde_yaml::Value,
     field: &str,
 ) -> Option<&'a serde_yaml::Value> {
-    kube_metadata(value).and_then(|m| m.get(field))
+    kube_metadata(value).and_then(|m| kube_field(m, field))
 }
 
 /// Read the sub-`metadata.<field>` YAML sub-mapping on a K8s custom
@@ -21483,7 +21483,7 @@ pub fn kube_root_field<'a>(
     value: &'a serde_yaml::Value,
     field: &str,
 ) -> Option<&'a serde_yaml::Value> {
-    value.get(field)
+    kube_field(value, field)
 }
 
 /// Read a top-level `<field>:` sub-sequence on a K8s custom resource or
@@ -22221,6 +22221,112 @@ impl KubeReceiver for serde_yaml::Mapping {
     fn field_value(&self, field: &str) -> Option<&serde_yaml::Value> {
         self.get(field)
     }
+}
+
+/// Read a sub-`<field>` YAML value nested one hop under an arbitrary
+/// [`KubeReceiver`] as `Option<&serde_yaml::Value>` — the value-level
+/// one-hop pass-through primitive that folds `.get(<field>)` into a
+/// single helper call, closing the value-level primitive family at
+/// the raw-`Value` arity to structural parity with the sub-`spec.
+/// <field>`, sub-`metadata.<field>`, and root-axis families where the
+/// raw-`Value` accessor already sits alongside the shape-gated variants
+/// ([`kube_spec_field`] 23bd568, [`kube_metadata_field`] c4fe21d,
+/// [`kube_root_field`] c456d97). Where the value-level shape-gated
+/// quintet ([`kube_str`] a23f61d, [`kube_u64`] bfbec1d, [`kube_bool`]
+/// 4785e45, [`kube_seq`] 9c74ddb, [`kube_map`] 28fa5d8) folds a
+/// trailing [`serde_yaml::Value::as_<X>`] shape-gate onto the one-hop
+/// navigation, this accessor stops at the raw `&Value` — so a caller
+/// that hands the result to a downstream [`kube_seq`] / [`kube_str`] /
+/// [`kube_u64`] / [`kube_map`] / [`kube_bool`] navigator, or that runs
+/// a raw-value existence check (`.is_some()`, `.is_none()`,
+/// `.is_u64()`, `.is_string()`, `.expect(...)` for a load-bearing
+/// bind), reaches for this accessor directly instead of re-inlining
+/// the middle-hop `.get(<K>)` re-inline. The sixth arity closure that
+/// mirrors the shape of the sub-axis families one altitude above
+/// where the raw-`Value` accessor sits alongside the `str` / `seq` /
+/// `map` / `bool` shape-gated peers.
+///
+/// Sealed [`KubeReceiver`]-generic like the shape-gated quintet the
+/// [`KubeReceiver`] sealed trait (7a87ffe) already closed the
+/// receiver-arm axis for — both `&Value` (a nested-mapping bracket
+/// returned from [`kube_spec_seq_first`] / [`kube_seq_first`] / an
+/// outer [`kube_field`] hop, a per-entry element off a
+/// [`kube_root_seq_field`] indexing walk) and `&Mapping` (a
+/// [`kube_map`] / [`kube_spec`] / [`kube_metadata`] hop that returned
+/// a sub-mapping, a [`placement_blocks`]-style per-entry `&Mapping`
+/// element) reach the same one-line dispatch through the trait's
+/// [`field_value`](KubeReceiver::field_value) method — the [`serde_yaml`]
+/// container-shape axis stays closed at the two implementations the
+/// crate exposes for `.get(<field>) → Option<&Value>` at the same
+/// arity.
+///
+/// Returns `None` on either short-circuit arm the underlying
+/// [`serde_yaml::Value::get`] / [`serde_yaml::Mapping::get`] one-hop
+/// walk closes: the receiver carries a YAML type without a
+/// `.get(<field>)` navigation surface ([`serde_yaml::Value::get`]
+/// returns `None` on scalar arms — string, bool, number, null — that
+/// expose no per-key lookup; [`serde_yaml::Mapping::get`] cannot be
+/// called on such receivers as the trait does not extend past the
+/// two-mapping-container arms), or the requested `<field>` axis-key
+/// is absent from the receiver's mapping ([`serde_yaml::Mapping::get`]
+/// trailing miss). No trailing shape-gate — the returned `&Value`
+/// borrows into the input receiver and preserves the caller's freedom
+/// to choose the downstream shape gate.
+///
+/// The canonical shape ~10 test-side per-nested-mapping middle-hop
+/// re-inline sites in [`caixa-mesh`][mesh] and [`caixa-flux`][flux]
+/// previously carried inline as the one-line composition
+///
+/// ```ignore
+/// <outer>
+///     .and_then(|X| X.get(<FIELD>))
+///     .and_then(|Y| kube_<X>(Y, <INNER>))
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the middle-hop `<FIELD>`
+/// axis-key threading the outer `&Value` bind to the downstream
+/// shape-gated readback — [`KUBE_KEY_RULES`] on the per-CNP
+/// `spec.ingress[0].toPorts[<i>].rules` L7-rule-list container hop,
+/// [`GATEWAY_API_KEY_PATH`] on the per-`HTTPRoute` `spec.rules[0]
+/// .matches[0].path` `HTTPPathMatch` container hop,
+/// [`GATEWAY_API_KEY_ATTEMPTS`] on the per-`HTTPRoute` `retry.attempts`
+/// integer-scalar container hop, [`CILIUM_KEY_MODE`] on the per-CNP
+/// `authentication.mode` string-scalar container hop,
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] on the per-`HelmRelease`
+/// `spec.install.remediation` / `spec.upgrade.remediation` retry-
+/// remediation sub-container hop, [`COMPUTEUNIT_MODULE_KEY_SOURCE`]
+/// on the per-programs-entry `spec.module.source` OCI-source-ref
+/// container hop). After this lift every routed consumer folds the
+/// middle-hop navigation onto `.and_then(|X| kube_field(X, <FIELD>))`
+/// — the one-hop `.get` walk happens once inside the helper, and the
+/// caller keeps its downstream idiom (shape-gated `kube_<X>` follow-
+/// up, `.is_string()`, `.is_u64()`, `.expect(...)`, `.filter_map(...)`)
+/// unchanged — the lift closes the navigation surface, not the per-
+/// site downstream posture.
+///
+/// Every future nested middle-hop `<field>` raw-`&Value` readback the
+/// M3.x + M4 renderer set materializes reaches this one helper by
+/// construction. No per-consumer one-hop re-inline; no coordinated
+/// rewrite across every middle-hop bracket on a future [`serde_yaml`]
+/// surface rebrand or a future [`KubeReceiver`] extension. Closes
+/// the value-level primitive family at the six principal arities the
+/// K8s apiserver `OpenAPI` schema partitions on — raw-`&Value` via
+/// `kube_field`, string via [`kube_str`], unsigned-integer via
+/// [`kube_u64`], boolean via [`kube_bool`], sequence via [`kube_seq`],
+/// sub-mapping via [`kube_map`] — matching the closed shape of the
+/// sibling spec/metadata/root-anchored families one altitude above
+/// where the raw-`&Value` accessor already sits alongside the shape-
+/// gated variants.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_field<'a, R: KubeReceiver + ?Sized>(
+    recv: &'a R,
+    field: &str,
+) -> Option<&'a serde_yaml::Value> {
+    recv.field_value(field)
 }
 
 /// Read a sub-`<field>[]` YAML sequence nested one hop under an
@@ -49424,6 +49530,328 @@ spec:
             kube_map(&value, KUBE_KEY_METADATA),
             "kube_map must byte-equal on the two receiver-arms — same \
              cross-arm dispatch contract as the sibling scalar arities"
+        );
+    }
+
+    #[test]
+    fn kube_field_dispatches_through_kube_receiver_both_arms() {
+        // Receiver-arm closure pin: the value-level raw-`Value` peer
+        // ([`kube_field`]) dispatches through both receiver-arms the
+        // [`KubeReceiver`] sealed trait admits — [`serde_yaml::Value`]
+        // and [`serde_yaml::Mapping`]. The sixth arity closure that
+        // mirrors what the shape-gated quintet ([`kube_str`], [`kube_u64`],
+        // [`kube_bool`], [`kube_seq`], [`kube_map`]) already closed on the
+        // trait axis. Exercises both arms on a fresh receiver so a future
+        // refactor that breaks either [`KubeReceiver`] impl (or accidentally
+        // reverts `kube_field`'s signature to a concrete receiver-arm)
+        // surfaces here.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(inner));
+        m.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(serde_yaml::Number::from(3u64)),
+        );
+
+        let value = serde_yaml::Value::Mapping(m.clone());
+
+        assert_eq!(
+            kube_field(&m, KUBE_KEY_METADATA),
+            m.get(KUBE_KEY_METADATA),
+            "kube_field must dispatch through the &Mapping receiver-arm \
+             as a one-hop pass-through — the returned Option<&Value> \
+             must byte-equal the raw `Mapping::get` result at the same \
+             axis-key"
+        );
+        assert_eq!(
+            kube_field(&value, KUBE_KEY_METADATA),
+            value.get(KUBE_KEY_METADATA),
+            "kube_field must dispatch through the &Value receiver-arm \
+             as a one-hop pass-through — the returned Option<&Value> \
+             must byte-equal the raw `Value::get` result at the same \
+             axis-key"
+        );
+        assert_eq!(
+            kube_field(&m, GATEWAY_API_KEY_ATTEMPTS).and_then(serde_yaml::Value::as_u64),
+            Some(3u64),
+            "kube_field composes naturally with the caller's downstream \
+             shape-gate choice — the drop-in the middle-hop `.and_then\
+             (|X| X.get(<F>))` re-inline sites (e.g. per-`HTTPRoute` \
+             `retry.attempts` integer-scalar readback) fold onto"
+        );
+    }
+
+    #[test]
+    fn kube_field_mapping_arm_byte_equals_value_arm() {
+        // Cross-arm byte-equality pin: given the same underlying YAML
+        // content, dispatching [`kube_field`] through the [`KubeReceiver`]
+        // `&Mapping` arm must return the identical `Option<&Value>`
+        // verdict the pre-existing `&Value` arm returns — mirrors the
+        // sibling `value_level_quintet_mapping_arm_byte_equals_value_arm`
+        // pin on the shape-gated quintet, extending the closure to the
+        // sixth raw-`Value` arity. A discrepancy indicates the trait's
+        // dispatch surface drifted from the inherent `get` on either
+        // receiver-arm.
+        let mut sub = serde_yaml::Mapping::new();
+        sub.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Service".into()));
+
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("catalog".into()));
+        m.insert_str_key(
+            KUBE_KEY_PORT,
+            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+        );
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(false));
+        m.insert_str_key(
+            KUBE_KEY_LABELS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("app".into())]),
+        );
+        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(sub));
+
+        let value = serde_yaml::Value::Mapping(m.clone());
+
+        for field in [
+            KUBE_KEY_NAME,
+            KUBE_KEY_PORT,
+            FLUX_KUSTOMIZATION_KEY_PRUNE,
+            KUBE_KEY_LABELS,
+            KUBE_KEY_METADATA,
+            "absent-key",
+        ] {
+            assert_eq!(
+                kube_field(&m, field),
+                kube_field(&value, field),
+                "kube_field must byte-equal on the two receiver-arms at \
+                 axis-key {field:?} — the &Mapping arm dispatches through \
+                 the same one-hop lookup the &Value arm's `Value::Mapping` \
+                 unwrap-then-lookup lands at, so the returned Option<&Value> \
+                 stays identical across arms across every axis-key (present \
+                 arm at each of the five underlying YAML shapes; absent arm \
+                 at the never-inserted axis-key)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_short_circuits_on_non_mapping_receiver() {
+        // Short-circuit arm closure pin: [`kube_field`] on a scalar-arm
+        // receiver ([`serde_yaml::Value::String`] / [`Bool`] / [`Number`]
+        // / [`Null`]) returns `None` — the underlying inherent
+        // [`serde_yaml::Value::get`] short-circuits on scalar receivers
+        // that expose no per-key lookup, and the trait method carries
+        // that semantic through. Pins the total-function readback
+        // contract at the same short-circuit arm the shape-gated
+        // quintet already carries.
+        assert_eq!(
+            kube_field(&serde_yaml::Value::String("scalar".into()), KUBE_KEY_NAME),
+            None,
+            "kube_field on a Value::String receiver must return None — \
+             the scalar arm exposes no per-key lookup surface"
+        );
+        assert_eq!(
+            kube_field(&serde_yaml::Value::Bool(true), KUBE_KEY_NAME),
+            None,
+            "kube_field on a Value::Bool receiver must return None — \
+             the scalar arm exposes no per-key lookup surface"
+        );
+        assert_eq!(
+            kube_field(&serde_yaml::Value::Null, KUBE_KEY_NAME),
+            None,
+            "kube_field on a Value::Null receiver must return None — \
+             the scalar arm exposes no per-key lookup surface"
+        );
+
+        let m = serde_yaml::Mapping::new();
+        assert_eq!(
+            kube_field(&m, KUBE_KEY_NAME),
+            None,
+            "kube_field on an empty Mapping receiver must return None \
+             — the absent-key arm short-circuits at the underlying \
+             `Mapping::get` miss"
+        );
+    }
+
+    #[test]
+    fn kube_field_composes_below_kube_field_at_two_hops() {
+        // Composition pin: chaining two [`kube_field`] hops through the
+        // `.and_then(|X| kube_field(X, <inner>))` middle-hop shape lands
+        // at the same [`Option<&Value>`] the two-hop inline `.get(<outer>)
+        // .and_then(|X| X.get(<inner>))` chain returns — the drop-in shape
+        // the ~10 routed middle-hop re-inline sites in [`caixa-mesh`] +
+        // [`caixa-flux`] fold onto after this lift. Pins the equivalence
+        // at both the present-key path (both hops resolve) and the
+        // short-circuit arms (outer miss, inner miss, non-mapping middle).
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(serde_yaml::Number::from(3u64)),
+        );
+        let mut outer = serde_yaml::Mapping::new();
+        outer.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(inner));
+        let value = serde_yaml::Value::Mapping(outer);
+
+        let via_composed = kube_field(&value, GATEWAY_API_KEY_RETRY)
+            .and_then(|r| kube_field(r, GATEWAY_API_KEY_ATTEMPTS));
+        let via_inline = value
+            .get(GATEWAY_API_KEY_RETRY)
+            .and_then(|r| r.get(GATEWAY_API_KEY_ATTEMPTS));
+        assert_eq!(
+            via_composed, via_inline,
+            "two-hop kube_field composition must byte-equal the two-hop \
+             inline `.get(<outer>).and_then(|X| X.get(<inner>))` chain — \
+             the drop-in the middle-hop re-inline sites fold onto"
+        );
+        assert!(
+            via_composed.is_some_and(serde_yaml::Value::is_u64),
+            "the composed two-hop readback must land at a raw &Value \
+             the caller then shape-gates through .is_u64() / kube_u64 \
+             / .as_u64() — the composition surface stays parametric \
+             on the downstream posture"
+        );
+
+        // Short-circuit arms: outer miss, inner miss.
+        let empty = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_field(&empty, GATEWAY_API_KEY_RETRY)
+                .and_then(|r| kube_field(r, GATEWAY_API_KEY_ATTEMPTS)),
+            None,
+            "outer-miss short-circuit — first `kube_field` returns None \
+             so the composition short-circuits before the inner hop"
+        );
+
+        let mut inner_empty = serde_yaml::Mapping::new();
+        inner_empty.insert_str_key(
+            GATEWAY_API_KEY_RETRY,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let inner_miss = serde_yaml::Value::Mapping(inner_empty);
+        assert_eq!(
+            kube_field(&inner_miss, GATEWAY_API_KEY_RETRY)
+                .and_then(|r| kube_field(r, GATEWAY_API_KEY_ATTEMPTS)),
+            None,
+            "inner-miss short-circuit — outer hop resolves to an empty \
+             sub-mapping and the inner hop returns None"
+        );
+    }
+
+    #[test]
+    fn kube_field_closes_value_level_primitive_family_at_six_arities() {
+        // Family closure pin: the value-level primitive family now spans
+        // six principal arities matching the K8s apiserver `OpenAPI`
+        // schema's shape-gate partition — raw-`&Value` via [`kube_field`],
+        // string via [`kube_str`], unsigned-integer via [`kube_u64`],
+        // boolean via [`kube_bool`], sequence via [`kube_seq`], sub-mapping
+        // via [`kube_map`]. Structural parity with the sibling sub-`spec.
+        // <field>` / sub-`metadata.<field>` / root-axis families where the
+        // raw-`&Value` accessor already sits alongside the shape-gated
+        // variants. Drives each of the six arities against one fixture
+        // with a per-arity axis-key on a corresponding underlying YAML
+        // shape, then pins that each accessor returns the correct arm
+        // and that off-arity accessors return None on the mismatched
+        // axis-key.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        m.insert_str_key(
+            KUBE_KEY_PORT,
+            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+        );
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        m.insert_str_key(
+            KUBE_KEY_LABELS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("app".into())]),
+        );
+        let mut sub = serde_yaml::Mapping::new();
+        sub.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Service".into()));
+        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(sub));
+        let value = serde_yaml::Value::Mapping(m);
+
+        assert!(
+            kube_field(&value, KUBE_KEY_NAME).is_some(),
+            "raw-Value arity returns Some at the string-scalar axis-key"
+        );
+        assert_eq!(kube_str(&value, KUBE_KEY_NAME), Some("cart"));
+        assert_eq!(kube_u64(&value, KUBE_KEY_PORT), Some(8080));
+        assert_eq!(kube_bool(&value, FLUX_KUSTOMIZATION_KEY_PRUNE), Some(true));
+        assert_eq!(
+            kube_seq(&value, KUBE_KEY_LABELS).map(std::vec::Vec::len),
+            Some(1)
+        );
+        assert_eq!(
+            kube_map(&value, KUBE_KEY_METADATA).and_then(|md| kube_str(md, KUBE_KEY_KIND)),
+            Some("Service")
+        );
+
+        // Off-arity gates return None on mismatched axis-keys.
+        assert_eq!(
+            kube_u64(&value, KUBE_KEY_NAME),
+            None,
+            "kube_u64 off-arity on string-scalar axis-key short-circuits"
+        );
+        assert_eq!(
+            kube_seq(&value, KUBE_KEY_PORT),
+            None,
+            "kube_seq off-arity on integer-scalar axis-key short-circuits"
+        );
+        assert_eq!(
+            kube_map(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
+            None,
+            "kube_map off-arity on boolean-scalar axis-key short-circuits"
+        );
+        // The raw-`&Value` arity accepts every present axis-key — the
+        // point of the sixth arity closure. It short-circuits only on
+        // absent keys and non-mapping receivers.
+        assert!(
+            kube_field(&value, "never-inserted-axis").is_none(),
+            "kube_field short-circuits on absent axis-keys — the raw-\
+             `&Value` arity gates only on the field-existence axis, \
+             not the underlying YAML shape"
+        );
+    }
+
+    #[test]
+    fn kube_field_recomposes_sub_axis_raw_field_accessors() {
+        // Recomposition pin: the three sub-axis raw-`&Value` accessors
+        // ([`kube_root_field`] c456d97, [`kube_spec_field`] 23bd568,
+        // [`kube_metadata_field`] c4fe21d) now route through
+        // [`kube_field`] as the trailing one-hop navigation on their
+        // sub-axis prelude. Pins the recomposition equivalence at all
+        // three altitudes so a future divergence between the primitive
+        // and its sub-axis peers surfaces here rather than at consumer
+        // build time.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("catalog".into()));
+        let mut meta = serde_yaml::Mapping::new();
+        meta.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("catalog-md".into()),
+        );
+        let mut root = serde_yaml::Mapping::new();
+        root.insert_str_key(KUBE_KEY_API_VERSION, serde_yaml::Value::String("v1".into()));
+        root.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        root.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta));
+        let value = serde_yaml::Value::Mapping(root);
+
+        assert_eq!(
+            kube_root_field(&value, KUBE_KEY_API_VERSION),
+            kube_field(&value, KUBE_KEY_API_VERSION),
+            "kube_root_field recomposes on kube_field at the top-level \
+             axis — same one-hop pass-through"
+        );
+        assert_eq!(
+            kube_spec_field(&value, KUBE_KEY_NAME),
+            kube_spec(&value).and_then(|s| kube_field(s, KUBE_KEY_NAME)),
+            "kube_spec_field recomposes as `kube_spec(v).and_then(|s| \
+             kube_field(s, <F>))` — the trailing `s.get(field)` \
+             re-inline now routes through the value-level primitive"
+        );
+        assert_eq!(
+            kube_metadata_field(&value, KUBE_KEY_NAME),
+            kube_metadata(&value).and_then(|md| kube_field(md, KUBE_KEY_NAME)),
+            "kube_metadata_field recomposes as `kube_metadata(v).and_then\
+             (|m| kube_field(m, <F>))` — the trailing `m.get(field)` \
+             re-inline now routes through the value-level primitive"
         );
     }
 }
