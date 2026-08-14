@@ -134,7 +134,7 @@ pub use render::{
     is_git_ref_name, is_git_repo_url, is_lareira_chart_name_shape,
     is_leading_zero_padded_magnitude, is_lisp_extension, is_nats_subject,
     is_sandboxed_relative_path, is_wasi_keyvalue_slot, is_wit_world_ref, kube_api_version,
-    kube_api_version_is, kube_bool, kube_field, kube_kind, kube_kind_is, kube_map,
+    kube_api_version_is, kube_bool, kube_field, kube_field_str, kube_kind, kube_kind_is, kube_map,
     kube_match_label, kube_match_label_is, kube_match_labels, kube_metadata, kube_metadata_field,
     kube_metadata_label, kube_metadata_label_is, kube_metadata_labels, kube_metadata_map_field,
     kube_metadata_seq_field, kube_metadata_str_field, kube_name, kube_name_is, kube_namespace,
