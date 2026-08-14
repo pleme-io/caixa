@@ -6280,12 +6280,7 @@ mod tests {
         assert_eq!(entries.len(), 3);
         let names: Vec<_> = entries
             .iter()
-            .map(|e| {
-                e.get(FLEET_PROGRAMS_KEY_NAME)
-                    .and_then(|n| n.as_str())
-                    .unwrap()
-                    .to_string()
-            })
+            .map(|e| kube_str(e, FLEET_PROGRAMS_KEY_NAME).unwrap().to_string())
             .collect();
         assert_eq!(names, vec!["catalog", "cart", "payment"]);
     }
@@ -6400,12 +6395,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         let versoes: Vec<_> = entries
             .iter()
-            .map(|e| {
-                e.get(FLEET_PROGRAMS_KEY_VERSAO)
-                    .and_then(|v| v.as_str())
-                    .unwrap()
-                    .to_string()
-            })
+            .map(|e| kube_str(e, FLEET_PROGRAMS_KEY_VERSAO).unwrap().to_string())
             .collect();
         assert_eq!(versoes, vec!["^0.1", "^0.1", "^0.2"]);
     }
@@ -6441,9 +6431,7 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         assert_eq!(entries.len(), membros.len());
         for (m, entry) in membros.iter().zip(entries.iter()) {
-            let emitted = entry
-                .get(FLEET_PROGRAMS_KEY_NAME)
-                .and_then(|v| v.as_str())
+            let emitted = kube_str(entry, FLEET_PROGRAMS_KEY_NAME)
                 .expect("programs.yaml entry carries name: as a string");
             assert_eq!(
                 emitted,
@@ -6481,9 +6469,7 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         assert_eq!(entries.len(), membros.len());
         for (m, entry) in membros.iter().zip(entries.iter()) {
-            let emitted = entry
-                .get(FLEET_PROGRAMS_KEY_VERSAO)
-                .and_then(|v| v.as_str())
+            let emitted = kube_str(entry, FLEET_PROGRAMS_KEY_VERSAO)
                 .expect("programs.yaml entry carries versao: as a string");
             assert_eq!(
                 emitted,
@@ -6533,9 +6519,7 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         assert!(!entries.is_empty());
         for entry in &entries {
-            let emitted = entry
-                .get(FLEET_PROGRAMS_KEY_APLICACAO)
-                .and_then(|v| v.as_str())
+            let emitted = kube_str(entry, FLEET_PROGRAMS_KEY_APLICACAO)
                 .expect("programs.yaml entry carries aplicacao: as a string");
             assert_eq!(
                 emitted,
@@ -7192,10 +7176,8 @@ mod tests {
         // silently drops workloads from clusters that should run them.
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
-            let clusters = p
-                .get(M3_PLACEMENT_KEY_CLUSTERS)
-                .and_then(|c| c.as_sequence())
-                .expect("placement.clusters sequence");
+            let clusters =
+                kube_seq(p, M3_PLACEMENT_KEY_CLUSTERS).expect("placement.clusters sequence");
             let names: Vec<&str> = clusters.iter().filter_map(|v| v.as_str()).collect();
             assert_eq!(names, vec!["rio", "mar"]);
         }
@@ -8047,9 +8029,7 @@ mod tests {
         let parent = kube_spec_seq_first(route, GATEWAY_API_KEY_PARENT_REFS)
             .expect("first parentRef present");
         assert_eq!(
-            parent
-                .get(GATEWAY_API_KEY_SECTION_NAME)
-                .and_then(|n| n.as_str()),
+            kube_str(parent, GATEWAY_API_KEY_SECTION_NAME),
             Some(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME),
             "the HTTPRoute per-parentRef listener-selector scalar must \
              render the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME \
@@ -8256,9 +8236,7 @@ mod tests {
                 .expect("Gateway present under every :entrada permutation");
             let listener = kube_spec_seq_first(gateway, GATEWAY_API_KEY_LISTENERS)
                 .expect("first listener present");
-            let emitted = listener
-                .get(GATEWAY_API_KEY_HOSTNAME)
-                .and_then(|h| h.as_str())
+            let emitted = kube_str(listener, GATEWAY_API_KEY_HOSTNAME)
                 .expect("Gateway listener carries a hostname scalar");
             assert_eq!(
                 emitted, expected,
@@ -8479,10 +8457,8 @@ mod tests {
             let backend = kube_spec_seq_first(route, KUBE_KEY_RULES)
                 .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
                 .expect("first HTTPRoute rule's first backendRef present");
-            let emitted = backend
-                .get(GATEWAY_API_KEY_NAME)
-                .and_then(|n| n.as_str())
-                .expect("backendRef name scalar present");
+            let emitted =
+                kube_str(backend, GATEWAY_API_KEY_NAME).expect("backendRef name scalar present");
             assert_eq!(
                 emitted, expected,
                 "HTTPRoute per-rule `backendRefs[0].name` must render \

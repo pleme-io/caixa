@@ -1466,15 +1466,11 @@ spec:
             .get(M2_KEY_BEHAVIOR)
             .expect("behavior must propagate");
         assert_eq!(
-            behavior
-                .get(M2_BEHAVIOR_KEY_ON_INIT)
-                .and_then(|v| v.as_str()),
+            kube_str(behavior, M2_BEHAVIOR_KEY_ON_INIT),
             Some("lib/init.lisp")
         );
         assert_eq!(
-            behavior
-                .get(M2_BEHAVIOR_KEY_ON_CALL)
-                .and_then(|v| v.as_str()),
+            kube_str(behavior, M2_BEHAVIOR_KEY_ON_CALL),
             Some("lib/handlers.lisp")
         );
     }
