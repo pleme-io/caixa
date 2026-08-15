@@ -5251,7 +5251,32 @@ impl Caixa {
             .and_then(|s| crate::supervisor::duration_codec::parse(s).ok());
         Some(SupervisorSpec {
             estrategia: self.estrategia().unwrap_or_default(),
-            max_restarts: self.max_restarts().unwrap_or(5),
+            // Route the author-omitted `:max-restarts` arm through the
+            // substrate-canonical [`crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT`]
+            // typed `pub const` rather than the raw `5` literal — one
+            // source of truth for the Erlang/OTP-canonical
+            // `{intensity, 5, 60}` `MaxIntensity` default that also
+            // backs the serde-side wire-format author-omitted arm on
+            // [`crate::supervisor::SupervisorSpec::max_restarts`] via
+            // `#[serde(default = "default_max_restarts")]` and the
+            // [`Default for SupervisorSpec`] impl's struct-literal
+            // default field. Prior to the lift the composition site
+            // carried a raw `5` with no compile-time link back to the
+            // serde-side default, so a future rebrand of the OTP-
+            // canonical default (a tightening to Elixir's `3`, a
+            // widening to a per-cluster overlay the operator pins
+            // through the MESH-COMPOSITION §III.2 supervision-canary
+            // `:supervisor :max-restarts-overrides` roadmap slot)
+            // would have had to be threaded through both open-coded
+            // copies in lockstep or the wire-format author-omitted arm
+            // and this view-construction author-omitted arm would
+            // silently disagree on which restart-budget an omitted
+            // `:max-restarts` resolves to. Pinned by
+            // [`supervisor_view_max_restarts_fallback_routes_through_lifted_default`]
+            // in the tests module.
+            max_restarts: self
+                .max_restarts()
+                .unwrap_or(crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT),
             restart_window,
             children: self.children().to_vec(),
         })
@@ -15888,6 +15913,54 @@ mod tests {
             "Caixa::max_restarts() must remain None on the author-\
              omitted arm — the supervisor_view fold must not mutate \
              the outer flat-spread presence bit",
+        );
+    }
+
+    #[test]
+    fn supervisor_view_max_restarts_fallback_routes_through_lifted_default() {
+        // Composition pin: [`Caixa::supervisor_view`]'s author-omitted
+        // `:max-restarts` arm must degrade onto the substrate-canonical
+        // [`crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT`] typed
+        // `pub const` — the Erlang/OTP-canonical `{intensity, 5, 60}`
+        // `MaxIntensity` default — rather than a raw `5` literal. Prior
+        // to the lift the composition site carried an inline
+        // `.unwrap_or(5)` with no compile-time link back to the shared
+        // OTP-canonical default that the serde-side
+        // `#[serde(default = "default_max_restarts")]` wire-format arm
+        // and the [`Default for crate::supervisor::SupervisorSpec`]
+        // struct-literal default arm both key off — so a future rebrand
+        // of the OTP-canonical default (Elixir's `Supervisor` `3`
+        // default, a per-cluster overlay the operator pins through the
+        // MESH-COMPOSITION §III.2 supervision-canary
+        // `:supervisor :max-restarts-overrides` roadmap slot) would
+        // have had to be threaded through both the serde-side helper
+        // and this view-construction arm in lockstep or a `:kind
+        // Supervisor` caixa carrying `:max-restarts ()` would silently
+        // resolve to a `SupervisorSpec` whose `max_restarts` disagreed
+        // with the same fixture's serde-side `SupervisorSpec` view (an
+        // author-omitted slot round-tripping through
+        // `SupervisorSpec::default()` to the lifted constant, then
+        // splitting to a stale literal past `supervisor_view`).
+        // Byte-parity against the lifted constant closes the split.
+        // Peer of the sibling
+        // [`crate::supervisor::default_max_restarts_helper_routes_through_lifted_default`]
+        // + [`crate::supervisor::supervisor_spec_default_max_restarts_routes_through_lifted_default`]
+        // composition pins that close the same routing on the two
+        // sibling entry points onto the shared substrate constant.
+        let c = caixa_supervisor_with_max_restarts_and_window(None, None);
+        let view = c.supervisor_view().expect(
+            "supervisor_view must materialize a SupervisorSpec for a \
+             :kind Supervisor Caixa carrying a None :max-restarts",
+        );
+        assert_eq!(
+            view.max_restarts(),
+            crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT,
+            "supervisor_view must degrade the outer \
+             Caixa::max_restarts() None arm onto the lifted \
+             SUPERVISOR_MAX_RESTARTS_DEFAULT typed pub const (got {}, \
+             expected {})",
+            view.max_restarts(),
+            crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT,
         );
     }
 

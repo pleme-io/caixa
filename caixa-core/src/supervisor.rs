@@ -808,8 +808,100 @@ pub struct SupervisorSpec {
 }
 
 const fn default_max_restarts() -> u32 {
-    5
+    // Route the private serde-`#[serde(default = "…")]` helper through
+    // the substrate-canonical [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] typed
+    // `pub const` rather than the raw `5` literal — one source of truth
+    // for the Erlang/OTP-canonical `{intensity, 5, 60}` `MaxIntensity`
+    // default across the two production consumers that currently
+    // dispatch on it (this helper via `#[serde(default = "…")]` on
+    // `SupervisorSpec::max_restarts` and the [`Default for SupervisorSpec`]
+    // impl at line 962). Pinned by
+    // `default_max_restarts_helper_routes_through_lifted_default` +
+    // `supervisor_spec_default_max_restarts_routes_through_lifted_default`
+    // in the tests module; peer of the sibling caixa-core
+    // [`crate::manifest::Caixa::supervisor_view`] `unwrap_or(…)` fold
+    // that now routes its author-omitted `:max-restarts` arm through
+    // the same lifted constant.
+    SUPERVISOR_MAX_RESTARTS_DEFAULT
 }
+
+/// Substrate-canonical Erlang/OTP-shaped `MaxIntensity` restart-budget-
+/// count default for the `:supervisor :max-restarts` axis — the
+/// canonical `{intensity, 5, 60}` `MaxIntensity` half of Learn You Some
+/// Erlang's worker-supervisor default, extracted as a typed `pub const`
+/// so every substrate-side consumer that resolves "what
+/// [`SupervisorSpec::max_restarts`] value does an author-omitted
+/// `:max-restarts` slot degrade onto?" reaches for exactly one
+/// substrate-primitive `u32`.
+///
+/// The `:max-restarts` default axis has two production consumers on the
+/// substrate side today (both prior to this lift folded onto raw `5`
+/// literals with no compile-time link back to a shared truth): the
+/// serde-`#[serde(default = "default_max_restarts")]` helper on
+/// [`SupervisorSpec::max_restarts`] that every author-omitted
+/// `:supervisor :max-restarts` slot lands in past the derive-macro's
+/// wire-format compose, and the [`crate::manifest::Caixa::supervisor_view`]
+/// `.max_restarts().unwrap_or(5)` fold that every downstream consumer of
+/// the composed [`SupervisorSpec`] altitude reaches through
+/// (`feira app graph`, the future wasm-operator's per-supervisor
+/// restart-intensity counter, the future M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+/// webhook, the caixa-operator's hierarchical reconciliation scheduler).
+/// A pair of open-coded `5`s across two files that expressed no
+/// compile-time link back to the shared OTP-canonical default — a
+/// future rebrand of the default (a tightening to Elixir's
+/// `Supervisor.max_restarts: 3`, a widening to a per-cluster overlay
+/// the operator pins through a future
+/// `:supervisor :max-restarts-overrides` slot the MESH-COMPOSITION
+/// §III.2 supervision-canary roadmap acknowledges, a promotion of the
+/// plain `u32` count to a richer `{MaxR, MaxT}` per-child-cohort
+/// restart-budget-partition once the INSPIRATIONS §II.2 Erlang/OTP
+/// per-child-cohort roadmap lands) would have had to be threaded
+/// through both open-coded copies in lockstep or the wire-format
+/// author-omitted arm and the view-construction author-omitted arm
+/// would silently disagree on which restart-budget an omitted
+/// `:max-restarts` resolves to (an author writing `:supervisor
+/// (:max-restarts ())` would round-trip through serde with the new
+/// default while `supervisor_view` silently continued to compose the
+/// stale `5`, or vice versa), a two-consumer split at the composition
+/// boundary far from the source `caixa.lisp` with no field naming the
+/// default-drift root cause. Lifting the resolution rule to a typed
+/// `pub const` on the substrate primitive means every downstream
+/// consumer of the per-Supervisor default-restart-budget-count surface
+/// reaches for exactly one substrate-primitive `u32` — the resolver's
+/// accepted value migrates as a unit on any future axis change.
+///
+/// The `5` value pins Learn You Some Erlang's `{intensity, 5, 60}`
+/// worker-supervisor default (the closest canonical OTP-shape
+/// production reference the substrate carries, matching the sibling
+/// `60s` `Period` default the [`Default for SupervisorSpec`] impl pairs
+/// this constant with on the paired sliding-window axis). Two orders of
+/// magnitude below the [`SUPERVISOR_MAX_RESTARTS_MAX`] `1000` ceiling
+/// (the upper bracket on the same axis, sibling of this lower default;
+/// both are typed `u32` const bounds on the `:supervisor :max-restarts`
+/// axis and now share one accessor discipline on the substrate) and
+/// above the OTP-`supervisor` callback-module `MaxR = 1` minimum-
+/// restart floor — the "one restart, then escalate" default is
+/// deliberately loose enough to absorb a short burst of transient
+/// child failures without escalating past the supervisor's parent
+/// while remaining tight enough to trip the `MaxIntensity / Period`
+/// ratio's escalation on a genuinely-stuck child within the sibling
+/// `60s` sliding window.
+///
+/// Lifted as a typed `pub const` so the bound has exactly one source
+/// of truth — the serde-side wire-format author-omitted arm at
+/// [`default_max_restarts`], the [`Default for SupervisorSpec`] impl's
+/// struct-literal default field, and the caixa-core
+/// [`crate::manifest::Caixa::supervisor_view`] fold's author-omitted
+/// arm all read from one place. Same shape every other typed default
+/// in this crate carries (the sibling
+/// [`SUPERVISOR_MAX_RESTARTS_MAX`] upper cap on the same axis, the
+/// paired [`SUPERVISOR_RESTART_WINDOW_MAX`] upper cap on the
+/// sibling `:restart-window` axis, and the peer
+/// [`crate::render::DEFAULT_NAMESPACE`] / [`crate::render::DEFAULT_LIBRARY_NAME`]
+/// per-renderer defaults on the caixa-flux / caixa-helm rendering
+/// axes).
+pub const SUPERVISOR_MAX_RESTARTS_DEFAULT: u32 = 5;
 
 /// Upper-bound ceiling on the `:supervisor :max-restarts` axis — every
 /// validated [`SupervisorSpec::max_restarts`] past
@@ -2389,6 +2481,62 @@ mod tests {
         assert!(
             msg.contains("50000"),
             ":supervisor :max-restarts cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn supervisor_max_restarts_default_pins_otp_canonical_value() {
+        // Pin [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] at `5` — the
+        // Erlang/OTP-canonical `{intensity, 5, 60}` `MaxIntensity`
+        // half of Learn You Some Erlang's worker-supervisor default,
+        // sibling of the `60s` `Period` half that the paired
+        // [`Default for SupervisorSpec`] impl already pins on the
+        // sibling `restart_window` axis. Pinning the literal here
+        // surfaces a future rebrand (a tightening to Elixir's `3`,
+        // a widening to a per-cluster overlay the operator pins
+        // through a future `:max-restarts-overrides` slot) as a
+        // deliberate test edit, not a silent contract migration.
+        // Peer of the sibling
+        // [`supervisor_max_restarts_cap_pins_canonical_value`]
+        // upper-bracket pin on the same axis.
+        assert_eq!(SUPERVISOR_MAX_RESTARTS_DEFAULT, 5);
+    }
+
+    #[test]
+    fn default_max_restarts_helper_routes_through_lifted_default() {
+        // Composition pin: the private `default_max_restarts()`
+        // serde-`#[serde(default = "…")]` helper on
+        // [`SupervisorSpec::max_restarts`] must route through the
+        // substrate-canonical [`SUPERVISOR_MAX_RESTARTS_DEFAULT`]
+        // typed `pub const` rather than a raw `5` literal. Prior to
+        // the lift the helper carried an inline `5` with no compile-
+        // time link back to the shared default, so the wire-format
+        // author-omitted arm and the caixa-core
+        // [`crate::manifest::Caixa::supervisor_view`] fold's `unwrap_or(5)`
+        // arm could silently split on any future default rebrand.
+        // Byte-parity against the lifted constant closes the split.
+        assert_eq!(default_max_restarts(), SUPERVISOR_MAX_RESTARTS_DEFAULT);
+    }
+
+    #[test]
+    fn supervisor_spec_default_max_restarts_routes_through_lifted_default() {
+        // Composition pin: the [`Default for SupervisorSpec`] impl's
+        // struct-literal `max_restarts` field must route through the
+        // substrate-canonical [`SUPERVISOR_MAX_RESTARTS_DEFAULT`]
+        // typed `pub const` (via the private helper this test's
+        // sibling `default_max_restarts_helper_routes_through_lifted_default`
+        // already pins onto the constant). Structurally: every
+        // `SupervisorSpec::default()` call must yield a
+        // `max_restarts` field byte-equal to the lifted constant
+        // (the two paired defaults — the serde-side wire-format arm
+        // and the struct-literal default arm — cannot silently split
+        // on any future default rebrand). Peer of the sibling
+        // `default_has_one_for_one_and_5_restarts_in_60s` shape pin
+        // — this pin closes the byte-parity arm on the two paired
+        // altitude entry points onto the shared substrate constant.
+        assert_eq!(
+            SupervisorSpec::default().max_restarts(),
+            SUPERVISOR_MAX_RESTARTS_DEFAULT,
         );
     }
 
