@@ -20545,6 +20545,71 @@ pub fn find_by_label<'a>(
         .find(|d| kube_metadata_label_is(d, label, expected))
 }
 
+/// Locate the first [`RenderedFile`] in `files` whose sandboxed relative
+/// [`RenderedFile::path`] byte-equals `path`.
+///
+/// The `&[RenderedFile]`-slice-arity peer to the sibling `&[Value]`-
+/// slice navigators [`find_by_kind`], [`find_by_api_version`],
+/// [`find_by_name`], [`find_by_namespace`], [`find_by_label`] — same
+/// one-hop `.iter().find(predicate)` navigator shape lifted onto the
+/// per-artifact substrate output container the `caixa-flux::cluster_bundle`
+/// Flux v2 CR-trio emit + the `caixa-helm::render_chart_for_servico`
+/// `lareira-<nome>` chart-directory emit both write into. Returns `None`
+/// when no file in `files` carries the requested `<path>` leaf (the same
+/// "no match" arm the sibling K8s-CR navigators return `None` on).
+///
+/// Every test-side per-artifact readback the two rendering crates carry
+/// walks the multi-file output through the same three-line
+/// `files.iter().find(|f| f.path == PathBuf::from(<FILENAME_CONST>))`
+/// combinator chain around a one-token semantic payload (the
+/// `<FILENAME_CONST>` axis — [`FLUX_HELMRELEASE_YAML_FILENAME`] /
+/// [`FLUX_GITREPOSITORY_YAML_FILENAME`] /
+/// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] for the Flux v2 CR trio,
+/// [`HELM_CHART_YAML_FILENAME`] / [`HELM_VALUES_YAML_FILENAME`] for the
+/// `lareira-<nome>` chart-directory pair). Every routed consumer now
+/// folds those four lines onto `find_file_by_path(&files, <FILENAME>)`
+/// — the `.iter()` + `.find(closure)` + `PathBuf::from(&str)` wrap +
+/// per-entry `f.path == <PathBuf>` equality-shape gate happen once
+/// inside the helper, the caller keeps its downstream continuation
+/// (`.expect(<axis>)`, `.unwrap_or_else(...)`, `.and_then(|f|
+/// serde_yaml::from_str(&f.contents))`) unchanged.
+///
+/// Accepts `path: &str` (rather than `&Path` / `&PathBuf`) to match the
+/// author-supplied filename constants the routed callers already carry
+/// at their invocation sites (`FLUX_*_YAML_FILENAME` /
+/// `HELM_*_YAML_FILENAME` — every one a `&'static str`), folding the
+/// per-caller `PathBuf::from(&str)` wrap into the helper. The equality
+/// comparison rebuilds a `PathBuf` once per call so the `&str`-in / `&str`-out
+/// interface stays symmetric with the sibling `&str` axis-key navigators
+/// on the K8s-CR side ([`find_by_kind`] / [`find_by_name`] /
+/// [`find_by_namespace`] / [`find_by_api_version`] all take `&str`
+/// axis-keys); a future performance-critical caller can bypass this by
+/// walking `files.iter()` directly, but no current caller sits on the
+/// per-artifact readback hot path.
+///
+/// This closes the substrate-side one-hop navigator arity on the
+/// `RenderedFile::path` axis — bringing the [`RenderedFile`]-container
+/// side into structural parity with the sibling K8s-CR-container side's
+/// [`find_by_kind`] / [`find_by_name`] / [`find_by_namespace`] /
+/// [`find_by_api_version`] / [`find_by_label`] navigator family. Every
+/// future per-artifact readback site (a future `caixa-mesh`
+/// `render_all_files` per-multi-doc-emit split by leaf path, a future
+/// `caixa-arch` per-flake-file rendering that emits multiple `.nix`
+/// leaves the per-flake test walks by filename, a future `caixa-teia`
+/// per-tofu-manifest emit that carries `main.tf` / `variables.tf` /
+/// `outputs.tf` leaves the tofu-plan test walks by filename) reaches
+/// this same helper by construction, with no inline `.iter().find(|f|
+/// f.path == PathBuf::from(...))` combinator chain and no drift surface
+/// on the receiver-widen, combinator, or filename-axis-key axes.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+#[must_use]
+pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'a RenderedFile> {
+    let target = PathBuf::from(path);
+    files.iter().find(|f| f.path == target)
+}
+
 /// Read the top-level `spec:` sub-mapping on a K8s custom resource YAML
 /// document as `Option<&serde_yaml::Mapping>` — the sub-mapping-arity
 /// accessor peer on the sibling top-level `spec:` sub-block, structural
@@ -46069,6 +46134,95 @@ spec:
                  label, expected))` — otherwise the routed selector-\
                  axis site drifts silently from the predicate's \
                  contract"
+            );
+        }
+    }
+
+    // ── find_file_by_path lift ──────────────────────────────────────────
+
+    fn rendered_file(path: &str, contents: &str) -> RenderedFile {
+        RenderedFile::new(path.to_string(), contents.to_string())
+    }
+
+    #[test]
+    fn find_file_by_path_locates_leaf_by_path_axis() {
+        let files = vec![
+            rendered_file(FLUX_GITREPOSITORY_YAML_FILENAME, "kind: GitRepository"),
+            rendered_file(FLUX_HELMRELEASE_YAML_FILENAME, "kind: HelmRelease"),
+            rendered_file(FLUX_KUSTOMIZATION_YAML_FILENAME, "kind: Kustomization"),
+        ];
+        assert_eq!(
+            find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME).map(|f| f.contents.as_str()),
+            Some("kind: HelmRelease"),
+            "find_file_by_path must locate the leaf whose path byte-\
+             equals the passed filename constant",
+        );
+        assert_eq!(
+            find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
+                .map(|f| f.contents.as_str()),
+            Some("kind: GitRepository"),
+            "find_file_by_path must locate a leaf earlier in the \
+             sequence when the first match wins",
+        );
+    }
+
+    #[test]
+    fn find_file_by_path_returns_none_when_no_file_matches() {
+        let files = vec![
+            rendered_file(HELM_CHART_YAML_FILENAME, "apiVersion: v2"),
+            rendered_file(HELM_VALUES_YAML_FILENAME, "enabled: true"),
+        ];
+        assert!(
+            find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME).is_none(),
+            "find_file_by_path must return None when no leaf in `files` \
+             carries the requested path axis",
+        );
+        assert!(
+            find_file_by_path(&[], HELM_CHART_YAML_FILENAME).is_none(),
+            "find_file_by_path must return None on an empty file set",
+        );
+    }
+
+    #[test]
+    #[allow(clippy::cmp_owned)] // Deliberate: the pin reproduces the
+    // prior owning-`PathBuf::from(...)` comparand byte-for-byte to
+    // guarantee the lift's substitution is behavior-preserving on
+    // exactly the shape the 80 converged callers previously carried.
+    fn find_file_by_path_matches_inline_iter_find_pathbuf_from_shape() {
+        // Byte-equivalence pin: the lifted navigator reproduces the
+        // three-line inline `files.iter().find(|f| f.path ==
+        // PathBuf::from(<FILENAME>))` combinator the 80 test-side
+        // caixa-flux (54) + caixa-helm (26) per-artifact readback sites
+        // previously carried around the readback intent "locate the
+        // leaf whose path byte-equals the substrate-canonical filename
+        // constant". Sweep every filename constant the routed callers
+        // reach for so a future rewire that drops the `PathBuf::from`
+        // wrap, widens the equality predicate, or short-circuits on a
+        // structurally-adjacent leaf is a build-time test failure.
+        let files = vec![
+            rendered_file(FLUX_GITREPOSITORY_YAML_FILENAME, "kind: GitRepository"),
+            rendered_file(FLUX_HELMRELEASE_YAML_FILENAME, "kind: HelmRelease"),
+            rendered_file(FLUX_KUSTOMIZATION_YAML_FILENAME, "kind: Kustomization"),
+            rendered_file(HELM_CHART_YAML_FILENAME, "apiVersion: v2"),
+            rendered_file(HELM_VALUES_YAML_FILENAME, "enabled: true"),
+        ];
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+            HELM_CHART_YAML_FILENAME,
+            HELM_VALUES_YAML_FILENAME,
+            "missing-leaf.yaml",
+        ] {
+            let via_helper = find_file_by_path(&files, filename);
+            let via_inline = files.iter().find(|f| f.path == PathBuf::from(filename));
+            assert_eq!(
+                via_helper, via_inline,
+                "find_file_by_path(&files, {filename:?}) must byte-\
+                 equal the prior inline `files.iter().find(|f| f.path == \
+                 PathBuf::from({filename:?}))` combinator — otherwise \
+                 the 80 routed per-artifact readback sites drift \
+                 silently on the leaf-path axis",
             );
         }
     }
