@@ -1001,7 +1001,7 @@ mod tests {
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_CALL, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR,
         M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
         M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, find_file_by_path, kube_has, kube_str,
-        kube_u64, mapping_string_keys,
+        kube_u64, mapping_string_keys, parse_yaml_at_path,
     };
     use std::path::PathBuf;
 
@@ -1134,8 +1134,7 @@ spec:
     #[test]
     fn values_yaml_wraps_under_pleme_computeunit_key() {
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
         let cu_block = parsed
             .get(DEFAULT_LIBRARY_NAME)
             .expect("must wrap under DEFAULT_LIBRARY_NAME");
@@ -1165,8 +1164,7 @@ spec:
             ..RenderOpts::default()
         };
         let dir = render_chart_for_servico_with(&sample_caixa(), &sample_cu_yaml(), &opts).unwrap();
-        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
         assert!(
             kube_has(&parsed, "acme-computeunit"),
             "values wrap key must follow opts.library_name override \
@@ -1209,8 +1207,7 @@ spec:
             let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
             let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
             let dep_name = &chart.dependencies[0].name;
-            let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-            let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+            let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
             assert!(
                 parsed.get(dep_name.as_str()).is_some(),
                 "values.yaml wrap key must match Chart.yaml dependencies[0].name {dep_name:?} \
@@ -1401,8 +1398,7 @@ spec:
             cpu: Some(500),
         });
         let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
-        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let limits = cu_block.get(M2_KEY_LIMITS).expect("limits must propagate");
         assert_eq!(kube_str(limits, M2_LIMITS_KEY_MEMORY), Some("64MiB"));
@@ -1421,8 +1417,7 @@ spec:
             ..Default::default()
         });
         let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
-        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let behavior = cu_block
             .get(M2_KEY_BEHAVIOR)
@@ -1448,8 +1443,7 @@ spec:
             }],
         }];
         let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
-        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         assert!(kube_has(cu_block, M2_KEY_UPGRADE_FROM));
     }
@@ -1459,8 +1453,7 @@ spec:
         // Existing caixa with no M2 slots → values.yaml carries no
         // limits/behavior/upgradeFrom keys (forward-compat invariant).
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         assert!(!kube_has(cu_block, M2_KEY_LIMITS));
         assert!(!kube_has(cu_block, M2_KEY_BEHAVIOR));
@@ -1775,8 +1768,7 @@ spec:
         // surface for the per-Chart.yaml per-chart-kind discriminator
         // axis.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let doc = parse_yaml_at_path(&dir.files, HELM_CHART_YAML_FILENAME);
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
              the Helm 3 chart-schema shape",
@@ -1821,8 +1813,7 @@ spec:
         // caixa-helm surface for the two serde-rename-literal-only
         // axes.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let doc = parse_yaml_at_path(&dir.files, HELM_CHART_YAML_FILENAME);
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
              the Helm 3 chart-schema shape",
@@ -1874,8 +1865,7 @@ spec:
         // caixa-helm surface for the three serde-rename-literal-only
         // axes.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let doc = parse_yaml_at_path(&dir.files, HELM_CHART_YAML_FILENAME);
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
              the Helm 3 chart-schema shape",
@@ -2017,8 +2007,7 @@ spec:
         // [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
         // [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] mounts one level down.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let doc = parse_yaml_at_path(&dir.files, HELM_CHART_YAML_FILENAME);
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
              the Helm 3 chart-schema shape",
@@ -2266,8 +2255,7 @@ spec:
         // struct-field read on the constant and the production-code
         // emit site that consumes the same constant.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
         let cu_block = parsed
             .get(DEFAULT_LIBRARY_NAME)
             .expect("must wrap under DEFAULT_LIBRARY_NAME");
@@ -3063,6 +3051,50 @@ spec:
                  directory emit writes — otherwise the 26 routed per-\
                  artifact readback sites regress silently on the \
                  leaf-path axis",
+            );
+        }
+    }
+
+    #[test]
+    fn parse_yaml_at_path_matches_prior_inline_find_then_from_str_shape() {
+        // Per-crate byte-equivalence pin on the lifted
+        // [`caixa_core::parse_yaml_at_path`] composed navigator: for
+        // every YAML leaf the `render_chart_for_servico` `lareira-
+        // <nome>` chart-directory emit writes that the test-side
+        // routed callers parse to a [`serde_yaml::Value`]
+        // ([`HELM_CHART_YAML_FILENAME`] as `doc` /
+        // [`HELM_VALUES_YAML_FILENAME`] as `parsed`), the lifted helper
+        // must return a `Value` byte-equal to the prior two-step
+        //
+        //   let f = find_file_by_path(&dir.files, <FILENAME>).unwrap();
+        //   let parsed: serde_yaml::Value =
+        //       serde_yaml::from_str(&f.contents).unwrap();
+        //
+        // the 12 test-side per-artifact YAML readback sites previously
+        // carried. Mirrors the sibling `caixa-flux`
+        // `parse_yaml_at_path_matches_prior_inline_find_then_from_str_shape`
+        // pin at the peer caller-crate altitude and the substrate-
+        // level `parse_yaml_at_path_matches_prior_inline_two_step_shape`
+        // pin at the primitive definition — the three-arm closure that
+        // closes the same discipline the sibling `find_file_by_path`
+        // sweep established. [`HELM_CHART_README_FILENAME`] is
+        // deliberately not swept: the routed callers only assert on its
+        // raw-byte content, never parse it to YAML.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        for filename in [HELM_CHART_YAML_FILENAME, HELM_VALUES_YAML_FILENAME] {
+            let via_helper = parse_yaml_at_path(&dir.files, filename);
+            let via_inline_file = find_file_by_path(&dir.files, filename).unwrap();
+            let via_inline: serde_yaml::Value =
+                serde_yaml::from_str(&via_inline_file.contents).unwrap();
+            assert_eq!(
+                via_helper, via_inline,
+                "parse_yaml_at_path(&dir.files, {filename:?}) must \
+                 byte-equal the prior two-step `find_file_by_path(&dir.files, \
+                 {filename:?}).unwrap() + serde_yaml::from_str(&_.contents).unwrap()` \
+                 combinator on every YAML leaf the `lareira-<nome>` chart-\
+                 directory emit writes — otherwise the 12 routed per-\
+                 artifact YAML readback sites regress silently on the \
+                 parse-target axis",
             );
         }
     }

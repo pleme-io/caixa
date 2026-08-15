@@ -20610,6 +20610,79 @@ pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'
     files.iter().find(|f| f.path == target)
 }
 
+/// Locate the [`RenderedFile`] in `files` whose sandboxed relative
+/// [`RenderedFile::path`] byte-equals `path`, then parse its
+/// [`RenderedFile::contents`] as an untyped [`serde_yaml::Value`] YAML
+/// document. Panics on either short-circuit arm — the leaf is absent
+/// (`{path} present`) or the contents do not parse as YAML
+/// (`{path} parses as YAML: {err}`).
+///
+/// The composed peer to [`find_file_by_path`] — same
+/// `&[RenderedFile]`-container-side one-hop navigator, extended by the
+/// paired [`serde_yaml::from_str`] parse step every test-side per-
+/// artifact readback carried inline after the locate call. Every
+/// per-artifact readback across [`caixa-flux`][flux]'s
+/// [`cluster_bundle`][cb] Flux v2 CR-trio emit and [`caixa-helm`][helm]'s
+/// `render_chart_for_servico` `lareira-<nome>` chart-directory emit
+/// previously carried the same four-line
+///
+/// ```ignore
+/// let f = find_file_by_path(&files, <FILENAME>)
+///     .expect("<filename>.yaml present");
+/// let parsed: serde_yaml::Value =
+///     serde_yaml::from_str(&f.contents).expect("<filename>.yaml parses as YAML");
+/// ```
+///
+/// combinator around a one-token semantic payload (the `<FILENAME>`
+/// filename constant — [`FLUX_HELMRELEASE_YAML_FILENAME`] /
+/// [`FLUX_GITREPOSITORY_YAML_FILENAME`] /
+/// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] on the Flux v2 CR trio,
+/// [`HELM_CHART_YAML_FILENAME`] / [`HELM_VALUES_YAML_FILENAME`] on the
+/// `lareira-<nome>` chart-directory pair) around the two-hop locate-
+/// then-parse readback intent "read the parsed YAML at this leaf". Every
+/// routed consumer now folds those four lines onto
+/// `parse_yaml_at_path(&files, <FILENAME>)` — the leaf-navigate + the
+/// parse step + the two `.expect`/`.unwrap_or_else(|| panic!(...))`
+/// panics happen once inside the helper, the caller keeps its downstream
+/// continuation (`kube_spec_field(&parsed, ...)`,
+/// `kube_api_version_is(&parsed, ...)`, etc.) unchanged.
+///
+/// Panic messages are composed from the passed `path` verbatim — the
+/// missing-leaf arm produces `"{path} present"`, the parse-failure arm
+/// produces `"{path} parses as YAML: {err}"`. These match the
+/// canonical shape the routed test-side sites carried inline
+/// (`"helmrelease.yaml present"`, `"kustomization.yaml parses as YAML"`)
+/// where `path` is one of the substrate-canonical `&'static str`
+/// filename constants ([`FLUX_HELMRELEASE_YAML_FILENAME`] /
+/// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] / [`FLUX_GITREPOSITORY_YAML_FILENAME`]
+/// / [`HELM_VALUES_YAML_FILENAME`] / [`HELM_CHART_YAML_FILENAME`]) —
+/// same panic prefix, and the parse-failure arm now includes the
+/// underlying `serde_yaml::Error` for far-easier root-cause naming
+/// than the prior `.expect("<filename>.yaml parses as YAML")` /
+/// `.unwrap()` shape (which either dropped the error verbatim or
+/// carried the canonical `Result::unwrap()` panic naming nothing).
+///
+/// Every future per-artifact YAML readback (a future `caixa-mesh`
+/// `render_all_files` per-multi-doc-emit split by leaf path, a future
+/// `caixa-arch` per-flake-file rendering that emits multiple `.nix`
+/// leaves the per-flake test walks by filename, a future `caixa-teia`
+/// per-tofu-manifest emit that carries `main.tf` / `variables.tf` /
+/// `outputs.tf` leaves the tofu-plan test walks by filename) reaches
+/// this same helper by construction, with no inline
+/// `find_file_by_path(...).expect(...)` + `serde_yaml::from_str(...).expect(...)`
+/// two-step and no drift surface on the parse-target,
+/// panic-message-composition, or filename-axis-key axes.
+///
+/// [cb]: https://docs.rs/caixa-flux/latest/caixa_flux/fn.cluster_bundle.html
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+#[must_use]
+pub fn parse_yaml_at_path(files: &[RenderedFile], path: &str) -> serde_yaml::Value {
+    let file = find_file_by_path(files, path).unwrap_or_else(|| panic!("{path} present"));
+    serde_yaml::from_str(&file.contents)
+        .unwrap_or_else(|err| panic!("{path} parses as YAML: {err}"))
+}
+
 /// Read the top-level `spec:` sub-mapping on a K8s custom resource YAML
 /// document as `Option<&serde_yaml::Mapping>` — the sub-mapping-arity
 /// accessor peer on the sibling top-level `spec:` sub-block, structural
@@ -46223,6 +46296,142 @@ spec:
                  PathBuf::from({filename:?}))` combinator — otherwise \
                  the 80 routed per-artifact readback sites drift \
                  silently on the leaf-path axis",
+            );
+        }
+    }
+
+    // ── parse_yaml_at_path lift ─────────────────────────────────────────
+
+    #[test]
+    fn parse_yaml_at_path_parses_leaf_yaml_at_path_axis() {
+        let files = vec![
+            rendered_file(
+                FLUX_HELMRELEASE_YAML_FILENAME,
+                "apiVersion: helm.toolkit.fluxcd.io/v2\nkind: HelmRelease\n",
+            ),
+            rendered_file(
+                FLUX_KUSTOMIZATION_YAML_FILENAME,
+                "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\n",
+            ),
+        ];
+        let hr = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
+        assert!(
+            kube_api_version_is(&hr, "helm.toolkit.fluxcd.io/v2"),
+            "parse_yaml_at_path must return a parsed serde_yaml::Value \
+             carrying the leaf's YAML at the path axis",
+        );
+        assert_eq!(
+            kube_kind(&hr).map(String::from),
+            Some(String::from("HelmRelease")),
+            "parse_yaml_at_path must parse the leaf's contents through \
+             serde_yaml::from_str verbatim so downstream kube_* \
+             navigators bind to the same Value the inline two-step \
+             produced",
+        );
+        let ks = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
+        assert_eq!(
+            kube_kind(&ks).map(String::from),
+            Some(String::from("Kustomization")),
+            "parse_yaml_at_path must locate the requested leaf even when \
+             a structurally-adjacent leaf carrying a different filename \
+             axis-key sits earlier in the sequence",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "helmrelease.yaml present")]
+    fn parse_yaml_at_path_panics_on_missing_leaf() {
+        // Sad-path arm — the missing-leaf panic message reproduces the
+        // shape the 39 caixa-flux converged callers previously carried
+        // inline (`.expect("helmrelease.yaml present")`), so a future
+        // rewire that drops the message prefix or swaps in a generic
+        // `unwrap()` panic is a build-time test failure.
+        let files = vec![rendered_file(
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+            "kind: Kustomization",
+        )];
+        let _ = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
+    }
+
+    #[test]
+    #[should_panic(expected = "kustomization.yaml parses as YAML")]
+    fn parse_yaml_at_path_panics_on_unparseable_contents() {
+        // Sad-path arm — the parse-failure panic message reproduces the
+        // shape the converged callers previously carried inline
+        // (`.expect("kustomization.yaml parses as YAML")`), extended
+        // with the underlying `serde_yaml::Error` for far-easier root-
+        // cause naming than the prior bare-string form. A structurally-
+        // invalid YAML body (unbalanced mapping-flow-style braces
+        // opened at column 0) reliably triggers the parse-error arm.
+        let files = vec![rendered_file(
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+            "{ this is: not: valid: yaml",
+        )];
+        let _ = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
+    }
+
+    #[test]
+    fn parse_yaml_at_path_matches_prior_inline_two_step_shape() {
+        // Byte-equivalence pin: the lifted `parse_yaml_at_path` folds
+        // the two-step
+        //
+        //   let f = find_file_by_path(&files, <FILENAME>)
+        //       .expect("<filename>.yaml present");
+        //   let parsed: serde_yaml::Value =
+        //       serde_yaml::from_str(&f.contents)
+        //           .expect("<filename>.yaml parses as YAML");
+        //
+        // 49 test-side caixa-flux (39) + caixa-helm (10) per-artifact
+        // YAML readback sites previously carried around the readback
+        // intent "parse the YAML at this leaf". Sweep every filename
+        // constant the routed callers reach for so a future rewire
+        // that drops the outer navigate step, swaps in a different
+        // parse target (`ChartYaml` typed parse — deliberately not
+        // routed through this helper), or short-circuits on a
+        // structurally-adjacent leaf is a build-time test failure.
+        let files = vec![
+            rendered_file(
+                FLUX_HELMRELEASE_YAML_FILENAME,
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n\
+                 kind: HelmRelease\n\
+                 spec:\n  interval: 5m\n",
+            ),
+            rendered_file(
+                FLUX_KUSTOMIZATION_YAML_FILENAME,
+                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n\
+                 kind: Kustomization\n\
+                 spec:\n  path: ./clusters/rio/services/hello-rio\n",
+            ),
+            rendered_file(
+                FLUX_GITREPOSITORY_YAML_FILENAME,
+                "apiVersion: source.toolkit.fluxcd.io/v1\n\
+                 kind: GitRepository\n\
+                 spec:\n  url: https://github.com/pleme-io/hello-rio\n",
+            ),
+            rendered_file(
+                HELM_VALUES_YAML_FILENAME,
+                "pleme-computeunit:\n  enabled: true\n",
+            ),
+        ];
+        for filename in [
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            HELM_VALUES_YAML_FILENAME,
+        ] {
+            let via_helper = parse_yaml_at_path(&files, filename);
+            let file =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
+            let via_inline: serde_yaml::Value = serde_yaml::from_str(&file.contents)
+                .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
+            assert_eq!(
+                via_helper, via_inline,
+                "parse_yaml_at_path(&files, {filename:?}) must byte-\
+                 equal the prior inline `find_file_by_path(&files, \
+                 {filename:?}).expect(...) + serde_yaml::from_str(&_.contents).expect(...)` \
+                 two-step — otherwise the 49 routed per-artifact YAML \
+                 readback sites drift silently on the parse-target or \
+                 leaf-path axis",
             );
         }
     }

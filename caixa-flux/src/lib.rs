@@ -2439,7 +2439,7 @@ mod tests {
         kube_field_u64, kube_has, kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq,
         kube_spec_bool_field, kube_spec_field, kube_spec_map_field, kube_spec_seq_field,
         kube_spec_seq_first, kube_spec_spec_field, kube_spec_spec_map_field,
-        kube_spec_spec_str_field, kube_spec_str_field, kube_str,
+        kube_spec_spec_str_field, kube_spec_str_field, kube_str, parse_yaml_at_path,
     };
 
     fn sample_caixa() -> Caixa {
@@ -3029,10 +3029,7 @@ spec:
         // agrees with the same.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let install_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_INSTALL)
             .and_then(|i| {
                 kube_field_u64(
@@ -3088,10 +3085,7 @@ spec:
         // per-path retry-cap sweep the caixa-core lift established.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let upgrade_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
             .and_then(|u| {
                 kube_field_u64(
@@ -3152,10 +3146,7 @@ spec:
         // CR remediation sub-container.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let remediate_last_failure = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
             .and_then(|u| {
                 kube_field_bool(
@@ -3313,10 +3304,7 @@ spec:
         // seeds under mirror-symmetric parent-container-axis-keys.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let create_namespace = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_INSTALL)
             .and_then(|i| kube_bool(i, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE))
             .expect(
@@ -3538,10 +3526,7 @@ spec:
         // level `spec.prune` position.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let prune = kube_spec_bool_field(&parsed, FLUX_KUSTOMIZATION_KEY_PRUNE).expect(
             "spec.prune boolean scalar present; drift on this axis \
                  silently drops the substrate's chosen sweep-what-you-\
@@ -3695,10 +3680,7 @@ spec:
         // position.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let path = kube_spec_str_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH).expect(
             "spec.path string scalar present; drift on this axis \
                  silently unbinds every per-caixa Kustomization from \
@@ -3834,10 +3816,7 @@ spec:
         // leaving the peer axis inline surfaces on either half.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let emitted = kube_spec_str_field(&parsed, FLUX_KUSTOMIZATION_KEY_PATH)
             .expect("spec.path string scalar present")
             .to_owned();
@@ -3952,10 +3931,7 @@ spec:
         // top-level `spec.timeout` position.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let timeout = kube_spec_str_field(&parsed, FLUX_KUSTOMIZATION_KEY_TIMEOUT).expect(
             "spec.timeout string scalar present; drift on this axis \
                  silently strips the substrate's chosen reconcile-ceiling \
@@ -4924,10 +4900,7 @@ spec:
         // the lifted-constant-keyed assertion would fail).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let values =
             kube_spec_map_field(&parsed, FLUX_KEY_VALUES).expect("spec.values mapping present");
         assert!(
@@ -5062,10 +5035,7 @@ spec:
         // fail when the lift's value changes).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         // Route the per-`kustomization.yaml` `metadata.namespace`
         // readback through the substrate-primitive [`kube_namespace`]
         // pinned accessor rather than the parametric
@@ -5142,10 +5112,7 @@ spec:
         // on the sibling [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] lift.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         assert!(
             kube_api_version_is(&parsed, FLUX_HELMRELEASE_API_VERSION),
             "helmrelease.yaml apiVersion must spell the lifted \
@@ -5170,10 +5137,7 @@ spec:
         // sits perpetually in `Reconciling`).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
@@ -5419,10 +5383,7 @@ spec:
         // the sibling [`FLUX_HELMRELEASE_API_VERSION`] lift.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
-            .expect("gitrepository.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         assert!(
             kube_api_version_is(&parsed, FLUX_GITREPOSITORY_API_VERSION),
             "gitrepository.yaml apiVersion must spell the lifted \
@@ -5508,10 +5469,7 @@ spec:
         // on the sibling Flux-CRD-axis lifts.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         assert!(
             kube_api_version_is(&parsed, FLUX_KUSTOMIZATION_API_VERSION),
             "kustomization.yaml apiVersion must spell the lifted \
@@ -5981,10 +5939,7 @@ spec:
         // on the sibling apiVersion half of the same CRD-lookup tuple.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
-            .expect("gitrepository.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         // Readback through the substrate-primitive [`kube_kind`] pinned
         // accessor rather than the parametric [`kube_root_str_field`]
         // two-token composition — the accessor pins the top-level
@@ -6023,10 +5978,7 @@ spec:
         // dangles a controller-side reference).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let source_ref_kind = kube_spec_spec_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
             .expect("helmrelease.yaml spec.chart.spec.sourceRef.kind present");
@@ -6055,10 +6007,7 @@ spec:
         // reconciliation freeze.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let source_ref_kind = kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
             .expect("kustomization.yaml spec.sourceRef.kind present");
@@ -6091,31 +6040,16 @@ spec:
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
 
-        let gr_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
-                .unwrap()
-                .contents,
-        )
-        .unwrap();
+        let gr_parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         let gr_kind = kube_kind(&gr_parsed).map(String::from).unwrap();
 
-        let hr_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-                .unwrap()
-                .contents,
-        )
-        .unwrap();
+        let hr_parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let hr_source_kind = kube_spec_spec_field(&hr_parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
             .map(String::from)
             .unwrap();
 
-        let kz_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-                .unwrap()
-                .contents,
-        )
-        .unwrap();
+        let kz_parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let kz_source_kind = kube_spec_field(&kz_parsed, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
             .map(String::from)
@@ -6188,10 +6122,7 @@ spec:
         // on the sibling Flux-v2 source-controller CRD kind axis.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         // Readback through the substrate-primitive [`kube_kind`] pinned
         // accessor — peer of the sibling gitrepository / kustomization
         // per-CR discriminator readbacks in the same test module.
@@ -6233,10 +6164,7 @@ spec:
         // Reconciling reconciliation freeze.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
@@ -6276,20 +6204,10 @@ spec:
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
 
-        let hr_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-                .unwrap()
-                .contents,
-        )
-        .unwrap();
+        let hr_parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let hr_kind = kube_kind(&hr_parsed).map(String::from).unwrap();
 
-        let kz_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-                .unwrap()
-                .contents,
-        )
-        .unwrap();
+        let kz_parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let kz_health_kind = kube_spec_seq_first(&kz_parsed, FLUX_KEY_HEALTH_CHECKS)
             .and_then(kube_kind)
             .map(String::from)
@@ -6400,10 +6318,7 @@ spec:
         // pin on the sibling per-`HelmRelease` body-key surface.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let source_ref = kube_spec_spec_map_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .expect("spec.chart.spec.<FLUX_KEY_SOURCE_REF> mapping present");
         assert!(
@@ -6446,10 +6361,7 @@ spec:
         // out.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let source_ref = kube_spec_map_field(&parsed, FLUX_KEY_SOURCE_REF)
             .expect("spec.<FLUX_KEY_SOURCE_REF> mapping present");
         assert!(
@@ -6530,10 +6442,7 @@ spec:
         // body-axis this test targets.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let values = kube_spec_map_field(&parsed, FLUX_KEY_VALUES)
             .expect("spec.<FLUX_KEY_VALUES> mapping present");
         assert!(
@@ -6574,10 +6483,7 @@ spec:
         // on the sibling Flux v2 controller-triplet CRD kind axes.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         // Readback through the substrate-primitive [`kube_kind`] pinned
         // accessor — peer of the sibling gitrepository / helmrelease
         // per-CR discriminator readbacks in the same test module.
@@ -6661,10 +6567,7 @@ spec:
         // chart-template container-axis this test targets.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let chart = kube_spec_map_field(&parsed, FLUX_KEY_CHART)
             .expect("spec.<FLUX_KEY_CHART> mapping present");
         assert!(
@@ -6733,10 +6636,7 @@ spec:
         // constant.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let chart_name =
             kube_spec_spec_str_field(&parsed, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART)
                 .expect("spec.chart.spec.<FLUX_HELMCHART_TEMPLATE_KEY_CHART> scalar present");
@@ -6825,10 +6725,7 @@ spec:
         // container-axis this test targets, completing the quartet.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("spec.<FLUX_KEY_HEALTH_CHECKS> sequence present");
         assert!(
@@ -6982,16 +6879,12 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
-        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
-            .expect("gitrepository.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         assert!(
             kube_spec_field(&parsed, FLUX_GITREPOSITORY_KEY_REF).is_some(),
             "rendered gitrepository.yaml must carry its ref-selection \
              container-axis at the lifted FLUX_GITREPOSITORY_KEY_REF key \
-             verbatim (got: {:?})",
-            gr.contents
+             verbatim (got: {parsed:?})",
         );
     }
 
@@ -7043,10 +6936,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
-        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
-            .expect("gitrepository.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         let url = kube_spec_str_field(&parsed, FLUX_GITREPOSITORY_KEY_URL).expect(
             "rendered gitrepository.yaml must carry its remote-URL leaf-scalar \
                  axis at the lifted FLUX_GITREPOSITORY_KEY_URL key verbatim",
@@ -7419,17 +7309,13 @@ spec:
             let mut opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
             opts.git_ref = git_ref.clone();
             let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
-            let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
-                .expect("gitrepository.yaml present");
-            let parsed: serde_yaml::Value =
-                serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+            let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
             let sub_selector = kube_spec_field(&parsed, FLUX_GITREPOSITORY_KEY_REF)
                 .and_then(|r| kube_str(r, expected_key))
                 .unwrap_or_else(|| {
                     panic!(
                         "spec.ref.{expected_key:?} missing or non-string \
-                         for GitRefSpec::{git_ref:?}: {contents:?}",
-                        contents = gr.contents,
+                         for GitRefSpec::{git_ref:?}: {parsed:?}",
                     )
                 });
             assert_eq!(
@@ -7595,10 +7481,7 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let doc =
-                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
-            let parsed: serde_yaml::Value = serde_yaml::from_str(&doc.contents)
-                .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
+            let parsed = parse_yaml_at_path(&files, filename);
             let interval = kube_spec_str_field(&parsed, FLUX_KEY_INTERVAL).unwrap_or_else(|| {
                 panic!(
                     "{filename} spec.<FLUX_KEY_INTERVAL> ({FLUX_KEY_INTERVAL:?}) \
@@ -7781,10 +7664,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
-            .expect("gitrepository.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         let emitted = kube_name(&parsed).expect(
             "gitrepository.yaml `metadata.name` scalar present — drift here \
              silently orphans the source-controller-side per-Servico \
@@ -7823,10 +7703,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
-            .expect("helmrelease.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let emitted = kube_name(&parsed).expect(
             "helmrelease.yaml `metadata.name` scalar present — drift here \
              silently orphans the helm-controller-side per-Servico \
@@ -7864,10 +7741,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let k = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
-            .expect("kustomization.yaml present");
-        let parsed: serde_yaml::Value =
-            serde_yaml::from_str(&k.contents).expect("kustomization.yaml parses as YAML");
+        let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let emitted = kube_name(&parsed).expect(
             "kustomization.yaml `metadata.name` scalar present — drift here \
              silently splits the kustomize-controller-side per-Servico \
@@ -7932,6 +7806,53 @@ spec:
                  combinator on every leaf the Flux v2 CR-trio emit \
                  writes — otherwise the 54 routed per-artifact \
                  readback sites regress silently on the leaf-path axis",
+            );
+        }
+    }
+
+    #[test]
+    fn parse_yaml_at_path_matches_prior_inline_find_then_from_str_shape() {
+        // Per-crate byte-equivalence pin on the lifted
+        // [`parse_yaml_at_path`] composed navigator: for every leaf the
+        // `cluster_bundle` Flux v2 CR-trio emit writes, the lifted
+        // helper must return a [`serde_yaml::Value`] byte-equal to the
+        // prior two-step
+        //
+        //   let f = find_file_by_path(&files, <FILENAME>)
+        //       .expect("<filename>.yaml present");
+        //   let parsed: serde_yaml::Value =
+        //       serde_yaml::from_str(&f.contents)
+        //           .expect("<filename>.yaml parses as YAML");
+        //
+        // the 38 test-side per-artifact YAML readback sites previously
+        // carried. Mirrors the substrate-side
+        // `parse_yaml_at_path_matches_prior_inline_two_step_shape` pin
+        // at the caller-crate altitude — the two-arm (substrate
+        // structural pin + caller-crate byte-equivalence pin) closure
+        // that made the sibling `find_file_by_path` sweep safe on the
+        // same discipline. Fail-before-pass-after; drift here means a
+        // future refactor of the lifted helper's parse-target contract
+        // has silently regressed the routed Flux-CR-trio readback shape.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+        ] {
+            let via_helper = parse_yaml_at_path(&files, filename);
+            let via_inline_file =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
+            let via_inline: serde_yaml::Value = serde_yaml::from_str(&via_inline_file.contents)
+                .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
+            assert_eq!(
+                via_helper, via_inline,
+                "parse_yaml_at_path(&files, {filename:?}) must byte-\
+                 equal the prior two-step `find_file_by_path(&files, \
+                 {filename:?}).expect(...) + serde_yaml::from_str(&_.contents).expect(...)` \
+                 combinator on every leaf the Flux v2 CR-trio emit \
+                 writes — otherwise the 38 routed per-artifact YAML \
+                 readback sites regress silently on the parse-target axis",
             );
         }
     }
