@@ -2438,7 +2438,8 @@ mod tests {
         kube_api_version_is, kube_bool, kube_field_bool, kube_field_field, kube_field_u64,
         kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq, kube_spec_bool_field,
         kube_spec_field, kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first,
-        kube_spec_spec_field, kube_spec_spec_str_field, kube_spec_str_field, kube_str,
+        kube_spec_spec_field, kube_spec_spec_map_field, kube_spec_spec_str_field,
+        kube_spec_str_field, kube_str,
     };
 
     fn sample_caixa() -> Caixa {
@@ -6493,8 +6494,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let source_ref = kube_spec_spec_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
-            .and_then(|r| r.as_mapping())
+        let source_ref = kube_spec_spec_map_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .expect("spec.chart.spec.<FLUX_KEY_SOURCE_REF> mapping present");
         assert!(
             !source_ref.is_empty(),
