@@ -158,8 +158,8 @@ pub use render::{
     singleton_mapping_sequence, string_keyed_entries, upsert_named_entry, yaml_string_mapping,
 };
 pub use supervisor::{
-    ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_ESTRATEGIA_DEFAULT,
-    SUPERVISOR_MAX_RESTARTS_DEFAULT, SUPERVISOR_MAX_RESTARTS_MAX,
+    ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_CHILD_RESTART_DEFAULT,
+    SUPERVISOR_ESTRATEGIA_DEFAULT, SUPERVISOR_MAX_RESTARTS_DEFAULT, SUPERVISOR_MAX_RESTARTS_MAX,
     SUPERVISOR_RESTART_WINDOW_DEFAULT, SUPERVISOR_RESTART_WINDOW_MAX, SupervisorError,
     SupervisorSpec,
 };
