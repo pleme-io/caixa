@@ -311,7 +311,26 @@ pub enum RestartPolicy {
 
 impl Default for RestartPolicy {
     fn default() -> Self {
-        Self::Permanent
+        // Route the [`Default for RestartPolicy`] impl's return arm through
+        // the substrate-canonical [`SUPERVISOR_CHILD_RESTART_DEFAULT`] typed
+        // `pub const` rather than a raw `Self::Permanent` arm — one source
+        // of truth for the Erlang/OTP-canonical `permanent` worker-child
+        // default across the two production consumers that currently
+        // dispatch on it (this impl at the [`RestartPolicy::default`] call
+        // and the serde-side `#[serde(default)]` on
+        // [`ChildSpec::restart`] that resolves an author-omitted
+        // `:children :restart` slot through `RestartPolicy::default()`).
+        // Peer of the sibling per-`:supervisor` axis
+        // [`Default for RestartStrategy`] → [`SUPERVISOR_ESTRATEGIA_DEFAULT`]
+        // route (95ffacc) — the two impls now share one substrate-primitive
+        // lift discipline, so any future coherent rebrand of the OTP-shape
+        // supervisor+child default set migrates through typed constants in
+        // lockstep instead of splitting a lifted supervisor half against
+        // an open-coded child half. Pinned by
+        // `restart_policy_default_routes_through_lifted_default` +
+        // `child_spec_serde_default_restart_routes_through_lifted_default`
+        // in the tests module.
+        SUPERVISOR_CHILD_RESTART_DEFAULT
     }
 }
 
@@ -553,7 +572,11 @@ pub struct ChildSpec {
     /// [`crate::dep::Dep::versao`].
     pub versao: String,
 
-    /// Restart policy — defaults to [`RestartPolicy::Permanent`].
+    /// Restart policy — an author-omitted slot degrades onto the
+    /// substrate-canonical [`SUPERVISOR_CHILD_RESTART_DEFAULT`]
+    /// (`permanent`, the Erlang/OTP worker-child default) through the
+    /// [`Default for RestartPolicy`] impl this `#[serde(default)]` routes
+    /// to.
     #[serde(default)]
     pub restart: RestartPolicy,
 }
@@ -1203,6 +1226,64 @@ pub const SUPERVISOR_RESTART_WINDOW_DEFAULT: Duration = Duration::from_secs(60);
 /// [`crate::render::DEFAULT_NAMESPACE`] / [`crate::render::DEFAULT_LIBRARY_NAME`]
 /// per-renderer defaults on the caixa-flux / caixa-helm rendering axes).
 pub const SUPERVISOR_ESTRATEGIA_DEFAULT: RestartStrategy = RestartStrategy::OneForOne;
+
+/// Substrate-canonical Erlang/OTP-shaped per-child restart-decision-policy
+/// default for the `:children :restart` axis — the OTP `permanent`
+/// worker-child default (`{ChildId, StartFunc, permanent, …}` in a
+/// `supervisor`'s `init/1` child-spec tuple), extracted as a typed
+/// `pub const` so every substrate-side consumer that resolves "what
+/// [`ChildSpec::restart`] variant does an author-omitted `:children
+/// :restart` slot degrade onto?" reaches for exactly one substrate-
+/// primitive [`RestartPolicy`].
+///
+/// Completes the OTP-shape supervisor-tree default set at the substrate
+/// primitive. The per-`:supervisor` axis already carries all three of its
+/// halves as lifted typed constants — [`SUPERVISOR_ESTRATEGIA_DEFAULT`]
+/// (`one_for_one`, 95ffacc), [`SUPERVISOR_MAX_RESTARTS_DEFAULT`]
+/// (`MaxIntensity` `5`, b698ec0), [`SUPERVISOR_RESTART_WINDOW_DEFAULT`]
+/// (`Period` `60s`, f7dcd0e) — while the per-`:children` axis's own
+/// OTP-canonical default rode as an open-coded `Self::Permanent` arm in
+/// the [`Default for RestartPolicy`] impl, the last un-lifted default on
+/// the M2 `:supervisor` slot family. The split mattered because the two
+/// axes resolve *together* on every author-omitted supervisor: a
+/// `(defcaixa :kind Supervisor :children ((:caixa "worker" :versao
+/// "^0.1")))` with no `:estrategia` and no per-child `:restart` degrades
+/// onto `{one_for_one, 5, 60}` through three lifted constants and onto
+/// `permanent` through an open-coded enum arm, so a future coherent
+/// rebrand of the OTP-shape default set (an Elixir-shaped
+/// `{:one_for_one, max_restarts: 3, max_seconds: 5}` tightening, a
+/// per-cluster overlay the operator pins through the MESH-COMPOSITION
+/// §III.2 supervision-canary roadmap slots, an OTP-`transient` widening
+/// once the substrate discovers clean-completion-aware children as the
+/// more common child shape) would have had to migrate three halves
+/// through typed constants and the fourth through a raw enum arm in
+/// lockstep or the supervisor-level and child-level defaults would
+/// silently drift apart.
+///
+/// The `:children :restart` default axis has two production consumers on
+/// the substrate side today: the [`Default for RestartPolicy`] impl's
+/// return arm, and the serde-side `#[serde(default)]` on
+/// [`ChildSpec::restart`] that resolves an author-omitted `:children
+/// :restart` slot through that same impl. Both now key off this one
+/// substrate primitive, so the future wasm-operator's per-child post-exit
+/// restart-decision branch, the future M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's per-child
+/// admission webhook, and the `caixa-operator`'s hierarchical
+/// reconciliation scheduler's per-child fan-out all reach for one typed
+/// identifier when they resolve an omitted per-child restart posture.
+///
+/// The [`RestartPolicy::Permanent`] value pins Erlang/OTP's `permanent`
+/// worker-child restart type — always restart the child regardless of how
+/// it died, the canonical posture for long-running services that must
+/// always be up, matching the sibling [`SUPERVISOR_ESTRATEGIA_DEFAULT`]
+/// `one_for_one` tree-of-independent-workers strategy this constant pairs
+/// with under the same `{one_for_one, intensity, 5, 60}` worker-supervisor
+/// shape. The two alternatives the closed [`RestartPolicy::ALL`] accept-set
+/// carries ([`RestartPolicy::Transient`] — restart only on abnormal exit;
+/// [`RestartPolicy::Temporary`] — never restart) express deliberate
+/// one-shot / clean-completion-aware postures an author declares
+/// explicitly, never a posture an omitted slot should silently assume.
+pub const SUPERVISOR_CHILD_RESTART_DEFAULT: RestartPolicy = RestartPolicy::Permanent;
 
 impl Default for SupervisorSpec {
     fn default() -> Self {
@@ -2860,6 +2941,83 @@ mod tests {
         assert_eq!(
             SupervisorSpec::default().estrategia(),
             SUPERVISOR_ESTRATEGIA_DEFAULT,
+        );
+    }
+
+    #[test]
+    fn supervisor_child_restart_default_pins_otp_canonical_value() {
+        // Pin [`SUPERVISOR_CHILD_RESTART_DEFAULT`] at
+        // [`RestartPolicy::Permanent`] — Erlang/OTP's `permanent`
+        // worker-child restart type (`{ChildId, StartFunc, permanent, …}`
+        // in a `supervisor`'s `init/1` child-spec tuple), the per-child
+        // half of the same OTP-shape supervisor-tree default set whose
+        // per-`:supervisor` halves the sibling
+        // [`SUPERVISOR_ESTRATEGIA_DEFAULT`] /
+        // [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] /
+        // [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] constants pin. Pinning the
+        // arm here surfaces a future rebrand of the per-child default (an
+        // OTP-`transient` widening once the substrate discovers clean-
+        // completion-aware children as the more common child shape, a
+        // per-cluster overlay the operator pins through a future
+        // `:restart-overrides` slot the MESH-COMPOSITION §III.2
+        // supervision-canary roadmap acknowledges) as a deliberate test
+        // edit, not a silent contract migration. Peer of the sibling
+        // [`supervisor_estrategia_default_pins_otp_canonical_value`] /
+        // [`supervisor_max_restarts_default_pins_otp_canonical_value`] /
+        // [`supervisor_restart_window_default_pins_otp_canonical_value`]
+        // value pins on the per-`:supervisor` halves.
+        assert_eq!(SUPERVISOR_CHILD_RESTART_DEFAULT, RestartPolicy::Permanent);
+    }
+
+    #[test]
+    fn restart_policy_default_routes_through_lifted_default() {
+        // Composition pin: the [`Default for RestartPolicy`] impl's return
+        // arm must route through the substrate-canonical
+        // [`SUPERVISOR_CHILD_RESTART_DEFAULT`] typed `pub const` rather
+        // than a raw `Self::Permanent` arm. Prior to the lift the impl
+        // carried an inline `Self::Permanent` with no compile-time link
+        // back to the OTP-shape supervisor-tree default set whose three
+        // per-`:supervisor` halves already rode through lifted constants
+        // — so a future coherent rebrand of the set would have had to
+        // migrate three halves through typed constants and this fourth
+        // through a raw enum arm in lockstep or the supervisor-level and
+        // child-level defaults would silently drift apart. Byte-parity
+        // against the lifted constant closes the split. Peer of the
+        // sibling
+        // [`restart_strategy_default_routes_through_lifted_default`]
+        // composition pin on the per-`:supervisor` `:estrategia` axis.
+        assert_eq!(RestartPolicy::default(), SUPERVISOR_CHILD_RESTART_DEFAULT);
+    }
+
+    #[test]
+    fn child_spec_serde_default_restart_routes_through_lifted_default() {
+        // Composition pin: the serde-side `#[serde(default)]` on
+        // [`ChildSpec::restart`] — the wire-format author-omitted
+        // `:children :restart` arm — must resolve onto the substrate-
+        // canonical [`SUPERVISOR_CHILD_RESTART_DEFAULT`] typed `pub const`
+        // (via the [`Default for RestartPolicy`] impl the sibling
+        // `restart_policy_default_routes_through_lifted_default` pin
+        // already routes onto the constant). Structurally: a `ChildSpec`
+        // deserialized from a payload that omits the `restart` key must
+        // yield a `restart` field byte-equal to the lifted constant, so
+        // the wire-format author-omitted arm and the
+        // [`RestartPolicy::default`] impl arm cannot silently split on any
+        // future default rebrand. Peer of the sibling
+        // [`supervisor_spec_default_estrategia_routes_through_lifted_default`]
+        // / [`supervisor_spec_default_max_restarts_routes_through_lifted_default`]
+        // / [`supervisor_spec_default_restart_window_routes_through_lifted_default`]
+        // byte-parity pins on the per-`:supervisor` halves of the same
+        // author-omitted-slot resolution surface.
+        let omitted: ChildSpec = serde_json::from_str(r#"{"caixa":"worker","versao":"^0.1"}"#)
+            .expect("ChildSpec must deserialize with the restart key omitted");
+        assert_eq!(
+            omitted.restart(),
+            SUPERVISOR_CHILD_RESTART_DEFAULT,
+            "an author-omitted :children :restart slot must degrade onto \
+             the SUPERVISOR_CHILD_RESTART_DEFAULT typed pub const (got \
+             {:?}, expected {:?})",
+            omitted.restart(),
+            SUPERVISOR_CHILD_RESTART_DEFAULT,
         );
     }
 
