@@ -159,7 +159,8 @@ pub use render::{
 };
 pub use supervisor::{
     ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_DEFAULT,
-    SUPERVISOR_MAX_RESTARTS_MAX, SUPERVISOR_RESTART_WINDOW_MAX, SupervisorError, SupervisorSpec,
+    SUPERVISOR_MAX_RESTARTS_MAX, SUPERVISOR_RESTART_WINDOW_DEFAULT, SUPERVISOR_RESTART_WINDOW_MAX,
+    SupervisorError, SupervisorSpec,
 };
 pub use upgrade::{
     UpgradeError, UpgradeFromEntry, UpgradeInstruction, validate_upgrade_from,
