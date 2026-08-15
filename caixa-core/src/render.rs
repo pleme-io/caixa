@@ -21840,6 +21840,85 @@ pub fn kube_metadata_u64_field(value: &serde_yaml::Value, field: &str) -> Option
     kube_metadata_field(value, field).and_then(serde_yaml::Value::as_u64)
 }
 
+/// Read the sub-`metadata.<field>` YAML scalar-boolean on a K8s custom
+/// resource YAML document as `Option<bool>` — the composed boolean-arity
+/// per-sub-field-bool accessor peer that stands on the composed
+/// scalar-arity [`kube_metadata_field`] accessor, folding the trailing
+/// `.and_then(|v| v.as_bool())` shape-gate closure into the helper for
+/// callers that always want a `bool` scalar (every future per-CR
+/// `metadata.<toggle>` scalar-boolean axis the [`ObjectMeta`][om] contract
+/// admits under controller-authored annotation-flavoured toggles or under
+/// the future [`ObjectMeta`][om] extension shape a per-CRD schema pins as a
+/// boolean leaf: the future `caixa-operator`'s per-`Caixa`/`Lacre`/`CaixaBuild`
+/// CR reconciler's per-CR `metadata.<toggle>` reconcile-loop identity toggle
+/// readback, the future `app-operator`'s per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's `metadata.<toggle>`
+/// controller-owned pre-reconcile-hook toggle readback, every future test-
+/// side `metadata.<toggle>` scalar-boolean probe on the K8s
+/// [`ObjectMeta`][om] contract's per-CRD boolean axes). Structural mirror
+/// of the sibling [`kube_spec_bool_field`] on the sub-`spec.<field>` axis
+/// and of the sibling [`kube_root_bool_field`] on the top-level `<field>:`
+/// axis: all three accessors fold a trailing `.as_bool()` shape-gate closure
+/// onto their axis's composed scalar-Value accessor primitive
+/// ([`kube_metadata_field`] here, [`kube_spec_field`] on the spec peer,
+/// [`kube_root_field`] on the root peer), all three stay parametric on the
+/// per-`<field>` sub-field axis-key. Closes the five-arity shape-gate family
+/// on the sub-`metadata:` axis to structural parity with the sub-`spec:`
+/// axis's five-arity closed family (`{str, seq, map, bool, u64}` since
+/// 4785e45 + 4f6fc93 + e09f5ad + 77d7a83 + the sibling map/seq peers) and
+/// with the top-level `<field>:` root peer family's five-arity closed
+/// coverage (`{str, seq, map, bool, u64}` since d166d7f + 77d7a83): the
+/// pre-existing [`kube_metadata_str_field`] scalar-string arm, the
+/// [`kube_metadata_seq_field`] sequence arm, the [`kube_metadata_map_field`]
+/// sub-mapping arm, the [`kube_metadata_u64_field`] scalar-integer arm, and
+/// this [`kube_metadata_bool_field`] scalar-boolean arm now all compose on
+/// the same [`kube_metadata_field`] two-hop
+/// `metadata → as_mapping → get(<field>)` primitive.
+///
+/// Returns `None` on any of the four short-circuit arms folded through
+/// the underlying composition: the outer `metadata:` block is absent
+/// (the [`kube_metadata`] outer-arm short-circuit — a legally-omitted
+/// per-CR identity sub-block on `List`-shaped documents or on external
+/// YAML shapes that carry no [`ObjectMeta`][om]-flavoured header),
+/// the `metadata:` value is present but carries a non-Mapping YAML
+/// type (the [`kube_metadata`] shape-gate short-circuit — a schema-
+/// invalid identity shape per the K8s API-machinery contract tolerated
+/// here as `None` so the readback stays a total function), the
+/// requested sub-field `<field>` axis-key is absent from the
+/// `metadata:` sub-mapping (the [`kube_metadata_field`] trailing
+/// `Mapping::get` none-arm — a legally-omitted per-metadata-axis
+/// surface on a CR that carries other identity sub-fields but not this
+/// one — e.g. a freshly-authored CR the controller has not yet stamped
+/// with its identity-toggle sub-field), or the sub-field value is
+/// present but carries a non-boolean YAML type (the trailing
+/// `.as_bool()` shape-gate short-circuit — a schema-invalid per-CR
+/// identity-sub-field type per the K8s apiserver's `OpenAPI` schema but
+/// tolerated here as `None` so the readback stays a total function,
+/// mirroring the sibling [`kube_spec_bool_field`] posture). The returned
+/// `bool` is a fresh primitive value (booleans carry no underlying
+/// borrow the way the sibling string-arity accessor preserves) — the
+/// caller decides whether to `assert_eq!(_, Some(<expected>))` for a
+/// determinism pin, `.expect(...)` for a load-bearing toggle identity,
+/// or `.unwrap_or(<default>)` for a substrate-side default fallback.
+///
+/// The `field` axis stays parametric (rather than pinned to a specific
+/// canonical sub-field as a separate helper) because the K8s API-
+/// machinery [`ObjectMeta`][om] contract plus every per-CRD schema
+/// extension admits an open-ended per-CR identity boolean-field surface
+/// — one helper covers every boolean-shaped `metadata.<field>` axis
+/// with the axis-key threaded through the call. Every future per-CR
+/// `metadata.<toggle>` scalar-boolean readback reaches this same helper
+/// by construction — no per-consumer three-hop chain re-inline, no per-
+/// consumer [`KUBE_KEY_METADATA`] axis-key drift, no coordinated rewrite
+/// across every per-CR identity-sub-field scalar-boolean readback on a
+/// future K8s API-machinery rebrand of the top-level `metadata:` axis.
+///
+/// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
+#[must_use]
+pub fn kube_metadata_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bool> {
+    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_bool)
+}
+
 /// Read a top-level `<field>:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the composed
 /// sub-mapping-arity per-top-level-field accessor at the root axis,
@@ -47094,6 +47173,301 @@ spec:
                  the sub-`metadata:` axis and any drift between the \
                  two disagrees on the load-bearing per-CR identity \
                  coordinate readback"
+            );
+        }
+    }
+
+    // ── kube_metadata_bool_field lift ─────────────────────────────────
+
+    #[test]
+    fn kube_metadata_bool_field_reads_sub_metadata_field_boolean_scalar() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `metadata: { <sub-field>: <bool>, ... }` identity
+        // sub-block (every per-CR `metadata.<toggle>` scalar-boolean axis
+        // the [`ObjectMeta`] contract plus per-CRD schema extensions
+        // admits), the composed boolean-arity accessor returns
+        // `Some(<bool>)` across the routed per-sub-field readback axes.
+        // Pin both boolean arms (`true` on one axis-key, `false` on a
+        // second) so the trailing `.as_bool()` fold-through preserves
+        // both arms — the sibling `kube_bool_reads_sub_field_scalar_
+        // boolean_verbatim` pin one altitude down on the value-level
+        // quintet already validates the boolean shape-gate; this pin
+        // validates the same axis one altitude up on the metadata-
+        // anchored family. Structural mirror of the sibling
+        // `kube_spec_bool_field_reads_sub_spec_field_boolean_scalar` pin
+        // on the sub-`spec.<field>` boolean-arity axis and of the sibling
+        // `kube_metadata_u64_field_reads_sub_metadata_field_u64_scalar`
+        // pin on the peer integer-arity axis of the same `metadata:`
+        // sub-block.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key("pausedReconcile", serde_yaml::Value::Bool(true));
+        metadata.insert_str_key("finalizersPending", serde_yaml::Value::Bool(false));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_metadata_bool_field(&value, "pausedReconcile"),
+            Some(true),
+            "kube_metadata_bool_field must read metadata.pausedReconcile \
+             as the true arm verbatim — the future caixa-operator per-\
+             `Caixa`/`Lacre`/`CaixaBuild` CR reconciler's per-CR identity-\
+             toggle readback reaches through this axis for the reconcile-\
+             loop-halt identity contract"
+        );
+        assert_eq!(
+            kube_metadata_bool_field(&value, "finalizersPending"),
+            Some(false),
+            "kube_metadata_bool_field must read a second axis-key on the \
+             opposite boolean arm — pinning that the trailing \
+             `.as_bool()` fold-through preserves both arms, not just the \
+             `true` arm (mirroring the sibling \
+             `kube_bool_reads_sub_field_scalar_boolean_verbatim` pin's \
+             both-arm coverage one altitude down on the value-level \
+             quintet)"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_bool_field_returns_none_when_metadata_block_absent() {
+        // The composition's outer-arm None short-circuit fold-through:
+        // any short-circuit the underlying [`kube_metadata_field`]
+        // closes on (which in turn folds through [`kube_metadata`]'s
+        // outer-arm and shape-gate) folds through this composed
+        // boolean-arity accessor. Peer of the sibling
+        // `kube_metadata_u64_field_returns_none_when_metadata_block_absent`
+        // pin on the composed sub-`metadata.<field>` integer-arity
+        // accessor axis and of the sibling
+        // `kube_spec_bool_field_returns_none_when_spec_sub_block_absent`
+        // pin on the composed sub-`spec.<field>` boolean-arity accessor
+        // axis one axis over.
+        for shape in [
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_metadata_bool_field(&shape, "pausedReconcile"),
+                None,
+                "kube_metadata_bool_field({shape:?}, <FIELD>) must \
+                 short-circuit to None through the underlying \
+                 kube_metadata_field's kube_metadata outer-arm when the \
+                 top-level `metadata:` block is absent on the outer \
+                 Value — the composition fold must preserve the total-\
+                 function contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_bool_field_returns_none_when_metadata_carries_non_mapping_type() {
+        // The composition's shape-gate None short-circuit fold-through:
+        // a present-but-non-Mapping `metadata:` value on the outer Value
+        // folds through [`kube_metadata`]'s trailing `.as_mapping()`
+        // shape-gate up through [`kube_metadata_field`] up through this
+        // composed boolean-arity accessor — the caller's `.expect(...)`
+        // / `assert_eq!(_, Some(<expected>))` continuation stays a total
+        // function.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("metadata-as-string".into()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, non_mapping.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_metadata_bool_field(&value, "pausedReconcile"),
+                None,
+                "kube_metadata_bool_field must return None when the \
+                 top-level `metadata:` axis carries a non-Mapping YAML \
+                 type ({non_mapping:?}) — the fold through \
+                 kube_metadata's shape-gate arm short-circuits here, \
+                 and every routed caller depends on that None-arm to \
+                 keep the readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_bool_field_returns_none_when_requested_field_absent() {
+        // The composition's middle per-key None-arm: the requested
+        // `<field>` sub-field axis-key is absent from the `metadata:`
+        // sub-mapping. Preserves the "no such sub-field" vs. "wrong
+        // shape" distinction routed consumers rely on — a per-CR
+        // `metadata.<toggle>` readback that finds no `<toggle>` sub-
+        // field (e.g. a freshly-authored CR the controller has not yet
+        // stamped with its identity-toggle sub-field) expects None here
+        // (routing the "no explicit opt-in" fallback the controller
+        // takes on first-write) rather than a panic.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_metadata_bool_field(&value, "pausedReconcile"),
+            None,
+            "kube_metadata_bool_field must return None when the \
+             requested `metadata.<field>` axis-key is absent from the \
+             sub-mapping — a `Mapping::get(<KEY>)` miss short-circuits \
+             the composed accessor, and callers rely on the None-arm \
+             to route the fallback path (rather than the wrong-shape \
+             arm)"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_bool_field_returns_none_when_field_carries_non_bool_type() {
+        // The composition's trailing `.as_bool()` shape-gate None arm:
+        // a `metadata.<field>` axis-key present but carrying a non-
+        // boolean YAML type. Schema-invalid per any per-CRD OpenAPI
+        // schema that pins a `metadata.<toggle>` axis as a boolean leaf
+        // but tolerated here as None so the readback stays a total
+        // function. Pin the None-arm so a future refactor that reaches
+        // for `.as_bool().unwrap()` (which would panic on a scalar-
+        // integer or string axis-value) is a test-visible break, not a
+        // runtime regression at the first schema-invalid CR the reader
+        // sees. Peer of the sibling
+        // `kube_metadata_u64_field_returns_none_when_field_carries_non_u64_type`
+        // pin on the sub-`metadata.<field>` integer-arity accessor axis
+        // and of the sibling
+        // `kube_spec_bool_field_returns_none_when_field_carries_non_boolean_type`
+        // pin on the sub-`spec.<field>` boolean-arity accessor axis one
+        // axis over.
+        for non_bool in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(1u64.into()),
+            serde_yaml::Value::String("true".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key("pausedReconcile", non_bool.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_metadata_bool_field(&value, "pausedReconcile"),
+                None,
+                "kube_metadata_bool_field must return None when \
+                 metadata.pausedReconcile carries a non-boolean YAML \
+                 type ({non_bool:?}) — the trailing `.as_bool()` shape \
+                 gate short-circuits here, and every routed caller \
+                 depends on that None-arm to keep the readback total \
+                 (YAML's `1` is a Number and `\"true\"` is a String per \
+                 serde_yaml's strict shape-gate posture, not truthy \
+                 Bools)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_bool_field_composes_on_lifted_kube_metadata_field_accessor() {
+        // Composition pin: the composed accessor's body IS
+        // `kube_metadata_field(value, field).and_then(|v| v.as_bool())`
+        // — the composed scalar-arity accessor stays load-bearing, this
+        // boolean-arity accessor stands one abstraction step above it
+        // (folding the trailing `.as_bool()` shape-gate closure). Pin
+        // the delegation-shape byte-for-byte across two representative
+        // sub-field axis-keys so a future refactor that bypasses
+        // [`kube_metadata_field`] (a private inline
+        // `.get(KUBE_KEY_METADATA).and_then(|m| m.as_mapping())
+        // .and_then(|m| m.get(field)).and_then(|n| n.as_bool())` chain
+        // that would silently drift on a future rebrand of the outer
+        // two-hop navigation) is a test-visible break. Peer of the
+        // sibling
+        // `kube_spec_bool_field_composes_on_lifted_kube_spec_field_accessor`
+        // composition pin on the sub-`spec.<field>` boolean-arity
+        // accessor axis and of the sibling
+        // `kube_metadata_u64_field_composes_on_lifted_kube_metadata_field_accessor`
+        // composition pin on the peer sub-`metadata.<field>` integer-
+        // arity accessor axis of the same `metadata:` sub-block.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key("pausedReconcile", serde_yaml::Value::Bool(true));
+        metadata.insert_str_key("finalizersPending", serde_yaml::Value::Bool(false));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in ["pausedReconcile", "finalizersPending"] {
+            let via_composed = kube_metadata_bool_field(&value, sub_field);
+            let via_delegation =
+                kube_metadata_field(&value, sub_field).and_then(serde_yaml::Value::as_bool);
+            assert_eq!(
+                via_composed, via_delegation,
+                "kube_metadata_bool_field(v, {sub_field:?}) must equal \
+                 the delegation-shape `kube_metadata_field(v, \
+                 {sub_field:?}).and_then(|v| v.as_bool())` — the \
+                 composition pin closes the drift surface where a \
+                 private inline bypass silently desynchronizes from \
+                 the underlying composed scalar-arity accessor's \
+                 contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_bool_field_matches_prior_inline_chain() {
+        // Cross-check the composed accessor's output byte-for-byte
+        // against the raw
+        // `value.get(KUBE_KEY_METADATA).and_then(|m|
+        // m.get(<FIELD>)).and_then(|n| n.as_bool())` three-hop chain
+        // every future routed per-CR `metadata.<field>` boolean-
+        // readback site would otherwise re-inline. Pin the byte-
+        // equivalence across a mix of matching and off-shape axis-keys
+        // (present-and-boolean, present-but-non-boolean, and absent) so
+        // the composed helper stays a drop-in replacement for every
+        // future routed site's prior two-line block regardless of which
+        // short-circuit arm each per-caller CR happens to carry.
+        // Mirrors the sibling `kube_spec_bool_field_matches_prior_inline_chain`
+        // pin one axis over on the composed sub-`spec.<field>` boolean-
+        // arity and of the sibling
+        // `kube_metadata_u64_field_matches_prior_inline_chain` pin on
+        // the peer integer-arity of the same `metadata:` sub-block.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key("pausedReconcile", serde_yaml::Value::Bool(true));
+        metadata.insert_str_key("finalizersPending", serde_yaml::Value::Bool(false));
+        // Off-shape axes route through the same composed helper — the
+        // present-key + wrong-shape arm's None-fold must also stay
+        // byte-identical to the inline chain, not just the present-and-
+        // correctly-typed arm.
+        metadata.insert_string(KUBE_KEY_NAME, "cart");
+        metadata.insert_str_key(KUBE_KEY_LABELS, {
+            let mut labels = serde_yaml::Mapping::new();
+            labels.insert_string("app", "cart");
+            serde_yaml::Value::Mapping(labels)
+        });
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for sub_field in [
+            "pausedReconcile",   // present-and-boolean arm (true)
+            "finalizersPending", // present-and-boolean arm (false)
+            KUBE_KEY_NAME,       // present-but-non-bool arm (String)
+            KUBE_KEY_LABELS,     // present-but-non-bool arm (Mapping)
+            "missing",           // absent arm
+        ] {
+            let via_helper = kube_metadata_bool_field(&value, sub_field);
+            let via_inline = value
+                .get(KUBE_KEY_METADATA)
+                .and_then(|m| m.get(sub_field))
+                .and_then(serde_yaml::Value::as_bool);
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_metadata_bool_field(v, {sub_field:?}) must yield \
+                 the same Option<bool> as the raw \
+                 `value.get(KUBE_KEY_METADATA).and_then(|m| \
+                 m.get({sub_field:?})).and_then(|n| n.as_bool())` chain \
+                 — otherwise every future routed per-CR sub-metadata-\
+                 field boolean-readback site drifts silently at test \
+                 time"
             );
         }
     }
