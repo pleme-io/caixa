@@ -21519,6 +21519,118 @@ pub fn kube_spec_spec_seq_field<'a>(
     kube_spec_spec_field(value, outer, inner).and_then(|v| v.as_sequence())
 }
 
+/// Read the nested `spec.<outer>.spec.<inner>` scalar-boolean on a K8s
+/// custom resource YAML document as `Option<bool>` — the composed
+/// scalar-boolean-arity peer that stands on the composed nested-spec-
+/// envelope-arity [`kube_spec_spec_field`] (18d3851) accessor, folding
+/// the trailing `.and_then(|v| v.as_bool())` shape-gate closure into the
+/// helper for callers that always want a boolean scalar at the innermost
+/// hop. Fifth-arity closure on the composed nested-`spec.<outer>.spec.<inner>`
+/// envelope family; sibling of the pre-existing raw-`&Value`
+/// [`kube_spec_spec_field`] (18d3851), string-scalar
+/// [`kube_spec_spec_str_field`] (32851e4), sub-mapping
+/// [`kube_spec_spec_map_field`] (94502e3), and sequence
+/// [`kube_spec_spec_seq_field`] (fc14e90) peers on the same composed
+/// nested-`spec:` envelope axis. Structural mirror of the sibling one-hop
+/// [`kube_spec_bool_field`] on the sub-`spec.<field>` axis and of the
+/// sibling one-hop [`kube_metadata_bool_field`] (f1bf0d8) on the sub-
+/// `metadata.<field>` axis: all three accessors fold a trailing
+/// `.as_bool()` shape-gate closure onto their axis's composed scalar-Value
+/// accessor primitive ([`kube_spec_spec_field`] here, [`kube_spec_field`]
+/// on the one-hop spec peer, [`kube_metadata_field`] on the metadata
+/// peer), all three stay parametric on the per-`<inner>` sub-field
+/// axis-key. Where [`kube_spec_spec_str_field`] closes the
+/// `spec.<outer>.spec.<inner>` string-scalar readback (the leaf-scalar-
+/// str arm), [`kube_spec_spec_map_field`] closes the sub-mapping readback
+/// (the nested-object arm), and [`kube_spec_spec_seq_field`] closes the
+/// sequence readback (the ordered-sub-block arm), this closes the
+/// `spec.<outer>.spec.<inner>` scalar-boolean readback (the leaf-toggle
+/// arm) — the sub-spec-envelope-carrying-CR boolean-toggle idiom the
+/// future Flux v2 `HelmRelease` `spec.chart.spec.reconcileStrategy` /
+/// `spec.chart.spec.interval`-flavoured operator-side reconcile toggle
+/// admits, the future Crossplane `Composition.spec.pipeline[].spec.<K>`
+/// per-step composed-CR boolean-gate navigation admits, and every future
+/// composed-nested-spec-envelope-carrying CR shape the M3.x + M4
+/// renderer set will materialize on the load-bearing
+/// `spec.<outer>.spec.<inner>` boolean-toggle axis.
+///
+/// Returns `None` on any of the seven short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// outer [`kube_spec`] outer-arm short-circuit), the outer `spec:`
+/// value is present but carries a non-Mapping YAML type (the outer
+/// [`kube_spec`] shape-gate short-circuit), the `<outer>` axis-key is
+/// absent from the outer `spec:` sub-mapping (the outer
+/// [`kube_spec_field`] trailing `Mapping::get` none-arm), the inner
+/// `spec:` block is absent on the `<outer>` sub-value (the inner
+/// [`kube_spec`] outer-arm short-circuit), the inner `spec:` value is
+/// present but carries a non-Mapping YAML type (the inner [`kube_spec`]
+/// shape-gate short-circuit), the `<inner>` axis-key is absent from the
+/// inner `spec:` sub-mapping (the inner [`kube_spec_field`] trailing
+/// `Mapping::get` none-arm), or the innermost `<inner>` value is present
+/// but carries a non-boolean YAML type (the trailing `.as_bool()` shape-
+/// gate short-circuit — a schema-invalid per-CR nested-sub-field type per
+/// the K8s apiserver's `OpenAPI` schema but tolerated here as `None` so
+/// the readback stays a total function, mirroring the sibling
+/// [`kube_spec_spec_str_field`] / [`kube_spec_spec_map_field`] /
+/// [`kube_spec_spec_seq_field`] posture). The returned `bool` is a
+/// fresh primitive value (booleans carry no underlying borrow the way
+/// the sibling string-arity accessor preserves) — the caller decides
+/// whether to `assert_eq!(_, Some(<expected>))` for a determinism pin,
+/// `.expect(...)` for a load-bearing toggle identity, or
+/// `.unwrap_or(<default>)` for a substrate-side default fallback.
+///
+/// The canonical two-line composition the routed caller would otherwise
+/// carry inline as
+///
+/// ```ignore
+/// kube_spec_spec_field(<value>, <OUTER>, <INNER>)
+///     .and_then(|v| v.as_bool())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<INNER>` sub-spec-envelope
+/// axis-key — the future Flux v2 `HelmRelease`
+/// `spec.chart.spec.reconcileStrategy`-flavoured toggle, the future
+/// Crossplane `Composition.spec.pipeline[].spec.<toggle>` boolean gate,
+/// every future composed-nested-spec-envelope-carrying CR shape the
+/// M3.x + M4 renderer set materializes on the load-bearing boolean-
+/// toggle axis) folds onto
+/// `kube_spec_spec_bool_field(<value>, <OUTER>, <INNER>)` — the
+/// `spec → as_mapping → get(<outer>) → spec → as_mapping →
+/// get(<inner>) → as_bool` walk happens once inside the helper, and
+/// the caller keeps its downstream idiom (`assert_eq!(...)`,
+/// `.expect(...)`, `.unwrap_or(false)`) unchanged — the lift closes
+/// the navigation surface, not the per-site error-handling posture.
+///
+/// Every future per-CR nested-`spec.<outer>.spec.<inner>` scalar-boolean
+/// readback (the future Flux v3 `HelmRelease` CRD split's per-CR
+/// nested-template toggle readback, the future Crossplane
+/// `Composition.spec.pipeline[].spec.<toggle>` per-step composed-CR
+/// boolean navigation, the future argo CD `Application.spec.source.spec
+/// .<toggle>` composed-source boolean navigation, every future test-
+/// side `spec.<outer>.spec.<inner>` boolean-toggle probe on a sub-spec-
+/// envelope-carrying CR shape the M3.x + M4 renderer set adds) reaches
+/// this same helper by construction — no per-consumer four-hop-plus-
+/// shape-gate chain re-inline, no per-consumer nested-`KUBE_KEY_SPEC`
+/// axis-key drift, no coordinated rewrite across every per-CR nested-
+/// boolean readback on a future K8s API-machinery rebrand of the
+/// nested `spec:` axis. Continues the composed-family closure toward
+/// the same six-arity structural coverage the one-hop sub-`spec.<field>`
+/// and `metadata.<field>` peer families reach at five arities (`{str,
+/// seq, map, bool, u64}`) plus the shape-agnostic existence-probe
+/// [`kube_has`] the value-level primitive family (23599) closes at
+/// its seventh arity.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_spec_spec_bool_field(
+    value: &serde_yaml::Value,
+    outer: &str,
+    inner: &str,
+) -> Option<bool> {
+    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_bool)
+}
+
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
@@ -56469,6 +56581,266 @@ spec:
                  must byte-equal the prior two-line \
                  `kube_spec_spec_field(v, {outer:?}, \
                  {inner:?}).and_then(|v| v.as_sequence())` composition \
+                 — the lift must stay a drop-in for every routed \
+                 caller's downstream continuation posture"
+            );
+        }
+    }
+
+    // ── kube_spec_spec_bool_field lift ──────────────────────────────
+
+    #[test]
+    fn kube_spec_spec_bool_field_reads_nested_boolean_scalar() {
+        // Load-bearing positive-path contract: given a CR body carrying
+        // a boolean-toggle leaf under the composed
+        // `spec.<outer>.spec.<inner>` envelope axis (the shape the
+        // future Flux v2 `HelmRelease` `spec.chart.spec.<toggle>`
+        // operator-side reconcile-toggle materializes and that every
+        // composed-nested-spec-envelope-carrying CR shape M3.x + M4
+        // renderer additions will materialize on the load-bearing
+        // boolean-toggle axis), the composed four-hop-plus-shape-gate
+        // nested-`spec:` `_spec_spec_bool_field` accessor returns the
+        // innermost `<inner>` `bool` — the actual leaf value the caller
+        // decides against.
+        let mut chart_spec = serde_yaml::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Bool(true));
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            Some(true),
+            "kube_spec_spec_bool_field must read the nested \
+             `spec.<outer>.spec.<inner>` boolean scalar verbatim from \
+             the composed nested-`spec:` envelope axis — the routed \
+             test-side toggle-presence pins reach through this axis"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_bool_field_returns_none_on_outer_short_circuit_arms() {
+        // Fold-through contract on the three outer arms
+        // [`kube_spec_spec_field`] already closes on the outer `spec:`
+        // hop: any outer short-circuit must collapse the composed helper
+        // to `None` too, so the caller's downstream `.expect(...)` /
+        // `.unwrap_or(<default>)` continuation never mis-fires on a
+        // bad-shape outer arm.
+
+        // Outer arm 1: no top-level `spec:` sub-block.
+        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_spec_spec_bool_field(&bare, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_bool_field must short-circuit to None when \
+             the top-level `spec:` sub-block is absent — the outer \
+             kube_spec_field hop's missing-spec arm folds through"
+        );
+
+        // Outer arm 2: `spec:` present but non-Mapping YAML type.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_SPEC,
+            serde_yaml::Value::String("scalar-spec".into()),
+        );
+        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_spec_bool_field(&scalar_spec, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_bool_field must short-circuit to None when \
+             the outer `spec:` value carries a non-Mapping YAML type — \
+             the outer kube_spec shape-gate short-circuit folds through"
+        );
+
+        // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
+        // key absent.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_string(KUBE_KEY_NAME, "not-chart");
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let no_outer = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_spec_bool_field(&no_outer, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_bool_field must short-circuit to None when \
+             the `<outer>` axis-key is absent from the outer `spec:` \
+             sub-mapping — the outer kube_spec_field's trailing \
+             `Mapping::get` none-arm folds through"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_bool_field_returns_none_on_inner_short_circuit_arms() {
+        // Fold-through contract on the three inner arms
+        // [`kube_spec_spec_field`] closes on the inner `spec:` hop: any
+        // inner short-circuit (inner `spec:` absent, inner `spec:` non-
+        // Mapping, inner `<inner>` axis-key absent) must collapse the
+        // composed helper to `None` too — the inner `kube_spec_field`
+        // hop's own short-circuit folds through the composed helper
+        // unchanged.
+
+        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(FLUX_KEY_CHART, chart_value);
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            serde_yaml::Value::Mapping(cr)
+        };
+
+        // Inner arm 1: outer `<outer>` sub-value carries no inner
+        // `spec:` sub-block.
+        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        assert_eq!(
+            kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_bool_field must short-circuit to None when \
+             the inner `spec:` sub-block is absent on the outer \
+             `<outer>` sub-value — the inner kube_spec_field hop's \
+             missing-spec arm folds through"
+        );
+
+        // Inner arm 2: outer `<outer>` sub-value carries an inner
+        // `spec:` axis-key that is present-but-non-Mapping (Bool here —
+        // a shape that would trivially fold through the trailing
+        // `.as_bool()` gate if the intermediate `spec:` Mapping shape-
+        // gate did not correctly reject it first).
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Bool(true));
+        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        assert_eq!(
+            kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_bool_field must short-circuit to None when \
+             the inner `spec:` value is present but carries a non-\
+             Mapping YAML type — the inner kube_spec shape-gate short-\
+             circuit folds through even when the outer type happens to \
+             be a Bool the trailing `.as_bool()` gate would otherwise \
+             accept"
+        );
+
+        // Inner arm 3: outer `<outer>` sub-value carries an inner
+        // `spec:` Mapping but `<inner>` axis-key absent from the inner
+        // sub-mapping.
+        let mut chart_spec = serde_yaml::Mapping::new();
+        chart_spec.insert_string(KUBE_KEY_NAME, "not-source-ref");
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        assert_eq!(
+            kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_bool_field must short-circuit to None when \
+             the `<inner>` axis-key is absent from the inner `spec:` \
+             sub-mapping — the inner kube_spec_field's trailing \
+             `Mapping::get` none-arm folds through"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_bool_field_returns_none_on_non_bool_leaf_arm() {
+        // Fold-through contract on the trailing `.as_bool()` shape-gate
+        // short-circuit closure — the innermost `<inner>` value is
+        // present at the composed nested-`spec.<outer>.spec.<inner>`
+        // axis but carries a non-boolean YAML type (a schema-invalid
+        // per-CR nested-sub-field type per the K8s apiserver's
+        // `OpenAPI` schema, tolerated here as `None` so the readback
+        // stays a total function). The lift folds the trailing shape
+        // gate onto the helper so this arm collapses to `None` inside
+        // the helper rather than at every routed caller's
+        // `.and_then(|v| v.as_bool())` trailer.
+        let mut chart_spec = serde_yaml::Mapping::new();
+        // Innermost `<inner>` present but as a String YAML type rather
+        // than a Bool — the trailing `.as_bool()` shape-gate short-
+        // circuit arm.
+        chart_spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::String("not-a-bool".into()),
+        );
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_bool_field must short-circuit to None when \
+             the innermost `<inner>` value is present but carries a \
+             non-boolean YAML type — the trailing `.as_bool()` shape-\
+             gate closure folded into the helper's body must swallow \
+             the schema-invalid arm so the caller's downstream \
+             `.expect(...)` never unwraps on a bad-shape sub-field"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_bool_field_matches_prior_inline_two_line_composition() {
+        // Byte-equivalence pin: the composed boolean helper must
+        // resolve exactly the same `Option<bool>` as the prior two-
+        // line `kube_spec_spec_field(v, OUTER, INNER).and_then(|v|
+        // v.as_bool())` inline composition every future routed caller
+        // would otherwise carry. A drift between the helper's return
+        // and the two-line inline composition would silently regress
+        // every downstream continuation (`assert_eq!(...)`,
+        // `.expect(...)`, `.unwrap_or(false)`). Structural mirror of
+        // the sibling `kube_spec_spec_seq_field_matches_prior_inline_\
+        // two_line_composition` one arity over on the sequence tail
+        // and `kube_spec_spec_map_field_matches_prior_inline_two_line_\
+        // composition` two arities over on the sub-mapping tail of the
+        // same composed nested-`spec:` envelope axis.
+        let mut chart_spec = serde_yaml::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Bool(false));
+        // Sibling axis-key: a non-Bool innermost value on a peer
+        // axis-key so the same fixture drives the trailing
+        // `.as_bool()` short-circuit arm through the byte-equivalence
+        // loop.
+        chart_spec.insert_str_key(
+            FLUX_HELMCHART_TEMPLATE_KEY_CHART,
+            serde_yaml::Value::String("charts/hello".into()),
+        );
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so
+        // the same fixture drives the inner-key-absent arm through
+        // the outer-key-varying axis.
+        chart.insert_string(KUBE_KEY_NAME, "chart-header");
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for (outer, inner) in [
+            // Load-bearing positive-path axis: the innermost value is
+            // a Bool (specifically `false` — the shape a substrate-
+            // side default fallback via `.unwrap_or(true)` would
+            // silently miss if the helper drifted).
+            (FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            // Non-Bool leaf arm on the sibling
+            // `<FLUX_HELMCHART_TEMPLATE_KEY_CHART>` axis-key (string
+            // scalar leaf).
+            (FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
+            // Inner-key-absent arm.
+            (FLUX_KEY_CHART, "never-inserted-inner"),
+            // Outer-key-absent arm.
+            ("never-inserted-outer", FLUX_KEY_SOURCE_REF),
+        ] {
+            let via_composed = kube_spec_spec_bool_field(&value, outer, inner);
+            let via_inline =
+                kube_spec_spec_field(&value, outer, inner).and_then(serde_yaml::Value::as_bool);
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_spec_spec_bool_field(v, {outer:?}, {inner:?}) \
+                 must byte-equal the prior two-line \
+                 `kube_spec_spec_field(v, {outer:?}, \
+                 {inner:?}).and_then(|v| v.as_bool())` composition \
                  — the lift must stay a drop-in for every routed \
                  caller's downstream continuation posture"
             );
