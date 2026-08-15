@@ -1000,7 +1000,8 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_CALL, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR,
         M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
-        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, kube_str, kube_u64, mapping_string_keys,
+        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, kube_has, kube_str, kube_u64,
+        mapping_string_keys,
     };
     use std::path::PathBuf;
 
@@ -1154,9 +1155,9 @@ spec:
             cu_block.get(HELM_VALUES_KEY_ENABLED),
             Some(&serde_yaml::Value::Bool(false))
         );
-        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
-        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());
-        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some());
+        assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_MODULE));
+        assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_TRIGGER));
+        assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_CAPABILITIES));
     }
 
     #[test]
@@ -1183,7 +1184,7 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         assert!(
-            parsed.get("acme-computeunit").is_some(),
+            kube_has(&parsed, "acme-computeunit"),
             "values wrap key must follow opts.library_name override \
              (got top-level keys: {keys:?})",
             keys = parsed
@@ -1192,7 +1193,7 @@ spec:
                 .unwrap_or_default()
         );
         assert!(
-            parsed.get(DEFAULT_LIBRARY_NAME).is_none(),
+            !kube_has(&parsed, DEFAULT_LIBRARY_NAME),
             "values wrap key must not retain the default `{DEFAULT_LIBRARY_NAME}` literal \
              when opts.library_name overrides it"
         );
@@ -1201,9 +1202,9 @@ spec:
             cu_block.get(HELM_VALUES_KEY_ENABLED),
             Some(&serde_yaml::Value::Bool(false))
         );
-        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
-        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());
-        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some());
+        assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_MODULE));
+        assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_TRIGGER));
+        assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_CAPABILITIES));
     }
 
     #[test]
@@ -1490,7 +1491,7 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
-        assert!(cu_block.get(M2_KEY_UPGRADE_FROM).is_some());
+        assert!(kube_has(cu_block, M2_KEY_UPGRADE_FROM));
     }
 
     #[test]
@@ -1505,9 +1506,9 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
-        assert!(cu_block.get(M2_KEY_LIMITS).is_none());
-        assert!(cu_block.get(M2_KEY_BEHAVIOR).is_none());
-        assert!(cu_block.get(M2_KEY_UPGRADE_FROM).is_none());
+        assert!(!kube_has(cu_block, M2_KEY_LIMITS));
+        assert!(!kube_has(cu_block, M2_KEY_BEHAVIOR));
+        assert!(!kube_has(cu_block, M2_KEY_UPGRADE_FROM));
     }
 
     #[test]

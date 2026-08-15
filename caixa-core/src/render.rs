@@ -23418,6 +23418,96 @@ pub fn kube_field<'a, R: KubeReceiver + ?Sized>(
     recv.field_value(field)
 }
 
+/// Read whether a sub-`<field>` axis-key is present under an arbitrary
+/// [`KubeReceiver`] as `bool` — the value-level existence-probe
+/// primitive that folds the two-call `.get(<field>).is_some()` shape-
+/// agnostic navigation into a single helper call. Existence-probe peer
+/// of the value-level shape-gated quintet ([`kube_str`], [`kube_u64`],
+/// [`kube_bool`], [`kube_seq`], [`kube_map`]) and raw-`&Value` accessor
+/// [`kube_field`] on the same value-level primitive family: where those
+/// six close each shape-gate arm on the nested `<field>` axis with an
+/// `Option<T>` return the caller then shape-gates further, this
+/// accessor closes the shape-agnostic existence-probe arm with a `bool`
+/// return the caller drops straight into an `assert!` / `if` predicate,
+/// so every routed test-side per-nested-mapping `assert!(recv.get
+/// (<FIELD>).is_some())` and `assert!(recv.get(<FIELD>).is_none())`
+/// existence-probe site now reaches through the same one-line dispatch
+/// the shape-gated arities already do. The seventh arity closure on
+/// the value-level primitive family — sibling to the sixth raw-`&Value`
+/// arity ([`kube_field`]) at the shape-agnostic altitude, one step
+/// further out on the "no shape gate" axis where the return-shape
+/// drops the borrow entirely and yields a bool.
+///
+/// Sealed [`KubeReceiver`]-generic like the shape-gated quintet and the
+/// raw-`&Value` accessor the [`KubeReceiver`] sealed trait (7a87ffe)
+/// already closed the receiver-arm axis for — both `&Value` (a nested-
+/// mapping bracket returned from [`kube_spec_seq_first`] /
+/// [`kube_seq_first`] / an outer [`kube_field`] hop) and `&Mapping`
+/// (a [`kube_map`] / [`kube_spec`] / [`kube_metadata`] hop that
+/// returned a sub-mapping, a [`placement_blocks`]-style per-entry
+/// `&Mapping` element) reach the same one-line dispatch through the
+/// trait's [`field_value`](KubeReceiver::field_value) method.
+///
+/// Returns `true` iff the receiver carries the requested `<field>`
+/// axis-key with any value (including [`serde_yaml::Value::Null`] —
+/// [`serde_yaml::Mapping::get`] returns `Some(&Value::Null)` for an
+/// explicitly-null key, which this predicate reports present, matching
+/// the raw `.get(<field>).is_some()` semantic bit-for-bit).
+/// [`serde_yaml::Value::get`] returns `None` on scalar arms (string,
+/// bool, number, null) that expose no per-key lookup, which this
+/// predicate reports absent — again matching the raw semantic.
+///
+/// The canonical shape ~36 test-side existence-probe re-inline sites
+/// across [`caixa-mesh`][mesh], [`caixa-flux`][flux], and
+/// [`caixa-helm`][helm] previously carried inline as the two-call
+/// composition
+///
+/// ```ignore
+/// <recv>.get(<FIELD>).is_some()  // or .is_none()
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` sub-field axis-
+/// key — [`CILIUM_KEY_HTTP`] on the per-`toPorts[]` L7-HTTP-rule-list
+/// existence probe, [`KUBE_KEY_TYPE`] on the per-`HTTPRouteMatch`
+/// `path.type` discriminator existence probe, [`M3_KEY_PLACEMENT`] on
+/// the per-programs-entry `placement:` sub-block existence probe,
+/// [`M3_PLACEMENT_KEY_AFFINITY`] / [`M3_PLACEMENT_KEY_SHARD_KEY`] on
+/// the omit-when-unset absence probes, [`GATEWAY_API_KEY_TIMEOUTS`] /
+/// [`GATEWAY_API_KEY_RETRY`] on the omit-when-`:politicas`-unset
+/// absence probes, [`CILIUM_KEY_AUTHENTICATION`] on the omit-when-
+/// `:mtls-required`-unset absence probe, [`M2_KEY_LIMITS`] /
+/// [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`] on the omit-when-
+/// unset M2 overlay absence probes, [`COMPUTEUNIT_SPEC_KEY_MODULE`] /
+/// [`COMPUTEUNIT_SPEC_KEY_TRIGGER`] / [`COMPUTEUNIT_SPEC_KEY_CAPABILITIES`]
+/// on the always-present `ComputeUnit` spec sub-block presence probes).
+/// After this lift every routed consumer folds the two-call navigation
+/// onto `kube_has(<recv>, <FIELD>)` (or `!kube_has(<recv>, <FIELD>)`
+/// for the absence arm) — the two-call `.get → .is_some` walk happens
+/// once inside the helper, and the caller keeps its downstream posture
+/// (`assert!(_, "<why>")`, `if _ { ... }`) unchanged.
+///
+/// Every future shape-agnostic existence probe the M3.x + M4 renderer
+/// set materializes (per-`:politicas` future `CiliumClusterwideEnvoy
+/// Config` sub-block presence probes, the `app-operator`'s per-
+/// Aplicacao materializer's per-`spec.<sub-block>` presence probes,
+/// per-Aplicacao future `spec.entrada.tls:` overlay absence probes,
+/// every future overlay omit-when-unset absence probe) reaches this
+/// one helper by construction. No per-consumer two-call re-inline; no
+/// coordinated rewrite across every existence-probe site on a future
+/// [`serde_yaml`] surface rebrand or a future [`KubeReceiver`]
+/// extension. Closes the value-level primitive family at the seventh
+/// principal arity — shape-agnostic existence-probe via `kube_has` —
+/// sibling to the six shape-gated arities that partition the K8s
+/// apiserver `OpenAPI` schema's shape-gate arms.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_has<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> bool {
+    recv.field_value(field).is_some()
+}
+
 /// Read a sub-`<field>[]` YAML sequence nested one hop under an
 /// arbitrary `&serde_yaml::Value` mapping receiver as
 /// `Option<&serde_yaml::Sequence>` — the value-level two-hop navigation
@@ -55016,6 +55106,148 @@ spec:
              `&Value` arity gates only on the field-existence axis, \
              not the underlying YAML shape"
         );
+    }
+
+    #[test]
+    fn kube_has_matches_prior_inline_two_call_get_is_some_chain() {
+        // Equivalence pin: [`kube_has`] on either receiver-arm
+        // (`&Value`, `&Mapping`) must yield the bool the prior two-call
+        // inline `.get(<field>).is_some()` navigation returns — the
+        // drop-in shape the ~36 routed test-side existence-probe
+        // re-inline sites in [`caixa-mesh`], [`caixa-flux`], and
+        // [`caixa-helm`] fold onto after this lift. Pins the
+        // equivalence at both the present-key arm (any of the five
+        // underlying YAML shapes — the predicate stays shape-agnostic)
+        // and the absent-key arm, on both receiver arms.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        m.insert_str_key(
+            KUBE_KEY_PORT,
+            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+        );
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        m.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Null);
+        let value = serde_yaml::Value::Mapping(m.clone());
+
+        for field in [
+            KUBE_KEY_NAME,                // String scalar arm
+            KUBE_KEY_PORT,                // Number scalar arm
+            FLUX_KUSTOMIZATION_KEY_PRUNE, // Bool scalar arm
+            KUBE_KEY_LABELS,              // Null arm — present-with-null must probe as present
+        ] {
+            assert!(
+                kube_has(&value, field),
+                "kube_has must report present on the &Value receiver \
+                 arm at axis-key {field:?} — including the explicit-\
+                 null arm where the raw `.get(<field>).is_some()` \
+                 returns true bit-for-bit"
+            );
+            assert!(
+                kube_has(&m, field),
+                "kube_has must report present on the &Mapping receiver \
+                 arm at axis-key {field:?} — same shape-agnostic \
+                 existence-probe semantic as the &Value arm"
+            );
+        }
+
+        // Absent-key arm: both receivers must report absent.
+        assert!(
+            !kube_has(&value, "never-inserted-axis"),
+            "kube_has must report absent on the &Value receiver arm \
+             for a never-inserted axis-key — the trailing \
+             `Mapping::get` miss folds through as false"
+        );
+        assert!(
+            !kube_has(&m, "never-inserted-axis"),
+            "kube_has must report absent on the &Mapping receiver arm \
+             for a never-inserted axis-key — same one-hop `get` miss \
+             the &Value arm carries"
+        );
+
+        // Byte-equal pin against the raw two-call chain, at both arms.
+        for field in [KUBE_KEY_NAME, KUBE_KEY_PORT, "never-inserted-axis"] {
+            assert_eq!(
+                kube_has(&value, field),
+                value.get(field).is_some(),
+                "kube_has(&Value, {field:?}) must byte-equal the raw \
+                 two-call `.get({field:?}).is_some()` chain — the \
+                 drop-in the ~36 test-side existence-probe re-inline \
+                 sites fold onto"
+            );
+            assert_eq!(
+                kube_has(&m, field),
+                m.get(field).is_some(),
+                "kube_has(&Mapping, {field:?}) must byte-equal the raw \
+                 two-call `.get({field:?}).is_some()` chain — same \
+                 drop-in equivalence on the sibling receiver arm"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_has_short_circuits_on_non_mapping_receiver() {
+        // Short-circuit arm closure pin: [`kube_has`] on a scalar-arm
+        // receiver ([`serde_yaml::Value::String`] / [`Bool`] /
+        // [`Number`] / [`Null`]) returns `false` — the underlying
+        // inherent [`serde_yaml::Value::get`] short-circuits on scalar
+        // receivers that expose no per-key lookup, and the sibling
+        // trait-dispatch through [`KubeReceiver::field_value`] carries
+        // that semantic through to the trailing `.is_some()` probe.
+        // Peer pin to [`kube_field_short_circuits_on_non_mapping_receiver`]
+        // one arity over on the same value-level primitive family.
+        assert!(
+            !kube_has(&serde_yaml::Value::String("scalar".into()), KUBE_KEY_NAME),
+            "kube_has on a Value::String receiver must return false — \
+             the scalar arm exposes no per-key lookup surface"
+        );
+        assert!(
+            !kube_has(&serde_yaml::Value::Bool(true), KUBE_KEY_NAME),
+            "kube_has on a Value::Bool receiver must return false — \
+             the scalar arm exposes no per-key lookup surface"
+        );
+        assert!(
+            !kube_has(&serde_yaml::Value::Null, KUBE_KEY_NAME),
+            "kube_has on a Value::Null receiver must return false — \
+             the scalar arm exposes no per-key lookup surface"
+        );
+        assert!(
+            !kube_has(&serde_yaml::Mapping::new(), KUBE_KEY_NAME),
+            "kube_has on an empty Mapping receiver must return false — \
+             the absent-key arm short-circuits at the underlying \
+             `Mapping::get` miss"
+        );
+    }
+
+    #[test]
+    fn kube_has_recomposes_on_kube_field_at_the_existence_probe_arity() {
+        // Recomposition pin: `kube_has(r, F)` is semantically
+        // `kube_field(r, F).is_some()` at the shape-agnostic existence-
+        // probe arity — the seventh arity that sits alongside the six
+        // shape-gated peers on the value-level primitive family. Pin
+        // the equivalence so a future divergence between the bool-
+        // returning helper and its `Option<&Value>`-returning sibling
+        // surfaces here rather than at consumer build time.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let value = serde_yaml::Value::Mapping(m.clone());
+        for field in [KUBE_KEY_NAME, "never-inserted-axis"] {
+            assert_eq!(
+                kube_has(&value, field),
+                kube_field(&value, field).is_some(),
+                "kube_has(&Value, {field:?}) must recompose as \
+                 kube_field(...).is_some() — the shape-agnostic \
+                 existence-probe arity folds through the raw-`&Value` \
+                 arity's one-hop pass-through with a trailing bool \
+                 gate"
+            );
+            assert_eq!(
+                kube_has(&m, field),
+                kube_field(&m, field).is_some(),
+                "kube_has(&Mapping, {field:?}) must recompose on the \
+                 sibling &Mapping receiver arm too — the trait-\
+                 dispatch axis stays closed under the recomposition"
+            );
+        }
     }
 
     #[test]
