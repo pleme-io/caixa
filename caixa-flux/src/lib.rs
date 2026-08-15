@@ -2429,6 +2429,39 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
     ])
 }
 
+/// Composed [`ClusterBundleOpts::for_caixa`] + [`cluster_bundle`] on the
+/// single-`&Caixa`-axis. Threads one `&Caixa` binding through both the
+/// per-cluster opts-derivation half (`ClusterBundleOpts::for_caixa` reads
+/// `:repositorio` + `:versao` off it to seed `git_url` + `git_ref`) and
+/// the per-cluster bundle-emit half (`cluster_bundle` reads `:nome` off
+/// it to seed the FluxCD trio's shared `metadata.name` + the
+/// `flux_kustomization_source_subtree` composer's per-caixa sub-tree
+/// scalar), so both halves consult one `&Caixa` binding by construction
+/// and the two-arg `(caixa, cluster)` composed arity replaces the manual
+/// two-step `let opts = ClusterBundleOpts::for_caixa(caixa, cluster); let
+/// files = cluster_bundle(caixa, &opts)?;` boilerplate every caller ran
+/// (43 sites in this crate's test module alone before this lift). Prior
+/// to the lift, the manual two-step admitted a latent per-caller drift
+/// hazard: nothing at the type level constrained the two `&Caixa` bindings
+/// (the `for_caixa` receiver and the `cluster_bundle` receiver) to
+/// resolve to the same `&Caixa`, so a per-caller edit that rebound one
+/// half without the other silently produced a per-cluster bundle whose
+/// `git_url` / `git_ref` derived off caixa A and whose
+/// `metadata.name`/sub-tree scalar derived off caixa B — the canonical
+/// "two dispatches on one primitive, wired through two separate bindings"
+/// footgun this composed arity closes. Byte-equivalent to the manual
+/// composition by construction: this fn's body is `cluster_bundle(caixa,
+/// &ClusterBundleOpts::for_caixa(caixa, cluster))`, pinned by the drift-
+/// detection test
+/// [`tests::cluster_bundle_for_caixa_byte_matches_manual_composition`].
+pub fn cluster_bundle_for_caixa(
+    caixa: &Caixa,
+    cluster: impl Into<String>,
+) -> Result<Vec<BundleFile>, Error> {
+    let opts = ClusterBundleOpts::for_caixa(caixa, cluster);
+    cluster_bundle(caixa, &opts)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2734,6 +2767,56 @@ spec:
     }
 
     #[test]
+    fn cluster_bundle_for_caixa_byte_matches_manual_composition() {
+        // Byte-parity pin: the composed
+        // [`crate::cluster_bundle_for_caixa`] `(caixa, cluster)` helper
+        // must render byte-identically to the manual two-step
+        // `let opts = ClusterBundleOpts::for_caixa(caixa, cluster);
+        //  let files = cluster_bundle(caixa, &opts)?;` composition
+        // every caller ran before the lift. Guards the paired-site
+        // convergence just applied across the caixa-flux tests module
+        // (43 sites the sole per-`&Caixa`-axis composed helper closes):
+        // a future implementation of [`crate::cluster_bundle_for_caixa`]
+        // that threaded a differently-seeded `ClusterBundleOpts` through
+        // its internal `cluster_bundle` call (a per-cluster opts-overlay
+        // the operator side pins through a future scoped slot, an M4
+        // per-cluster namespace-qualified default overlay, the future
+        // `:git-url` / `:git-ref` per-caixa override the substrate could
+        // hoist into the composed helper's arity) would silently split
+        // the rendered per-cluster bundle from the emit shape every
+        // pre-existing test-side fixture-navigation site pins against
+        // — this pin surfaces the drift at build-time on this test's
+        // failure rather than at a downstream `kubectl apply` audit
+        // over the fleet. Peer to the caixa-core-side per-composed-
+        // navigator byte-equivalence pin discipline the recent
+        // 43b6575 / f17b445 [`parse_yaml_at_path`] +
+        // [`parse_yaml_at_path_as`] composed-navigator lifts landed
+        // on their sibling caller-facing composed arities.
+        let caixa = sample_caixa();
+        let composed = cluster_bundle_for_caixa(&caixa, "rio").expect(
+            "composed cluster_bundle_for_caixa must render on the shared \
+             per-test sample_caixa() fixture the manual two-step \
+             composition already renders on",
+        );
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let manual = cluster_bundle(&caixa, &opts).expect(
+            "manual `cluster_bundle(caixa, &ClusterBundleOpts::for_caixa(caixa, cluster))` \
+             composition must render on the shared per-test sample_caixa() fixture",
+        );
+        assert_eq!(
+            composed, manual,
+            "cluster_bundle_for_caixa must render byte-identically to \
+             the manual `cluster_bundle(caixa, &ClusterBundleOpts::for_caixa(caixa, cluster))` \
+             composition — drift on this axis silently splits the \
+             composed helper's per-cluster emit shape from the \
+             pre-existing manual two-step every caller previously ran, \
+             invalidating every caller-facing fixture-navigation site \
+             the caixa-flux tests module pins against the composed \
+             helper's return"
+        );
+    }
+
+    #[test]
     fn flux_helmrelease_remediation_retries_default_re_export_points_at_caixa_core_canonical() {
         // The renderer's `FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`
         // was lifted from the two production-code duplicated inline
@@ -3027,8 +3110,7 @@ spec:
         // pins the rendered upgrade-path scalar agrees with the lifted
         // default, this test pins the rendered install-path scalar
         // agrees with the same.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let install_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_INSTALL)
             .and_then(|i| {
@@ -3083,8 +3165,7 @@ spec:
         // [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
         // pin on the install-path retry-cap sibling axis — closing the
         // per-path retry-cap sweep the caixa-core lift established.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let upgrade_retries = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
             .and_then(|u| {
@@ -3144,8 +3225,7 @@ spec:
         // `spec.upgrade.remediation.{retries, remediateLastFailure}` leaf-
         // scalar-key pair the substrate seeds under the upgrade-path per-
         // CR remediation sub-container.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let remediate_last_failure = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_UPGRADE)
             .and_then(|u| {
@@ -3302,8 +3382,7 @@ spec:
         // `spec.{install.createNamespace, upgrade.remediation.remediateLastFailure}`
         // per-CR phase-specific toggle leaf-scalar-key pair the substrate
         // seeds under mirror-symmetric parent-container-axis-keys.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let create_namespace = kube_spec_field(&parsed, FLUX_HELMRELEASE_KEY_INSTALL)
             .and_then(|i| kube_bool(i, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE))
@@ -3524,8 +3603,7 @@ spec:
         // `HelmRelease`-CR spec surface onto the co-resident per-
         // `Kustomization`-CR spec surface at the mirror-symmetric top-
         // level `spec.prune` position.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let prune = kube_spec_bool_field(&parsed, FLUX_KUSTOMIZATION_KEY_PRUNE).expect(
             "spec.prune boolean scalar present; drift on this axis \
@@ -3929,8 +4007,7 @@ spec:
         // sub-tree pointer and garbage-collection-toggle onto the co-
         // resident reconcile wall-clock cap at the mirror-symmetric
         // top-level `spec.timeout` position.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let timeout = kube_spec_str_field(&parsed, FLUX_KUSTOMIZATION_KEY_TIMEOUT).expect(
             "spec.timeout string scalar present; drift on this axis \
@@ -4830,8 +4907,7 @@ spec:
 
     #[test]
     fn cluster_bundle_three_files() {
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         assert_eq!(files.len(), 3);
         let names: Vec<_> = files
             .iter()
@@ -4898,8 +4974,7 @@ spec:
         // A regression that re-introduces an inline literal surfaces
         // as a key mismatch (the inline literal would survive, but
         // the lifted-constant-keyed assertion would fail).
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let values =
             kube_spec_map_field(&parsed, FLUX_KEY_VALUES).expect("spec.values mapping present");
@@ -4938,8 +5013,7 @@ spec:
         // `default_servico_port_constant_pins_canonical_8080_literal`
         // bridge-arm pin in caixa-core.
         assert_eq!(DEFAULT_LIBRARY_NAME, "pleme-computeunit");
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME).unwrap();
         assert!(
             hr.contents.contains("pleme-computeunit:"),
@@ -5033,8 +5107,7 @@ spec:
         // axis surfaces here as a key mismatch (the inline literal
         // would survive, but the lifted-constant-keyed assertion would
         // fail when the lift's value changes).
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         // Route the per-`kustomization.yaml` `metadata.namespace`
         // readback through the substrate-primitive [`kube_namespace`]
@@ -5076,8 +5149,7 @@ spec:
         // `default_servico_port_constant_pins_canonical_8080_literal`
         // bridge-arm pin in caixa-core.
         assert_eq!(DEFAULT_FLUX_SYSTEM_NAMESPACE, "flux-system");
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME).unwrap();
         assert!(
             kust.contents.contains("namespace: flux-system\n"),
@@ -5110,8 +5182,7 @@ spec:
         // 'helm.toolkit.fluxcd.io/v2beta2'" error. Peer with
         // [`cluster_bundle_kustomization_uses_lifted_flux_system_namespace`]
         // on the sibling [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] lift.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         assert!(
             kube_api_version_is(&parsed, FLUX_HELMRELEASE_API_VERSION),
@@ -5135,8 +5206,7 @@ spec:
         // have silently dangled the health-check (apply-side: the per-
         // resource health-gate never resolves, the parent Kustomization
         // sits perpetually in `Reconciling`).
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("kustomization.yaml spec.healthChecks present");
@@ -5172,8 +5242,7 @@ spec:
         // future Flux v3 migration of the lifted constant surfaces here
         // as a coordinated edit-point.
         assert_eq!(FLUX_HELMRELEASE_API_VERSION, "helm.toolkit.fluxcd.io/v2");
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME).unwrap();
         assert!(
             hr.contents
@@ -5381,8 +5450,7 @@ spec:
         // error. Peer with
         // [`cluster_bundle_helmrelease_uses_lifted_flux_api_version`] on
         // the sibling [`FLUX_HELMRELEASE_API_VERSION`] lift.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         assert!(
             kube_api_version_is(&parsed, FLUX_GITREPOSITORY_API_VERSION),
@@ -5410,8 +5478,7 @@ spec:
             FLUX_GITREPOSITORY_API_VERSION,
             "source.toolkit.fluxcd.io/v1"
         );
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME).unwrap();
         assert!(
             gr.contents
@@ -5467,8 +5534,7 @@ spec:
         // [`cluster_bundle_helmrelease_uses_lifted_flux_api_version`] /
         // [`cluster_bundle_gitrepository_uses_lifted_flux_api_version`]
         // on the sibling Flux-CRD-axis lifts.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         assert!(
             kube_api_version_is(&parsed, FLUX_KUSTOMIZATION_API_VERSION),
@@ -5498,8 +5564,7 @@ spec:
             FLUX_KUSTOMIZATION_API_VERSION,
             "kustomize.toolkit.fluxcd.io/v1"
         );
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME).unwrap();
         assert!(
             kz.contents
@@ -5541,8 +5606,7 @@ spec:
         // on the sibling per-CR `.get(KUBE_KEY_API_VERSION)` retrieval-
         // side pins one level below the raw-byte label-axis this pin
         // gates.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let label_prefix = format!("{KUBE_KEY_API_VERSION}: ");
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
@@ -5600,8 +5664,7 @@ spec:
         // discriminator-half's raw-byte label position, so the two
         // halves of the tuple's label axes both consume the same
         // substrate-owned `&'static str` by construction.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let label_prefix = format!("{KUBE_KEY_KIND}: ");
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
@@ -5660,8 +5723,7 @@ spec:
         // the sibling ObjectMeta-block-scope label position, so the
         // three top-level K8s-CR body-block label axes all consume
         // the same substrate-owned `&'static str`s by construction.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let label_prefix = format!("{KUBE_KEY_METADATA}:");
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
@@ -5731,8 +5793,7 @@ spec:
         // every top-level K8s-CR body-block label position across the
         // whole `cluster_bundle` render surface consumes the same
         // substrate-owned `&'static str`s by construction.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let label_prefix = format!("{KUBE_KEY_SPEC}:");
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
@@ -5803,8 +5864,7 @@ spec:
         // navigates, so every `namespace:` label position across the
         // whole `cluster_bundle` render surface consumes the same
         // substrate-owned `&'static str` by construction.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let label_prefix = format!("{KUBE_KEY_NAMESPACE}:");
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
@@ -5869,8 +5929,7 @@ spec:
         // navigates, so every `name:` label position across the whole
         // `cluster_bundle` render surface consumes the same
         // substrate-owned `&'static str` by construction.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let label_prefix = format!("{KUBE_KEY_NAME}:");
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
@@ -5937,8 +5996,7 @@ spec:
         // `GitRepository` outside the source-controller's `Watches`).
         // Peer with [`cluster_bundle_gitrepository_uses_lifted_flux_api_version`]
         // on the sibling apiVersion half of the same CRD-lookup tuple.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         // Readback through the substrate-primitive [`kube_kind`] pinned
         // accessor rather than the parametric [`kube_root_str_field`]
@@ -5976,8 +6034,7 @@ spec:
         // (top-level kind typos surface as "no kind 'X' is registered"
         // at apply parse time; a nested sourceRef.kind typo silently
         // dangles a controller-side reference).
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let source_ref_kind = kube_spec_spec_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
@@ -6005,8 +6062,7 @@ spec:
         // any one of the three rendered Flux bundle axes is a build-time
         // test failure, not a silent apply-time dangling-sourceRef
         // reconciliation freeze.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let source_ref_kind = kube_spec_field(&parsed, FLUX_KEY_SOURCE_REF)
             .and_then(kube_kind)
@@ -6037,8 +6093,7 @@ spec:
         // sibling [`flux_controller_triplet_api_versions_share_toolkit_fluxcd_io_root`]
         // cross-axis pin on the apiVersion half of the same CRD-lookup
         // tuple.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
 
         let gr_parsed = parse_yaml_at_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME);
         let gr_kind = kube_kind(&gr_parsed).map(String::from).unwrap();
@@ -6120,8 +6175,7 @@ spec:
         // and with
         // [`cluster_bundle_gitrepository_kind_uses_lifted_flux_kind_git_repository`]
         // on the sibling Flux-v2 source-controller CRD kind axis.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         // Readback through the substrate-primitive [`kube_kind`] pinned
         // accessor — peer of the sibling gitrepository / kustomization
@@ -6162,8 +6216,7 @@ spec:
         // either of the two rendered Flux bundle axes is a
         // build-time test failure, not a silent apply-time stuck-
         // Reconciling reconciliation freeze.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("kustomization.yaml spec.healthChecks present");
@@ -6201,8 +6254,7 @@ spec:
         // [`cluster_bundle_three_git_repository_kind_axes_share_one_lifted_constant`]
         // cross-axis pin on the Flux v2 source-controller CRD kind
         // axis.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
 
         let hr_parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let hr_kind = kube_kind(&hr_parsed).map(String::from).unwrap();
@@ -6316,8 +6368,7 @@ spec:
         // container-axis, and to the sibling
         // [`cluster_bundle_helmrelease_values_block_uses_lifted_flux_key_values`]
         // pin on the sibling per-`HelmRelease` body-key surface.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let source_ref = kube_spec_spec_map_field(&parsed, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF)
             .expect("spec.chart.spec.<FLUX_KEY_SOURCE_REF> mapping present");
@@ -6359,8 +6410,7 @@ spec:
         // container-axis, together closing the two-site production
         // emit sweep the peer [`FLUX_KEY_SOURCE_REF`] doc block calls
         // out.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let source_ref = kube_spec_map_field(&parsed, FLUX_KEY_SOURCE_REF)
             .expect("spec.<FLUX_KEY_SOURCE_REF> mapping present");
@@ -6440,8 +6490,7 @@ spec:
         // — extends the canonical-Flux-v2-per-`HelmRelease`-values-
         // navigation lift from the wrap-key axis onto the outer block-
         // body-axis this test targets.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let values = kube_spec_map_field(&parsed, FLUX_KEY_VALUES)
             .expect("spec.<FLUX_KEY_VALUES> mapping present");
@@ -6481,8 +6530,7 @@ spec:
         // /
         // [`cluster_bundle_gitrepository_kind_uses_lifted_flux_kind_git_repository`]
         // on the sibling Flux v2 controller-triplet CRD kind axes.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         // Readback through the substrate-primitive [`kube_kind`] pinned
         // accessor — peer of the sibling gitrepository / helmrelease
@@ -6565,8 +6613,7 @@ spec:
         // `HelmRelease`-body-key lifted-const-keyed pin discipline
         // from the values-override block-body-axis onto the sibling
         // chart-template container-axis this test targets.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         let chart = kube_spec_map_field(&parsed, FLUX_KEY_CHART)
             .expect("spec.<FLUX_KEY_CHART> mapping present");
@@ -6723,8 +6770,7 @@ spec:
         // discipline from the per-`HelmRelease` triplet onto the sibling
         // per-`Kustomization` `spec.healthChecks` reference-list
         // container-axis this test targets, completing the quartet.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         let parsed = parse_yaml_at_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME);
         let health_checks = kube_spec_seq_field(&parsed, FLUX_KEY_HEALTH_CHECKS)
             .expect("spec.<FLUX_KEY_HEALTH_CHECKS> sequence present");
@@ -7787,8 +7833,7 @@ spec:
         // drift here means a future refactor of the lifted helper's
         // path-comparison contract has silently regressed the routed
         // Flux-CR-trio readback shape.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
             FLUX_HELMRELEASE_YAML_FILENAME,
@@ -7833,8 +7878,7 @@ spec:
         // same discipline. Fail-before-pass-after; drift here means a
         // future refactor of the lifted helper's parse-target contract
         // has silently regressed the routed Flux-CR-trio readback shape.
-        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
-        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let files = cluster_bundle_for_caixa(&sample_caixa(), "rio").unwrap();
         for filename in [
             FLUX_GITREPOSITORY_YAML_FILENAME,
             FLUX_HELMRELEASE_YAML_FILENAME,
