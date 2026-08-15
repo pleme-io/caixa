@@ -102,7 +102,6 @@
 1	clippy::doc_markdown	caixa-flake/src/flake.rs
 4	clippy::format_push_string	caixa-flake/src/render.rs
 4	clippy::assertions_on_constants	caixa-flux/src/lib.rs
-54	clippy::cmp_owned	caixa-flux/src/lib.rs
 31	clippy::doc_lazy_continuation	caixa-flux/src/lib.rs
 1	clippy::format_in_format_args	caixa-flux/src/lib.rs
 1	clippy::many_single_char_names	caixa-fmt/src/canonical.rs
@@ -121,7 +120,6 @@
 2	clippy::needless_raw_string_hashes	caixa-fmt/tests/proptest_invariants.rs
 3	clippy::needless_raw_string_hashes	caixa-fmt/tests/special_shapes.rs
 1	clippy::assertions_on_constants	caixa-helm/src/lib.rs
-26	clippy::cmp_owned	caixa-helm/src/lib.rs
 2	clippy::format_push_string	caixa-lacre/src/lock.rs
 1	clippy::if_same_then_else	caixa-lacre/src/lock.rs
 9	clippy::collapsible_if	caixa-lint/src/rules.rs

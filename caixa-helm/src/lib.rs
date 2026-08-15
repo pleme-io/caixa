@@ -1000,8 +1000,8 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_CALL, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR,
         M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
-        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, kube_has, kube_str, kube_u64,
-        mapping_string_keys,
+        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, find_file_by_path, kube_has, kube_str,
+        kube_u64, mapping_string_keys,
     };
     use std::path::PathBuf;
 
@@ -1081,11 +1081,7 @@ spec:
     #[test]
     fn chart_yaml_metadata_propagates() {
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(chart.api_version, "v2");
         assert_eq!(chart.name, "lareira-hello-rio");
@@ -1123,11 +1119,7 @@ spec:
         // [`chart_yaml_metadata_propagates`] on the
         // per-`Chart.yaml`-body-field propagation surface.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         for keyword in caixa_core::LAREIRA_CHART_KEYWORDS {
             assert!(
@@ -1142,11 +1134,7 @@ spec:
     #[test]
     fn values_yaml_wraps_under_pleme_computeunit_key() {
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed
             .get(DEFAULT_LIBRARY_NAME)
@@ -1177,11 +1165,7 @@ spec:
             ..RenderOpts::default()
         };
         let dir = render_chart_for_servico_with(&sample_caixa(), &sample_cu_yaml(), &opts).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         assert!(
             kube_has(&parsed, "acme-computeunit"),
@@ -1222,18 +1206,10 @@ spec:
             };
             let dir =
                 render_chart_for_servico_with(&sample_caixa(), &sample_cu_yaml(), &opts).unwrap();
-            let chart_file = dir
-                .files
-                .iter()
-                .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-                .unwrap();
+            let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
             let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
             let dep_name = &chart.dependencies[0].name;
-            let values = dir
-                .files
-                .iter()
-                .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-                .unwrap();
+            let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
             let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
             assert!(
                 parsed.get(dep_name.as_str()).is_some(),
@@ -1258,11 +1234,7 @@ spec:
             ..RenderOpts::default()
         };
         let dir = render_chart_for_servico_with(&sample_caixa(), &sample_cu_yaml(), &opts).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         assert!(
             values.contents.contains("`acme-computeunit:`"),
             "header must name the overriding library alias verbatim \
@@ -1429,11 +1401,7 @@ spec:
             cpu: Some(500),
         });
         let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let limits = cu_block.get(M2_KEY_LIMITS).expect("limits must propagate");
@@ -1453,11 +1421,7 @@ spec:
             ..Default::default()
         });
         let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let behavior = cu_block
@@ -1484,11 +1448,7 @@ spec:
             }],
         }];
         let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         assert!(kube_has(cu_block, M2_KEY_UPGRADE_FROM));
@@ -1499,11 +1459,7 @@ spec:
         // Existing caixa with no M2 slots → values.yaml carries no
         // limits/behavior/upgradeFrom keys (forward-compat invariant).
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         assert!(!kube_has(cu_block, M2_KEY_LIMITS));
@@ -1619,11 +1575,7 @@ spec:
         // `values_yaml_wrap_key_matches_chart_dependency_name` on the
         // sibling structural-cross-axis-invariant surface.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
             chart.api_version, HELM_CHART_API_VERSION,
@@ -1716,11 +1668,7 @@ spec:
         // discipline from the `apiVersion` half onto the sibling `type`
         // half.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
             chart.chart_type, HELM_CHART_TYPE_APPLICATION,
@@ -1827,11 +1775,7 @@ spec:
         // surface for the per-Chart.yaml per-chart-kind discriminator
         // axis.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
@@ -1877,11 +1821,7 @@ spec:
         // caixa-helm surface for the two serde-rename-literal-only
         // axes.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
@@ -1934,11 +1874,7 @@ spec:
         // caixa-helm surface for the three serde-rename-literal-only
         // axes.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
@@ -2081,11 +2017,7 @@ spec:
         // [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
         // [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] mounts one level down.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .unwrap();
+        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
         let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
         let mapping = doc.as_mapping().expect(
             "rendered Chart.yaml must be a top-level YAML mapping per \
@@ -2334,11 +2266,7 @@ spec:
         // struct-field read on the constant and the production-code
         // emit site that consumes the same constant.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let values = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .unwrap();
+        let values = find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed
             .get(DEFAULT_LIBRARY_NAME)
@@ -2746,11 +2674,8 @@ spec:
         // on the sibling per-`Chart.yaml` `appVersion:` axis.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .expect("Chart.yaml present");
+        let chart_file =
+            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
             chart.version.as_str(),
@@ -2783,11 +2708,8 @@ spec:
         // field on the typed accessor.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .expect("Chart.yaml present");
+        let chart_file =
+            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
             chart.app_version.as_str(),
@@ -2828,11 +2750,8 @@ spec:
         // regresses to the raw `&caixa.nome` field access.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .expect("Chart.yaml present");
+        let chart_file =
+            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
             chart.name,
@@ -2864,11 +2783,8 @@ spec:
             ..sample_caixa()
         };
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
-            .expect("Chart.yaml present");
+        let chart_file =
+            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
             chart.description,
@@ -2896,11 +2812,8 @@ spec:
         // extension whose header-emit regresses to the raw field.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let values_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
-            .expect("values.yaml present");
+        let values_file =
+            find_file_by_path(&dir.files, HELM_VALUES_YAML_FILENAME).expect("values.yaml present");
         let expected = format!("servicos/{}.computeunit.yaml", caixa.nome());
         assert!(
             values_file.contents.contains(&expected),
@@ -2931,11 +2844,8 @@ spec:
             ..sample_caixa()
         };
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let readme_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_README_FILENAME))
-            .expect("README.md present");
+        let readme_file =
+            find_file_by_path(&dir.files, HELM_CHART_README_FILENAME).expect("README.md present");
         let expected = format!("caixa Servico {}", caixa.nome());
         assert!(
             readme_file.contents.contains(&expected),
@@ -2971,11 +2881,8 @@ spec:
         // to the raw field.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let readme_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_README_FILENAME))
-            .expect("README.md present");
+        let readme_file =
+            find_file_by_path(&dir.files, HELM_CHART_README_FILENAME).expect("README.md present");
         let expected = format!("caixa.lisp` v{}.", caixa.versao());
         assert!(
             readme_file.contents.contains(&expected),
@@ -3096,11 +3003,8 @@ spec:
             ..sample_caixa()
         };
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let readme_file = dir
-            .files
-            .iter()
-            .find(|f| f.path == PathBuf::from(HELM_CHART_README_FILENAME))
-            .expect("README.md present");
+        let readme_file =
+            find_file_by_path(&dir.files, HELM_CHART_README_FILENAME).expect("README.md present");
         let expected = format!(
             "Generated by `caixa-helm` from `{}/caixa.lisp`",
             caixa.nome()
@@ -3116,5 +3020,50 @@ spec:
              accessor extension. Full contents:\n{contents}",
             contents = readme_file.contents,
         );
+    }
+
+    #[test]
+    #[allow(clippy::cmp_owned)] // Deliberate: the pin reproduces the
+    // prior owning-`PathBuf::from(...)` comparand byte-for-byte to
+    // guarantee the lift's substitution is behavior-preserving on
+    // exactly the shape the 26 converged caixa-helm callers previously
+    // carried.
+    fn find_file_by_path_matches_prior_inline_iter_find_pathbuf_from_shape() {
+        // Per-crate byte-equivalence pin on the lifted
+        // [`caixa_core::find_file_by_path`] navigator: for every leaf
+        // the `render_chart_for_servico` `lareira-<nome>` chart-
+        // directory emit writes ([`HELM_CHART_YAML_FILENAME`] /
+        // [`HELM_VALUES_YAML_FILENAME`] /
+        // [`HELM_CHART_README_FILENAME`]), the lifted navigator must
+        // byte-equal the prior three-line inline
+        // `dir.files.iter().find(|f| f.path ==
+        // PathBuf::from(<FILENAME_CONST>))` combinator the 26 test-
+        // side per-artifact readback sites previously carried. Mirrors
+        // the sibling `caixa-flux`
+        // `find_file_by_path_matches_prior_inline_iter_find_pathbuf_from_shape`
+        // pin at the peer caller-crate altitude and the substrate-
+        // level `find_file_by_path_matches_inline_iter_find_pathbuf_from_shape`
+        // pin at the primitive definition — the three-arm closure
+        // that closes the discipline the sibling `sequence_str_values`
+        // / `kube_has` sweeps established.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        for filename in [
+            HELM_CHART_YAML_FILENAME,
+            HELM_VALUES_YAML_FILENAME,
+            HELM_CHART_README_FILENAME,
+        ] {
+            let via_helper = find_file_by_path(&dir.files, filename);
+            let via_inline = dir.files.iter().find(|f| f.path == PathBuf::from(filename));
+            assert_eq!(
+                via_helper, via_inline,
+                "find_file_by_path(&dir.files, {filename:?}) must \
+                 byte-equal the prior three-line `dir.files.iter()\
+                 .find(|f| f.path == PathBuf::from({filename:?}))` \
+                 combinator on every leaf the `lareira-<nome>` chart-\
+                 directory emit writes — otherwise the 26 routed per-\
+                 artifact readback sites regress silently on the \
+                 leaf-path axis",
+            );
+        }
     }
 }

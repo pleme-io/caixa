@@ -2435,8 +2435,8 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version_is, kube_bool, kube_field_bool, kube_field_field, kube_field_u64,
-        kube_has, kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq,
+        find_file_by_path, kube_api_version_is, kube_bool, kube_field_bool, kube_field_field,
+        kube_field_u64, kube_has, kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq,
         kube_spec_bool_field, kube_spec_field, kube_spec_map_field, kube_spec_seq_field,
         kube_spec_seq_first, kube_spec_spec_field, kube_spec_spec_map_field,
         kube_spec_spec_str_field, kube_spec_str_field, kube_str,
@@ -3029,9 +3029,7 @@ spec:
         // agrees with the same.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -3090,9 +3088,7 @@ spec:
         // per-path retry-cap sweep the caixa-core lift established.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -3156,9 +3152,7 @@ spec:
         // CR remediation sub-container.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -3319,9 +3313,7 @@ spec:
         // seeds under mirror-symmetric parent-container-axis-keys.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -3546,9 +3538,7 @@ spec:
         // level `spec.prune` position.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
@@ -3705,9 +3695,7 @@ spec:
         // position.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
@@ -3846,9 +3834,7 @@ spec:
         // leaving the peer axis inline surfaces on either half.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
@@ -3966,9 +3952,7 @@ spec:
         // top-level `spec.timeout` position.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let ks = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let ks = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
@@ -4881,16 +4865,10 @@ spec:
         assert!(names.contains(&FLUX_HELMRELEASE_YAML_FILENAME.to_string()));
         assert!(names.contains(&FLUX_KUSTOMIZATION_YAML_FILENAME.to_string()));
 
-        let kust = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
-            .unwrap();
+        let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME).unwrap();
         assert!(kust.contents.contains("./clusters/rio/services/hello-rio"));
 
-        let gitrepo = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
-            .unwrap();
+        let gitrepo = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME).unwrap();
         assert!(gitrepo.contents.contains("v0.1.0"));
     }
 
@@ -4946,9 +4924,7 @@ spec:
         // the lifted-constant-keyed assertion would fail).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -4991,10 +4967,7 @@ spec:
         assert_eq!(DEFAULT_LIBRARY_NAME, "pleme-computeunit");
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
-            .unwrap();
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME).unwrap();
         assert!(
             hr.contents.contains("pleme-computeunit:"),
             "helmrelease.yaml must spell the canonical library-chart wrap \
@@ -5089,9 +5062,7 @@ spec:
         // fail when the lift's value changes).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kust = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
@@ -5137,10 +5108,7 @@ spec:
         assert_eq!(DEFAULT_FLUX_SYSTEM_NAMESPACE, "flux-system");
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kust = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
-            .unwrap();
+        let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME).unwrap();
         assert!(
             kust.contents.contains("namespace: flux-system\n"),
             "kustomization.yaml must spell the canonical FluxCD \
@@ -5174,9 +5142,7 @@ spec:
         // on the sibling [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] lift.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -5204,9 +5170,7 @@ spec:
         // sits perpetually in `Reconciling`).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kust = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
@@ -5246,10 +5210,7 @@ spec:
         assert_eq!(FLUX_HELMRELEASE_API_VERSION, "helm.toolkit.fluxcd.io/v2");
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
-            .unwrap();
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME).unwrap();
         assert!(
             hr.contents
                 .contains("apiVersion: helm.toolkit.fluxcd.io/v2\n"),
@@ -5257,10 +5218,7 @@ spec:
              apiVersion at the top-level apiVersion axis (got: {contents:?})",
             contents = hr.contents,
         );
-        let kust = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
-            .unwrap();
+        let kust = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME).unwrap();
         assert!(
             kust.contents
                 .contains("apiVersion: helm.toolkit.fluxcd.io/v2\n"),
@@ -5326,9 +5284,7 @@ spec:
             other => panic!("expected GitRefSpec::Tag, got {other:?}"),
         }
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
             .expect("gitrepository.yaml present");
         let expected_tag = format!(
             "{prefix}{versao}",
@@ -5405,9 +5361,7 @@ spec:
             other => panic!("expected GitRefSpec::Tag, got {other:?}"),
         }
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
             .expect("gitrepository.yaml present");
         assert!(
             gr.contents.contains(&format!("tag: {expected_tag:?}")),
@@ -5465,9 +5419,7 @@ spec:
         // the sibling [`FLUX_HELMRELEASE_API_VERSION`] lift.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -5499,10 +5451,7 @@ spec:
         );
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
-            .unwrap();
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME).unwrap();
         assert!(
             gr.contents
                 .contains("apiVersion: source.toolkit.fluxcd.io/v1\n"),
@@ -5559,9 +5508,7 @@ spec:
         // on the sibling Flux-CRD-axis lifts.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -5595,10 +5542,7 @@ spec:
         );
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
-            .unwrap();
+        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME).unwrap();
         assert!(
             kz.contents
                 .contains("apiVersion: kustomize.toolkit.fluxcd.io/v1\n"),
@@ -5647,10 +5591,8 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let f = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(filename))
-                .unwrap_or_else(|| panic!("{filename} present"));
+            let f =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
             assert!(
                 f.contents.contains(&label_prefix),
                 "{filename} must carry the top-level {label_prefix:?} YAML label \
@@ -5708,10 +5650,8 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let f = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(filename))
-                .unwrap_or_else(|| panic!("{filename} present"));
+            let f =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
             assert!(
                 f.contents.contains(&label_prefix),
                 "{filename} must carry the top-level {label_prefix:?} YAML label \
@@ -5770,10 +5710,8 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let f = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(filename))
-                .unwrap_or_else(|| panic!("{filename} present"));
+            let f =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
             assert!(
                 f.contents.contains(&label_prefix),
                 "{filename} must carry the top-level {label_prefix:?} YAML label \
@@ -5843,10 +5781,8 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let f = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(filename))
-                .unwrap_or_else(|| panic!("{filename} present"));
+            let f =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
             assert!(
                 f.contents.contains(&label_prefix),
                 "{filename} must carry the top-level {label_prefix:?} YAML label \
@@ -5917,10 +5853,8 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let f = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(filename))
-                .unwrap_or_else(|| panic!("{filename} present"));
+            let f =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
             assert!(
                 f.contents.contains(&label_prefix),
                 "{filename} must carry the {label_prefix:?} YAML label \
@@ -5985,10 +5919,8 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let f = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(filename))
-                .unwrap_or_else(|| panic!("{filename} present"));
+            let f =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
             assert!(
                 f.contents.contains(&label_prefix),
                 "{filename} must carry the {label_prefix:?} YAML label \
@@ -6049,9 +5981,7 @@ spec:
         // on the sibling apiVersion half of the same CRD-lookup tuple.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -6093,9 +6023,7 @@ spec:
         // dangles a controller-side reference).
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -6127,9 +6055,7 @@ spec:
         // reconciliation freeze.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -6166,9 +6092,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
 
         let gr_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+            &find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
                 .unwrap()
                 .contents,
         )
@@ -6176,9 +6100,7 @@ spec:
         let gr_kind = kube_kind(&gr_parsed).map(String::from).unwrap();
 
         let hr_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+            &find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
                 .unwrap()
                 .contents,
         )
@@ -6189,9 +6111,7 @@ spec:
             .unwrap();
 
         let kz_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+            &find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
                 .unwrap()
                 .contents,
         )
@@ -6268,9 +6188,7 @@ spec:
         // on the sibling Flux-v2 source-controller CRD kind axis.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -6315,9 +6233,7 @@ spec:
         // Reconciling reconciliation freeze.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -6361,9 +6277,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
 
         let hr_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+            &find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
                 .unwrap()
                 .contents,
         )
@@ -6371,9 +6285,7 @@ spec:
         let hr_kind = kube_kind(&hr_parsed).map(String::from).unwrap();
 
         let kz_parsed: serde_yaml::Value = serde_yaml::from_str(
-            &files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+            &find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
                 .unwrap()
                 .contents,
         )
@@ -6488,9 +6400,7 @@ spec:
         // pin on the sibling per-`HelmRelease` body-key surface.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -6536,9 +6446,7 @@ spec:
         // out.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -6622,9 +6530,7 @@ spec:
         // body-axis this test targets.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -6668,9 +6574,7 @@ spec:
         // on the sibling Flux v2 controller-triplet CRD kind axes.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -6757,9 +6661,7 @@ spec:
         // chart-template container-axis this test targets.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -6831,9 +6733,7 @@ spec:
         // constant.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -6925,9 +6825,7 @@ spec:
         // container-axis this test targets, completing the quartet.
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
-        let kz = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let kz = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -7084,9 +6982,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -7147,9 +7043,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -7525,9 +7419,7 @@ spec:
             let mut opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
             opts.git_ref = git_ref.clone();
             let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
-            let gr = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+            let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
                 .expect("gitrepository.yaml present");
             let parsed: serde_yaml::Value =
                 serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -7703,10 +7595,8 @@ spec:
             FLUX_HELMRELEASE_YAML_FILENAME,
             FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
-            let doc = files
-                .iter()
-                .find(|f| f.path == std::path::PathBuf::from(filename))
-                .unwrap_or_else(|| panic!("{filename} present"));
+            let doc =
+                find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
             let parsed: serde_yaml::Value = serde_yaml::from_str(&doc.contents)
                 .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
             let interval = kube_spec_str_field(&parsed, FLUX_KEY_INTERVAL).unwrap_or_else(|| {
@@ -7891,9 +7781,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let gr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+        let gr = find_file_by_path(&files, FLUX_GITREPOSITORY_YAML_FILENAME)
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -7935,9 +7823,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let hr = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+        let hr = find_file_by_path(&files, FLUX_HELMRELEASE_YAML_FILENAME)
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -7978,9 +7864,7 @@ spec:
         let caixa = sample_caixa();
         let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
         let files = cluster_bundle(&caixa, &opts).unwrap();
-        let k = files
-            .iter()
-            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+        let k = find_file_by_path(&files, FLUX_KUSTOMIZATION_YAML_FILENAME)
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&k.contents).expect("kustomization.yaml parses as YAML");
@@ -8001,5 +7885,54 @@ spec:
              accessor extension (namespace-qualified rewrite, per-cluster \
              alias table, `:nome-suffix` overlay) that lands on the accessor",
         );
+    }
+
+    #[test]
+    #[allow(clippy::cmp_owned)] // Deliberate: the pin reproduces the
+    // prior owning-`std::path::PathBuf::from(...)` comparand byte-for-
+    // byte to guarantee the lift's substitution is behavior-preserving
+    // on exactly the shape the 54 converged caixa-flux callers
+    // previously carried.
+    fn find_file_by_path_matches_prior_inline_iter_find_pathbuf_from_shape() {
+        // Per-crate byte-equivalence pin on the lifted
+        // [`find_file_by_path`] navigator: for every leaf the
+        // `cluster_bundle` Flux v2 CR-trio emit writes
+        // ([`FLUX_GITREPOSITORY_YAML_FILENAME`] /
+        // [`FLUX_HELMRELEASE_YAML_FILENAME`] /
+        // [`FLUX_KUSTOMIZATION_YAML_FILENAME`]), the lifted navigator
+        // must byte-equal the prior three-line inline
+        // `files.iter().find(|f| f.path ==
+        // std::path::PathBuf::from(<FILENAME_CONST>))` combinator the
+        // 54 test-side per-artifact readback sites previously carried.
+        // Mirrors the substrate-side
+        // `find_file_by_path_matches_inline_iter_find_pathbuf_from_shape`
+        // pin at the caller-crate altitude — the two-arm (substrate
+        // structural pin + caller-crate byte-equivalence pin) closure
+        // that made the sibling `sequence_str_values` / `kube_has`
+        // sweeps safe on the same discipline. Fail-before-pass-after;
+        // drift here means a future refactor of the lifted helper's
+        // path-comparison contract has silently regressed the routed
+        // Flux-CR-trio readback shape.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+        ] {
+            let via_helper = find_file_by_path(&files, filename);
+            let via_inline = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(filename));
+            assert_eq!(
+                via_helper, via_inline,
+                "find_file_by_path(&files, {filename:?}) must byte-\
+                 equal the prior three-line `files.iter().find(|f| \
+                 f.path == std::path::PathBuf::from({filename:?}))` \
+                 combinator on every leaf the Flux v2 CR-trio emit \
+                 writes — otherwise the 54 routed per-artifact \
+                 readback sites regress silently on the leaf-path axis",
+            );
+        }
     }
 }
