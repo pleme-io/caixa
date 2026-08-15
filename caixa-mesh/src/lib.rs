@@ -9350,9 +9350,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         assert_eq!(rules.len(), 3);
         for rule in &rules {
-            let req = rule
-                .get(GATEWAY_API_KEY_TIMEOUTS)
-                .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST))
+            let req = kube_field_str(rule, GATEWAY_API_KEY_TIMEOUTS, GATEWAY_API_KEY_REQUEST)
                 .expect("each of the 3 rules carries timeouts.request");
             assert_eq!(req, "30s");
         }
@@ -9375,8 +9373,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST)),
+                kube_field_str(rule, GATEWAY_API_KEY_TIMEOUTS, GATEWAY_API_KEY_REQUEST),
                 Some("90s")
             );
         }
@@ -9399,8 +9396,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST)),
+                kube_field_str(rule, GATEWAY_API_KEY_TIMEOUTS, GATEWAY_API_KEY_REQUEST),
                 Some("1m")
             );
         }
@@ -9725,8 +9721,7 @@ mod tests {
         assert_eq!(rules.len(), 3);
         for rule in &rules {
             assert_eq!(
-                rule.get(CILIUM_KEY_AUTHENTICATION)
-                    .and_then(|a| kube_str(a, CILIUM_KEY_MODE)),
+                kube_field_str(rule, CILIUM_KEY_AUTHENTICATION, CILIUM_KEY_MODE),
                 Some(CILIUM_AUTH_MODE_REQUIRED),
                 "every CNP's ingress rule must carry the authentication overlay"
             );
@@ -9798,8 +9793,7 @@ mod tests {
             find_by_name(&policies, "checkout-payment-to-cart").expect("pubsub CNP present");
         let rule = kube_spec_seq_first(nats_policy, CILIUM_KEY_INGRESS).expect("ingress[0]");
         assert_eq!(
-            rule.get(CILIUM_KEY_AUTHENTICATION)
-                .and_then(|a| kube_str(a, CILIUM_KEY_MODE)),
+            kube_field_str(rule, CILIUM_KEY_AUTHENTICATION, CILIUM_KEY_MODE),
             Some(CILIUM_AUTH_MODE_REQUIRED)
         );
     }
@@ -10086,5 +10080,100 @@ mod tests {
             no_entrada.entrada.is_none(),
             "Caixa::entrada raw field must project None on a fixture with no :entrada"
         );
+    }
+
+    #[test]
+    fn kube_field_str_form_byte_equals_get_and_then_kube_str_form_across_swept_axes() {
+        // Per-crate byte-equivalence pin covering the two axis-key pairs
+        // the caixa-mesh test-side sweep converged onto kube_field_str:
+        //   (GATEWAY_API_KEY_TIMEOUTS, GATEWAY_API_KEY_REQUEST) —
+        //     per-HTTPRoute rule request-deadline overlay position, 3
+        //     sites (`httproute_carries_politicas_timeout_on_every_rule`,
+        //     `httproute_timeout_uses_canonical_kube_duration_format`,
+        //     `httproute_timeout_renders_minute_window_canonically`).
+        //   (CILIUM_KEY_AUTHENTICATION, CILIUM_KEY_MODE) —
+        //     per-CNP ingress-rule mutual-auth overlay position, 2
+        //     sites (`cnp_carries_politicas_mtls_required_on_every_rule`,
+        //     `cnp_authentication_pubsub_contracts_carry_overlay_too`).
+        // The caixa-core-side lift pin
+        // (`kube_field_str_matches_prior_inline_two_line_composition`
+        // in render.rs) covers the primitive's own byte-equivalence
+        // against the two-line composition; this per-crate pin lifts
+        // that guarantee to the specific (outer, inner) axis-key pairs
+        // the caixa-mesh sweep keys off, so a future drift inside
+        // kube_field_str that broke either pair — a rewrite that
+        // stopped composing through kube_str's trailing shape-gate, an
+        // Index-for-str vs Index-for-Value divergence in serde_yaml
+        // that hit one axis-key but not the other — surfaces here with
+        // the offending axis-pair named.
+        let axes: &[(&str, &str)] = &[
+            (GATEWAY_API_KEY_TIMEOUTS, GATEWAY_API_KEY_REQUEST),
+            (CILIUM_KEY_AUTHENTICATION, CILIUM_KEY_MODE),
+        ];
+
+        for (outer, inner) in axes.iter().copied() {
+            // Positive path — leaf string is present under `<outer>.<inner>`.
+            let mut inner_map = serde_yaml::Mapping::new();
+            inner_map.insert(
+                serde_yaml::Value::String(inner.to_string()),
+                serde_yaml::Value::String("present".to_string()),
+            );
+            let mut root_present = serde_yaml::Mapping::new();
+            root_present.insert(
+                serde_yaml::Value::String(outer.to_string()),
+                serde_yaml::Value::Mapping(inner_map),
+            );
+            let present = serde_yaml::Value::Mapping(root_present);
+
+            // Outer-absent short-circuit — no `<outer>:` key anywhere.
+            let outer_absent = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+
+            // Inner-absent short-circuit — outer sub-mapping present but empty.
+            let mut root_inner_absent = serde_yaml::Mapping::new();
+            root_inner_absent.insert(
+                serde_yaml::Value::String(outer.to_string()),
+                serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            );
+            let inner_absent = serde_yaml::Value::Mapping(root_inner_absent);
+
+            // Non-string-leaf short-circuit — `<inner>:` present as an integer,
+            // so the trailing `.as_str()` shape-gate rejects.
+            let mut inner_non_str = serde_yaml::Mapping::new();
+            inner_non_str.insert(
+                serde_yaml::Value::String(inner.to_string()),
+                serde_yaml::Value::Number(42_u64.into()),
+            );
+            let mut root_non_str = serde_yaml::Mapping::new();
+            root_non_str.insert(
+                serde_yaml::Value::String(outer.to_string()),
+                serde_yaml::Value::Mapping(inner_non_str),
+            );
+            let non_str = serde_yaml::Value::Mapping(root_non_str);
+
+            // Outer-non-mapping short-circuit — `<outer>:` present as a scalar,
+            // so the middle-hop `.get(<inner>)` on a non-mapping arm falls off.
+            let mut root_outer_scalar = serde_yaml::Mapping::new();
+            root_outer_scalar.insert(
+                serde_yaml::Value::String(outer.to_string()),
+                serde_yaml::Value::String("scalar".to_string()),
+            );
+            let outer_scalar = serde_yaml::Value::Mapping(root_outer_scalar);
+
+            for fixture in [
+                &present,
+                &outer_absent,
+                &inner_absent,
+                &non_str,
+                &outer_scalar,
+            ] {
+                let via_lifted = kube_field_str(fixture, outer, inner);
+                let via_inline = fixture.get(outer).and_then(|x| kube_str(x, inner));
+                assert_eq!(
+                    via_lifted, via_inline,
+                    "kube_field_str byte-equivalence must hold on ({outer}, {inner}) \
+                     across every short-circuit arm the caixa-mesh sweep folded"
+                );
+            }
+        }
     }
 }
