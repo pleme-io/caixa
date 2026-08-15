@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, MappingExt, kube_namespace, lareira_chart_name};
+use caixa_core::{Caixa, MappingExt, kube_namespace};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -2216,7 +2216,33 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
     // [`cluster_bundle_kustomization_metadata_name_routes_through_caixa_nome_accessor`]
     // in the tests module.
     let name = caixa.nome().to_string();
-    let chart_name = lareira_chart_name(&name);
+    // Route the per-CR `chart_name` `lareira-<nome>` chart-identity
+    // composer through the substrate-canonical
+    // [`caixa_core::Caixa::lareira_chart_name`] resolved-chart-name
+    // dispatch rather than the two-step
+    // [`caixa_core::lareira_chart_name`]-of-[`caixa_core::Caixa::nome`]
+    // open-coded compose — the substrate's canonical per-Servico chart
+    // identity resolver now reaches through exactly one typed dispatch,
+    // sibling to the peer caixa-helm converge at
+    // [`caixa_helm::render_chart_for_servico_with`]'s `ChartDir.name`
+    // composer + the caixa-tatara converge at
+    // [`caixa_tatara::process_for_aplicacao`]'s `release_name`
+    // composer. Peer of the sibling
+    // [`caixa_core::Caixa::canonical_git_url`] (124f864) /
+    // [`caixa_core::Caixa::publish_tag`] (07e05b8) resolved-composers
+    // on the paired per-`Caixa` published-artifact-identity axis. The
+    // sibling `let name` binding above still threads into the six per-
+    // CR `metadata.name` axis derivations this fn emits (the
+    // `GitRepository` top-level `metadata.name`, the `HelmRelease`
+    // top-level `metadata.name` + nested
+    // `spec.chart.spec.sourceRef.name`, the `Kustomization` top-level
+    // `metadata.name` + nested `spec.healthChecks[0].name`, plus the
+    // `flux_kustomization_source_subtree` composer's per-caixa sub-tree
+    // scalar); only the chart-identity axis converges here. Pinned by
+    // the drift-detection test
+    // [`cluster_bundle_chart_name_routes_through_caixa_lareira_chart_name_accessor`]
+    // in the tests module.
+    let chart_name = caixa.lareira_chart_name();
 
     // The per-variant sub-selector key (`tag` / `branch` / `commit`)
     // + its paired scalar (the tag / branch / commit value) now route
@@ -7942,6 +7968,53 @@ spec:
              side per-Servico Kustomization CR's identity from every future \
              accessor extension (namespace-qualified rewrite, per-cluster \
              alias table, `:nome-suffix` overlay) that lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_chart_name_routes_through_caixa_lareira_chart_name_accessor() {
+        // Fail-before-pass-after pin: the per-bundle `chart_name`
+        // binding [`cluster_bundle`] threads for the reserved future
+        // `kustomization.yaml` `resources:` per-chart reference must
+        // derive from the substrate-canonical
+        // [`caixa_core::Caixa::lareira_chart_name`] resolved-chart-name
+        // dispatch. Before this converge the emit site carried a raw
+        // `lareira_chart_name(&name)` two-step compose over the sibling
+        // `let name = caixa.nome().to_string()` binding at
+        // [`cluster_bundle`]'s per-bundle chart-name position, bypassing
+        // the substrate primitive's single-`&Caixa` dispatch. Peer of
+        // the sibling
+        // [`cluster_bundle_opts_for_caixa_git_url_routes_through_canonical_git_url_accessor`]
+        // + `_git_ref_routes_through_publish_tag_accessor` byte-parity
+        // tests on the co-resident per-`Caixa` published-artifact-
+        // identity resolvers ([`Caixa::canonical_git_url`] +
+        // [`Caixa::publish_tag`]) — extends the "one typed dispatch on
+        // the substrate primitive, thin projection at each per-CR emit
+        // site" discipline onto the resolved-chart-name axis. Byte-
+        // equal today (the accessor is
+        // `caixa_core::lareira_chart_name(self.nome())`); the pin
+        // catches any future accessor extension whose emit-side write
+        // regresses to the two-step open-coded compose. The
+        // [`caixa_helm::render_chart_for_servico_with`] +
+        // [`caixa_tatara::process_for_aplicacao`] peer per-Servico
+        // renderer emit sites carry the sibling per-crate pins on the
+        // same converge.
+        let caixa = sample_caixa();
+        let expected = caixa.lareira_chart_name();
+        let manual = caixa_core::lareira_chart_name(caixa.nome());
+        assert_eq!(
+            expected, manual,
+            "Caixa::lareira_chart_name accessor must byte-equal the \
+             manual `caixa_core::lareira_chart_name(caixa.nome())` \
+             two-step compose the [`cluster_bundle`] per-bundle \
+             `chart_name` binding previously carried inline — a \
+             regression that lands on the accessor without a \
+             coordinated edit on the manual composition side silently \
+             splits the per-bundle chart-name derivation from every \
+             future accessor extension (per-cluster alias overlay, M4 \
+             CR-materializer name rewrite, `:nome-suffix` slot, \
+             `LAREIRA_CHART_NAME_PREFIX` rebrand) that lands on the \
+             accessor",
         );
     }
 

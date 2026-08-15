@@ -33,9 +33,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{
-    Caixa, CaixaKind, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, lareira_chart_name, oci_chart_ref,
-};
+use caixa_core::{Caixa, CaixaKind, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, oci_chart_ref};
 
 /// Canonical OCI URL scheme prefix — the `"oci://"` byte-string every
 /// substrate-side renderer that composes an OCI artifact reference
@@ -220,11 +218,22 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
     let versao = caixa.versao().to_owned();
 
     let chart_ref = derive_chart_ref(caixa, &inputs.registry);
-    // Route the `lareira-<nome>` chart-name compose through the typed
-    // [`caixa_core::Caixa::nome`] `&str`-return accessor — sibling to
-    // the paired `.versao` converge above; closes the emit-side raw
-    // `.nome.as_str()` field-access at this composer site.
-    let release_name = lareira_chart_name(caixa.nome());
+    // Route the `AplicacaoIntent.release_name` `lareira-<nome>` chart-
+    // identity composer through the substrate-canonical
+    // [`caixa_core::Caixa::lareira_chart_name`] resolved-chart-name
+    // dispatch rather than the two-step
+    // [`caixa_core::lareira_chart_name`]-of-[`caixa_core::Caixa::nome`]
+    // open-coded compose — the substrate's canonical per-Servico chart
+    // identity resolver now reaches through exactly one typed dispatch,
+    // sibling to the peer caixa-helm + caixa-flux converges at
+    // [`caixa_helm::render_chart_for_servico_with`]'s `ChartDir.name`
+    // and [`caixa_flux::cluster_bundle`]'s per-CR `chart_name` sites.
+    // Peer of the sibling [`caixa_core::Caixa::canonical_git_url`] +
+    // [`caixa_core::Caixa::publish_tag`] resolved-composers on the
+    // paired per-`Caixa` published-artifact-identity axis. Pinned by
+    // [`derive_process_release_name_routes_through_caixa_lareira_chart_name_accessor`]
+    // in the tests module.
+    let release_name = caixa.lareira_chart_name();
 
     let aplicacao = AplicacaoIntent {
         chart_ref,
@@ -351,6 +360,7 @@ fn default_class() -> Classification {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use caixa_core::lareira_chart_name;
     use pretty_assertions::assert_eq;
     use tatara_process::intent::IntentVariant;
     use tatara_process::lifetime::LifetimeVariant;
@@ -822,6 +832,56 @@ mod tests {
                      peer `caixa_core::oci_chart_ref` composer's shape and \
                      from the `derive_chart_ref_ends_with_lareira_chart_name` \
                      cross-axis pin"
+                );
+            }
+            other => panic!("expected Aplicacao intent, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn derive_process_release_name_routes_through_caixa_lareira_chart_name_accessor() {
+        // Fail-before-pass-after pin: the emit-side
+        // `AplicacaoIntent.release_name` scalar the [`process_for_aplicacao`]
+        // fn composes on the intent-arm must derive from the substrate-
+        // canonical [`caixa_core::Caixa::lareira_chart_name`] resolved-
+        // chart-name dispatch. Before this converge the emit site
+        // carried a raw `lareira_chart_name(caixa.nome())` two-step
+        // compose at the `release_name` composer position, bypassing
+        // the substrate primitive's single-`&Caixa` dispatch. Peer of
+        // the sibling
+        // [`process_for_aplicacao_routes_nome_and_versao_through_caixa_accessors`]
+        // pin above on the paired per-`Caixa` universal-axis identity
+        // carriers ([`Caixa::nome`] / [`Caixa::versao`]) — extends
+        // the discipline from the per-atom scalar accessors onto the
+        // resolved-chart-name composer projection. Byte-equal today
+        // (the accessor is `caixa_core::lareira_chart_name(self.nome())`);
+        // the pin catches any future accessor extension whose emit-
+        // side write regresses to the two-step open-coded compose,
+        // in lockstep with the peer caixa-helm
+        // [`chart_dir_name_routes_through_caixa_lareira_chart_name_accessor`]
+        // + caixa-flux
+        // [`cluster_bundle_chart_name_routes_through_caixa_lareira_chart_name_accessor`]
+        // pins that carry the same converge on the sibling per-Servico
+        // renderer emit surfaces.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        let inputs = sample_inputs();
+        let process = process_for_aplicacao(&caixa, &inputs).expect("render");
+        match process.spec.intent.variant().expect("intent") {
+            IntentVariant::Aplicacao(a) => {
+                assert_eq!(
+                    a.release_name.as_deref(),
+                    Some(caixa.lareira_chart_name().as_str()),
+                    "AplicacaoIntent.release_name must derive from the \
+                     substrate-canonical \
+                     `caixa_core::Caixa::lareira_chart_name` accessor \
+                     byte-for-byte — a regression that re-inlines \
+                     `caixa_core::lareira_chart_name(caixa.nome())` at \
+                     the release-name compose site silently splits the \
+                     CR's release-name from every future accessor \
+                     extension (per-cluster alias overlay, M4 CR-\
+                     materializer name rewrite, `:nome-suffix` slot, \
+                     `LAREIRA_CHART_NAME_PREFIX` rebrand) that lands on \
+                     the accessor"
                 );
             }
             other => panic!("expected Aplicacao intent, got {other:?}"),

@@ -50,7 +50,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use caixa_core::{Caixa, MappingExt, lareira_chart_name};
+use caixa_core::{Caixa, MappingExt};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -763,19 +763,23 @@ pub fn render_chart_for_servico_with(
 ) -> Result<ChartDir, Error> {
     caixa_core::require_v0_servico_shape::<Error>(caixa)?;
 
-    // Canonical typed `&str`-read of the per-`Caixa` `:nome`
-    // universal-axis DNS-1123-label caixa-identity scalar into
-    // the per-chart-directory `lareira-<nome>` identity composer.
-    // Peer of the sibling 4a363bf / 54bf2f3 `caixa.nome.clone()`
-    // converges on the outer-Caixa `:nome` `String`-carry axis
-    // in caixa-flux / caixa-mesh and the sibling eb912de
-    // `caixa.versao.clone()` converge on the co-resident
-    // `Caixa::versao` `String`-carry axis in this crate — this
-    // extends the "one typed dispatch on the substrate primitive,
-    // thin projections at each consumer" discipline onto the
-    // non-`.clone()` raw-field-access axis of `Caixa::nome` in
-    // caixa-helm.
-    let chart_name = lareira_chart_name(caixa.nome());
+    // Route the per-`ChartDir.name` `lareira-<nome>` chart-identity
+    // composer through the substrate-canonical
+    // [`caixa_core::Caixa::lareira_chart_name`] resolved-chart-name
+    // dispatch rather than the two-step
+    // [`caixa_core::lareira_chart_name`]-of-[`caixa_core::Caixa::nome`]
+    // open-coded compose — the load-bearing per-Servico Helm chart
+    // identity now reaches through exactly one typed dispatch on the
+    // substrate primitive. Peer of the sibling
+    // [`Caixa::canonical_git_url`] (124f864) / [`Caixa::publish_tag`]
+    // (07e05b8) resolved-composers on the paired per-`Caixa` published-
+    // artifact-identity axis — every substrate-side consumer that
+    // resolves "which chart does this caixa publish under?" now travels
+    // through one accessor rather than a per-caller two-step compose.
+    // Pinned by the drift-detection test
+    // [`chart_dir_name_routes_through_caixa_lareira_chart_name_accessor`]
+    // in the tests module.
+    let chart_name = caixa.lareira_chart_name();
     let chart_yaml = build_chart_yaml(caixa, &chart_name, opts);
     let values_yaml = build_values_yaml(caixa, computeunit_yaml, opts)?;
     let readme = build_readme(caixa, &chart_name);
@@ -2762,6 +2766,46 @@ spec:
              every future accessor extension (per-cluster alias overlay, \
              M4 CR-materializer name rewrite, `:nome-suffix` slot) that \
              lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn chart_dir_name_routes_through_caixa_lareira_chart_name_accessor() {
+        // Emit-path pin: the per-`ChartDir` top-level `name` axis the
+        // [`render_chart_for_servico_with`] fn writes must derive from
+        // the substrate-canonical
+        // [`caixa_core::Caixa::lareira_chart_name`] resolved-chart-name
+        // dispatch. Before this converge the outer `lareira_chart_name
+        // (caixa.nome())` two-step compose at the emit site re-derived
+        // the `LAREIRA_CHART_NAME_PREFIX + :nome` composition inline,
+        // bypassing the substrate primitive's single-`&Caixa` dispatch.
+        // Peer of the sibling [`Caixa::canonical_git_url`] (124f864) /
+        // [`Caixa::publish_tag`] (07e05b8) resolved-composers'
+        // paired-site convergence pins the sibling caixa-flux
+        // [`cluster_bundle_opts_for_caixa_git_url_routes_through_canonical_git_url_accessor`]
+        // + `_git_ref_routes_through_publish_tag_accessor` byte-parity
+        // tests carry on the per-Servico-renderer emit surface. Byte-
+        // equal today (the accessor is
+        // `caixa_core::lareira_chart_name(self.nome())`); the pin
+        // catches any future accessor extension (a per-cluster alias
+        // overlay, an M4 CR-materializer name rewrite, a
+        // `:nome-suffix` slot, the [`LAREIRA_CHART_NAME_PREFIX`]
+        // rebrand once the chart-family scoping intent shifts) whose
+        // emit-side write regresses to the two-step open-coded compose.
+        let caixa = sample_caixa();
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        assert_eq!(
+            dir.name,
+            caixa.lareira_chart_name(),
+            "ChartDir.name must derive from the substrate-canonical \
+             `caixa_core::Caixa::lareira_chart_name` accessor byte-for-\
+             byte — a regression that re-inlines \
+             `caixa_core::lareira_chart_name(caixa.nome())` at the emit \
+             site silently splits the per-`ChartDir` `name` axis from \
+             every future accessor extension (per-cluster alias overlay, \
+             M4 CR-materializer name rewrite, `:nome-suffix` slot, \
+             `LAREIRA_CHART_NAME_PREFIX` rebrand) that lands on the \
+             accessor",
         );
     }
 

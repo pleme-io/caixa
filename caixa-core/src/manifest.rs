@@ -678,6 +678,88 @@ impl Caixa {
         )
     }
 
+    /// Substrate-canonical per-`Caixa` **resolved-Helm-chart-name** composer
+    /// — returns the caixa's canonical `lareira-<nome>` per-Servico Helm
+    /// chart identity as an owned [`String`], derived by dispatching through
+    /// the substrate-canonical [`crate::lareira_chart_name`] helper against
+    /// the typed [`Self::nome`] byte-string. Every substrate-side consumer
+    /// that resolves "which Helm chart identity does this caixa render
+    /// under?" reaches for exactly one typed dispatch on the substrate
+    /// primitive — the raw `caixa_core::lareira_chart_name(caixa.nome())`
+    /// two-step compose every prior caller re-derived collapses onto one
+    /// canonical arm on the single-`&Caixa` dispatch.
+    ///
+    /// Peer of the sibling [`Self::canonical_git_url`] (124f864) resolved-
+    /// git-URL composer + [`Self::publish_tag`] (07e05b8) resolved-publish-
+    /// tag composer on the paired per-`Caixa` published-artifact-identity
+    /// axis — same "close the composed substrate-primitive at one canonical
+    /// arm on the single-`&Caixa` dispatch, converge every prior open-coded
+    /// caller onto the arm" discipline extended from the resolved-URL /
+    /// resolved-tag projections of the `:repositorio` / `:versao` axes onto
+    /// the resolved-chart-name projection of the `:nome` axis. The three
+    /// accessors jointly close the triple of scalars every per-Servico
+    /// deploy artifact keys off (git source URL via
+    /// [`Self::canonical_git_url`], git source tag via
+    /// [`Self::publish_tag`], per-Servico Helm chart identity via
+    /// [`Self::lareira_chart_name`]) at the substrate primitive — a
+    /// downstream consumer that reaches through all three reads the
+    /// complete deploy-artifact identity of a caixa through three typed
+    /// dispatches, not six open-coded compositions across three renderer
+    /// crates.
+    ///
+    /// The reader-side (three production sites at the time of the lift —
+    /// [`caixa-helm::render_chart_for_servico_with`]'s `ChartDir.name`
+    /// composer at caixa-helm/src/lib.rs:778, the peer
+    /// [`caixa-flux::cluster_bundle`]'s per-CR `chart_name` binding at
+    /// caixa-flux/src/lib.rs:2219, and
+    /// [`caixa-tatara::process_for_aplicacao`]'s `release_name`
+    /// composer at caixa-tatara/src/lib.rs:227, plus every future
+    /// per-Servico OCI publish emitter the CAIXA-SDLC §II
+    /// `caixa-publish.yml` reusable workflow's `skopeo push` step keys
+    /// off, the future per-cluster snapshot bundle emitter, the future
+    /// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// per-member chart-carrier slot on the tatara `Process` intent) —
+    /// always resolves the chart name under the canonical
+    /// [`crate::LAREIRA_CHART_NAME_PREFIX`] prefix; this method encodes
+    /// that reader-side convention. The joint-length invariant the peer
+    /// [`Self::validate_nome_chart_name_budget`] gate enforces at
+    /// caixa-build time (author-declared `:nome` + fixed prefix ≤
+    /// [`crate::DNS_1123_LABEL_MAX_LEN`]) is verified on the input to
+    /// this composer by construction, so the produced `lareira-<nome>`
+    /// string is a valid Helm chart-name segment on every accept-set
+    /// input.
+    ///
+    /// The composition body is the exact byte-image of the prior inline
+    /// `caixa_core::lareira_chart_name(caixa.nome())` two-step form every
+    /// prior caller re-derived — pinned by the sibling caixa-helm /
+    /// caixa-flux / caixa-tatara byte-parity tests
+    /// `<crate>_lareira_chart_name_routes_through_caixa_accessor` against
+    /// a future implementation of this method that reordered the
+    /// composition arguments, migrated the `<prefix>` segment to a
+    /// different constant (the [`crate::LAREIRA_CHART_NAME_PREFIX`] axis a
+    /// future substrate-side chart-family rebrand may split off — the
+    /// constant's own docstring anticipates a substrate-side move once
+    /// the `lareira-` scoping intent outlives the family it names),
+    /// interposed a canonicalization pass on the `:nome` axis (a per-
+    /// registry namespace-qualification an M4 CR materializer might apply
+    /// per-CR — the "`pleme-io/checkout` vs `partner-org/checkout`
+    /// collision" arm the multi-tenant-registry story acknowledges), or
+    /// silently absorbed an empty `:nome` arm (which cannot occur past
+    /// the [`Self::validate_nome`] gate but which a hypothetical bypass
+    /// on the accessor path must not silently paper over).
+    ///
+    /// Owns per-call [`String`] allocation via the single
+    /// [`crate::lareira_chart_name`] `format!` invocation — the by-value
+    /// return matches every downstream consumer's field-fill shape (the
+    /// caixa-helm `ChartDir.name: String` field, the caixa-flux per-CR
+    /// `chart_name: String` binding, the caixa-tatara
+    /// `AplicacaoIntent.release_name: Option<String>` field-fill on the
+    /// `Some` arm).
+    #[must_use]
+    pub fn lareira_chart_name(&self) -> String {
+        crate::lareira_chart_name(self.nome())
+    }
+
     /// Substrate-canonical per-`Caixa` `:descricao` free-form-prose
     /// chart-description scalar accessor every consumer of the top-level
     /// manifest's Chart.yaml `description:` axis keys off — returns the
@@ -10684,6 +10766,106 @@ mod tests {
                  composition across every representative :versao input \
                  — got {got:?}, expected {manual:?}",
                 got = c.publish_tag(),
+            );
+        }
+    }
+
+    // ── Caixa::lareira_chart_name — resolved-chart-name composer ─────
+
+    #[test]
+    fn lareira_chart_name_composes_prefix_and_nome_on_all_shapes() {
+        // Fail-before-pass-after pin: [`Caixa::lareira_chart_name`] must
+        // compose [`crate::LAREIRA_CHART_NAME_PREFIX`] against the caixa's
+        // typed [`Caixa::nome`] byte-string across every DNS-1123 shape
+        // the sibling [`validate_nome_accepts_canonical_forms`] positive-
+        // set sweep documents — single-word, hyphen-joined, version-
+        // suffixed, single-char, two-char, digit-start, retry-suffixed.
+        // Every accept-set value the peer validate gate lets through must
+        // survive the resolved-chart-name projection byte-equal.
+        for nome in [
+            "checkout",
+            "cart-v2",
+            "a",
+            "db",
+            "3rd-party-shim",
+            "payment-retry",
+            "0",
+        ] {
+            let c = caixa_with_nome(nome);
+            let expected = format!("{prefix}{nome}", prefix = crate::LAREIRA_CHART_NAME_PREFIX);
+            assert_eq!(
+                c.lareira_chart_name(),
+                expected,
+                "Caixa::lareira_chart_name must compose \
+                 LAREIRA_CHART_NAME_PREFIX ({prefix:?}) against \
+                 :nome ({nome:?}) verbatim — got {got:?}, \
+                 expected {expected:?}",
+                prefix = crate::LAREIRA_CHART_NAME_PREFIX,
+                got = c.lareira_chart_name(),
+            );
+        }
+    }
+
+    #[test]
+    fn lareira_chart_name_starts_with_lifted_prefix() {
+        // Prefix-shape pin: every [`Caixa::lareira_chart_name`] emission
+        // must begin with the canonical
+        // [`crate::LAREIRA_CHART_NAME_PREFIX`] byte-string on every
+        // input, guarding a hypothetical future implementation that
+        // migrated the prefix segment to an inline literal (`"lareira-"`)
+        // that would silently drift from any rebrand of the lifted
+        // constant. Peer to the sibling
+        // [`publish_tag_starts_with_default_publish_tag_prefix`] pin on
+        // the co-resident resolved-publish-tag composer's prefix axis.
+        for nome in ["checkout", "cart", "a", "payment-retry", "0"] {
+            let c = caixa_with_nome(nome);
+            let chart = c.lareira_chart_name();
+            assert!(
+                chart.starts_with(crate::LAREIRA_CHART_NAME_PREFIX),
+                "Caixa::lareira_chart_name emission {chart:?} must start \
+                 with the lifted crate::LAREIRA_CHART_NAME_PREFIX \
+                 ({prefix:?})",
+                prefix = crate::LAREIRA_CHART_NAME_PREFIX,
+            );
+        }
+    }
+
+    #[test]
+    fn lareira_chart_name_byte_matches_canonical_helper_composition() {
+        // Byte-parity pin: [`Caixa::lareira_chart_name`] must render
+        // byte-identically to the manual open-coded
+        // `caixa_core::lareira_chart_name(caixa.nome())` two-step
+        // composition every prior substrate-side caller re-derived.
+        // Guards the paired-site convergence just applied at caixa-helm's
+        // [`render_chart_for_servico_with`] `ChartDir.name` composer,
+        // caixa-flux's [`cluster_bundle`] per-CR `chart_name` binding,
+        // and caixa-tatara's [`process_for_aplicacao`] `release_name`
+        // composer (all of which now route through this accessor): a
+        // future implementation of this method that reordered the
+        // composition arguments, swapped the `<prefix>` constant for a
+        // different one, or interposed a canonicalization pass on the
+        // `:nome` axis surfaces here as a caixa-core build-time test
+        // failure rather than as a downstream Helm chart-render / FluxCD
+        // reconcile / tatara Process-CR mismatch far from this method's
+        // source.
+        for nome in [
+            "checkout",
+            "cart-v2",
+            "a",
+            "db",
+            "3rd-party-shim",
+            "payment-retry",
+        ] {
+            let c = caixa_with_nome(nome);
+            let manual = crate::lareira_chart_name(c.nome());
+            assert_eq!(
+                c.lareira_chart_name(),
+                manual,
+                "Caixa::lareira_chart_name must byte-equal the manual \
+                 open-coded `caixa_core::lareira_chart_name(caixa.nome())` \
+                 composition across every representative :nome input — \
+                 got {got:?}, expected {manual:?}",
+                got = c.lareira_chart_name(),
             );
         }
     }
