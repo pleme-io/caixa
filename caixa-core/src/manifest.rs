@@ -536,6 +536,74 @@ impl Caixa {
         self.repositorio.as_deref()
     }
 
+    /// Substrate-canonical per-`Caixa` **resolved-git-repo-URL** composer —
+    /// returns the caixa's canonical git-source-of-truth URL as an owned
+    /// [`String`], author-declared `:repositorio` byte-string verbatim on
+    /// the `Some` arm and the substrate's canonical pleme-org github URL
+    /// fallback ([`crate::DEFAULT_PLEME_GIT_ORG`] and [`Self::nome`]
+    /// interpolated into `https://github.com/<org>/<nome>`) on the
+    /// `None` arm. Every substrate-side consumer that resolves
+    /// "which git URL does this caixa's source live at?" reaches for
+    /// exactly one typed dispatch on the substrate primitive — the raw
+    /// `caixa.repositorio().map(str::to_owned).unwrap_or_else(|| format!(
+    /// "https://github.com/{org}/{nome}", org = DEFAULT_PLEME_GIT_ORG,
+    /// nome = caixa.nome()))` open-coded composition every prior caller
+    /// re-derived collapses onto one canonical arm.
+    ///
+    /// Distinct from [`Self::repositorio`] (`Option<&str>`, exposes the
+    /// author-omitted / author-declared partition to the caller) — this
+    /// accessor is the **resolved** URL surface, folding the fallback in
+    /// at the substrate-primitive boundary. Every consumer that keys off
+    /// the `Option::is_none()` discriminator (a [`Chart.yaml`] `home:`
+    /// field emit that must omit the field entirely on an author-omitted
+    /// `:repositorio`, per the [`Self::repositorio`] docstring's
+    /// documented four-consumer list) reaches through the raw
+    /// [`Self::repositorio`] `Option<&str>` accessor by construction — the
+    /// resolved-URL composer sits alongside it as the second projection
+    /// on the same underlying `:repositorio` slot rather than replacing
+    /// the raw accessor.
+    ///
+    /// The fallback branch is the exact byte-image of the prior inline
+    /// [`caixa-flux::ClusterBundleOpts::for_caixa`] `git_url` composer at
+    /// caixa-flux/src/lib.rs:2080 — pinned by the sibling caixa-flux
+    /// byte-parity test
+    /// `cluster_bundle_opts_for_caixa_git_url_routes_through_canonical_git_url_accessor`
+    /// against a future implementation of this method that reordered the
+    /// `format!` template arguments, migrated the `<org>` segment to a
+    /// different constant (the [`crate::DEFAULT_PLEME_GIT_ORG`] axis a
+    /// future substrate-side git-org migration may split off), or
+    /// silently absorbed the empty-string arm (a hypothetical
+    /// `Some("") → fallback` collapse the raw [`Self::repositorio`]
+    /// accessor's docstring explicitly rejects on the sibling raw
+    /// accessor).
+    ///
+    /// Peer of the sibling per-`&Caixa`-axis composed helpers
+    /// [`caixa-flux::cluster_bundle_for_caixa`] (06d52d7) on the sibling
+    /// substrate-side renderer surface — same "close the composed
+    /// substrate-primitive at one canonical arm on the single-`&Caixa`
+    /// dispatch, converge every prior open-coded caller onto the arm"
+    /// discipline extended onto the resolved-git-URL projection of the
+    /// per-`Caixa` `:repositorio` axis. Owns per-call [`String`]
+    /// allocation on both arms (the `Some` arm's `str::to_owned` and the
+    /// `None` arm's `format!`) — the by-value return matches every
+    /// downstream consumer's field-fill shape (the caixa-flux
+    /// `ClusterBundleOpts::git_url: String` field, every future
+    /// `Chart.yaml` `home:` fold's `Option<String>` field-fill on the
+    /// `Some` arm).
+    #[must_use]
+    pub fn canonical_git_url(&self) -> String {
+        self.repositorio().map_or_else(
+            || {
+                format!(
+                    "https://github.com/{org}/{nome}",
+                    org = crate::DEFAULT_PLEME_GIT_ORG,
+                    nome = self.nome(),
+                )
+            },
+            str::to_owned,
+        )
+    }
+
     /// Substrate-canonical per-`Caixa` `:descricao` free-form-prose
     /// chart-description scalar accessor every consumer of the top-level
     /// manifest's Chart.yaml `description:` axis keys off — returns the
@@ -10313,6 +10381,131 @@ mod tests {
                 first, repositorio,
                 "Caixa::repositorio must return :repositorio verbatim by \
                  borrow — got {first:?}, expected {repositorio:?}",
+            );
+        }
+    }
+
+    // ── Caixa::canonical_git_url — resolved-git-URL composer ──────────
+
+    #[test]
+    fn canonical_git_url_returns_repositorio_verbatim_on_some_arm() {
+        // Fail-before-pass-after pin: [`Caixa::canonical_git_url`] must
+        // return the author-declared `:repositorio` byte-string verbatim
+        // on the `Some` arm — no scheme rewrite, no trailing-slash
+        // canonicalization, no `github:` → `https://github.com/`
+        // desugaring. The resolved-URL composer is the projection of
+        // the raw [`Caixa::repositorio`] `Option<&str>` accessor onto
+        // the `String`-return arity every substrate-side field-fill
+        // consumer keys off; on the `Some` arm the projection is
+        // `str::to_owned` verbatim, so every accept-set value the
+        // sibling `repositorio_returns_repositorio_byte_string_verbatim_
+        // across_permutations` pin covers (`https://…`, `github:…`,
+        // `ssh://…`, `git://…`, `git@…`, `file://…`, and the past-the-
+        // guard sentinel `pleme-io/…`) must survive the accessor
+        // byte-equal. Pins against a future silent detour that rewrote
+        // the `github:` shorthand to the `https://github.com/` full URL
+        // at the accessor boundary (which would silently split the
+        // resolved-URL surface from the raw [`Caixa::repositorio`]
+        // accessor's documented pass-through invariant), or a trailing-
+        // slash normalization (which would silently break the
+        // FluxCD `GitRepository` `spec.url` byte-exact match every
+        // downstream consumer keys the source-controller reconcile off).
+        for repositorio in [
+            "github:pleme-io/hello-rio",
+            "https://github.com/pleme-io/checkout",
+            "ssh://git@github.com/pleme-io/checkout.git",
+            "git://github.com/pleme-io/checkout.git",
+            "git@github.com:pleme-io/checkout.git",
+            "file:///opt/mirrors/pleme-io/checkout",
+        ] {
+            let c = caixa_with_repositorio(Some(repositorio));
+            assert_eq!(
+                c.canonical_git_url(),
+                repositorio,
+                "Caixa::canonical_git_url on the Some arm must return \
+                 :repositorio verbatim (got {:?}, expected {repositorio:?})",
+                c.canonical_git_url(),
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_git_url_falls_back_to_pleme_org_url_on_none_arm() {
+        // Fail-before-pass-after pin: [`Caixa::canonical_git_url`] on the
+        // `None` arm must emit the substrate's canonical pleme-org github
+        // URL derived from `caixa.nome()` — `https://github.com/<org>/
+        // <nome>` with `<org>` bound to [`crate::DEFAULT_PLEME_GIT_ORG`]
+        // and `<nome>` bound to the typed [`Caixa::nome`] accessor. This
+        // is the exact byte-image of the prior inline
+        // [`caixa-flux::ClusterBundleOpts::for_caixa`] `git_url`
+        // composer at caixa-flux/src/lib.rs:2080 that every prior caller
+        // re-derived open-coded. Pins against a future silent detour
+        // that migrated the `<org>` segment to a different constant (a
+        // fork rebranding that split off a new
+        // `DEFAULT_PLEME_GIT_ORG_MIRROR` const the accessor would need
+        // to migrate onto), a scheme change (`https://` → `git://` or
+        // `ssh://`), or a per-`Caixa` `.canonical_git_url_prefix`
+        // override (which would break the substrate-wide single-source-
+        // of-truth guarantee this method encodes).
+        let c = caixa_with_repositorio(None);
+        let expected = format!(
+            "https://github.com/{org}/{nome}",
+            org = crate::DEFAULT_PLEME_GIT_ORG,
+            nome = c.nome(),
+        );
+        assert_eq!(
+            c.canonical_git_url(),
+            expected,
+            "Caixa::canonical_git_url on the None arm must fold through \
+             the substrate's canonical pleme-org github URL fallback \
+             `https://github.com/<DEFAULT_PLEME_GIT_ORG>/<nome>` — got \
+             {:?}, expected {expected:?}",
+            c.canonical_git_url(),
+        );
+    }
+
+    #[test]
+    fn canonical_git_url_byte_matches_manual_composition() {
+        // Byte-parity pin: [`Caixa::canonical_git_url`] must render
+        // byte-identically to the manual open-coded
+        // `caixa.repositorio().map(str::to_owned).unwrap_or_else(||
+        //  format!("https://github.com/{org}/{nome}", ...))` composition
+        // every prior substrate-side caller re-derived. Guards the
+        // paired-site convergence just applied at caixa-flux's
+        // [`ClusterBundleOpts::for_caixa`] `git_url` composer (which
+        // now routes through this accessor): a future implementation of
+        // this method that reordered the format arguments, swapped the
+        // `<org>` constant for a different one, or interposed a
+        // canonicalization pass on the `Some` arm surfaces here as a
+        // caixa-core build-time test failure rather than as a downstream
+        // FluxCD `GitRepository` reconcile mismatch far from this
+        // method's source.
+        for repositorio in [
+            None,
+            Some("github:pleme-io/hello-rio"),
+            Some("https://github.com/pleme-io/checkout"),
+            Some("ssh://git@github.com/pleme-io/checkout.git"),
+        ] {
+            let c = caixa_with_repositorio(repositorio);
+            let manual = c.repositorio().map_or_else(
+                || {
+                    format!(
+                        "https://github.com/{org}/{nome}",
+                        org = crate::DEFAULT_PLEME_GIT_ORG,
+                        nome = c.nome(),
+                    )
+                },
+                str::to_owned,
+            );
+            assert_eq!(
+                c.canonical_git_url(),
+                manual,
+                "Caixa::canonical_git_url must byte-equal the manual \
+                 open-coded `repositorio().map(str::to_owned)\
+                 .unwrap_or_else(|| format!(...))` composition across \
+                 every representative :repositorio input — got {:?}, \
+                 expected {manual:?}",
+                c.canonical_git_url(),
             );
         }
     }
