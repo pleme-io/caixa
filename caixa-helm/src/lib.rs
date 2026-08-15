@@ -1001,7 +1001,7 @@ mod tests {
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_CALL, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR,
         M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
         M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK, find_file_by_path, kube_has, kube_str,
-        kube_u64, mapping_string_keys, parse_yaml_at_path,
+        kube_u64, mapping_string_keys, parse_yaml_at_path, parse_yaml_at_path_as,
     };
     use std::path::PathBuf;
 
@@ -1081,8 +1081,7 @@ spec:
     #[test]
     fn chart_yaml_metadata_propagates() {
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         assert_eq!(chart.api_version, "v2");
         assert_eq!(chart.name, "lareira-hello-rio");
         assert_eq!(chart.version, "0.1.0");
@@ -1119,8 +1118,7 @@ spec:
         // [`chart_yaml_metadata_propagates`] on the
         // per-`Chart.yaml`-body-field propagation surface.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         for keyword in caixa_core::LAREIRA_CHART_KEYWORDS {
             assert!(
                 chart.keywords.contains(&(*keyword).to_string()),
@@ -1204,8 +1202,7 @@ spec:
             };
             let dir =
                 render_chart_for_servico_with(&sample_caixa(), &sample_cu_yaml(), &opts).unwrap();
-            let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-            let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+            let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
             let dep_name = &chart.dependencies[0].name;
             let parsed = parse_yaml_at_path(&dir.files, HELM_VALUES_YAML_FILENAME);
             assert!(
@@ -1568,8 +1565,7 @@ spec:
         // `values_yaml_wrap_key_matches_chart_dependency_name` on the
         // sibling structural-cross-axis-invariant surface.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         assert_eq!(
             chart.api_version, HELM_CHART_API_VERSION,
             "rendered Chart.yaml `apiVersion` must equal the lifted \
@@ -1661,8 +1657,7 @@ spec:
         // discipline from the `apiVersion` half onto the sibling `type`
         // half.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).unwrap();
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         assert_eq!(
             chart.chart_type, HELM_CHART_TYPE_APPLICATION,
             "rendered Chart.yaml `type` must equal the lifted \
@@ -2662,9 +2657,7 @@ spec:
         // on the sibling per-`Chart.yaml` `appVersion:` axis.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file =
-            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         assert_eq!(
             chart.version.as_str(),
             caixa.versao(),
@@ -2696,9 +2689,7 @@ spec:
         // field on the typed accessor.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file =
-            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         assert_eq!(
             chart.app_version.as_str(),
             caixa.versao(),
@@ -2738,9 +2729,7 @@ spec:
         // regresses to the raw `&caixa.nome` field access.
         let caixa = sample_caixa();
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file =
-            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         assert_eq!(
             chart.name,
             caixa_core::lareira_chart_name(caixa.nome()),
@@ -2771,9 +2760,7 @@ spec:
             ..sample_caixa()
         };
         let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
-        let chart_file =
-            find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME).expect("Chart.yaml present");
-        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let chart: ChartYaml = parse_yaml_at_path_as(&dir.files, HELM_CHART_YAML_FILENAME);
         assert_eq!(
             chart.description,
             format!("Generated chart for caixa Servico {}", caixa.nome()),
@@ -3097,5 +3084,54 @@ spec:
                  parse-target axis",
             );
         }
+    }
+
+    #[test]
+    fn parse_yaml_at_path_as_matches_prior_inline_find_then_from_str_typed_shape() {
+        // Per-crate byte-equivalence pin on the lifted
+        // [`caixa_core::parse_yaml_at_path_as`] caller-typed composed
+        // navigator: for the `Chart.yaml` YAML leaf the
+        // `render_chart_for_servico` `lareira-<nome>` chart-directory
+        // emit writes that the test-side routed callers parse to a
+        // [`ChartYaml`]-typed body, the lifted helper must return a
+        // `ChartYaml` byte-equal to the prior two-step
+        //
+        //   let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME)
+        //       .unwrap(); // or .expect("Chart.yaml present")
+        //   let chart: ChartYaml =
+        //       serde_yaml::from_str(&chart_file.contents).unwrap();
+        //
+        // the 9 test-side per-`Chart.yaml`-typed-parse readback sites
+        // previously carried. Mirrors the sibling
+        // [`parse_yaml_at_path_matches_prior_inline_find_then_from_str_shape`]
+        // untyped-Value-arity pin in this crate at the caller-typed-
+        // arity peer, and the substrate-level
+        // `parse_yaml_at_path_as_matches_prior_inline_typed_two_step_shape`
+        // pin at the primitive definition — the three-arm closure
+        // that closes the same discipline the sibling
+        // [`parse_yaml_at_path`] sweep established. Only
+        // [`HELM_CHART_YAML_FILENAME`] is swept: the routed
+        // caller-typed-parse sites in this crate reach exclusively
+        // through the `ChartYaml`-typed body at the `Chart.yaml`
+        // leaf; [`HELM_VALUES_YAML_FILENAME`] carries no typed-mirror
+        // struct in this crate (the routed callers navigate its
+        // parsed [`serde_yaml::Value`] through `kube_*` / `mapping_*`
+        // primitives), and [`HELM_CHART_README_FILENAME`] is not
+        // parsed as YAML at all.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        let filename = HELM_CHART_YAML_FILENAME;
+        let via_helper: ChartYaml = parse_yaml_at_path_as(&dir.files, filename);
+        let via_inline_file = find_file_by_path(&dir.files, filename).unwrap();
+        let via_inline: ChartYaml = serde_yaml::from_str(&via_inline_file.contents).unwrap();
+        assert_eq!(
+            via_helper, via_inline,
+            "parse_yaml_at_path_as::<ChartYaml>(&dir.files, {filename:?}) \
+             must byte-equal the prior two-step \
+             `find_file_by_path(&dir.files, {filename:?}).unwrap() + \
+             serde_yaml::from_str::<ChartYaml>(&_.contents).unwrap()` \
+             combinator on the `Chart.yaml` YAML leaf — otherwise \
+             the 9 routed per-artifact typed-parse readback sites \
+             regress silently on the parse-target axis",
+        );
     }
 }

@@ -20683,6 +20683,105 @@ pub fn parse_yaml_at_path(files: &[RenderedFile], path: &str) -> serde_yaml::Val
         .unwrap_or_else(|err| panic!("{path} parses as YAML: {err}"))
 }
 
+/// Locate the [`RenderedFile`] in `files` whose sandboxed relative
+/// [`RenderedFile::path`] byte-equals `path`, then parse its
+/// [`RenderedFile::contents`] as a caller-typed `T` YAML document via
+/// [`serde_yaml::from_str::<T>`]. Panics on either short-circuit arm —
+/// the leaf is absent (`{path} present`) or the contents do not parse
+/// as `T` at the passed [`serde::Deserialize`] boundary
+/// (`{path} parses as YAML: {err}`).
+///
+/// The caller-typed peer to [`parse_yaml_at_path`] — same
+/// leaf-locate + `serde_yaml::from_str` two-step, extended one axis-
+/// arity by letting the caller pin the parse target through the
+/// standard [`serde::Deserialize`] surface every renderer already
+/// carries on its emit-side [`serde::Serialize`]-derived body type.
+/// Where [`parse_yaml_at_path`] closes the untyped
+/// [`serde_yaml::Value`]-arity every renderer-neutral `kube_*` /
+/// `mapping_*` navigator downstream keys off, this closes the paired
+/// typed-arity every renderer-native emit-side test-arm keys off —
+/// [`caixa-helm`][helm]'s `ChartYaml`-typed Chart.yaml readback, a
+/// future [`caixa-flux`][flux] `HelmRelease`-typed CR readback once
+/// the crate carries its own `#[derive(Deserialize)]` mirror of the
+/// `FluxCD` `HelmRelease` body, a future [`caixa-mesh`][mesh]
+/// `Aplicacao`-typed mesh-CR readback once the `mesh.pleme.io/v1alpha1`
+/// CR body's typed-mirror lands (MESH-COMPOSITION §III.2 #5), the
+/// [`caixa-teia`][teia] per-tofu-manifest `TfLock`-typed readback once
+/// the lockfile-typed-mirror lands.
+///
+/// Every per-artifact typed-parse readback across
+/// [`caixa-helm`][helm]'s `render_chart_for_servico` `lareira-<nome>`
+/// chart-directory emit previously carried the same four-line
+///
+/// ```ignore
+/// let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME)
+///     .unwrap(); // or .expect("Chart.yaml present")
+/// let chart: ChartYaml =
+///     serde_yaml::from_str(&chart_file.contents).unwrap();
+/// ```
+///
+/// combinator around a two-token semantic payload (the `<FILENAME>`
+/// filename constant + the `<T>` parse-target type) around the same
+/// two-hop locate-then-parse readback intent "read the typed body at
+/// this leaf". Every routed consumer now folds those four lines onto
+/// `parse_yaml_at_path_as::<T>(&files, <FILENAME>)` — the leaf-navigate
+/// step, the parse step, and the two
+/// `.expect`/`.unwrap_or_else(|| panic!(...))` panics happen once
+/// inside the helper, the caller keeps its downstream
+/// per-body-field assertions (`chart.api_version == "v2"`,
+/// `chart.dependencies[0].name == DEFAULT_LIBRARY_NAME`, etc.)
+/// unchanged.
+///
+/// Panic messages are composed from the passed `path` verbatim — the
+/// missing-leaf arm produces `"{path} present"`, the parse-failure arm
+/// produces `"{path} parses as YAML: {err}"`. These match the
+/// canonical shape the routed test-side sites carried inline
+/// (`"Chart.yaml present"` on the `.expect`-shaped variant), and the
+/// parse-failure arm now includes the underlying `serde_yaml::Error`
+/// for far-easier root-cause naming than the prior
+/// `serde_yaml::from_str(...).unwrap()` shape (which produced the
+/// canonical [`Result::unwrap`] panic naming nothing about which leaf,
+/// which parse-target type, or which per-field boundary the parser
+/// tripped over).
+///
+/// Every future per-artifact typed-parse readback (a future
+/// `caixa-flux` per-CR-trio typed-mirror readback whose test-side
+/// asserts on the `HelmRelease.spec.chart.spec.chart` per-field body
+/// through a typed struct rather than
+/// `kube_spec_str_field(&parsed, ...)`; a future `caixa-mesh`
+/// per-Aplicacao-CR body typed-mirror readback whose test-side
+/// asserts on the `Aplicacao.spec.membros` typed vector rather than
+/// `kube_spec_seq_field(&parsed, ...)`; a future `caixa-arch` per-
+/// flake typed-mirror readback whose test-side asserts on the emitted
+/// `flake.nix` frontmatter through a typed `NixFlakeFrontmatter`
+/// struct) reaches this same helper by construction, with no inline
+/// `find_file_by_path(...).expect(...)` + `serde_yaml::from_str::<T>(...)
+/// .expect(...)` two-step and no drift surface on the parse-target,
+/// panic-message-composition, or filename-axis-key axes.
+///
+/// Composition-symmetric with the sibling [`parse_yaml_at_path`] on
+/// the untyped-parse arm: the two together bracket every leaf-locate
+/// paired with a serde_yaml-parse readback the substrate output
+/// containers admit — [`parse_yaml_at_path`] on the [`serde_yaml::Value`]-arity
+/// (renderer-neutral navigation through `kube_*` / `mapping_*`
+/// primitives), [`parse_yaml_at_path_as`] on the caller-typed-arity
+/// (renderer-native per-body-field assertion through the typed struct
+/// the emit-side already carries).
+///
+/// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+/// [teia]: https://github.com/pleme-io/caixa/tree/main/caixa-teia
+#[must_use]
+pub fn parse_yaml_at_path_as<T>(files: &[RenderedFile], path: &str) -> T
+where
+    T: serde::de::DeserializeOwned,
+{
+    let file = find_file_by_path(files, path).unwrap_or_else(|| panic!("{path} present"));
+    serde_yaml::from_str(&file.contents)
+        .unwrap_or_else(|err| panic!("{path} parses as YAML: {err}"))
+}
+
 /// Read the top-level `spec:` sub-mapping on a K8s custom resource YAML
 /// document as `Option<&serde_yaml::Mapping>` — the sub-mapping-arity
 /// accessor peer on the sibling top-level `spec:` sub-block, structural
@@ -46434,6 +46533,145 @@ spec:
                  leaf-path axis",
             );
         }
+    }
+
+    // ── parse_yaml_at_path_as lift ──────────────────────────────────────
+
+    #[derive(Debug, PartialEq, serde::Deserialize)]
+    struct MiniChart {
+        #[serde(rename = "apiVersion")]
+        api_version: String,
+        name: String,
+        version: String,
+    }
+
+    #[test]
+    fn parse_yaml_at_path_as_parses_leaf_yaml_at_typed_target() {
+        // Happy-path: the composed helper locates the requested leaf +
+        // parses its contents through the caller-typed
+        // `serde::Deserialize`-derived struct's boundary. Structural
+        // mirror of the sibling `parse_yaml_at_path` happy-path pin at
+        // the untyped-Value-arity — this pin closes the caller-typed-
+        // arity every renderer-native emit-side test-arm keys off.
+        let files = vec![
+            rendered_file(
+                HELM_CHART_YAML_FILENAME,
+                "apiVersion: v2\nname: lareira-hello\nversion: 0.1.0\n",
+            ),
+            rendered_file(
+                HELM_VALUES_YAML_FILENAME,
+                "pleme-computeunit:\n  enabled: true\n",
+            ),
+        ];
+        let chart: MiniChart = parse_yaml_at_path_as(&files, HELM_CHART_YAML_FILENAME);
+        assert_eq!(
+            chart,
+            MiniChart {
+                api_version: "v2".into(),
+                name: "lareira-hello".into(),
+                version: "0.1.0".into(),
+            },
+            "parse_yaml_at_path_as must return a fully-parsed `T` \
+             carrying every per-body-field derived through the \
+             caller-passed `serde::Deserialize` boundary — the \
+             `#[serde(rename = ...)]` axis (`apiVersion` → \
+             `api_version`) must route through the caller's typed \
+             struct rather than through the untyped Value's raw \
+             string-key axis"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Chart.yaml present")]
+    fn parse_yaml_at_path_as_panics_on_missing_leaf() {
+        // Sad-path arm — the missing-leaf panic message reproduces the
+        // shape the 4 caixa-helm `.expect("Chart.yaml present")`-
+        // shaped converged callers previously carried inline, so a
+        // future rewire that drops the message prefix or swaps in a
+        // generic `unwrap()` panic is a build-time test failure.
+        // Structural peer of the sibling
+        // `parse_yaml_at_path_panics_on_missing_leaf` pin at the
+        // untyped-parse arm — the two together pin the missing-leaf
+        // panic-message shape across both parse-arity peers on exactly
+        // the caller-visible byte-string.
+        let files = vec![rendered_file(HELM_VALUES_YAML_FILENAME, "enabled: true")];
+        let _: MiniChart = parse_yaml_at_path_as(&files, HELM_CHART_YAML_FILENAME);
+    }
+
+    #[test]
+    #[should_panic(expected = "Chart.yaml parses as YAML")]
+    fn parse_yaml_at_path_as_panics_on_unparseable_typed_target() {
+        // Sad-path arm — the typed-parse-failure panic message
+        // reproduces the shape the converged callers previously carried
+        // inline (`.unwrap()` on `serde_yaml::from_str::<ChartYaml>(...)`,
+        // which produced the canonical `Result::unwrap` panic naming
+        // nothing about which leaf or which typed-parse boundary the
+        // parser tripped over). The lifted helper's message names both
+        // the leaf that failed (`Chart.yaml`) and the underlying
+        // `serde_yaml::Error` — for a caller-typed target this is
+        // strictly better than the untyped-Value-arity, since the error
+        // now names the specific per-field boundary
+        // (`missing field ...`, `invalid type ...`) the caller-passed
+        // `#[derive(Deserialize)]` struct's boundary tripped over. A
+        // valid YAML body that violates the typed struct's schema
+        // (missing the required `apiVersion` field) reliably triggers
+        // the typed-parse-failure arm.
+        let files = vec![rendered_file(
+            HELM_CHART_YAML_FILENAME,
+            "name: only-a-name\n",
+        )];
+        let _: MiniChart = parse_yaml_at_path_as(&files, HELM_CHART_YAML_FILENAME);
+    }
+
+    #[test]
+    fn parse_yaml_at_path_as_matches_prior_inline_typed_two_step_shape() {
+        // Byte-equivalence pin: the lifted `parse_yaml_at_path_as::<T>`
+        // folds the two-step
+        //
+        //   let chart_file = find_file_by_path(&files, <FILENAME>)
+        //       .unwrap(); // or .expect("<filename> present")
+        //   let chart: T = serde_yaml::from_str(&chart_file.contents).unwrap();
+        //
+        // 9 test-side caixa-helm per-`Chart.yaml`-typed-parse readback
+        // sites previously carried around the readback intent "parse
+        // the caller-typed body at this leaf". The substrate-level pin
+        // sweeps the single `HELM_CHART_YAML_FILENAME` axis-key the
+        // per-crate `caixa-helm` sites reach through at the routed-
+        // consumer altitude today; the same discipline applies at the
+        // per-crate byte-equivalence pin in `caixa-helm` (which sweeps
+        // the same axis-key against the routed callers' emit-side
+        // `ChartYaml`-typed parse target). Structural mirror of the
+        // sibling `parse_yaml_at_path_matches_prior_inline_two_step_shape`
+        // pin on the untyped-Value-arity — the two together pin every
+        // routed leaf-locate + serde_yaml-parse two-step across both
+        // parse-arity peers.
+        let files = vec![
+            rendered_file(
+                HELM_CHART_YAML_FILENAME,
+                "apiVersion: v2\n\
+                 name: lareira-hello-rio\n\
+                 version: 0.1.0\n",
+            ),
+            rendered_file(
+                HELM_VALUES_YAML_FILENAME,
+                "pleme-computeunit:\n  enabled: true\n",
+            ),
+        ];
+        let filename = HELM_CHART_YAML_FILENAME;
+        let via_helper: MiniChart = parse_yaml_at_path_as(&files, filename);
+        let file =
+            find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
+        let via_inline: MiniChart = serde_yaml::from_str(&file.contents)
+            .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
+        assert_eq!(
+            via_helper, via_inline,
+            "parse_yaml_at_path_as::<MiniChart>(&files, {filename:?}) \
+             must byte-equal the prior inline `find_file_by_path(&files, \
+             {filename:?}).unwrap() + serde_yaml::from_str::<T>(&_.contents).unwrap()` \
+             two-step — otherwise the 9 routed per-artifact typed-\
+             parse readback sites drift silently on the parse-\
+             target or leaf-path axis",
+        );
     }
 
     // ── kube_spec lift ──────────────────────────────────────────────────
