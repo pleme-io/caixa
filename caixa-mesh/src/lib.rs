@@ -100,7 +100,30 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
     // matching two-caller drift surface on `caixa-mesh`'s per-
     // Aplicacao entry-gate).
     let spec = typed_view(caixa)?;
+    programs_for_aplicacao_from_spec(caixa, &spec)
+}
 
+/// Renderer body for [`programs_for_aplicacao`] with the typed view
+/// already computed. Split out so the composed [`render_all`] path
+/// runs the `require_kind + aplicacao_view + AplicacaoSpec::validate`
+/// cascade exactly once across all three per-Aplicacao renderers
+/// (previously each of `programs_for_aplicacao` /
+/// `cilium_network_policies` / `gateway_routes` re-validated
+/// independently, so a single `render_all(caixa)` triggered three
+/// full validation passes on the same `&Caixa`). Any future widening
+/// of the entry gate — an admission-webhook prelude, a
+/// `:placement`-aware normalization pass, the M4 CR materializer's
+/// per-Aplicacao capability-audit floor — reaches this call site's
+/// composed peer through exactly one dispatch, so the 3× amplification
+/// through `render_all` collapses to 1×. Not exposed publicly: takes
+/// a `(caixa, spec)` pair that must be threaded together (the same
+/// two-arg drift surface `cluster_bundle_for_caixa` closed by
+/// composing on `&Caixa` alone), so callers reach through the
+/// single-`&Caixa`-arity public wrapper by construction.
+pub(crate) fn programs_for_aplicacao_from_spec(
+    caixa: &Caixa,
+    spec: &AplicacaoSpec,
+) -> Result<Vec<serde_yaml::Value>, Error> {
     // `:placement` overlay — surfaces the typed Aplicacao-level
     // distribution strategy + cluster list (validated upstream by
     // [`AplicacaoSpec::validate_placement`]: non-empty `:clusters`,
@@ -2531,6 +2554,28 @@ pub use caixa_core::GATEWAY_API_KEY_REQUEST;
 /// [cnp]: https://docs.cilium.io/en/stable/security/policy/index.html
 pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     let spec = typed_view(caixa)?;
+    cilium_network_policies_from_spec(caixa, &spec)
+}
+
+/// Renderer body for [`cilium_network_policies`] with the typed view
+/// already computed — peer of [`programs_for_aplicacao_from_spec`] on
+/// the sibling per-Aplicacao renderer axis. See that helper's
+/// docstring for the composed [`render_all`]-side entry-gate-collapse
+/// rationale: this crate's three per-Aplicacao renderers previously
+/// each re-ran `typed_view` independently, so a single `render_all`
+/// call amplified the `require_kind + aplicacao_view +
+/// AplicacaoSpec::validate` cascade 3×; the composed path now runs it
+/// exactly once and threads the resulting `&AplicacaoSpec` through
+/// each renderer body. Not public: the paired `(caixa, spec)` two-arg
+/// arity carries the same drift risk `cluster_bundle_for_caixa`
+/// closed on the peer caixa-flux axis (two `&Caixa`-derived bindings
+/// nothing at the type level pins to the same source), so external
+/// callers reach through the single-`&Caixa`-arity public wrapper by
+/// construction.
+pub(crate) fn cilium_network_policies_from_spec(
+    caixa: &Caixa,
+    spec: &AplicacaoSpec,
+) -> Result<Vec<serde_yaml::Value>, Error> {
     let namespace = DEFAULT_NAMESPACE; // operators scope per-cluster manifests
     // `:politicas :mtls-required` overlay — when the typed slot
     // carries a value it surfaces as a per-ingress-rule
@@ -2814,6 +2859,32 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
 ///     pointing at the destination Servico.
 pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     let spec = typed_view(caixa)?;
+    gateway_routes_from_spec(caixa, &spec)
+}
+
+/// Renderer body for [`gateway_routes`] with the typed view already
+/// computed — the third of the three per-Aplicacao renderer bodies
+/// [`render_all`] composes over a single shared `&AplicacaoSpec` after
+/// its one `typed_view` call. Peer of [`programs_for_aplicacao_from_spec`]
+/// and [`cilium_network_policies_from_spec`]: see either helper's
+/// docstring for the full lift rationale. This crate's `render_all`
+/// previously amplified the `require_kind + aplicacao_view +
+/// AplicacaoSpec::validate` cascade 3× (once per per-Aplicacao
+/// renderer body's independent `let spec = typed_view(caixa)?;` line),
+/// which read as inert per-body defensive validation but landed as a
+/// latent gate-widening trap — a future entry-gate widening (an
+/// admission-webhook prelude, a `:placement`-aware normalization pass,
+/// the M4 CR materializer's per-Aplicacao capability-audit floor)
+/// would have compounded its cost 3× through every `render_all` call
+/// site. This helper's composed peer path collapses that amplification
+/// to 1×. Not public: the paired `(caixa, spec)` two-arg arity carries
+/// the same drift risk `cluster_bundle_for_caixa` closed on the peer
+/// caixa-flux axis, so external callers reach through the
+/// single-`&Caixa`-arity public wrapper by construction.
+pub(crate) fn gateway_routes_from_spec(
+    caixa: &Caixa,
+    spec: &AplicacaoSpec,
+) -> Result<Vec<serde_yaml::Value>, Error> {
     // Route the per-`:entrada` composite-reference read through the
     // lifted [`caixa_core::AplicacaoSpec::entrada`] accessor rather
     // than the raw `spec.entrada.as_ref()` field access — the
@@ -3258,11 +3329,37 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 /// Returned as a flat `Vec<Value>` of YAML documents, suitable for
 /// concatenation into a single multi-doc YAML file (the canonical
 /// `feira app deploy` write target).
+///
+/// Composes over one shared [`typed_view`] call rather than the
+/// three-per-call amplification the prior body carried. Prior to this
+/// lift `render_all` dispatched to each of its three per-Aplicacao
+/// renderer components through their public single-`&Caixa` arities
+/// (`programs_for_aplicacao` / `cilium_network_policies` /
+/// `gateway_routes`), each of which independently re-ran the
+/// `require_kind + aplicacao_view + AplicacaoSpec::validate` entry
+/// gate — so a single `render_all(&caixa)` triggered three full
+/// validation passes on the same `&Caixa`. That amplification read as
+/// inert per-body defensive validation but landed as a latent
+/// gate-widening trap: a future entry-gate widening (an
+/// admission-webhook prelude, a `:placement`-aware normalization pass,
+/// the M4 CR materializer's per-Aplicacao capability-audit floor)
+/// would have compounded its cost 3× through this call site. The
+/// composed path now runs the entry gate exactly once at the top of
+/// this function and threads the resulting `&AplicacaoSpec` through
+/// the three `pub(crate) fn *_from_spec` renderer bodies — see each
+/// helper's docstring for the per-renderer split rationale. Byte-
+/// identical output to the manual three-call composition by
+/// construction (each `*_from_spec` peer body is the verbatim tail of
+/// its public single-`&Caixa` sibling with the shared `let spec =
+/// typed_view(caixa)?;` prelude collapsed), pinned by the drift-
+/// detection test
+/// [`tests::render_all_byte_matches_manual_three_renderer_composition`].
 pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
+    let spec = typed_view(caixa)?;
     let mut out = Vec::new();
-    out.extend(programs_for_aplicacao(caixa)?);
-    out.extend(cilium_network_policies(caixa)?);
-    out.extend(gateway_routes(caixa)?);
+    out.extend(programs_for_aplicacao_from_spec(caixa, &spec)?);
+    out.extend(cilium_network_policies_from_spec(caixa, &spec)?);
+    out.extend(gateway_routes_from_spec(caixa, &spec)?);
     Ok(out)
 }
 
@@ -9328,6 +9425,41 @@ mod tests {
         assert!(kinds.contains(&CILIUM_KIND_NETWORK_POLICY.to_string()));
         assert!(kinds.contains(&GATEWAY_API_KIND_GATEWAY.to_string()));
         assert!(kinds.contains(&GATEWAY_API_KIND_HTTP_ROUTE.to_string()));
+    }
+
+    #[test]
+    fn render_all_byte_matches_manual_three_renderer_composition() {
+        // Pins the composed [`render_all`] one-`typed_view` path to
+        // byte-identical output with the manual three-renderer
+        // composition every prior caller ran through the public
+        // single-`&Caixa` arities. A future implementation of
+        // `render_all` that re-derived one of its three shared
+        // `&AplicacaoSpec`-threaded [`programs_for_aplicacao_from_spec`]
+        // / [`cilium_network_policies_from_spec`] /
+        // [`gateway_routes_from_spec`] renderer bodies from a
+        // differently-seeded typed view (an accidental
+        // `typed_view(other_caixa)?` misroute, a divergent per-body
+        // validation-permitted-shape narrowing that skipped one
+        // renderer's expected fields) surfaces at build time on this
+        // test's failure rather than at a downstream `kubectl apply`
+        // audit far from the render_all call site. Sibling of the peer
+        // [`caixa_flux::tests::cluster_bundle_for_caixa_byte_matches_manual_composition`]
+        // composed-path drift-detection pin on the caixa-flux
+        // per-cluster bundle-emit axis.
+        let caixa = aplicacao_caixa();
+        let via_composed = render_all(&caixa).unwrap();
+        let mut via_manual = Vec::new();
+        via_manual.extend(programs_for_aplicacao(&caixa).unwrap());
+        via_manual.extend(cilium_network_policies(&caixa).unwrap());
+        via_manual.extend(gateway_routes(&caixa).unwrap());
+        assert_eq!(
+            via_composed, via_manual,
+            "render_all composed one-typed_view path must emit \
+             byte-identical Vec<Value> to the manual three-renderer \
+             single-&Caixa composition — a mismatch is a drift on the \
+             `require_kind + aplicacao_view + AplicacaoSpec::validate` \
+             entry-gate cascade this lift collapsed from 3× to 1×"
+        );
     }
 
     // ── HTTPRoute :politicas :timeout overlay ────────────────────────────
