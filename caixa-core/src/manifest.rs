@@ -5250,7 +5250,41 @@ impl Caixa {
             .restart_window()
             .and_then(|s| crate::supervisor::duration_codec::parse(s).ok());
         Some(SupervisorSpec {
-            estrategia: self.estrategia().unwrap_or_default(),
+            // Route the author-omitted `:estrategia` arm through the
+            // substrate-canonical
+            // [`crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT`] typed
+            // `pub const` rather than the transitively-derived
+            // [`RestartStrategy::default`] route the prior
+            // `.unwrap_or_default()` fold reached for — one source of
+            // truth for the Erlang/OTP `one_for_one` half of Learn You
+            // Some Erlang's `{one_for_one, intensity, 5, 60}` worker-
+            // supervisor canonical default that also backs the
+            // [`crate::supervisor::Default for RestartStrategy`] impl
+            // and the [`crate::supervisor::Default for SupervisorSpec`]
+            // impl's struct-literal `estrategia` field, all now routed
+            // through the same lifted constant. Prior to the lift the
+            // composition site carried `.unwrap_or_default()` with no
+            // compile-time link back to the shared OTP-canonical
+            // default that the peer paired
+            // `.unwrap_or(SUPERVISOR_MAX_RESTARTS_DEFAULT)` (b698ec0)
+            // arm on the sibling `:max-restarts` axis routes through —
+            // so a future rebrand of the OTP-canonical strategy default
+            // (a widening to `rest_for_one` once the substrate
+            // discovers startup-order-coupled child cohorts as the more
+            // common shape, a per-cluster overlay the operator pins
+            // through the MESH-COMPOSITION §III.2 supervision-canary
+            // `:estrategia-overrides` roadmap slot) would have had to
+            // migrate the paired `MaxIntensity` + `Period` halves
+            // through the lifted constants and the `one_for_one` half
+            // through a `RestartStrategy::default()` route in lockstep
+            // or the three halves of the same OTP-canonical default
+            // would silently drift out of pairing. Byte-parity against
+            // the lifted constant closes the split. Pinned by
+            // [`supervisor_view_estrategia_fallback_routes_through_lifted_default`]
+            // in the tests module.
+            estrategia: self
+                .estrategia()
+                .unwrap_or(crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT),
             // Route the author-omitted `:max-restarts` arm through the
             // substrate-canonical [`crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT`]
             // typed `pub const` rather than the raw `5` literal — one
@@ -15913,6 +15947,68 @@ mod tests {
             "Caixa::max_restarts() must remain None on the author-\
              omitted arm — the supervisor_view fold must not mutate \
              the outer flat-spread presence bit",
+        );
+    }
+
+    #[test]
+    fn supervisor_view_estrategia_fallback_routes_through_lifted_default() {
+        // Composition pin: [`Caixa::supervisor_view`]'s author-omitted
+        // `:estrategia` arm must degrade onto the substrate-canonical
+        // [`crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT`] typed
+        // `pub const` — the Erlang/OTP-canonical `one_for_one` strategy
+        // half of Learn You Some Erlang's `{one_for_one, intensity, 5, 60}`
+        // worker-supervisor default — rather than the transitively-
+        // derived [`crate::supervisor::RestartStrategy::default`] route
+        // the prior `.unwrap_or_default()` fold reached for. Prior to the
+        // lift the composition site carried `.unwrap_or_default()` with
+        // no compile-time link back to the shared OTP-canonical strategy
+        // default that the paired [`crate::supervisor::Default for
+        // RestartStrategy`] impl and the [`crate::supervisor::Default for
+        // SupervisorSpec`] impl's struct-literal `estrategia` field both
+        // (now) route through the same lifted constant — so a future
+        // rebrand of the OTP-canonical strategy default (an OTP
+        // `rest_for_one` widening once the substrate discovers startup-
+        // order-coupled child cohorts as the more common worker-
+        // supervisor shape, a per-cluster overlay the operator pins
+        // through the MESH-COMPOSITION §III.2 supervision-canary
+        // `:estrategia-overrides` roadmap slot) would have had to migrate
+        // the paired `MaxIntensity` + `Period` halves through the lifted
+        // constants and the `one_for_one` half through a
+        // `RestartStrategy::default()` route in lockstep or a
+        // `:kind Supervisor` caixa carrying an author-omitted
+        // `:estrategia` slot would silently resolve to a `SupervisorSpec`
+        // whose `estrategia` disagreed with the paired
+        // `SupervisorSpec::default()` view. Byte-parity against the
+        // lifted constant closes the split. Peer of the sibling
+        // [`supervisor_view_max_restarts_fallback_routes_through_lifted_default`]
+        // composition pin on the paired `MaxIntensity` half + the
+        // [`crate::supervisor::restart_strategy_default_routes_through_lifted_default`]
+        // + [`crate::supervisor::supervisor_spec_default_estrategia_routes_through_lifted_default`]
+        // pins on the sibling entry points onto the shared substrate
+        // constant.
+        use crate::CaixaKind;
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        let mut c = Caixa::from_lisp(&Caixa::template("root")).unwrap();
+        c.kind = CaixaKind::Supervisor;
+        c.estrategia = None;
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let view = c.supervisor_view().expect(
+            "supervisor_view must materialize a SupervisorSpec for a \
+             :kind Supervisor Caixa carrying a None :estrategia",
+        );
+        assert_eq!(
+            view.estrategia(),
+            crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT,
+            "supervisor_view must degrade the outer \
+             Caixa::estrategia() None arm onto the lifted \
+             SUPERVISOR_ESTRATEGIA_DEFAULT typed pub const (got {:?}, \
+             expected {:?})",
+            view.estrategia(),
+            crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT,
         );
     }
 

@@ -63,7 +63,16 @@ pub enum RestartStrategy {
 
 impl Default for RestartStrategy {
     fn default() -> Self {
-        Self::OneForOne
+        // Route the [`Default for RestartStrategy`] impl through the
+        // substrate-canonical [`SUPERVISOR_ESTRATEGIA_DEFAULT`] typed
+        // `pub const` rather than a raw `Self::OneForOne` arm — one
+        // source of truth for the Erlang/OTP `one_for_one` half of Learn
+        // You Some Erlang's `{one_for_one, intensity, 5, 60}` worker-
+        // supervisor canonical default, paired with the sibling
+        // `SUPERVISOR_MAX_RESTARTS_DEFAULT` `MaxIntensity` half (b698ec0)
+        // and `SUPERVISOR_RESTART_WINDOW_DEFAULT` `Period` half (f7dcd0e).
+        // Pinned by `restart_strategy_default_routes_through_lifted_default`.
+        SUPERVISOR_ESTRATEGIA_DEFAULT
     }
 }
 
@@ -1123,10 +1132,102 @@ pub const SUPERVISOR_RESTART_WINDOW_MAX: Duration = Duration::from_secs(3600);
 /// caixa-flux / caixa-helm rendering axes).
 pub const SUPERVISOR_RESTART_WINDOW_DEFAULT: Duration = Duration::from_secs(60);
 
+/// Substrate-canonical Erlang/OTP-shaped sibling-restart-strategy default
+/// for the `:supervisor :estrategia` axis — the canonical `one_for_one`
+/// half of Learn You Some Erlang's `{one_for_one, intensity, 5, 60}`
+/// worker-supervisor default, extracted as a typed `pub const` so every
+/// substrate-side consumer that resolves "what
+/// [`SupervisorSpec::estrategia`] variant does an author-omitted
+/// `:estrategia` slot degrade onto?" reaches for exactly one substrate-
+/// primitive [`RestartStrategy`].
+///
+/// The `:estrategia` default axis has three production consumers on the
+/// substrate side today: the [`Default for RestartStrategy`] impl's
+/// return arm, the [`Default for SupervisorSpec`] impl's struct-literal
+/// `estrategia` field, and the
+/// [`crate::manifest::Caixa::supervisor_view`] fold's
+/// `.unwrap_or(SUPERVISOR_ESTRATEGIA_DEFAULT)` `Option<RestartStrategy>`
+/// collapse arm — three entry points onto the same OTP-canonical
+/// `one_for_one` value that prior to this lift folded onto a raw
+/// `Self::OneForOne` arm at the [`Default for RestartStrategy`] impl and
+/// implicit `RestartStrategy::default()` routes at the sibling consumers,
+/// with no compile-time link back to the paired
+/// [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `MaxIntensity` half + the paired
+/// [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] `Period` half of the same
+/// `{one_for_one, intensity, 5, 60}` OTP-canonical default. The paired
+/// triple was split across three altitudes with no compile-time link
+/// between the halves: the `MaxIntensity` half rode through the lifted
+/// [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] constant (b698ec0) and the `Period`
+/// half rode through the lifted [`SUPERVISOR_RESTART_WINDOW_DEFAULT`]
+/// constant (f7dcd0e) while the `one_for_one` half rode as an open-coded
+/// discriminator at the [`Default for RestartStrategy`] impl, so a future
+/// coherent rebrand of the triple (Elixir's `{:one_for_one,
+/// max_restarts: 3, max_seconds: 5}` — same strategy, different
+/// intensity/period; an OTP `rest_for_one` widening once the substrate
+/// discovers startup-order-coupled child cohorts as the more common
+/// worker-supervisor default; a per-cluster overlay the operator pins
+/// through a future `:estrategia-overrides` slot the MESH-COMPOSITION
+/// §III.2 supervision-canary roadmap acknowledges) would have had to
+/// migrate the `MaxIntensity` + `Period` halves through the lifted
+/// constants and the `one_for_one` half through an open-coded arm in
+/// lockstep or the three halves of the same OTP-canonical default would
+/// silently drift out of pairing. Lifting the resolution rule to a typed
+/// `pub const` on the substrate primitive means the paired OTP-canonical
+/// worker-supervisor default migrates as one unit on any future axis
+/// change.
+///
+/// The [`RestartStrategy::OneForOne`] value pins Learn You Some Erlang's
+/// `{one_for_one, intensity, 5, 60}` worker-supervisor default (the
+/// closest canonical OTP-shape production reference the substrate
+/// carries, matching the paired [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `5`
+/// `MaxIntensity` half and the paired [`SUPERVISOR_RESTART_WINDOW_DEFAULT`]
+/// `60s` `Period` half). The `one_for_one` strategy — restart only the
+/// failed child, leaving siblings untouched — is the default for tree-of-
+/// independent-workers use cases the substrate's [`RestartStrategy`]
+/// discriminator's own docstring already carries as the default arm; it
+/// composes with the `{5, 60}` restart-intensity ratio to name the same
+/// substrate-canonical "canonical worker-supervisor" shape the paired
+/// halves close on their respective axes.
+///
+/// Lifted as a typed `pub const` so the paired OTP-canonical default has
+/// exactly one source of truth on each of its three halves — the sibling
+/// [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `MaxIntensity` `5` half, the
+/// sibling [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] `Period` `60s` half, and
+/// this `one_for_one` strategy half now share the same substrate-
+/// primitive lift discipline. Same shape every other typed default in
+/// this crate carries (the sibling [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] +
+/// [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] paired halves on the same OTP-
+/// canonical `{one_for_one, intensity, 5, 60}`, the sibling
+/// [`SUPERVISOR_MAX_RESTARTS_MAX`] + [`SUPERVISOR_RESTART_WINDOW_MAX`]
+/// upper caps on the paired sibling axes, and the peer
+/// [`crate::render::DEFAULT_NAMESPACE`] / [`crate::render::DEFAULT_LIBRARY_NAME`]
+/// per-renderer defaults on the caixa-flux / caixa-helm rendering axes).
+pub const SUPERVISOR_ESTRATEGIA_DEFAULT: RestartStrategy = RestartStrategy::OneForOne;
+
 impl Default for SupervisorSpec {
     fn default() -> Self {
         Self {
-            estrategia: RestartStrategy::default(),
+            // Route the struct-literal `estrategia` default arm through
+            // the substrate-canonical [`SUPERVISOR_ESTRATEGIA_DEFAULT`]
+            // typed `pub const` rather than the transitively-derived
+            // `RestartStrategy::default()` route — one source of truth
+            // for the Erlang/OTP `one_for_one` half of Learn You Some
+            // Erlang's `{one_for_one, intensity, 5, 60}` worker-
+            // supervisor canonical default, paired with the sibling
+            // `max_restarts: default_max_restarts()` arm below that
+            // routes through the peer [`SUPERVISOR_MAX_RESTARTS_DEFAULT`]
+            // `MaxIntensity` half (b698ec0) and the sibling
+            // `restart_window: Some(SUPERVISOR_RESTART_WINDOW_DEFAULT)`
+            // arm that routes through the peer
+            // [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] `Period` half
+            // (f7dcd0e). All three halves of the same OTP-canonical
+            // default now share the same substrate-primitive lift
+            // discipline so any future coherent rebrand of the paired
+            // triple migrates through three typed constants in lockstep
+            // instead of splitting two lifted halves against a
+            // transitively-derived third. Pinned by
+            // `supervisor_spec_default_estrategia_routes_through_lifted_default`.
+            estrategia: SUPERVISOR_ESTRATEGIA_DEFAULT,
             max_restarts: default_max_restarts(),
             // Route the struct-literal `restart_window` default arm
             // through the substrate-canonical
@@ -2681,6 +2782,84 @@ mod tests {
         assert_eq!(
             SupervisorSpec::default().restart_window(),
             Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
+        );
+    }
+
+    #[test]
+    fn supervisor_estrategia_default_pins_otp_canonical_value() {
+        // Pin [`SUPERVISOR_ESTRATEGIA_DEFAULT`] at [`RestartStrategy::OneForOne`]
+        // — the Erlang/OTP-canonical `one_for_one` half of Learn You Some
+        // Erlang's `{one_for_one, intensity, 5, 60}` worker-supervisor
+        // canonical default, paired with the sibling
+        // `SUPERVISOR_MAX_RESTARTS_DEFAULT` `5` `MaxIntensity` half and the
+        // sibling `SUPERVISOR_RESTART_WINDOW_DEFAULT` `60s` `Period` half
+        // this constant is the strategy discriminator of on the same
+        // OTP-canonical worker-supervisor default. Pinning the arm here
+        // surfaces a future coherent rebrand of the paired triple (Elixir's
+        // `{:one_for_one, max_restarts: 3, max_seconds: 5}` on the sibling
+        // intensity/period axes leaving this strategy arm untouched, an OTP
+        // `rest_for_one` widening once the substrate discovers startup-
+        // order-coupled child cohorts as the more common worker-supervisor
+        // shape, a per-cluster overlay the operator pins through a future
+        // `:estrategia-overrides` slot the MESH-COMPOSITION §III.2
+        // supervision-canary roadmap acknowledges) as a deliberate test
+        // edit, not a silent contract migration. Peer of the sibling
+        // [`supervisor_max_restarts_default_pins_otp_canonical_value`] +
+        // [`supervisor_restart_window_default_pins_otp_canonical_value`]
+        // paired-half pins on the same OTP-canonical default.
+        assert_eq!(SUPERVISOR_ESTRATEGIA_DEFAULT, RestartStrategy::OneForOne);
+    }
+
+    #[test]
+    fn restart_strategy_default_routes_through_lifted_default() {
+        // Composition pin: the [`Default for RestartStrategy`] impl's
+        // return arm must route through the substrate-canonical
+        // [`SUPERVISOR_ESTRATEGIA_DEFAULT`] typed `pub const` rather than
+        // a raw `Self::OneForOne` arm. Prior to the lift the impl carried
+        // an inline `Self::OneForOne` with no compile-time link back to
+        // the shared OTP-canonical `one_for_one` strategy the paired
+        // [`Default for SupervisorSpec`] impl's struct-literal `estrategia`
+        // field and the [`crate::manifest::Caixa::supervisor_view`] fold's
+        // `.unwrap_or_default()` (now
+        // `.unwrap_or(SUPERVISOR_ESTRATEGIA_DEFAULT)`) arm both key off —
+        // so a future rebrand of the OTP-canonical strategy default (an
+        // OTP `rest_for_one` widening once the substrate discovers
+        // startup-order-coupled child cohorts as the more common worker-
+        // supervisor shape, a per-cluster overlay the operator pins
+        // through a future `:estrategia-overrides` slot) would have had to
+        // be threaded through the `Default` impl and the two peer routes
+        // in lockstep or the three consumers would silently split. Byte-
+        // parity against the lifted constant closes the split. Peer of
+        // the sibling
+        // [`default_max_restarts_helper_routes_through_lifted_default`] +
+        // [`supervisor_spec_default_restart_window_routes_through_lifted_default`]
+        // composition pins on the paired `MaxIntensity` + `Period` halves.
+        assert_eq!(RestartStrategy::default(), SUPERVISOR_ESTRATEGIA_DEFAULT,);
+    }
+
+    #[test]
+    fn supervisor_spec_default_estrategia_routes_through_lifted_default() {
+        // Composition pin: the [`Default for SupervisorSpec`] impl's
+        // struct-literal `estrategia` field must route through the
+        // substrate-canonical [`SUPERVISOR_ESTRATEGIA_DEFAULT`] typed
+        // `pub const` (either directly, or via the
+        // [`RestartStrategy::default`] impl that the sibling
+        // `restart_strategy_default_routes_through_lifted_default` pin
+        // already routes onto the constant). Structurally: every
+        // `SupervisorSpec::default()` call must yield an `estrategia`
+        // field byte-equal to the lifted constant (the three paired
+        // defaults — the [`Default for RestartStrategy`] impl arm, the
+        // struct-literal default arm here, and the
+        // [`crate::manifest::Caixa::supervisor_view`] fold arm — cannot
+        // silently split on any future default rebrand). Peer of the
+        // sibling
+        // [`supervisor_spec_default_max_restarts_routes_through_lifted_default`]
+        // + [`supervisor_spec_default_restart_window_routes_through_lifted_default`]
+        // byte-parity pins on the paired `MaxIntensity` + `Period` halves
+        // of the same `SupervisorSpec::default()` composed altitude.
+        assert_eq!(
+            SupervisorSpec::default().estrategia(),
+            SUPERVISOR_ESTRATEGIA_DEFAULT,
         );
     }
 
