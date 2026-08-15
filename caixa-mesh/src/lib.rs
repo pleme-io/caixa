@@ -7322,7 +7322,7 @@ mod tests {
         for e in &entries {
             let m = e.as_mapping().expect("entry mapping");
             assert!(
-                m.contains_key(M3_KEY_PLACEMENT),
+                kube_has(m, M3_KEY_PLACEMENT),
                 "entry must carry the M3_KEY_PLACEMENT key exactly"
             );
         }
@@ -7387,7 +7387,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(M3_PLACEMENT_KEY_ESTRATEGIA),
+            kube_has(mapping, M3_PLACEMENT_KEY_ESTRATEGIA),
             "Placement's serde derive must emit the estrategia axis under the exact key \
              the lifted M3_PLACEMENT_KEY_ESTRATEGIA const carries; got mapping keys: {keys:?}",
             keys = mapping_string_keys(mapping)
@@ -7454,7 +7454,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(M3_PLACEMENT_KEY_CLUSTERS),
+            kube_has(mapping, M3_PLACEMENT_KEY_CLUSTERS),
             "Placement's serde derive must emit the clusters axis under the exact key \
              the lifted M3_PLACEMENT_KEY_CLUSTERS const carries; got mapping keys: {keys:?}",
             keys = mapping_string_keys(mapping)
@@ -7533,7 +7533,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(M3_PLACEMENT_KEY_AFFINITY),
+            kube_has(mapping, M3_PLACEMENT_KEY_AFFINITY),
             "Placement's serde derive must emit the affinity axis under the exact key \
              the lifted M3_PLACEMENT_KEY_AFFINITY const carries when the typed slot \
              resolves to `Some(_)`; got mapping keys: {keys:?}",
@@ -7623,7 +7623,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(M3_PLACEMENT_KEY_SHARD_KEY),
+            kube_has(mapping, M3_PLACEMENT_KEY_SHARD_KEY),
             "Placement's serde derive must emit the shard_key axis under the exact key \
              the lifted M3_PLACEMENT_KEY_SHARD_KEY const carries when the typed slot \
              resolves to `Some(_)`; got mapping keys: {keys:?}",
@@ -9073,7 +9073,7 @@ mod tests {
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         let spec = kube_spec(gateway).expect("Gateway spec is a mapping");
         assert!(
-            spec.contains_key(caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME),
+            kube_has(spec, caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME),
             "Gateway spec must carry a key byte-identical to the lifted \
              caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME — drift here \
              is the canonical footgun this lift closes"
@@ -9418,10 +9418,10 @@ mod tests {
             let m = rule.as_mapping().expect("rule mapping");
             // matches + backendRefs + timeouts + retry (4 top-level keys).
             assert_eq!(m.len(), 4);
-            assert!(m.contains_key(GATEWAY_API_KEY_MATCHES));
-            assert!(m.contains_key(GATEWAY_API_KEY_BACKEND_REFS));
-            assert!(m.contains_key(GATEWAY_API_KEY_TIMEOUTS));
-            assert!(m.contains_key(GATEWAY_API_KEY_RETRY));
+            assert!(kube_has(m, GATEWAY_API_KEY_MATCHES));
+            assert!(kube_has(m, GATEWAY_API_KEY_BACKEND_REFS));
+            assert!(kube_has(m, GATEWAY_API_KEY_TIMEOUTS));
+            assert!(kube_has(m, GATEWAY_API_KEY_RETRY));
         }
     }
 
@@ -9745,9 +9745,9 @@ mod tests {
         for rule in &rules {
             let m = rule.as_mapping().expect("rule mapping");
             assert_eq!(m.len(), 3);
-            assert!(m.contains_key(CILIUM_KEY_FROM_ENDPOINTS));
-            assert!(m.contains_key(CILIUM_KEY_TO_PORTS));
-            assert!(m.contains_key(CILIUM_KEY_AUTHENTICATION));
+            assert!(kube_has(m, CILIUM_KEY_FROM_ENDPOINTS));
+            assert!(kube_has(m, CILIUM_KEY_TO_PORTS));
+            assert!(kube_has(m, CILIUM_KEY_AUTHENTICATION));
             // The auth block must not leak inside fromEndpoints[] or
             // toPorts[] — guards the Cilium-side schema contract that
             // mutual-auth is an ingress-rule-level concern.

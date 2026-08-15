@@ -23822,6 +23822,30 @@ pub fn kube_field<'a, R: KubeReceiver + ?Sized>(
 /// sibling to the six shape-gated arities that partition the K8s
 /// apiserver `OpenAPI` schema's shape-gate arms.
 ///
+/// The [`serde_yaml::Mapping::contains_key`] inherent method is the
+/// bit-for-bit equivalent shape on the `&Mapping` receiver arm alone:
+/// [`serde_yaml::Mapping::contains_key`] delegates through the same
+/// [`serde_yaml::mapping::Index`] hash-bucket lookup that
+/// [`serde_yaml::Mapping::get`] does, so `kube_has(&mapping, K)`
+/// (which reaches through the trait's
+/// [`field_value`](KubeReceiver::field_value) dispatch to `Mapping::get`)
+/// yields the same `bool` as `mapping.contains_key(K)` on every axis-key
+/// (pinned by [`tests::kube_has_matches_mapping_contains_key_across_swept_axis_keys`]
+/// across a representative sweep of caixa-mesh / caixa-flux / caixa-helm
+/// production axis-keys on both present-key and absent-key arms). Every
+/// routed test-side `mapping.contains_key(<K>)` existence-probe re-inline
+/// site across the renderer crates folds through this one substrate
+/// dispatch after the sweep — the [`serde_yaml::Mapping::contains_key`]
+/// inherent method stays reachable as an escape hatch, but the substrate
+/// promotes the shape-agnostic [`kube_has`] to the canonical existence-
+/// probe form so a caller reaches for the same one-line dispatch across
+/// both `&Value` (a nested-mapping bracket returned from
+/// [`kube_spec_seq_first`] / [`kube_seq_first`] / an outer
+/// [`kube_field`] hop) and `&Mapping` (a [`kube_map`] / [`kube_spec`] /
+/// [`kube_metadata`] hop, a [`placement_blocks`]-style per-entry
+/// `&Mapping` element, a `.as_mapping()` shape-gated bracket) receiver
+/// arms.
+///
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
@@ -55901,6 +55925,118 @@ spec:
                  dispatch axis stays closed under the recomposition"
             );
         }
+    }
+
+    #[test]
+    fn kube_has_matches_mapping_contains_key_across_swept_axis_keys() {
+        // Substrate-level byte-equivalence pin: `kube_has(&mapping, K)`
+        // on the `&Mapping` receiver arm must yield the same `bool` as
+        // the inherent [`serde_yaml::Mapping::contains_key`] method on
+        // every axis-key the routed test-side existence-probe re-inline
+        // sweep across [`caixa-mesh`] and [`caixa-helm`] converges
+        // onto the substrate primitive. The two shapes reach through
+        // the same [`serde_yaml::mapping::Index`] hash-bucket lookup
+        // ([`Mapping::contains_key`] delegates through `.get(K).is_some()`
+        // internally, matching the [`kube_has`] body's
+        // `.field_value(field).is_some()` at the sealed [`KubeReceiver`]
+        // trait's `&Mapping` impl bit-for-bit) — this pin locks the
+        // equivalence at build time so a future upstream `serde_yaml`
+        // upgrade whose `contains_key` path diverges from `get` for any
+        // of the swept keys is a caixa-core-build-time failure naming the
+        // offending axis-key, not a silent semantic drift that would let
+        // the swept `kube_has(m, K)` sites disagree with the pre-sweep
+        // `m.contains_key(K)` shape at consumer test time. Peer of the
+        // sibling caixa-helm-side
+        // [`contains_key_bare_str_key_byte_equals_value_string_wrapped_form_across_swept_axis_keys`]
+        // pin (which partitions the equivalence between the two argument-
+        // shapes of `contains_key` itself — bare-`&str` vs
+        // `Value::String`-wrapped); this pin partitions the equivalence
+        // between the two probe surfaces — [`kube_has`] (the substrate
+        // primitive) vs [`serde_yaml::Mapping::contains_key`] (the
+        // pre-sweep inline shape).
+        //
+        // Swept axis-keys span the four principal surfaces the
+        // renderer-side existence-probe sweep touches: the M3
+        // `placement:` block (mesh, ~5 sites), the Gateway API
+        // per-`HTTPRoute` sub-mapping (mesh, ~4 sites), the Cilium
+        // per-CNP rule sub-mapping (mesh, ~3 sites), and the Helm 3
+        // Chart.yaml surface (helm, ~5 sites) — enough diversity that
+        // any per-key hash-bucket divergence surfaces here rather than
+        // at a specific consumer site.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(M3_KEY_PLACEMENT, serde_yaml::Value::Null);
+        m.insert_str_key(
+            M3_PLACEMENT_KEY_ESTRATEGIA,
+            serde_yaml::Value::String("SingleNode".into()),
+        );
+        m.insert_str_key(
+            M3_PLACEMENT_KEY_CLUSTERS,
+            serde_yaml::Value::Sequence(vec![]),
+        );
+        m.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_yaml::Value::Sequence(vec![]));
+        m.insert_str_key(
+            GATEWAY_API_KEY_BACKEND_REFS,
+            serde_yaml::Value::Sequence(vec![]),
+        );
+        m.insert_str_key(
+            CILIUM_KEY_FROM_ENDPOINTS,
+            serde_yaml::Value::Sequence(vec![]),
+        );
+        m.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
+        m.insert_str_key(
+            HELM_CHART_KEY_TYPE,
+            serde_yaml::Value::String("application".into()),
+        );
+        m.insert_str_key(
+            HELM_CHART_KEY_API_VERSION,
+            serde_yaml::Value::String("v2".into()),
+        );
+        m.insert_str_key(
+            HELM_CHART_DEPENDENCY_KEY_NAME,
+            serde_yaml::Value::String("pleme-computeunit".into()),
+        );
+        for field in [
+            // M3 placement block sub-keys (caixa-mesh sweep)
+            M3_KEY_PLACEMENT,
+            M3_PLACEMENT_KEY_ESTRATEGIA,
+            M3_PLACEMENT_KEY_CLUSTERS,
+            // Gateway API per-HTTPRoute sub-mapping (caixa-mesh sweep)
+            GATEWAY_API_KEY_MATCHES,
+            GATEWAY_API_KEY_BACKEND_REFS,
+            // Cilium per-CNP rule sub-mapping (caixa-mesh sweep)
+            CILIUM_KEY_FROM_ENDPOINTS,
+            CILIUM_KEY_TO_PORTS,
+            // Helm 3 Chart.yaml surface (caixa-helm sweep)
+            HELM_CHART_KEY_TYPE,
+            HELM_CHART_KEY_API_VERSION,
+            HELM_CHART_DEPENDENCY_KEY_NAME,
+        ] {
+            assert_eq!(
+                kube_has(&m, field),
+                m.contains_key(field),
+                "kube_has(&Mapping, {field:?}) must byte-equal the raw \
+                 Mapping::contains_key({field:?}) probe on the present-\
+                 key arm — the substrate-side dispatch through \
+                 KubeReceiver::field_value must return the same bool \
+                 the inherent contains_key inherent method returns, so \
+                 the ~15 test-side .contains_key(K) sweep sites across \
+                 caixa-mesh + caixa-helm fold onto kube_has(m, K) \
+                 without a semantic drift"
+            );
+        }
+        // Absent-key arm: both probes must return false on a key that
+        // was never inserted — the sweep must preserve the absent-key
+        // semantic bit-for-bit alongside the present-key semantic.
+        let absent = "this_axis_key_never_appears_in_the_swept_surfaces";
+        assert_eq!(
+            kube_has(&m, absent),
+            m.contains_key(absent),
+            "kube_has(&Mapping, absent-key) must byte-equal the raw \
+             Mapping::contains_key(absent-key) probe on the absent-\
+             key arm too — otherwise the sweep would silently flip \
+             `!kube_has(m, K)` vs `!m.contains_key(K)` at any \
+             absence-check consumer site"
+        );
     }
 
     #[test]

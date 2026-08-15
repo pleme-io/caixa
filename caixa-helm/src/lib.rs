@@ -1838,7 +1838,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(HELM_CHART_KEY_TYPE),
+            kube_has(mapping, HELM_CHART_KEY_TYPE),
             "rendered Chart.yaml must carry a top-level {HELM_CHART_KEY_TYPE:?} \
              axis-key — a drift on the `#[serde(rename = {HELM_CHART_KEY_TYPE:?})]` \
              attribute at ChartYaml's `chart_type` field silently reroutes the \
@@ -1888,7 +1888,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(HELM_CHART_KEY_APP_VERSION),
+            kube_has(mapping, HELM_CHART_KEY_APP_VERSION),
             "rendered Chart.yaml must carry a top-level \
              {HELM_CHART_KEY_APP_VERSION:?} axis-key — a drift on the \
              `#[serde(rename = {HELM_CHART_KEY_APP_VERSION:?})]` attribute at \
@@ -1945,7 +1945,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(HELM_CHART_KEY_API_VERSION),
+            kube_has(mapping, HELM_CHART_KEY_API_VERSION),
             "rendered Chart.yaml must carry a top-level \
              {HELM_CHART_KEY_API_VERSION:?} axis-key — a drift on the \
              `#[serde(rename = {HELM_CHART_KEY_API_VERSION:?})]` attribute at \
@@ -2009,7 +2009,7 @@ spec:
             HELM_CHART_DEPENDENCY_KEY_ALIAS,
         ] {
             assert!(
-                mapping.contains_key(key),
+                kube_has(mapping, key),
                 "serialized ChartDependency must carry a top-level {key:?} \
                  axis-key — a drift on the `ChartDependency` struct's serde \
                  field-name (a Rust-side rename, an added \
@@ -2092,7 +2092,7 @@ spec:
              the Helm 3 chart-schema shape",
         );
         assert!(
-            mapping.contains_key(HELM_CHART_KEY_DEPENDENCIES),
+            kube_has(mapping, HELM_CHART_KEY_DEPENDENCIES),
             "rendered Chart.yaml must carry a top-level \
              {HELM_CHART_KEY_DEPENDENCIES:?} axis-key — a drift on the \
              `ChartYaml.dependencies` field's serde field-name (a Rust-side \
