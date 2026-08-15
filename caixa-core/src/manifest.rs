@@ -604,6 +604,80 @@ impl Caixa {
         )
     }
 
+    /// Substrate-canonical per-`Caixa` **resolved-publish-tag** composer —
+    /// returns the caixa's canonical Zig-style git-publish-tag as an owned
+    /// [`String`], derived by concatenating
+    /// [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] with the typed
+    /// [`Self::versao`] byte-string on a single `format!` template.
+    /// Every substrate-side consumer that resolves "which git tag does this
+    /// caixa publish under?" reaches for exactly one typed dispatch on the
+    /// substrate primitive — the raw `format!("{prefix}{versao}", prefix =
+    /// caixa_core::DEFAULT_PUBLISH_TAG_PREFIX, versao = caixa.versao())`
+    /// open-coded composition every prior caller re-derived collapses onto
+    /// one canonical arm.
+    ///
+    /// Peer of the sibling [`Self::canonical_git_url`] (124f864) resolved-
+    /// git-URL composer on the paired per-`Caixa` git-remote axis — same
+    /// "close the composed substrate-primitive at one canonical arm on the
+    /// single-`&Caixa` dispatch, converge every prior open-coded caller
+    /// onto the arm" discipline extended from the resolved-URL projection
+    /// of the per-`Caixa` `:repositorio` axis onto the resolved-tag
+    /// projection of the per-`Caixa` `:versao` axis. The two accessors
+    /// jointly close the pair of scalars every `FluxCD` `GitRepository` CR
+    /// keys off (`spec.url` via [`Self::canonical_git_url`],
+    /// `spec.ref.tag` via [`Self::publish_tag`]) at the substrate primitive
+    /// — a downstream consumer that reaches through both accessors reads
+    /// the complete published-git-identity of a caixa through two typed
+    /// dispatches, not four open-coded field accesses.
+    ///
+    /// The reader-side (`caixa-flux::cluster_bundle` /
+    /// `ClusterBundleOpts::for_caixa`'s `git_ref` field, every future
+    /// per-cluster snapshot bundle emitter, the future M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's tag-carrier
+    /// slot on the tatara `Process` intent) always resolves the tag under
+    /// the canonical [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] prefix — this
+    /// method encodes that reader-side convention. The writer-side
+    /// (`caixa-feira`'s `feira publish` `--prefix` clap flag) allows the
+    /// operator to override the prefix at publish time; the two surfaces
+    /// intentionally sit on the "canonical default + operator override"
+    /// pair the sibling [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] constant's
+    /// own docstring documents — a `feira publish --prefix release/`
+    /// override is the operator's explicit opt-out from the substrate
+    /// default, not a supported drift axis.
+    ///
+    /// The composition body is the exact byte-image of the prior inline
+    /// [`caixa-flux::ClusterBundleOpts::for_caixa`] `git_ref` composer at
+    /// caixa-flux/src/lib.rs:2105 — pinned by the sibling caixa-flux
+    /// byte-parity test
+    /// `cluster_bundle_opts_for_caixa_git_ref_routes_through_publish_tag_accessor`
+    /// against a future implementation of this method that reordered the
+    /// `format!` template arguments, migrated the `<prefix>` segment to a
+    /// different constant (the [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] axis
+    /// a future Zig-style-tag rebrand may split off — the constant's own
+    /// docstring anticipates a substrate-side move to `release/<versao>`
+    /// or bare `<versao>` shapes once a sibling forge convention adopts a
+    /// slash-namespaced or bare-scalar form), interposed a canonicalization
+    /// pass on the `:versao` axis (a SemVer-2 build-metadata strip an OCI-
+    /// tag normalizer might apply once the M4 registry-alignment slot
+    /// lands), or silently absorbed an empty `:versao` arm (which cannot
+    /// occur past the [`Self::validate_versao`] gate but which a
+    /// hypothetical bypass on the accessor path must not silently paper
+    /// over).
+    ///
+    /// Owns per-call [`String`] allocation via the single `format!`
+    /// invocation — the by-value return matches every downstream
+    /// consumer's field-fill shape (the caixa-flux `GitRefSpec::Tag(String)`
+    /// variant's owned payload, every future `intent.aplicacao.tag: String`
+    /// field-fill on the M4 CR materializer's tag-carrier slot).
+    #[must_use]
+    pub fn publish_tag(&self) -> String {
+        format!(
+            "{prefix}{versao}",
+            prefix = crate::DEFAULT_PUBLISH_TAG_PREFIX,
+            versao = self.versao(),
+        )
+    }
+
     /// Substrate-canonical per-`Caixa` `:descricao` free-form-prose
     /// chart-description scalar accessor every consumer of the top-level
     /// manifest's Chart.yaml `description:` axis keys off — returns the
@@ -10506,6 +10580,110 @@ mod tests {
                  every representative :repositorio input — got {:?}, \
                  expected {manual:?}",
                 c.canonical_git_url(),
+            );
+        }
+    }
+
+    // ── Caixa::publish_tag — resolved-publish-tag composer ───────────
+
+    #[test]
+    fn publish_tag_composes_prefix_and_versao_on_all_shapes() {
+        // Fail-before-pass-after pin: [`Caixa::publish_tag`] must compose
+        // [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] against the caixa's typed
+        // [`Caixa::versao`] byte-string across every SemVer-2 shape the
+        // sibling [`validate_versao_accepts_canonical_forms`] positive-set
+        // sweep documents — bare MAJOR.MINOR.PATCH, pre-release tags
+        // (`-rc.1`), build metadata (`+build.42`), the combined form, and
+        // the `0.0.0` boundary case. Every accept-set value the peer
+        // validate gate lets through must survive the resolved-tag
+        // projection byte-equal.
+        for versao in [
+            "0.1.0",
+            "0.0.0",
+            "1.0.0",
+            "1.2.3-rc.1",
+            "1.2.3+build.42",
+            "1.2.3-rc.1+build.42",
+        ] {
+            let c = caixa_with_versao(versao);
+            let expected = format!(
+                "{prefix}{versao}",
+                prefix = crate::DEFAULT_PUBLISH_TAG_PREFIX,
+            );
+            assert_eq!(
+                c.publish_tag(),
+                expected,
+                "Caixa::publish_tag must compose \
+                 DEFAULT_PUBLISH_TAG_PREFIX ({prefix:?}) against \
+                 :versao ({versao:?}) verbatim — got {got:?}, \
+                 expected {expected:?}",
+                prefix = crate::DEFAULT_PUBLISH_TAG_PREFIX,
+                got = c.publish_tag(),
+            );
+        }
+    }
+
+    #[test]
+    fn publish_tag_starts_with_default_publish_tag_prefix() {
+        // Prefix-shape pin: every [`Caixa::publish_tag`] emission must
+        // begin with the canonical [`crate::DEFAULT_PUBLISH_TAG_PREFIX`]
+        // byte-string on every input, guarding a hypothetical future
+        // implementation that migrated the prefix segment to an inline
+        // literal (`"v"`) that would silently drift from any rebrand of
+        // the lifted constant. Peer to the sibling caixa-flux
+        // `cluster_bundle_default_git_tag_uses_lifted_caixa_core_prefix`
+        // test which pins the same prefix invariant at the reader-side
+        // `GitRefSpec::Tag` emit site.
+        for versao in ["0.0.0", "0.1.0", "1.2.3-rc.1", "9.9.9+build.1"] {
+            let c = caixa_with_versao(versao);
+            let tag = c.publish_tag();
+            assert!(
+                tag.starts_with(crate::DEFAULT_PUBLISH_TAG_PREFIX),
+                "Caixa::publish_tag emission {tag:?} must start with \
+                 the lifted crate::DEFAULT_PUBLISH_TAG_PREFIX \
+                 ({prefix:?})",
+                prefix = crate::DEFAULT_PUBLISH_TAG_PREFIX,
+            );
+        }
+    }
+
+    #[test]
+    fn publish_tag_byte_matches_manual_composition() {
+        // Byte-parity pin: [`Caixa::publish_tag`] must render byte-
+        // identically to the manual open-coded
+        // `format!("{prefix}{versao}", prefix =
+        //  caixa_core::DEFAULT_PUBLISH_TAG_PREFIX, versao =
+        //  caixa.versao())` composition every prior substrate-side
+        // caller re-derived. Guards the paired-site convergence just
+        // applied at caixa-flux's [`ClusterBundleOpts::for_caixa`]
+        // `git_ref` composer (which now routes through this accessor):
+        // a future implementation of this method that reordered the
+        // format arguments, swapped the `<prefix>` constant for a
+        // different one, or interposed a canonicalization pass on the
+        // `:versao` axis surfaces here as a caixa-core build-time test
+        // failure rather than as a downstream FluxCD `GitRepository`
+        // reconcile mismatch far from this method's source.
+        for versao in [
+            "0.1.0",
+            "0.0.0",
+            "1.2.3-rc.1",
+            "1.2.3+build.42",
+            "1.2.3-rc.1+build.42",
+        ] {
+            let c = caixa_with_versao(versao);
+            let manual = format!(
+                "{prefix}{versao}",
+                prefix = crate::DEFAULT_PUBLISH_TAG_PREFIX,
+                versao = c.versao(),
+            );
+            assert_eq!(
+                c.publish_tag(),
+                manual,
+                "Caixa::publish_tag must byte-equal the manual \
+                 open-coded `format!(\"{{prefix}}{{versao}}\", ...)` \
+                 composition across every representative :versao input \
+                 — got {got:?}, expected {manual:?}",
+                got = c.publish_tag(),
             );
         }
     }

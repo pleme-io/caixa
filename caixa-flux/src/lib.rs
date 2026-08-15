@@ -2102,11 +2102,37 @@ impl ClusterBundleOpts {
             // [`caixa_core::manifest::tests::canonical_git_url_byte_matches_manual_composition`]
             // caixa-core pin.
             git_url: caixa.canonical_git_url(),
-            git_ref: GitRefSpec::Tag(format!(
-                "{prefix}{versao}",
-                prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
-                versao = caixa.versao(),
-            )),
+            // Route the per-`ClusterBundleOpts::for_caixa` git-publish-tag
+            // composer through the canonical [`caixa_core::Caixa::publish_tag`]
+            // substrate primitive rather than the prior open-coded
+            // `format!("{prefix}{versao}", prefix =
+            // caixa_core::DEFAULT_PUBLISH_TAG_PREFIX, versao = caixa.versao())`
+            // composition — the load-bearing per-cluster-bundle git-tag
+            // resolver on the emitted `GitRepository` `spec.ref.tag` now
+            // reads through exactly one typed dispatch on the substrate
+            // primitive, peer of the sibling `git_url:` field's converge
+            // onto [`caixa_core::Caixa::canonical_git_url`] (aaf1028 /
+            // 124f864) on the paired `spec.url` axis. The two typed
+            // dispatches jointly close the FluxCD `GitRepository` CR's
+            // `spec.url` + `spec.ref.tag` scalars at the substrate
+            // primitive — a downstream consumer that reaches through both
+            // accessors reads the complete published-git-identity of a
+            // caixa through two typed dispatches, not four open-coded
+            // field accesses. Same "close the composed substrate-primitive
+            // at one canonical arm on the single-`&Caixa` dispatch,
+            // converge every prior open-coded caller onto the arm"
+            // discipline the sibling [`caixa_core::Caixa::canonical_git_url`]
+            // lift established across `git_url:` — this landing extends
+            // the discipline onto the paired `git_ref:` axis. Byte-
+            // identical to the prior open-coded composition (the
+            // `format!` template + typed [`Caixa::versao`] accessor +
+            // lifted [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] constant
+            // all preserved verbatim); pinned by
+            // [`tests::cluster_bundle_opts_for_caixa_git_ref_routes_through_publish_tag_accessor`]
+            // in this crate's tests module and by the peer
+            // [`caixa_core::manifest::tests::publish_tag_byte_matches_manual_composition`]
+            // caixa-core pin.
+            git_ref: GitRefSpec::Tag(caixa.publish_tag()),
         }
     }
 }
@@ -5466,6 +5492,58 @@ spec:
              substrate's per-caixa version-identity dispatch",
             contents = gr.contents
         );
+    }
+
+    #[test]
+    fn cluster_bundle_opts_for_caixa_git_ref_routes_through_publish_tag_accessor() {
+        // Byte-parity converge pin: [`ClusterBundleOpts::for_caixa`]'s
+        // `git_ref: GitRefSpec::Tag(...)` body must derive its terminal
+        // scalar through the canonical [`caixa_core::Caixa::publish_tag`]
+        // substrate primitive byte-for-byte. Peer of the sibling
+        // [`cluster_bundle_opts_for_caixa_git_url_routes_through_canonical_git_url_accessor`]
+        // pin on the paired `git_url:` axis (which routes through
+        // [`caixa_core::Caixa::canonical_git_url`]) — this closes the
+        // second coordinate of the FluxCD `GitRepository` CR's
+        // (`spec.url`, `spec.ref.tag`) scalar pair at the substrate
+        // primitive. A regression that re-inlines the prior
+        // `format!("{prefix}{versao}", prefix =
+        // caixa_core::DEFAULT_PUBLISH_TAG_PREFIX, versao =
+        // caixa.versao())` two-axis composition at this constructor site
+        // silently splits the emitted tag from every future extension
+        // of the [`caixa_core::Caixa::publish_tag`] projection (a per-
+        // registry `:versao` OCI-tag normalization the M4 registry-
+        // alignment slot lands, a per-edition pre-release-tag overlay
+        // dispatched through `Caixa::edicao`, a per-`:publish-tag`
+        // author-side override slot the substrate may grow once a
+        // sibling forge convention adopts a slash-namespaced or bare-
+        // scalar form) — the source-controller would then resolve a
+        // pre-extension git tag while every other substrate-side
+        // per-caixa tag consumer (the paired caixa-feira `feira
+        // publish` writer-side tag, the future M4 CR materializer's
+        // tag-carrier slot on the tatara `Process` intent) carried the
+        // post-extension form, silently freezing every deployed chart
+        // at the wrong per-caixa git snapshot far from this constructor
+        // site's rebrand commit.
+        for repositorio in [None, Some("github:pleme-io/checkout")] {
+            let caixa = {
+                let mut c = sample_caixa();
+                c.repositorio = repositorio.map(String::from);
+                c
+            };
+            let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+            let expected = caixa.publish_tag();
+            match &opts.git_ref {
+                GitRefSpec::Tag(tag) => assert_eq!(
+                    tag, &expected,
+                    "ClusterBundleOpts::for_caixa's `git_ref: \
+                     GitRefSpec::Tag(...)` body must derive its scalar \
+                     through the canonical \
+                     `caixa_core::Caixa::publish_tag` substrate \
+                     primitive — got {tag:?}, expected {expected:?}"
+                ),
+                other => panic!("expected GitRefSpec::Tag, got {other:?}"),
+            }
+        }
     }
 
     #[test]
