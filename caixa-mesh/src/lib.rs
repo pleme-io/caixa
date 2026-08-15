@@ -3274,13 +3274,14 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is,
-        kube_field, kube_field_field, kube_field_seq, kube_field_str, kube_field_u64, kube_kind,
-        kube_kind_is, kube_map, kube_match_label, kube_match_label_is, kube_match_labels,
-        kube_metadata, kube_metadata_label, kube_metadata_label_is, kube_metadata_labels,
-        kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first, kube_spec,
-        kube_spec_field, kube_spec_seq_field, kube_spec_seq_first, kube_spec_seq_first_seq_first,
-        kube_spec_seq_first_seq_first_seq_first, kube_spec_seq_first_str, kube_spec_str_field,
-        kube_str, kube_u64, mapping_str_keys, mapping_string_keys,
+        kube_field, kube_field_field, kube_field_seq, kube_field_str, kube_field_u64, kube_has,
+        kube_kind, kube_kind_is, kube_map, kube_match_label, kube_match_label_is,
+        kube_match_labels, kube_metadata, kube_metadata_label, kube_metadata_label_is,
+        kube_metadata_labels, kube_name, kube_name_is, kube_namespace, kube_seq, kube_seq_first,
+        kube_spec, kube_spec_field, kube_spec_seq_field, kube_spec_seq_first,
+        kube_spec_seq_first_seq_first, kube_spec_seq_first_seq_first_seq_first,
+        kube_spec_seq_first_str, kube_spec_str_field, kube_str, kube_u64, mapping_str_keys,
+        mapping_string_keys,
     };
     use std::time::Duration;
 
@@ -5454,7 +5455,7 @@ mod tests {
                  HTTP-shaped `:contratos` edges",
             );
         assert!(
-            rules.get(CILIUM_KEY_HTTP).is_some(),
+            kube_has(rules, CILIUM_KEY_HTTP),
             "per-`toPorts[]` `rules` L7-rule-list-container must carry \
              the lifted `CILIUM_KEY_HTTP` (`\"http\"`) L7-HTTP-rule-list-\
              discriminator key verbatim — the load-bearing Cilium CRD \
@@ -5559,7 +5560,7 @@ mod tests {
                      navigable through the lifted GATEWAY_API_KEY_PATH constant",
                 );
                 assert!(
-                    path.get(KUBE_KEY_TYPE).is_some(),
+                    kube_has(path, KUBE_KEY_TYPE),
                     "per-`HTTPRouteMatch` `path` block must carry \
                      the lifted `KUBE_KEY_TYPE` (`\"type\"`) path-\
                      selection-predicate discriminator scalar-key \
@@ -7149,7 +7150,7 @@ mod tests {
         assert!(!entries.is_empty());
         for e in &entries {
             assert!(
-                e.get(M3_KEY_PLACEMENT).is_some(),
+                kube_has(e, M3_KEY_PLACEMENT),
                 "every member entry must carry a `placement:` block"
             );
         }
@@ -7234,11 +7235,11 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         for p in placement_blocks(&entries) {
             assert!(
-                p.get(M3_PLACEMENT_KEY_AFFINITY).is_none(),
+                !kube_has(p, M3_PLACEMENT_KEY_AFFINITY),
                 "placement.affinity must be absent when :affinity is None"
             );
             assert!(
-                p.get(M3_PLACEMENT_KEY_SHARD_KEY).is_none(),
+                !kube_has(p, M3_PLACEMENT_KEY_SHARD_KEY),
                 "placement.shardKey must be absent when :shard-key is None"
             );
             // Exactly 2 keys remain — estrategia + clusters.
@@ -7842,7 +7843,7 @@ mod tests {
                 1,
                 "destination endpointSelector must be the program-only selector"
             );
-            assert!(selector.get(LABEL_PROGRAM).is_some());
+            assert!(kube_has(selector, LABEL_PROGRAM));
         }
     }
 
@@ -7869,8 +7870,8 @@ mod tests {
                 2,
                 "source fromEndpoints must be the program-in-aplicacao selector (2 axes)"
             );
-            assert!(from.get(LABEL_PROGRAM).is_some());
-            assert!(from.get(LABEL_APLICACAO).is_some());
+            assert!(kube_has(from, LABEL_PROGRAM));
+            assert!(kube_has(from, LABEL_APLICACAO));
         }
     }
 
@@ -7906,8 +7907,8 @@ mod tests {
             kube_spec_seq_first_seq_first(nats_policy, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS)
                 .unwrap();
         // L4 ports yes; L7 rules no.
-        assert!(to_ports.get(CILIUM_KEY_PORTS).is_some());
-        assert!(to_ports.get(KUBE_KEY_RULES).is_none());
+        assert!(kube_has(to_ports, CILIUM_KEY_PORTS));
+        assert!(!kube_has(to_ports, KUBE_KEY_RULES));
     }
 
     #[test]
@@ -9303,12 +9304,7 @@ mod tests {
         for rule in &rules {
             let timeouts = kube_map(rule, GATEWAY_API_KEY_TIMEOUTS)
                 .expect("rule must carry timeouts mapping when :politicas :timeout is set");
-            assert_eq!(
-                timeouts
-                    .get(GATEWAY_API_KEY_REQUEST)
-                    .and_then(|v| v.as_str()),
-                Some("30s")
-            );
+            assert_eq!(kube_str(timeouts, GATEWAY_API_KEY_REQUEST), Some("30s"));
         }
     }
 
@@ -9329,7 +9325,7 @@ mod tests {
         assert!(!rules.is_empty());
         for rule in &rules {
             assert!(
-                rule.get(GATEWAY_API_KEY_TIMEOUTS).is_none(),
+                !kube_has(rule, GATEWAY_API_KEY_TIMEOUTS),
                 "rule must omit `timeouts:` when :politicas :timeout is None"
             );
         }
@@ -9483,7 +9479,7 @@ mod tests {
         assert!(!rules.is_empty());
         for rule in &rules {
             assert!(
-                rule.get(GATEWAY_API_KEY_RETRY).is_none(),
+                !kube_has(rule, GATEWAY_API_KEY_RETRY),
                 "rule must omit `retry:` when :politicas :retries is None"
             );
         }
@@ -9577,12 +9573,11 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| kube_str(t, GATEWAY_API_KEY_REQUEST)),
+                kube_field_str(rule, GATEWAY_API_KEY_TIMEOUTS, GATEWAY_API_KEY_REQUEST),
                 Some("15s")
             );
             assert!(
-                rule.get(GATEWAY_API_KEY_RETRY).is_none(),
+                !kube_has(rule, GATEWAY_API_KEY_RETRY),
                 "retry: must be absent when only :timeout is set"
             );
         }
@@ -9597,7 +9592,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert!(
-                rule.get(GATEWAY_API_KEY_TIMEOUTS).is_none(),
+                !kube_has(rule, GATEWAY_API_KEY_TIMEOUTS),
                 "timeouts: must be absent when only :retries is set"
             );
             assert_eq!(
@@ -9668,7 +9663,7 @@ mod tests {
         assert!(!rules.is_empty());
         for rule in &rules {
             assert!(
-                rule.get(CILIUM_KEY_AUTHENTICATION).is_none(),
+                !kube_has(rule, CILIUM_KEY_AUTHENTICATION),
                 "rule must omit `authentication:` when :mtls-required is None"
             );
         }
@@ -9764,14 +9759,14 @@ mod tests {
             let from = kube_seq(rule, CILIUM_KEY_FROM_ENDPOINTS).expect("fromEndpoints sequence");
             for fe in from {
                 assert!(
-                    fe.get(CILIUM_KEY_AUTHENTICATION).is_none(),
+                    !kube_has(fe, CILIUM_KEY_AUTHENTICATION),
                     "authentication must not nest inside fromEndpoints[]"
                 );
             }
             let to = kube_seq(rule, CILIUM_KEY_TO_PORTS).expect("toPorts sequence");
             for tp in to {
                 assert!(
-                    tp.get(CILIUM_KEY_AUTHENTICATION).is_none(),
+                    !kube_has(tp, CILIUM_KEY_AUTHENTICATION),
                     "authentication must not nest inside toPorts[]"
                 );
             }

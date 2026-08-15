@@ -2436,10 +2436,10 @@ mod tests {
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
         kube_api_version_is, kube_bool, kube_field_bool, kube_field_field, kube_field_u64,
-        kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq, kube_spec_bool_field,
-        kube_spec_field, kube_spec_map_field, kube_spec_seq_field, kube_spec_seq_first,
-        kube_spec_spec_field, kube_spec_spec_map_field, kube_spec_spec_str_field,
-        kube_spec_str_field, kube_str,
+        kube_has, kube_kind, kube_map, kube_name, kube_root_seq_field, kube_seq,
+        kube_spec_bool_field, kube_spec_field, kube_spec_map_field, kube_spec_seq_field,
+        kube_spec_seq_first, kube_spec_spec_field, kube_spec_spec_map_field,
+        kube_spec_spec_str_field, kube_spec_str_field, kube_str,
     };
 
     fn sample_caixa() -> Caixa {
@@ -4441,9 +4441,9 @@ spec:
             kube_str(&entry, KUBE_KEY_NAMESPACE),
             Some(DEFAULT_NAMESPACE)
         );
-        assert!(entry.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
-        assert!(entry.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());
-        assert!(entry.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some());
+        assert!(kube_has(&entry, COMPUTEUNIT_SPEC_KEY_MODULE));
+        assert!(kube_has(&entry, COMPUTEUNIT_SPEC_KEY_TRIGGER));
+        assert!(kube_has(&entry, COMPUTEUNIT_SPEC_KEY_CAPABILITIES));
         assert!(
             kube_field_field(
                 &entry,
@@ -4863,9 +4863,9 @@ spec:
         // programs.yaml entry that's structurally identical to V0
         // (no extra keys).
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        assert!(entry.get(M2_KEY_LIMITS).is_none());
-        assert!(entry.get(M2_KEY_BEHAVIOR).is_none());
-        assert!(entry.get(M2_KEY_UPGRADE_FROM).is_none());
+        assert!(!kube_has(&entry, M2_KEY_LIMITS));
+        assert!(!kube_has(&entry, M2_KEY_BEHAVIOR));
+        assert!(!kube_has(&entry, M2_KEY_UPGRADE_FROM));
     }
 
     #[test]
@@ -4955,7 +4955,7 @@ spec:
         let values =
             kube_spec_map_field(&parsed, FLUX_KEY_VALUES).expect("spec.values mapping present");
         assert!(
-            values.get(DEFAULT_LIBRARY_NAME).is_some(),
+            kube_has(values, DEFAULT_LIBRARY_NAME),
             "spec.values must wrap under the lifted DEFAULT_LIBRARY_NAME \
              ({DEFAULT_LIBRARY_NAME:?}); a drifted literal here silently \
              routes per-cluster overrides nowhere at helm template time"
