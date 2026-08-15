@@ -760,6 +760,98 @@ impl Caixa {
         crate::lareira_chart_name(self.nome())
     }
 
+    /// Substrate-canonical per-`Caixa` **resolved-OCI-chart-ref** composer
+    /// — returns the caixa's canonical `oci://<registry>/lareira-<nome>`
+    /// per-Servico Helm chart OCI artifact reference as an owned
+    /// [`String`], derived by dispatching through the substrate-canonical
+    /// [`crate::oci_chart_ref`] helper (which itself composes
+    /// [`crate::OCI_SCHEME_PREFIX`] + the caller-supplied `registry` +
+    /// [`crate::lareira_chart_name`]-of-[`Self::nome`]) against the
+    /// caller-supplied `registry` and the typed [`Self::nome`] byte-string.
+    /// Every substrate-side consumer that resolves "which OCI chart
+    /// artifact does this caixa publish under, in this registry?" reaches
+    /// for exactly one typed dispatch on the substrate primitive — the raw
+    /// `caixa_core::oci_chart_ref(registry, caixa.nome())` two-step compose
+    /// every prior caller re-derived collapses onto one canonical arm on
+    /// the single-`(&Caixa, &str)` dispatch.
+    ///
+    /// Fourth member of the paired per-`Caixa` published-artifact-identity
+    /// axis alongside [`Self::canonical_git_url`] (124f864) /
+    /// [`Self::publish_tag`] (07e05b8) / [`Self::lareira_chart_name`]
+    /// (a8f0bee) — same "close the composed substrate-primitive at one
+    /// canonical arm on the single-`&Caixa` dispatch, converge every
+    /// prior open-coded caller onto the arm" discipline extended from the
+    /// resolved-URL / resolved-tag / resolved-chart-name projections of
+    /// the `:repositorio` / `:versao` / `:nome` axes onto the resolved-
+    /// OCI-ref projection over the paired `(registry, :nome)` inputs. The
+    /// four accessors jointly close the per-`Caixa` published-artifact-
+    /// identity surface every downstream consumer of a caixa's published
+    /// deploy artifacts keys off (git source URL via
+    /// [`Self::canonical_git_url`], git source tag via
+    /// [`Self::publish_tag`], per-Servico Helm chart identity via
+    /// [`Self::lareira_chart_name`], per-registry OCI chart artifact
+    /// reference via [`Self::oci_chart_ref`]) at the substrate primitive
+    /// — a downstream consumer that reaches through all four reads the
+    /// complete deploy-artifact identity of a caixa through four typed
+    /// dispatches, not eight open-coded compositions across four renderer
+    /// crates. The unique-signature dispatch (`(&Caixa, &str)` on this
+    /// method vs. `&Caixa` on the sibling three) reflects the extra input
+    /// axis this composer folds in: unlike the git-URL / git-tag / chart-
+    /// name axes (each derived purely from a `&Caixa`), the OCI-ref axis
+    /// pairs the caixa's per-`:nome` chart identity with the caller-
+    /// supplied per-registry authority segment, so the accessor threads
+    /// the registry byte-string through as a positional `&str`.
+    ///
+    /// The reader-side (one production site at the time of the lift —
+    /// [`caixa-tatara::process_for_aplicacao`]'s `derive_chart_ref` helper
+    /// at caixa-tatara/src/lib.rs:333 that composes the emitted
+    /// `AplicacaoIntent.chart_ref` scalar the tatara-reconciler feeds into
+    /// `helm install`, plus every future per-Servico OCI publish emitter
+    /// the CAIXA-SDLC §II `caixa-publish.yml` reusable workflow's
+    /// `skopeo push` step keys off, the future per-cluster snapshot bundle
+    /// emitter's per-CR `oci://…` field-fill on the M4 registry-alignment
+    /// slot, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's per-member `chart_ref` slot on the tatara `Process`
+    /// intent, the `FluxCD` `HelmRelease` `spec.chart.spec.chart` field-fill
+    /// on the OCI-source path an M4 per-cluster registry-rewrite overlay
+    /// applies per-CR) — always resolves the OCI ref under the canonical
+    /// [`crate::OCI_SCHEME_PREFIX`] scheme prefix + the canonical
+    /// [`Self::lareira_chart_name`] chart-name segment; this method
+    /// encodes that reader-side convention.
+    ///
+    /// The composition body is the exact byte-image of the prior inline
+    /// `caixa_core::oci_chart_ref(registry, caixa.nome())` two-step form
+    /// every prior caller re-derived — pinned by the sibling caixa-tatara
+    /// byte-parity test
+    /// `derive_chart_ref_routes_through_caixa_oci_chart_ref_accessor`
+    /// against a future implementation of this method that reordered the
+    /// composition arguments, migrated the `<scheme>` segment to a
+    /// different constant (the [`crate::OCI_SCHEME_PREFIX`] axis a future
+    /// substrate-side registry-protocol rebrand may split off — the
+    /// constant's own docstring anticipates a substrate-side move once
+    /// Helm 3 / `FluxCD` introduce a successor scheme past `oci://`),
+    /// migrated the `<chart>` segment off the paired
+    /// [`crate::lareira_chart_name`] composer (a per-registry
+    /// namespace-qualification an M4 CR materializer might apply per-CR),
+    /// interposed a canonicalization pass on the `registry` axis (an OCI-
+    /// authority normalization once the M4 registry-alignment slot lands),
+    /// or silently absorbed an empty `:nome` arm (which cannot occur past
+    /// the [`Self::validate_nome`] gate but which a hypothetical bypass
+    /// on the accessor path must not silently paper over).
+    ///
+    /// Owns per-call [`String`] allocation via the single
+    /// [`crate::oci_chart_ref`] `format!` invocation — the by-value return
+    /// matches every downstream consumer's field-fill shape (the caixa-
+    /// tatara `AplicacaoIntent.chart_ref: String` field-fill, every
+    /// future `intent.aplicacao.chart_ref: String` field-fill on the M4
+    /// CR materializer's chart-ref-carrier slot, every future
+    /// `HelmRelease.spec.chart.spec.chart: String` field-fill on the OCI-
+    /// source path).
+    #[must_use]
+    pub fn oci_chart_ref(&self, registry: &str) -> String {
+        crate::oci_chart_ref(registry, self.nome())
+    }
+
     /// Substrate-canonical per-`Caixa` `:descricao` free-form-prose
     /// chart-description scalar accessor every consumer of the top-level
     /// manifest's Chart.yaml `description:` axis keys off — returns the
@@ -10867,6 +10959,145 @@ mod tests {
                  got {got:?}, expected {manual:?}",
                 got = c.lareira_chart_name(),
             );
+        }
+    }
+
+    // ── Caixa::oci_chart_ref — resolved-OCI-chart-ref composer ────────
+
+    #[test]
+    fn oci_chart_ref_composes_scheme_and_lareira_chart_name_on_all_shapes() {
+        // Fail-before-pass-after pin: [`Caixa::oci_chart_ref`] must
+        // compose [`crate::OCI_SCHEME_PREFIX`] + the caller-supplied
+        // `registry` + [`crate::lareira_chart_name`]-of-[`Caixa::nome`]
+        // across the full paired `(registry, :nome)` accept-set — every
+        // representative registry the substrate-side emitters carry
+        // (`ghcr.io/pleme-io/charts`, the canonical CAIXA-SDLC §II
+        // ArtifactHub-tier registry; `ghcr.io/pleme-io`, the bare-org
+        // arm the sibling `oci_chart_ref_pins_byte_shape_against_prior_
+        // inline_format` render-side pin exercises; `registry.example.
+        // com`, an off-org shape; `localhost:5000`, the local-dev shape
+        // every `feira chart` iteration path lands under) × every DNS-
+        // 1123 `:nome` shape the peer `validate_nome_accepts_canonical_
+        // forms` positive-set sweep documents (single-word, hyphen-
+        // joined, single-char, two-char, digit-start, retry-suffixed).
+        // Every accept-set pair the peer validate gates let through must
+        // survive the resolved-OCI-ref projection byte-equal.
+        for registry in [
+            "ghcr.io/pleme-io/charts",
+            "ghcr.io/pleme-io",
+            "registry.example.com",
+            "localhost:5000",
+        ] {
+            for nome in [
+                "checkout",
+                "cart-v2",
+                "a",
+                "db",
+                "3rd-party-shim",
+                "payment-retry",
+                "0",
+            ] {
+                let c = caixa_with_nome(nome);
+                let expected = format!(
+                    "{scheme}{registry}/{chart}",
+                    scheme = crate::OCI_SCHEME_PREFIX,
+                    chart = crate::lareira_chart_name(nome),
+                );
+                assert_eq!(
+                    c.oci_chart_ref(registry),
+                    expected,
+                    "Caixa::oci_chart_ref must compose \
+                     OCI_SCHEME_PREFIX ({scheme:?}) + registry ({registry:?}) + \
+                     lareira_chart_name(:nome ({nome:?})) verbatim — got {got:?}, \
+                     expected {expected:?}",
+                    scheme = crate::OCI_SCHEME_PREFIX,
+                    got = c.oci_chart_ref(registry),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn oci_chart_ref_starts_with_lifted_scheme_prefix() {
+        // Scheme-prefix-shape pin: every [`Caixa::oci_chart_ref`]
+        // emission must begin with the canonical
+        // [`crate::OCI_SCHEME_PREFIX`] byte-string on every input, guarding
+        // a hypothetical future implementation that migrated the scheme
+        // segment to an inline literal (`"oci://"`) that would silently
+        // drift from any rebrand of the lifted constant. Peer to the
+        // sibling [`publish_tag_starts_with_default_publish_tag_prefix`]
+        // + [`lareira_chart_name_starts_with_lifted_prefix`] pins on the
+        // co-resident resolved-publish-tag / resolved-chart-name
+        // composers' prefix axes.
+        for registry in [
+            "ghcr.io/pleme-io/charts",
+            "ghcr.io/pleme-io",
+            "localhost:5000",
+        ] {
+            for nome in ["checkout", "cart", "a", "payment-retry", "0"] {
+                let c = caixa_with_nome(nome);
+                let ref_ = c.oci_chart_ref(registry);
+                assert!(
+                    ref_.starts_with(crate::OCI_SCHEME_PREFIX),
+                    "Caixa::oci_chart_ref emission {ref_:?} must start \
+                     with the lifted crate::OCI_SCHEME_PREFIX ({scheme:?}) \
+                     — registry ({registry:?}), :nome ({nome:?})",
+                    scheme = crate::OCI_SCHEME_PREFIX,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn oci_chart_ref_byte_matches_canonical_helper_composition() {
+        // Byte-parity pin: [`Caixa::oci_chart_ref`] must render byte-
+        // identically to the manual open-coded
+        // `caixa_core::oci_chart_ref(registry, caixa.nome())` two-step
+        // composition every prior substrate-side caller re-derived.
+        // Guards the paired-site convergence just applied at caixa-
+        // tatara's [`derive_chart_ref`] helper (which now routes through
+        // this accessor): a future implementation of this method that
+        // reordered the composition arguments, swapped the `<scheme>`
+        // constant for a different one, migrated the `<chart>` segment
+        // off the paired [`crate::lareira_chart_name`] composer, or
+        // interposed a canonicalization pass on either input axis
+        // surfaces here as a caixa-core build-time test failure rather
+        // than as a downstream `helm install` / FluxCD OCI-source
+        // reconcile / tatara `Process`-CR mismatch far from this
+        // method's source. Sibling to the peer
+        // [`lareira_chart_name_byte_matches_canonical_helper_composition`]
+        // / [`publish_tag_byte_matches_manual_composition`] /
+        // [`canonical_git_url_byte_matches_manual_composition`] byte-
+        // parity pins that carry the same discipline on the co-resident
+        // resolved-chart-name / resolved-publish-tag / resolved-git-URL
+        // composers.
+        for registry in [
+            "ghcr.io/pleme-io/charts",
+            "ghcr.io/pleme-io",
+            "registry.example.com",
+            "localhost:5000",
+        ] {
+            for nome in [
+                "checkout",
+                "cart-v2",
+                "a",
+                "db",
+                "3rd-party-shim",
+                "payment-retry",
+            ] {
+                let c = caixa_with_nome(nome);
+                let manual = crate::oci_chart_ref(registry, c.nome());
+                assert_eq!(
+                    c.oci_chart_ref(registry),
+                    manual,
+                    "Caixa::oci_chart_ref must byte-equal the manual \
+                     open-coded `caixa_core::oci_chart_ref(registry, \
+                     caixa.nome())` composition across every representative \
+                     (registry, :nome) pair — registry ({registry:?}), \
+                     :nome ({nome:?}), got {got:?}, expected {manual:?}",
+                    got = c.oci_chart_ref(registry),
+                );
+            }
         }
     }
 
