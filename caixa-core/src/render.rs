@@ -24910,6 +24910,87 @@ pub fn kube_field_map<'a, R: KubeReceiver + ?Sized>(
     kube_field(recv, field).and_then(|v| kube_map(v, map_field))
 }
 
+/// Read whether a sub-`<mid>.<tail>` axis-key is present two hops under an
+/// arbitrary [`KubeReceiver`] as `bool` — the composed value-level three-hop
+/// existence-probe primitive that folds `.get(<mid>).and_then(|v|
+/// v.get(<tail>)).is_some()` into a single helper call. Exactly
+/// `kube_field_field(recv, mid, tail).is_some()` (or equivalently
+/// `kube_field(recv, mid).map(|v| kube_has(v, tail)).unwrap_or(false)` —
+/// the two forms fold onto the same three-hop `get → get → is_some` walk
+/// through the sealed [`KubeReceiver`] trait's [`field_value`](KubeReceiver::field_value)
+/// dispatch). Existence-probe peer of the composed value-level shape-gated
+/// quintet ([`kube_field_str`] 1c68424, [`kube_field_u64`] e6fca52,
+/// [`kube_field_bool`] 261894b, [`kube_field_seq`] a45bd8b, [`kube_field_map`]
+/// ce6b752) and the composed raw-tail [`kube_field_field`] (cb5d862) on the
+/// same three-hop `<mid>.<tail>` navigation axis: where those six close
+/// each shape-gate arm and the raw-`&Value` accessor on the nested
+/// `<mid>.<tail>` axis with an `Option<T>` return the caller then shape-
+/// gates further, this accessor closes the shape-agnostic existence-probe
+/// arm with a `bool` return the caller drops straight into an `assert!` /
+/// `if` predicate. The seventh arity closure on the composed value-level
+/// primitive family — sibling to the value-level shape-agnostic
+/// [`kube_has`] (81ea4d9) one altitude down, structurally symmetric to how
+/// [`kube_has`] closed the value-level quintet plus [`kube_field`] with a
+/// bool-returning existence-probe accessor.
+///
+/// Sealed [`KubeReceiver`]-generic like the sibling composed shape-gated
+/// six the [`KubeReceiver`] sealed trait (7a87ffe) already closed the
+/// receiver-arm axis for — both `&Value` (a nested-mapping bracket returned
+/// from [`kube_spec_seq_first`] / [`kube_seq_first`] / an outer
+/// [`kube_field`] hop) and `&Mapping` (a [`kube_map`] / [`kube_spec`] /
+/// [`kube_metadata`] hop that returned a sub-mapping, a
+/// [`placement_blocks`]-style per-entry `&Mapping` element) reach the same
+/// three-hop dispatch through the trait's [`field_value`](KubeReceiver::field_value)
+/// method.
+///
+/// Returns `true` iff the receiver carries the requested `<mid>` middle-hop
+/// axis-key with any value AND the middle-hop value in turn carries the
+/// requested `<tail>` axis-key with any value (including
+/// [`serde_yaml::Value::Null`] — [`serde_yaml::Mapping::get`] returns
+/// `Some(&Value::Null)` for an explicitly-null key, which this predicate
+/// reports present, matching the raw `.get(<mid>).and_then(|v|
+/// v.get(<tail>)).is_some()` semantic bit-for-bit). Returns `false` on any
+/// of the three short-circuit arms folded through the underlying three-hop
+/// composition: the receiver carries a YAML type without a `get(<mid>)`
+/// navigation surface, the `<mid>` middle-hop axis-key is absent from the
+/// receiver's mapping, or the `<mid>` sub-field value is present but
+/// carries a YAML shape with no `get(<tail>)` navigation surface (a scalar
+/// arm at the middle-hop altitude). No shape-gate on the `<tail>` value —
+/// this predicate reports present for any YAML shape the tail carries
+/// (string, integer, bool, null, sequence, mapping), matching the shape-
+/// agnostic posture of the sibling [`kube_has`] value-level primitive one
+/// altitude down.
+///
+/// Every future composed two-hop existence probe the M3.x + M4 renderer
+/// set materializes (per-`HTTPRoute` per-rule `timeouts.request` /
+/// `retry.attempts` omit-when-unset absence probes at the two-hop altitude,
+/// per-CNP per-rule `authentication.mode` omit-when-`:mtls-required`-unset
+/// absence probe at the two-hop altitude, per-`HelmRelease`
+/// `spec.install.remediation` / `spec.upgrade.remediation` sub-block
+/// presence probes, the future `app-operator`'s per-Aplicacao materializer's
+/// per-`spec.entrada.<field>` two-hop presence probes, every future
+/// omit-when-unset absence probe the M3.x + M4 typed-slot overlay set adds
+/// at the two-hop altitude) reaches this one helper by construction. No
+/// per-consumer three-hop re-inline; no coordinated rewrite across every
+/// composed existence-probe site on a future [`serde_yaml`] surface
+/// rebrand or a future [`KubeReceiver`] extension. Closes the composed
+/// value-level primitive family at the seventh principal arity — shape-
+/// agnostic existence-probe via `kube_field_has` — sibling to the six
+/// composed shape-gated / raw-`&Value` arities that partition the K8s
+/// apiserver `OpenAPI` schema's shape-gate arms at the two-hop-nested
+/// altitude, matching the closed shape of the value-level primitive family
+/// ([`kube_field`], [`kube_has`], [`kube_str`], [`kube_u64`], [`kube_bool`],
+/// [`kube_seq`], [`kube_map`]) one altitude below where the seventh arity
+/// existence-probe already sits alongside the raw-`&Value` accessor and the
+/// shape-gated variants.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_field_has<R: KubeReceiver + ?Sized>(recv: &R, field: &str, inner_field: &str) -> bool {
+    kube_field_field(recv, field, inner_field).is_some()
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -54299,6 +54380,256 @@ spec:
                  not a mapping), the middle-hop-scalar arm (`name.\
                  labels` — middle-hop `name` is a scalar), and the \
                  outer-miss arm (`never-inserted-mid`)"
+            );
+        }
+    }
+
+    // ── kube_field_has lift ─────────────────────────────────────────
+
+    #[test]
+    fn kube_field_has_reports_present_on_every_yaml_shape_the_tail_carries() {
+        // Load-bearing positive-path contract: given a `&Value` mapping
+        // receiver carrying a nested `<mid>.<tail>: <any>` two-hop bracket,
+        // the composed shape-agnostic existence-probe primitive reports
+        // present regardless of which YAML shape the tail scalar carries —
+        // matching the shape-agnostic posture of the sibling value-level
+        // `kube_has` (81ea4d9) one altitude down. Peer positive-path pin
+        // to the composed shape-gated positive-path pins one arity over
+        // on the same three-hop axis (`kube_field_str_reads_two_hop_...`,
+        // `kube_field_u64_reads_two_hop_...`, `kube_field_bool_reads_two_hop_...`,
+        // `kube_field_seq_reads_two_hop_...`, `kube_field_field_reads_two_hop_...`,
+        // `kube_field_map_reads_two_hop_...`) — with the shape-agnostic
+        // arm the tail scalar's YAML shape is irrelevant, so the pin
+        // sweeps every representative shape the K8s apiserver `OpenAPI`
+        // schema admits at the tail altitude.
+        for tail in [
+            serde_yaml::Value::String("cart".into()),
+            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut mid_body = serde_yaml::Mapping::new();
+            mid_body.insert_str_key(KUBE_KEY_NAME, tail.clone());
+            let mut root = serde_yaml::Mapping::new();
+            root.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(mid_body));
+            let value = serde_yaml::Value::Mapping(root);
+            assert!(
+                kube_field_has(&value, KUBE_KEY_SPEC, KUBE_KEY_NAME),
+                "kube_field_has must report present on the composed two-\
+                 hop `<mid>.<tail>` bracket regardless of the tail YAML \
+                 shape ({tail:?}) — the shape-agnostic existence-probe \
+                 arm stays open across every K8s apiserver `OpenAPI` \
+                 schema shape arity, matching the sibling `kube_has` \
+                 posture one altitude down"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_has_returns_false_on_every_short_circuit_arm() {
+        // Fold-through pin: every short-circuit the underlying three-
+        // hop `get → get → is_some` closes on folds through this composed
+        // helper to `false`. Pin all three arms so a future refactor
+        // reaching for a `.expect(...)` chain that assumes any hop is
+        // total is a test-visible break at this pin rather than a runtime
+        // panic at the consumer site. Structural mirror of the sibling
+        // `kube_field_str_returns_none_on_every_short_circuit_arm`,
+        // `kube_field_u64_returns_none_on_every_short_circuit_arm`,
+        // `kube_field_bool_returns_none_on_every_short_circuit_arm`,
+        // `kube_field_seq_returns_none_on_every_short_circuit_arm`,
+        // `kube_field_field_returns_none_on_every_short_circuit_arm`, and
+        // `kube_field_map_returns_none_on_every_short_circuit_arm` fold-
+        // through pins one arity over on the same three-hop axis — the
+        // shape-agnostic arm carries three (not four) arms because no
+        // trailing shape-gate exists to short-circuit on a present-but-
+        // wrong-shape tail.
+
+        // Arm 1: receiver carries a scalar YAML type with no `get(<mid>)`
+        // navigation surface — the outer `kube_field`'s scalar-arm `None`
+        // folds through.
+        assert!(
+            !kube_field_has(
+                &serde_yaml::Value::String("scalar".into()),
+                KUBE_KEY_SPEC,
+                KUBE_KEY_NAME,
+            ),
+            "kube_field_has must short-circuit to false when the receiver \
+             Value carries a scalar YAML type with no `get` navigation \
+             surface — the outer kube_field's scalar-arm None folds \
+             through"
+        );
+
+        // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
+        // mapping.
+        let mut only_other = serde_yaml::Mapping::new();
+        only_other.insert_string(KUBE_KEY_NAME, "other");
+        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        assert!(
+            !kube_field_has(&missing_mid, KUBE_KEY_SPEC, KUBE_KEY_NAME),
+            "kube_field_has must short-circuit to false when the requested \
+             `<mid>` middle-hop axis-key is absent from the receiver's \
+             mapping — the outer kube_field's trailing miss folds through"
+        );
+
+        // Arm 3: `<mid>` middle-hop value present but carries a YAML shape
+        // with no `get(<tail>)` navigation surface (the inner scalar-arm
+        // `None` folds through). Pin across the representative non-mapping
+        // YAML shapes the middle-hop `.get` cannot navigate.
+        for scalar_mid in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
+            serde_yaml::Value::String("scalar-not-mapping".into()),
+        ] {
+            let mut root = serde_yaml::Mapping::new();
+            root.insert_str_key(KUBE_KEY_SPEC, scalar_mid.clone());
+            let value = serde_yaml::Value::Mapping(root);
+            assert!(
+                !kube_field_has(&value, KUBE_KEY_SPEC, KUBE_KEY_NAME),
+                "kube_field_has must short-circuit to false when the \
+                 `<mid>` sub-field carries a YAML shape ({scalar_mid:?}) \
+                 with no per-key `get(<tail>)` surface — the inner \
+                 kube_field's scalar-arm None folds through the middle-\
+                 hop navigation"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_has_reports_present_on_explicit_null_tail_matching_kube_has_semantic() {
+        // Semantic pin: the shape-agnostic existence-probe reports present
+        // for an explicitly-null `<tail>` value — [`serde_yaml::Mapping::get`]
+        // returns `Some(&Value::Null)` for an explicitly-null key, and this
+        // predicate carries that semantic through to `true` bit-for-bit,
+        // matching the sibling value-level [`kube_has`] posture one
+        // altitude down. Guards against a future refactor that reaches
+        // for a shape-gate on the tail (would break this pin) or that
+        // treats null-as-absent (would break bit-for-bit equivalence with
+        // the raw `.get(<mid>).and_then(|v| v.get(<tail>)).is_some()`
+        // chain).
+        let mut mid_body = serde_yaml::Mapping::new();
+        mid_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::Null);
+        let mut root = serde_yaml::Mapping::new();
+        root.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(mid_body));
+        let value = serde_yaml::Value::Mapping(root);
+        assert!(
+            kube_field_has(&value, KUBE_KEY_SPEC, KUBE_KEY_NAME),
+            "kube_field_has must report present for an explicit-null tail \
+             — the sibling `kube_has` semantic (81ea4d9) reports present \
+             on the same arm, and the composed two-hop peer must carry \
+             the same bit-for-bit equivalence with the raw \
+             `.get(<mid>).and_then(|v| v.get(<tail>)).is_some()` chain"
+        );
+    }
+
+    #[test]
+    fn kube_field_has_matches_prior_inline_three_call_get_get_is_some_chain() {
+        // Byte-equivalence pin: the lifted `kube_field_has` helper
+        // resolves exactly the same `bool` as the three-call
+        // `kube_field(v, MID).and_then(|X| kube_field(X, TAIL)).is_some()`
+        // inline composition every future routed caller site walks (the
+        // future per-`HTTPRoute` per-rule `timeouts.request` /
+        // `retry.attempts` omit-when-unset absence probes at the two-hop
+        // altitude, the future per-CNP per-rule `authentication.mode`
+        // omit-when-`:mtls-required`-unset absence probe at the two-hop
+        // altitude, the future per-`HelmRelease` `spec.install.remediation`
+        // / `spec.upgrade.remediation` sub-block presence probes). A
+        // drift between the composed helper's return and the three-call
+        // inline composition would silently regress every downstream
+        // existence-probe posture (`assert!(_, "<why>")`, `!kube_field_has(_)`,
+        // an `if _ { ... }` branch) — pin the byte-equivalence across the
+        // canonical composed axis so the composed helper stays a drop-in
+        // replacement for every future routed caller's prior three-call
+        // composition. Structural mirror of the sibling
+        // `kube_field_str_matches_prior_inline_two_line_composition`,
+        // `kube_field_u64_matches_prior_inline_two_line_composition`,
+        // `kube_field_bool_matches_prior_inline_two_line_composition`,
+        // `kube_field_seq_matches_prior_inline_two_line_composition`,
+        // `kube_field_field_matches_prior_inline_two_line_composition`,
+        // and `kube_field_map_matches_prior_inline_two_line_composition`
+        // pins on the composed shape-gated / raw-tail peers one arity
+        // over.
+        let mut retry_map = serde_yaml::Mapping::new();
+        retry_map.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(5u64.into()),
+        );
+        let mut rule_entry = serde_yaml::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
+        // Sibling non-target axes so the same fixture drives the
+        // present-key + missing-key + middle-hop-non-mapping arms of the
+        // equivalence.
+        rule_entry.insert_string(GATEWAY_API_KEY_NAME, "retry");
+        let value = serde_yaml::Value::Mapping(rule_entry);
+
+        for (mid, tail) in [
+            // Present-key path: `retry.attempts` present.
+            (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
+            // Middle-hop-mapping-tail-absent arm: `retry.hostname` absent.
+            (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_HOSTNAME),
+            // Middle-hop-scalar arm: `name.attempts` — middle-hop `name`
+            // is a scalar.
+            (GATEWAY_API_KEY_NAME, GATEWAY_API_KEY_ATTEMPTS),
+            // Outer-miss arm: `never-inserted-mid.attempts`.
+            ("never-inserted-mid", GATEWAY_API_KEY_ATTEMPTS),
+        ] {
+            let via_composed = kube_field_has(&value, mid, tail);
+            let via_inline = kube_field(&value, mid)
+                .and_then(|v| kube_field(v, tail))
+                .is_some();
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_field_has(v, {mid:?}, {tail:?}) must byte-equal the \
+                 prior three-call `kube_field(v, {mid:?}).and_then(|X| \
+                 kube_field(X, {tail:?})).is_some()` composition — the \
+                 lift must stay a drop-in for every future routed \
+                 caller's downstream existence-probe posture, spanning \
+                 the present-key path (`retry.attempts`), the middle-hop-\
+                 mapping-tail-absent arm (`retry.hostname` — tail \
+                 absent), the middle-hop-scalar arm (`name.attempts` — \
+                 middle-hop `name` is a scalar), and the outer-miss arm \
+                 (`never-inserted-mid`)"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_field_has_recomposes_on_kube_field_field_at_the_existence_probe_arity() {
+        // Recomposition pin: `kube_field_has(r, MID, TAIL)` is semantically
+        // `kube_field_field(r, MID, TAIL).is_some()` at the shape-agnostic
+        // existence-probe arity — the seventh arity that sits alongside
+        // the six shape-gated / raw-tail peers on the composed value-
+        // level primitive family. Pin the equivalence so a future
+        // divergence between the bool-returning helper and its
+        // `Option<&Value>`-returning sibling surfaces here rather than at
+        // consumer build time. Structural mirror of the sibling
+        // `kube_has_recomposes_on_kube_field_at_the_existence_probe_arity`
+        // recomposition pin one altitude down.
+        let mut retry_map = serde_yaml::Mapping::new();
+        retry_map.insert_str_key(
+            GATEWAY_API_KEY_ATTEMPTS,
+            serde_yaml::Value::Number(3u64.into()),
+        );
+        let mut rule_entry = serde_yaml::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
+        let value = serde_yaml::Value::Mapping(rule_entry);
+        for (mid, tail) in [
+            (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
+            (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_HOSTNAME),
+            ("never-inserted-mid", GATEWAY_API_KEY_ATTEMPTS),
+        ] {
+            assert_eq!(
+                kube_field_has(&value, mid, tail),
+                kube_field_field(&value, mid, tail).is_some(),
+                "kube_field_has(v, {mid:?}, {tail:?}) must recompose as \
+                 `kube_field_field(v, {mid:?}, {tail:?}).is_some()` — the \
+                 shape-agnostic existence-probe arity folds through the \
+                 raw-`&Value` composed arity's three-hop pass-through \
+                 with a trailing bool gate, matching the sibling \
+                 `kube_has = kube_field(...).is_some()` recomposition one \
+                 altitude down"
             );
         }
     }
