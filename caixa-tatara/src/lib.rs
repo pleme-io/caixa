@@ -33,7 +33,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, oci_chart_ref};
+use caixa_core::{Caixa, CaixaKind, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE};
 
 /// Canonical OCI URL scheme prefix — the `"oci://"` byte-string every
 /// substrate-side renderer that composes an OCI artifact reference
@@ -332,19 +332,26 @@ pub fn process_yaml(caixa: &Caixa, inputs: &RenderInputs) -> Result<String> {
 
 fn derive_chart_ref(caixa: &Caixa, registry: &str) -> String {
     // caixa-helm publishes the rendered chart as `lareira-<name>` to
-    // the supplied registry; we compose the OCI ref through the same
-    // canonical [`caixa_core::oci_chart_ref`] composer (which itself
-    // reads through [`caixa_core::OCI_SCHEME_PREFIX`] +
-    // [`caixa_core::lareira_chart_name`]) so the Process resolves the
-    // same chart name the publisher pushed under, with no inline
-    // prefix-format drift on either the scheme or the chart-name axis.
-    // Route the OCI-ref compose through the typed
-    // [`caixa_core::Caixa::nome`] `&str`-return accessor — closes the
-    // last unlifted `.nome.as_str()` raw-field-access site in this
-    // crate's production emit path, sibling to the paired
-    // `Process::new(caixa.nome(), ..)` + `lareira_chart_name(caixa.nome())`
-    // converges above.
-    oci_chart_ref(registry, caixa.nome())
+    // the supplied registry; we compose the OCI ref through the
+    // substrate-canonical [`caixa_core::Caixa::oci_chart_ref`]
+    // resolved-OCI-chart-ref dispatch rather than the two-step
+    // [`caixa_core::oci_chart_ref`]-of-[`caixa_core::Caixa::nome`]
+    // open-coded compose — the substrate's canonical per-registry
+    // OCI-artifact-ref resolver now reaches through exactly one typed
+    // dispatch on the substrate primitive, sibling to the peer converge
+    // at [`caixa_core::Caixa::lareira_chart_name`] the
+    // `AplicacaoIntent.release_name` composer above already routes
+    // through. Peer of the sibling
+    // [`caixa_core::Caixa::canonical_git_url`] (124f864) /
+    // [`caixa_core::Caixa::publish_tag`] (07e05b8) /
+    // [`caixa_core::Caixa::lareira_chart_name`] (a8f0bee) resolved-
+    // composers on the paired per-`Caixa` published-artifact-identity
+    // axis — this landing extends the discipline onto the fourth (and
+    // for now sole two-input) member of the per-`Caixa` deploy-artifact
+    // identity surface. Pinned by
+    // [`derive_chart_ref_routes_through_caixa_oci_chart_ref_accessor`]
+    // in the tests module.
+    caixa.oci_chart_ref(registry)
 }
 
 fn default_class() -> Classification {
@@ -882,6 +889,80 @@ mod tests {
                      materializer name rewrite, `:nome-suffix` slot, \
                      `LAREIRA_CHART_NAME_PREFIX` rebrand) that lands on \
                      the accessor"
+                );
+            }
+            other => panic!("expected Aplicacao intent, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn derive_chart_ref_routes_through_caixa_oci_chart_ref_accessor() {
+        // Fail-before-pass-after pin: the emit-side
+        // `AplicacaoIntent.chart_ref` scalar the [`process_for_aplicacao`]
+        // fn composes on the intent-arm (via the [`derive_chart_ref`]
+        // helper) must derive from the substrate-canonical
+        // [`caixa_core::Caixa::oci_chart_ref`] resolved-OCI-chart-ref
+        // dispatch. Before this converge the emit site carried a raw
+        // `caixa_core::oci_chart_ref(registry, caixa.nome())` two-step
+        // compose at the `derive_chart_ref` composer position, bypassing
+        // the substrate primitive's paired-`(&Caixa, &str)` dispatch.
+        // Peer of the sibling
+        // [`derive_process_release_name_routes_through_caixa_lareira_chart_name_accessor`]
+        // pin above on the paired per-`Caixa` published-artifact-identity
+        // resolved-composer axis — extends the discipline from the
+        // resolved-chart-name single-`&Caixa` composer projection onto
+        // the resolved-OCI-ref paired-`(&Caixa, &str)` composer
+        // projection. Byte-equal today (the accessor dispatches through
+        // `caixa_core::oci_chart_ref(registry, self.nome())`); the pin
+        // catches any future accessor extension whose emit-side write
+        // regresses to the two-step open-coded compose, in lockstep with
+        // the peer caixa-core
+        // [`oci_chart_ref_byte_matches_canonical_helper_composition`]
+        // pin that carries the sibling byte-parity gate on the accessor
+        // itself.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        for registry in [
+            "ghcr.io/pleme-io/charts",
+            "ghcr.io/pleme-io",
+            "registry.example.com",
+            "localhost:5000",
+        ] {
+            let composed = derive_chart_ref(&caixa, registry);
+            assert_eq!(
+                composed,
+                caixa.oci_chart_ref(registry),
+                "derive_chart_ref must derive from the substrate-canonical \
+                 `caixa_core::Caixa::oci_chart_ref` accessor byte-for-byte \
+                 — a regression that re-inlines \
+                 `caixa_core::oci_chart_ref(registry, caixa.nome())` at \
+                 the OCI-ref compose site silently splits the CR's chart-\
+                 ref from every future accessor extension (per-registry \
+                 alias overlay, M4 CR-materializer chart-ref rewrite, \
+                 `OCI_SCHEME_PREFIX` rebrand) that lands on the accessor \
+                 — registry ({registry:?})"
+            );
+        }
+
+        // Emit-side projection pin: the resolved-OCI-ref accessor
+        // reaches the emitted `AplicacaoIntent.chart_ref` field verbatim
+        // via `derive_chart_ref` — a regression that decoupled the field
+        // fill from the accessor's return value (a caller-supplied
+        // per-CR overlay silently interposed at the intent-compose site)
+        // surfaces here as well.
+        let inputs = sample_inputs();
+        let process = process_for_aplicacao(&caixa, &inputs).expect("render");
+        match process.spec.intent.variant().expect("intent") {
+            IntentVariant::Aplicacao(a) => {
+                assert_eq!(
+                    a.chart_ref,
+                    caixa.oci_chart_ref(&inputs.registry),
+                    "AplicacaoIntent.chart_ref must derive from the \
+                     substrate-canonical `caixa_core::Caixa::oci_chart_ref` \
+                     accessor byte-for-byte — a regression that re-inlines \
+                     `caixa_core::oci_chart_ref(registry, caixa.nome())` \
+                     at the intent-compose site silently splits the CR's \
+                     chart-ref from the peer per-`Caixa` published-\
+                     artifact-identity resolved-composers"
                 );
             }
             other => panic!("expected Aplicacao intent, got {other:?}"),
