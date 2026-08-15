@@ -1050,12 +1050,108 @@ pub const SUPERVISOR_MAX_RESTARTS_MAX: u32 = 1000;
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
 pub const SUPERVISOR_RESTART_WINDOW_MAX: Duration = Duration::from_secs(3600);
 
+/// Substrate-canonical Erlang/OTP-shaped `Period` sliding-window-duration
+/// default for the `:supervisor :restart-window` axis — the canonical
+/// `{intensity, 5, 60}` `Period` half of Learn You Some Erlang's
+/// worker-supervisor default, extracted as a typed `pub const` so every
+/// substrate-side consumer that resolves "what
+/// [`SupervisorSpec::restart_window`] value does an author-omitted
+/// `:restart-window` slot degrade onto?" reaches for exactly one
+/// substrate-primitive [`Duration`].
+///
+/// The `:restart-window` default axis has one production consumer on the
+/// substrate side today: the [`Default for SupervisorSpec`] impl's
+/// struct-literal `restart_window` field, which prior to this lift folded
+/// onto a raw `Duration::from_secs(60)` literal with no compile-time link
+/// back to the paired [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `MaxIntensity`
+/// half of the same `{intensity, 5, 60}` OTP-canonical default. The
+/// [`crate::manifest::Caixa::supervisor_view`] fold deliberately does
+/// *not* fall back to this default on the sibling `:restart-window` axis
+/// — an author-omitted `:supervisor :restart-window` composes to
+/// `restart_window: None` (the shared codec's soft-swallow shape),
+/// keeping author-declared intent ("no reset — never escalate on rolling
+/// window") distinct from the [`Default for SupervisorSpec`] "canonical
+/// 60s Period" arm every programmatic `SupervisorSpec::default()` caller
+/// resolves to. Prior to this lift the paired `{intensity, 5, 60}` OTP
+/// default was split across two files with no compile-time link between
+/// the halves: [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] pinned the
+/// `MaxIntensity` half at the substrate primitive while the `Period`
+/// half rode as an open-coded literal at the composition site, so a
+/// future coherent rebrand of the paired canonical (a tightening to
+/// Elixir's `{max_restarts: 3, max_seconds: 5}`, a widening to a
+/// per-cluster overlay the operator pins through a future
+/// `:supervisor :restart-window-overrides` slot the MESH-COMPOSITION
+/// §III.2 supervision-canary roadmap acknowledges, a promotion of the
+/// paired constants to a per-child-cohort `{MaxR, MaxT}` restart-budget-
+/// partition once the INSPIRATIONS §II.2 Erlang/OTP per-child-cohort
+/// roadmap lands) would have had to migrate the `MaxIntensity` half
+/// through the lifted constant and the `Period` half through a raw
+/// literal in lockstep or the two halves of the same OTP-canonical
+/// default would silently drift out of pairing. Lifting the resolution
+/// rule to a typed `pub const` on the substrate primitive means the
+/// paired OTP-canonical default migrates as one unit on any future
+/// axis change.
+///
+/// The `60s` value pins Learn You Some Erlang's `{intensity, 5, 60}`
+/// worker-supervisor default (the closest canonical OTP-shape
+/// production reference the substrate carries, matching the paired
+/// [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `5` `MaxIntensity` half this
+/// constant is the `Period` denominator of on the same
+/// `MaxIntensity / Period` restart-intensity ratio). Two orders of
+/// magnitude below the [`SUPERVISOR_RESTART_WINDOW_MAX`] `3600s`
+/// (`1h`) ceiling (the upper bracket on the same axis, sibling of
+/// this lower default; both are typed [`Duration`] const bounds on the
+/// `:supervisor :restart-window` axis and now share one accessor
+/// discipline on the substrate) and above the OTP-`supervisor`
+/// callback-module `MaxT = 5` seconds "minimal-window" floor — the "60s
+/// rolling window" default is deliberately loose enough to absorb a
+/// short burst of transient child failures without escalating past the
+/// supervisor's parent while remaining tight enough for the paired
+/// `MaxIntensity / Period` ratio's escalation to trip on a genuinely-
+/// stuck child within a human-scale observation window.
+///
+/// Lifted as a typed `pub const` so the paired OTP-canonical default has
+/// exactly one source of truth on each half — the sibling
+/// [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `MaxIntensity` `5` half and this
+/// `Period` `60s` half now share the same substrate-primitive lift
+/// discipline. Same shape every other typed default in this crate
+/// carries (the sibling [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] paired
+/// `MaxIntensity` half on the same OTP-canonical `{intensity, 5, 60}`,
+/// the sibling [`SUPERVISOR_RESTART_WINDOW_MAX`] upper cap on the same
+/// axis, and the peer [`crate::render::DEFAULT_NAMESPACE`] /
+/// [`crate::render::DEFAULT_LIBRARY_NAME`] per-renderer defaults on the
+/// caixa-flux / caixa-helm rendering axes).
+pub const SUPERVISOR_RESTART_WINDOW_DEFAULT: Duration = Duration::from_secs(60);
+
 impl Default for SupervisorSpec {
     fn default() -> Self {
         Self {
             estrategia: RestartStrategy::default(),
             max_restarts: default_max_restarts(),
-            restart_window: Some(Duration::from_secs(60)),
+            // Route the struct-literal `restart_window` default arm
+            // through the substrate-canonical
+            // [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] typed `pub const`
+            // rather than a raw `Duration::from_secs(60)` literal — one
+            // source of truth for the Erlang/OTP-canonical
+            // `{intensity, 5, 60}` `Period` half of Learn You Some
+            // Erlang's worker-supervisor default, paired with the
+            // sibling `max_restarts: default_max_restarts()` arm above
+            // that already routes through the peer
+            // [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `MaxIntensity` half
+            // (b698ec0). The two halves of the same OTP-canonical
+            // default now share the same substrate-primitive lift
+            // discipline so any future coherent rebrand of the paired
+            // default (Elixir's `{max_restarts: 3, max_seconds: 5}`, a
+            // per-cluster overlay via a future
+            // `:restart-window-overrides` slot, a per-child-cohort
+            // promotion) migrates through two typed constants in
+            // lockstep instead of splitting a lifted `MaxIntensity` half
+            // against an open-coded `Period` literal. Pinned by
+            // `supervisor_spec_default_restart_window_routes_through_lifted_default`
+            // in the tests module; peer of the sibling
+            // `supervisor_spec_default_max_restarts_routes_through_lifted_default`
+            // byte-parity pin on the paired `max_restarts` field.
+            restart_window: Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
             children: Vec::new(),
         }
     }
@@ -2537,6 +2633,54 @@ mod tests {
         assert_eq!(
             SupervisorSpec::default().max_restarts(),
             SUPERVISOR_MAX_RESTARTS_DEFAULT,
+        );
+    }
+
+    #[test]
+    fn supervisor_restart_window_default_pins_otp_canonical_value() {
+        // Pin [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] at `60s` — the
+        // Erlang/OTP-canonical `{intensity, 5, 60}` `Period` half of
+        // Learn You Some Erlang's worker-supervisor default, paired
+        // with the sibling `SUPERVISOR_MAX_RESTARTS_DEFAULT` `5`
+        // `MaxIntensity` half this constant is the sliding-window
+        // denominator of on the same `MaxIntensity / Period`
+        // restart-intensity ratio. Pinning the literal here surfaces a
+        // future coherent rebrand of the paired default (Elixir's
+        // `{max_restarts: 3, max_seconds: 5}`, a per-cluster overlay
+        // the operator pins through a future
+        // `:restart-window-overrides` slot) as a deliberate test edit,
+        // not a silent contract migration. Peer of the sibling
+        // [`supervisor_max_restarts_default_pins_otp_canonical_value`]
+        // paired-half pin on the same OTP-canonical default and the
+        // [`supervisor_restart_window_cap_pins_canonical_value`]
+        // upper-bracket pin on the same axis.
+        assert_eq!(SUPERVISOR_RESTART_WINDOW_DEFAULT, Duration::from_secs(60),);
+    }
+
+    #[test]
+    fn supervisor_spec_default_restart_window_routes_through_lifted_default() {
+        // Composition pin: the [`Default for SupervisorSpec`] impl's
+        // struct-literal `restart_window` field must route through the
+        // substrate-canonical [`SUPERVISOR_RESTART_WINDOW_DEFAULT`]
+        // typed `pub const` rather than a raw
+        // `Duration::from_secs(60)` literal. Prior to this lift the
+        // paired `{intensity, 5, 60}` OTP-canonical default was split
+        // across two altitudes with no compile-time link between the
+        // halves — the `MaxIntensity` half rode through the lifted
+        // [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] constant while the
+        // `Period` half rode as an open-coded literal at the
+        // composition site, so a future coherent rebrand of the paired
+        // canonical would have had to migrate one half through the
+        // constant and the other through a raw literal in lockstep.
+        // Byte-parity against the lifted constant on the `Period` half
+        // closes the split — the paired OTP-canonical default now
+        // migrates as one unit on any future axis change. Peer of the
+        // sibling
+        // [`supervisor_spec_default_max_restarts_routes_through_lifted_default`]
+        // byte-parity pin on the paired `MaxIntensity` half.
+        assert_eq!(
+            SupervisorSpec::default().restart_window(),
+            Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
         );
     }
 
