@@ -21427,6 +21427,98 @@ pub fn kube_spec_spec_map_field<'a>(
     kube_spec_spec_field(value, outer, inner).and_then(|v| v.as_mapping())
 }
 
+/// Read the nested `spec.<outer>.spec.<inner>` YAML sequence on a K8s
+/// custom resource YAML document as `Option<&serde_yaml::Sequence>` — the
+/// composed sequence-arity peer that stands on the composed nested-spec-
+/// envelope-arity [`kube_spec_spec_field`] (18d3851) accessor, folding
+/// the trailing `.and_then(|v| v.as_sequence())` shape-gate closure into
+/// the helper for callers that always want a sequence at the innermost
+/// hop. Fourth-arity closure on the composed nested-`spec.<outer>.spec.<inner>`
+/// envelope family; sibling of the pre-existing raw-`&Value`
+/// [`kube_spec_spec_field`] (18d3851), string-scalar
+/// [`kube_spec_spec_str_field`] (32851e4), and sub-mapping
+/// [`kube_spec_spec_map_field`] (94502e3) peers on the same composed
+/// nested-`spec:` envelope axis. Structural mirror of the sibling
+/// one-hop [`kube_spec_seq_field`] (66d90b0) on the sub-`spec.<field>`
+/// axis: both accessors fold a trailing `.as_sequence()` shape-gate
+/// closure onto their respective composed-[`kube_spec_field`]-family
+/// navigation, both return `Option<&serde_yaml::Sequence>` for callers
+/// that pin an ordered multi-entry sub-block downstream, both stay
+/// parametric on the per-`<inner>` sub-field axis-key. Where
+/// [`kube_spec_seq_field`] closes the `spec.<field>` sequence readback
+/// at the one-hop arity, this closes the `spec.<outer>.spec.<inner>`
+/// sequence readback at the composed nested-`spec:`-envelope arity —
+/// the sub-spec-envelope-carrying-CR ordered sub-block idiom the Flux
+/// v2 `HelmRelease` `spec.chart.spec.valuesFrom[]` per-`ValuesReference`
+/// fan-out materializes, that the Crossplane `Composition.spec.pipeline[]`
+/// per-step composition surface materializes, and that every future
+/// composed-nested-spec-envelope-carrying CR shape the M3.x + M4
+/// renderer set will materialize on the load-bearing
+/// `spec.<outer>.spec.<inner>[]` axis-key.
+///
+/// Returns `None` on any of the seven short-circuit arms folded through
+/// the underlying composition: the outer `spec:` block is absent (the
+/// outer [`kube_spec`] outer-arm short-circuit), the outer `spec:`
+/// value is present but carries a non-Mapping YAML type (the outer
+/// [`kube_spec`] shape-gate short-circuit), the `<outer>` axis-key is
+/// absent from the outer `spec:` sub-mapping (the outer
+/// [`kube_spec_field`] trailing `Mapping::get` none-arm), the inner
+/// `spec:` block is absent on the `<outer>` sub-value (the inner
+/// [`kube_spec`] outer-arm short-circuit), the inner `spec:` value is
+/// present but carries a non-Mapping YAML type (the inner [`kube_spec`]
+/// shape-gate short-circuit), the `<inner>` axis-key is absent from the
+/// inner `spec:` sub-mapping (the inner [`kube_spec_field`] trailing
+/// `Mapping::get` none-arm), or the innermost `<inner>` value is
+/// present but carries a non-sequence YAML type (the trailing
+/// `.as_sequence()` shape-gate short-circuit — a schema-invalid per-CR
+/// nested-sub-field type per the K8s apiserver's `OpenAPI` schema but
+/// tolerated here as `None` so the readback stays a total function).
+/// The returned `&Sequence` borrows into the input `Value` — the
+/// caller decides whether to iterate (`.iter()`), pick the first entry
+/// (`.first()`), enumerate for length (`.len()`), or clone.
+///
+/// The canonical two-line composition the routed caller previously
+/// carried inline as
+///
+/// ```ignore
+/// kube_spec_spec_field(<value>, <OUTER>, <INNER>)
+///     .and_then(|v| v.as_sequence())
+///     ...
+/// ```
+///
+/// around a one-token semantic payload (the `<INNER>` sub-spec-envelope
+/// axis-key) folds onto `kube_spec_spec_seq_field(<value>, <OUTER>,
+/// <INNER>)` — the `spec → as_mapping → get(<outer>) → spec →
+/// as_mapping → get(<inner>) → as_sequence` walk happens once inside
+/// the helper, and the caller keeps its downstream idiom
+/// (`.iter().find(...)`, `.first()`, `.len()`, `.expect(...)`)
+/// unchanged — the lift closes the navigation surface, not the per-site
+/// downstream posture.
+///
+/// Every future per-CR nested-`spec.<outer>.spec.<inner>` sequence
+/// readback (the future Flux v3 `HelmRelease` CRD split's per-CR
+/// `spec.chart.spec.valuesFrom[]` per-`ValuesReference` fan-out
+/// readback, the future Crossplane `Composition.spec.pipeline[].spec.<K>[]`
+/// per-step composed-CR sequence navigation, the future argo CD
+/// `Application.spec.source.spec.<K>[]` composed-source sequence
+/// navigation, every future test-side sequence probe on a sub-spec-
+/// envelope-carrying CR shape the M3.x + M4 renderer set adds) reaches
+/// this same helper by construction — no per-consumer four-hop-plus-
+/// shape-gate chain re-inline, no per-consumer nested-`KUBE_KEY_SPEC`
+/// axis-key drift, no coordinated rewrite across every per-CR nested-
+/// Sequence readback on a future K8s API-machinery rebrand of the
+/// nested `spec:` axis.
+///
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_spec_spec_seq_field<'a>(
+    value: &'a serde_yaml::Value,
+    outer: &str,
+    inner: &str,
+) -> Option<&'a serde_yaml::Sequence> {
+    kube_spec_spec_field(value, outer, inner).and_then(|v| v.as_sequence())
+}
+
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
 /// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
@@ -56102,6 +56194,281 @@ spec:
                  must byte-equal the prior two-line \
                  `kube_spec_spec_field(v, {outer:?}, \
                  {inner:?}).and_then(|r| r.as_mapping())` composition \
+                 — the lift must stay a drop-in for every routed \
+                 caller's downstream continuation posture"
+            );
+        }
+    }
+
+    // ── kube_spec_spec_seq_field lift ───────────────────────────────
+
+    #[test]
+    fn kube_spec_spec_seq_field_reads_nested_sequence_borrowing_into_input_value() {
+        // Load-bearing positive-path contract: given a CR body carrying
+        // a nested ordered sub-block under the composed
+        // `spec.<outer>.spec.<inner>` envelope axis (the shape the Flux
+        // v2 `HelmRelease` `spec.chart.spec.valuesFrom[]`
+        // per-`ValuesReference` fan-out materializes, that every
+        // composed-nested-spec-envelope-carrying CR shape M3.x + M4
+        // renderer additions will materialize on the load-bearing
+        // ordered-sub-block axis), the composed four-hop-plus-shape-gate
+        // nested-`spec:` `_spec_spec_seq_field` accessor returns the
+        // innermost `<inner>` `&Sequence` — the actual ordered sub-block
+        // the caller iterates over. Peer of the sibling
+        // `kube_spec_spec_map_field_reads_nested_sub_mapping_borrowing_into_input_value`
+        // positive-path pin one arity over on the sub-mapping tail of
+        // the same composed nested-`spec:` envelope axis.
+        let values_from_seq = serde_yaml::Sequence::from(vec![
+            serde_yaml::Value::String("first-entry".into()),
+            serde_yaml::Value::String("second-entry".into()),
+        ]);
+        let mut chart_spec = serde_yaml::Mapping::new();
+        chart_spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::Sequence(values_from_seq.clone()),
+        );
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            Some(&values_from_seq),
+            "kube_spec_spec_seq_field must read the nested \
+             `spec.<outer>.spec.<inner>` `&Sequence` verbatim from the \
+             composed nested-`spec:` envelope axis — the routed \
+             test-side ordered sub-block presence pins reach through \
+             this axis"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_seq_field_returns_none_on_outer_short_circuit_arms() {
+        // Fold-through contract on the three outer arms
+        // [`kube_spec_spec_field`] already closes on the outer `spec:`
+        // hop: any outer short-circuit must collapse the composed helper
+        // to `None` too, so the caller's downstream `.iter()` /
+        // `.first()` / `.len()` continuation never unwraps on a
+        // bad-shape outer arm.
+
+        // Outer arm 1: no top-level `spec:` sub-block.
+        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_spec_spec_seq_field(&bare, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_seq_field must short-circuit to None when \
+             the top-level `spec:` sub-block is absent — the outer \
+             kube_spec_field hop's missing-spec arm folds through"
+        );
+
+        // Outer arm 2: `spec:` present but non-Mapping YAML type.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_SPEC,
+            serde_yaml::Value::String("scalar-spec".into()),
+        );
+        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_spec_seq_field(&scalar_spec, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_seq_field must short-circuit to None when \
+             the outer `spec:` value carries a non-Mapping YAML type — \
+             the outer kube_spec shape-gate short-circuit folds through"
+        );
+
+        // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
+        // key absent.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_string(KUBE_KEY_NAME, "not-chart");
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let no_outer = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_spec_spec_seq_field(&no_outer, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_seq_field must short-circuit to None when \
+             the `<outer>` axis-key is absent from the outer `spec:` \
+             sub-mapping — the outer kube_spec_field's trailing \
+             `Mapping::get` none-arm folds through"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_seq_field_returns_none_on_inner_short_circuit_arms() {
+        // Fold-through contract on the three inner arms
+        // [`kube_spec_spec_field`] closes on the inner `spec:` hop: any
+        // inner short-circuit (inner `spec:` absent, inner `spec:` non-
+        // Mapping, inner `<inner>` axis-key absent) must collapse the
+        // composed helper to `None` too — the inner `kube_spec_field`
+        // hop's own short-circuit folds through the composed helper
+        // unchanged.
+
+        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
+            let mut spec = serde_yaml::Mapping::new();
+            spec.insert_str_key(FLUX_KEY_CHART, chart_value);
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+            serde_yaml::Value::Mapping(cr)
+        };
+
+        // Inner arm 1: outer `<outer>` sub-value carries no inner
+        // `spec:` sub-block.
+        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        assert_eq!(
+            kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_seq_field must short-circuit to None when \
+             the inner `spec:` sub-block is absent on the outer \
+             `<outer>` sub-value — the inner kube_spec_field hop's \
+             missing-spec arm folds through"
+        );
+
+        // Inner arm 2: outer `<outer>` sub-value carries an inner
+        // `spec:` axis-key that is present-but-non-Mapping (Sequence
+        // here — a shape that would trivially fold through the
+        // trailing `.as_sequence()` gate if the intermediate `spec:`
+        // Mapping shape-gate did not correctly reject it first).
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
+        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        assert_eq!(
+            kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_seq_field must short-circuit to None when \
+             the inner `spec:` value is present but carries a non-\
+             Mapping YAML type — the inner kube_spec shape-gate short-\
+             circuit folds through even when the outer type happens to \
+             be a Sequence the trailing `.as_sequence()` gate would \
+             otherwise accept"
+        );
+
+        // Inner arm 3: outer `<outer>` sub-value carries an inner
+        // `spec:` Mapping but `<inner>` axis-key absent from the inner
+        // sub-mapping.
+        let mut chart_spec = serde_yaml::Mapping::new();
+        chart_spec.insert_string(KUBE_KEY_NAME, "not-source-ref");
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        assert_eq!(
+            kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_seq_field must short-circuit to None when \
+             the `<inner>` axis-key is absent from the inner `spec:` \
+             sub-mapping — the inner kube_spec_field's trailing \
+             `Mapping::get` none-arm folds through"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_seq_field_returns_none_on_non_sequence_leaf_arm() {
+        // Fold-through contract on the trailing `.as_sequence()` shape-
+        // gate short-circuit closure — the innermost `<inner>` value is
+        // present at the composed nested-`spec.<outer>.spec.<inner>`
+        // axis but carries a non-Sequence YAML type (a schema-invalid
+        // per-CR nested-sub-field type per the K8s apiserver's
+        // `OpenAPI` schema, tolerated here as `None` so the readback
+        // stays a total function). The lift folds the trailing shape
+        // gate onto the helper so this arm collapses to `None` inside
+        // the helper rather than at every routed caller's
+        // `.and_then(|v| v.as_sequence())` trailer.
+        let mut chart_spec = serde_yaml::Mapping::new();
+        // Innermost `<inner>` present but as a Mapping YAML type
+        // rather than a Sequence — the trailing `.as_sequence()`
+        // shape-gate short-circuit arm.
+        chart_spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        );
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            None,
+            "kube_spec_spec_seq_field must short-circuit to None when \
+             the innermost `<inner>` value is present but carries a \
+             non-Sequence YAML type — the trailing `.as_sequence()` \
+             shape-gate closure folded into the helper's body must \
+             swallow the schema-invalid arm so the caller's downstream \
+             `.expect(...)` never unwraps on a bad-shape sub-block"
+        );
+    }
+
+    #[test]
+    fn kube_spec_spec_seq_field_matches_prior_inline_two_line_composition() {
+        // Byte-equivalence pin: the composed sequence helper must
+        // resolve exactly the same `Option<&Sequence>` as the prior
+        // two-line `kube_spec_spec_field(v, OUTER, INNER).and_then(|v|
+        // v.as_sequence())` inline composition every future routed
+        // caller would otherwise carry. A drift between the helper's
+        // return and the two-line inline composition would silently
+        // regress every downstream continuation (`.iter()`, `.first()`,
+        // `.len()`). Structural mirror of the sibling
+        // `kube_spec_spec_map_field_matches_prior_inline_two_line_composition`
+        // one arity over on the sub-mapping tail and
+        // `kube_spec_spec_str_field_matches_prior_inline_two_line_composition`
+        // two arities over on the string-scalar tail.
+        let values_from_seq = serde_yaml::Sequence::from(vec![
+            serde_yaml::Value::String("chart-values-1".into()),
+            serde_yaml::Value::String("chart-values-2".into()),
+        ]);
+        let mut chart_spec = serde_yaml::Mapping::new();
+        chart_spec.insert_str_key(
+            FLUX_KEY_SOURCE_REF,
+            serde_yaml::Value::Sequence(values_from_seq),
+        );
+        // Sibling axis: a non-Sequence innermost value on a peer
+        // axis-key so the same fixture drives the trailing
+        // `.as_sequence()` short-circuit arm through the byte-
+        // equivalence loop.
+        chart_spec.insert_str_key(
+            FLUX_HELMCHART_TEMPLATE_KEY_CHART,
+            serde_yaml::Value::String("charts/hello".into()),
+        );
+        let mut chart = serde_yaml::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so
+        // the same fixture drives the inner-key-absent arm through
+        // the outer-key-varying axis.
+        chart.insert_string(KUBE_KEY_NAME, "chart-header");
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for (outer, inner) in [
+            // Load-bearing positive-path axis: the innermost value is
+            // a Sequence.
+            (FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
+            // Non-Sequence leaf arm on the sibling
+            // `<FLUX_HELMCHART_TEMPLATE_KEY_CHART>` axis-key (string
+            // scalar leaf).
+            (FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
+            // Inner-key-absent arm.
+            (FLUX_KEY_CHART, "never-inserted-inner"),
+            // Outer-key-absent arm.
+            ("never-inserted-outer", FLUX_KEY_SOURCE_REF),
+        ] {
+            let via_composed = kube_spec_spec_seq_field(&value, outer, inner);
+            let via_inline =
+                kube_spec_spec_field(&value, outer, inner).and_then(|v| v.as_sequence());
+            assert_eq!(
+                via_composed, via_inline,
+                "kube_spec_spec_seq_field(v, {outer:?}, {inner:?}) \
+                 must byte-equal the prior two-line \
+                 `kube_spec_spec_field(v, {outer:?}, \
+                 {inner:?}).and_then(|v| v.as_sequence())` composition \
                  — the lift must stay a drop-in for every routed \
                  caller's downstream continuation posture"
             );
