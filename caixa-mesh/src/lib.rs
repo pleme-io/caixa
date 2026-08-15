@@ -3281,7 +3281,7 @@ mod tests {
         kube_spec, kube_spec_field, kube_spec_seq_field, kube_spec_seq_first,
         kube_spec_seq_first_seq_first, kube_spec_seq_first_seq_first_seq_first,
         kube_spec_seq_first_str, kube_spec_str_field, kube_str, kube_u64, mapping_str_keys,
-        mapping_string_keys,
+        mapping_string_keys, sequence_str_values,
     };
     use std::time::Duration;
 
@@ -7191,8 +7191,61 @@ mod tests {
         for p in placement_blocks(&entries) {
             let clusters =
                 kube_seq(p, M3_PLACEMENT_KEY_CLUSTERS).expect("placement.clusters sequence");
-            let names: Vec<&str> = clusters.iter().filter_map(|v| v.as_str()).collect();
+            // Route the per-`placement.clusters` string-scalar-list
+            // readback through the substrate-primitive
+            // [`sequence_str_values`] pinned accessor rather than the
+            // raw three-token `.iter().filter_map(|v| v.as_str())
+            // .collect::<Vec<&str>>()` composition — sibling
+            // convergence to the peer sequence-scalar-list readback
+            // sites the sequence-values enumeration axis serves at the
+            // borrowed-`Vec<&str>` altitude, closing the same one-
+            // token semantic concern the sibling [`mapping_str_keys`]
+            // closes on the mapping-keys axis. Any future
+            // `placement.clusters` shape widening (per-cluster overlay
+            // with typed sub-mapping entries, per-cluster affinity-
+            // weighted priority scalar) reaches the routed accessor
+            // through one composition-link, not a re-inlined per-
+            // consumer `.filter_map(|v| v.as_str())` shape-gate.
+            let names = sequence_str_values(clusters);
             assert_eq!(names, vec!["rio", "mar"]);
+        }
+    }
+
+    #[test]
+    fn sequence_str_values_matches_prior_inline_iter_filter_map_collect_at_placement_clusters() {
+        // Per-crate byte-equivalence pin on the caixa-mesh sweep of
+        // one routed `sequence_str_values` re-inline site (the sibling
+        // `programs_entry_placement_carries_clusters_list` per-
+        // `placement.clusters` string-scalar-list readback) — the
+        // lifted [`sequence_str_values`] helper must yield the same
+        // `Vec<&str>` as the prior three-token
+        // `.iter().filter_map(|v| v.as_str()).collect::<Vec<&str>>()`
+        // composition on every K8s YAML sequence shape the routed site
+        // reaches. Mirrors the caixa-mesh per-crate byte-equivalence
+        // discipline the peer `mapping_str_keys` cross-crate sweep
+        // established on the sibling mapping-keys axis — the two-arm
+        // (substrate-level structural pin + caller-crate byte-
+        // equivalence pin) closure that made the sibling
+        // `kube_field_str` / `kube_has` sweeps safe on the same
+        // discipline. Fail-before-pass-after; drift here means a
+        // future refactor of the lifted helper's filter contract has
+        // silently regressed the routed test's `Vec<&str>` shape.
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        for p in placement_blocks(&entries) {
+            let clusters =
+                kube_seq(p, M3_PLACEMENT_KEY_CLUSTERS).expect("placement.clusters sequence");
+            let via_helper = sequence_str_values(clusters);
+            let via_inline: Vec<&str> = clusters.iter().filter_map(|v| v.as_str()).collect();
+            assert_eq!(
+                via_helper, via_inline,
+                "sequence_str_values must byte-equal the prior three-\
+                 token `.iter().filter_map(|v| v.as_str()).collect::\
+                 <Vec<&str>>()` composition on every K8s YAML sequence \
+                 shape the routed `placement.clusters` per-entry \
+                 readback reaches — otherwise the caixa-mesh routed \
+                 site regresses silently on the byte-compare against \
+                 the expected `vec![<CLUSTER_CONST>, ...]` shape"
+            );
         }
     }
 

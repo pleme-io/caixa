@@ -18879,6 +18879,71 @@ pub fn mapping_str_keys(mapping: &serde_yaml::Mapping) -> Vec<&str> {
     mapping.keys().filter_map(|k| k.as_str()).collect()
 }
 
+/// Collect the string-shaped values of a [`serde_yaml::Sequence`] as
+/// borrowed [`&str`] slices — the sequence-values-axis peer of
+/// [`mapping_str_keys`] on the mapping-keys-axis. The three-line
+/// composition
+///
+/// ```ignore
+/// let values: Vec<&str> = <sequence>
+///     .iter()
+///     .filter_map(|v| v.as_str())
+///     .collect();
+/// ```
+///
+/// three routed test-side call sites (the [`caixa-mesh`][mesh] per-
+/// `placement.clusters` cluster-name-list readback + the two per-
+/// [`GATEWAY_API_KEY_HOSTNAMES`] plural `HTTPRoute` hostname-list
+/// readbacks) previously threaded around the same one-token semantic concern
+/// [`mapping_str_keys`] closes on the sibling mapping-keys axis: "give
+/// me every string-shape scalar entry of this sequence as borrowed
+/// `&str` slices, in the sequence's natural iteration order". The lift
+/// collapses the three-token composition — the `.iter()` receiver-widen,
+/// the per-entry `.filter_map(|v| v.as_str())` shape gate, the terminal
+/// `.collect::<Vec<&str>>()` type-witness — onto one accessor the
+/// caller reads as intent (`sequence_str_values(<sequence>)` — "give me
+/// every string scalar in this sequence").
+///
+/// Structural peer to [`mapping_str_keys`] on the sibling mapping-keys
+/// enumeration axis at the same borrowed-`Vec<&str>` ownership altitude
+/// — the two together bracket the "flatten a YAML container of string
+/// scalars into a borrowed `Vec<&str>` snapshot" surface at both
+/// container-shape arms: [`mapping_str_keys`] closes it on
+/// [`serde_yaml::Mapping`] keys, [`sequence_str_values`] closes it on
+/// [`serde_yaml::Sequence`] values. Same ownership arity, same drop-
+/// not-panic contract, different container-shape input — the two
+/// scalar-enumeration axes the emit-side test-harness routinely reaches
+/// for when byte-comparing a readback of a K8s CR sub-container against
+/// an expected `vec![<STR_CONST>, ...]` shape.
+///
+/// Non-string-shape entries ([`serde_yaml::Value::Number`] /
+/// [`serde_yaml::Value::Bool`] / [`serde_yaml::Value::Mapping`] /
+/// [`serde_yaml::Value::Sequence`] / [`serde_yaml::Value::Null`] /
+/// [`serde_yaml::Value::Tagged`] arms) are silently dropped — the same
+/// drop-not-panic contract the sibling [`mapping_str_keys`] enforces on
+/// non-string keys. The dropped entries never reach the downstream K8s
+/// YAML-scalar surface (which requires string scalars at every
+/// enumerated axis this helper serves — cluster-name list, hostname
+/// list, protocol list, endpoint list) anyway, so their absence from
+/// the yielded `Vec<&str>` mirrors the runtime shape the routed
+/// `assert_eq!(..., vec![<STR_CONST>, ...])` byte-compare protects.
+///
+/// The owned [`Vec<String>`] altitude is a future companion lift on the
+/// same axis if a routed caller ever needs to interpolate the yielded
+/// slice through a `format!`-like macro whose lifetime outlives the
+/// input sequence's borrow — the same paired-arity carveout the
+/// sibling [`mapping_string_keys`] + [`mapping_str_keys`] pair already
+/// established on the mapping-keys enumeration axis.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn sequence_str_values(sequence: &serde_yaml::Sequence) -> Vec<&str> {
+    sequence
+        .iter()
+        .filter_map(serde_yaml::Value::as_str)
+        .collect()
+}
+
 /// Read the string-scalar value at `metadata.<field>` on a K8s custom
 /// resource YAML document, returning `None` when either the top-level
 /// [`KUBE_KEY_METADATA`] block is absent (a defensively-tolerated
@@ -43289,6 +43354,148 @@ spec:
                  identical pointer address), not into a per-call \
                  temporary — the returned slices' lifetime is bounded \
                  by the input mapping's borrow"
+            );
+        }
+    }
+
+    #[test]
+    fn sequence_str_values_collects_string_shaped_values_in_iteration_order() {
+        // Load-bearing contract on the sequence-values axis, structural
+        // mirror of the sibling `mapping_str_keys` insertion-order pin:
+        // given a Sequence of three string-shaped entries inserted in a
+        // fixed order, yield a `Vec<&str>` that borrows into the input
+        // and preserves the sequence's natural iteration order.
+        let sequence = serde_yaml::Sequence::from(vec![
+            serde_yaml::Value::String("rio".into()),
+            serde_yaml::Value::String("mar".into()),
+            serde_yaml::Value::String("sol".into()),
+        ]);
+        let values = sequence_str_values(&sequence);
+        assert_eq!(
+            values,
+            vec!["rio", "mar", "sol"],
+            "sequence_str_values must yield every string-shaped entry \
+             as borrowed `&str` slices in the underlying Sequence's \
+             iteration order — every routed test-side assert reaches \
+             through the yielded shape as the byte-compare against the \
+             expected `Vec<&str>` of `<STR_CONST>` axis-tokens"
+        );
+    }
+
+    #[test]
+    fn sequence_str_values_drops_non_string_entries() {
+        // Same drop-not-panic contract the sibling `mapping_str_keys`
+        // peer enforces on non-string keys, translated to the sequence-
+        // values axis: serde_yaml admits arbitrary Value shapes at every
+        // sequence position, and the routed inline sites'
+        // `.filter_map(|v| v.as_str())` shape-gate silently drops the
+        // ones that don't round-trip through the K8s YAML-scalar
+        // surface. Pin the lift's filter contract so a future refactor
+        // that reaches for `.as_str().unwrap()` (which would panic on
+        // a numeric entry) is a test-visible break, not a runtime
+        // regression at the first drift-detection diagnostic.
+        let sequence = serde_yaml::Sequence::from(vec![
+            serde_yaml::Value::String("kept-1".into()),
+            serde_yaml::Value::Number(7.into()),
+            serde_yaml::Value::Bool(false),
+            serde_yaml::Value::String("kept-2".into()),
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_yaml::Value::Sequence(serde_yaml::Sequence::new()),
+        ]);
+        let values = sequence_str_values(&sequence);
+        assert_eq!(
+            values,
+            vec!["kept-1", "kept-2"],
+            "sequence_str_values must silently drop non-string-shape \
+             entries (Value::Number, Value::Bool, Value::Null, \
+             Value::Mapping, Value::Sequence) — the K8s YAML-scalar \
+             surface downstream requires string scalars at every \
+             enumerated axis, and every routed assert-side byte-compare \
+             reached through the per-entry `.filter_map(|v| \
+             v.as_str())` shape-gate expected exactly this drop-not-\
+             panic contract"
+        );
+    }
+
+    #[test]
+    fn sequence_str_values_on_empty_sequence_yields_empty_vec() {
+        // Cardinality-arm pin on the sequence-values axis: an empty
+        // Sequence yields an empty `Vec<&str>`. Sibling to the paired
+        // `mapping_str_keys` empty-arm pin, closing the empty-
+        // cardinality behavior on the sequence-values enumeration axis
+        // — every routed assert-side byte-compare against an empty
+        // `vec![]` on drift-detection failure renders cleanly rather
+        // than raising.
+        let sequence = serde_yaml::Sequence::new();
+        let values = sequence_str_values(&sequence);
+        assert!(
+            values.is_empty(),
+            "sequence_str_values on an empty Sequence must yield an \
+             empty `Vec<&str>` so the routed assert-side byte-compare \
+             against an empty `vec![]` on drift-detection failure \
+             renders cleanly rather than raising; got {values:?}"
+        );
+    }
+
+    #[test]
+    fn sequence_str_values_matches_prior_inline_iter_filter_map_collect() {
+        // Byte-equivalence pin against the prior three-line inline
+        // `<sequence>.iter().filter_map(|v|
+        // v.as_str()).collect::<Vec<&str>>()` block the routed test-
+        // side sites (the caixa-mesh per-`placement.clusters` cluster-
+        // name-list readback + the two per-`GATEWAY_API_KEY_HOSTNAMES`
+        // plural HTTPRoute hostname-list readbacks) carried verbatim.
+        // A drift between the helper's yielded Vec and the inline
+        // collect would silently regress every routed diagnostic —
+        // mirrors the discipline the sibling
+        // `mapping_str_keys_matches_prior_inline_iter_filter_map_collect`
+        // pin established on the mapping-keys enumeration axis.
+        let sequence = serde_yaml::Sequence::from(vec![
+            serde_yaml::Value::String("rio".into()),
+            serde_yaml::Value::Number(3.into()),
+            serde_yaml::Value::String("mar".into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::String("sol".into()),
+        ]);
+
+        let via_helper = sequence_str_values(&sequence);
+        let via_inline: Vec<&str> = sequence.iter().filter_map(|v| v.as_str()).collect();
+
+        assert_eq!(
+            via_helper, via_inline,
+            "sequence_str_values must yield the same Vec<&str> as the \
+             prior inline `.iter().filter_map(|v| \
+             v.as_str()).collect::<Vec<&str>>()` block — otherwise the \
+             routed test-side drift-detection byte-compares regress \
+             silently on the interpolated `vec![<STR_CONST>, ...]` \
+             expected-shape assertion"
+        );
+    }
+
+    #[test]
+    fn sequence_str_values_borrows_into_input_sequence() {
+        // Ownership-arity pin: the returned `Vec<&str>` borrows into
+        // the input sequence's own scalar storage (not into a per-call
+        // temporary), so the returned slices remain valid for the whole
+        // outer sequence borrow but not beyond it. Mirrors the sibling
+        // `mapping_str_keys_borrows_into_input_mapping` pin on the
+        // paired mapping-keys axis, distinguishing this helper's
+        // `Vec<&str>` return from any future owned-`Vec<String>` peer.
+        let sequence = serde_yaml::Sequence::from(vec![
+            serde_yaml::Value::String("value-1".into()),
+            serde_yaml::Value::String("value-2".into()),
+        ]);
+        let values = sequence_str_values(&sequence);
+        for (yielded, from_sequence) in values.iter().zip(sequence.iter()) {
+            let from_sequence_str = from_sequence.as_str().expect("string entry");
+            assert!(
+                std::ptr::eq::<str>(*yielded, from_sequence_str),
+                "sequence_str_values must yield &str borrows that \
+                 point back into the input Sequence's own scalar \
+                 storage (byte-identical pointer address), not into a \
+                 per-call temporary — the returned slices' lifetime is \
+                 bounded by the input sequence's borrow"
             );
         }
     }
