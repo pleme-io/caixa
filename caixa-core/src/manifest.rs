@@ -509,8 +509,11 @@ impl Caixa {
     /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
     /// carries.
     #[must_use]
-    pub fn licenca(&self) -> Option<&str> {
-        self.licenca.as_deref()
+    pub const fn licenca(&self) -> Option<&str> {
+        match &self.licenca {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`Caixa` `:repositorio` git-repo-URL scalar
@@ -608,8 +611,11 @@ impl Caixa {
     /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
     /// carries.
     #[must_use]
-    pub fn repositorio(&self) -> Option<&str> {
-        self.repositorio.as_deref()
+    pub const fn repositorio(&self) -> Option<&str> {
+        match &self.repositorio {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`Caixa` **resolved-git-repo-URL** composer —
@@ -1029,8 +1035,11 @@ impl Caixa {
     /// carries. The one remaining universal `Option<String>` slot
     /// (`:edicao`) folds on this pattern next.
     #[must_use]
-    pub fn descricao(&self) -> Option<&str> {
-        self.descricao.as_deref()
+    pub const fn descricao(&self) -> Option<&str> {
+        match &self.descricao {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`Caixa` `:edicao` language-edition scalar
@@ -1116,8 +1125,11 @@ impl Caixa {
     /// accessor's identity maps onto the canonical CAIXA-SDLC §I
     /// vocabulary the slot's docstring already carries.
     #[must_use]
-    pub fn edicao(&self) -> Option<&str> {
-        self.edicao.as_deref()
+    pub const fn edicao(&self) -> Option<&str> {
+        match &self.edicao {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`Caixa` `:nome` universal-axis DNS-1123-
@@ -3304,8 +3316,11 @@ impl Caixa {
     /// onto the canonical OTP-shape supervision vocabulary the
     /// `:restart-window` field's docstring already carries.
     #[must_use]
-    pub fn restart_window(&self) -> Option<&str> {
-        self.restart_window.as_deref()
+    pub const fn restart_window(&self) -> Option<&str> {
+        match &self.restart_window {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`Caixa` `:upgrade-from` M2 typed-slot
@@ -5941,6 +5956,94 @@ mod tests {
         assert_eq!(versao_via_const_fn(&c), c.versao());
         assert_eq!(c.nome(), "demo");
         assert_eq!(c.versao(), "0.1.0");
+    }
+
+    #[test]
+    fn caixa_option_string_scalar_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the five per-`Caixa`
+        // `Option<String> → Option<&str>` scalar accessors
+        // ([`Caixa::licenca`] / [`Caixa::repositorio`] /
+        // [`Caixa::descricao`] / [`Caixa::edicao`] on the top-level
+        // manifest's optional universal-axis surface, plus
+        // [`Caixa::restart_window`] on the M2 supervisor-tree
+        // per-`SupervisorSpec` peer raw-window-string projection axis).
+        // Each accessor destructures the typed slot's `Option<String>`
+        // storage through the `match &self.<field> { Some(s) =>
+        // Some(s.as_str()), None => None }` shape — routing through
+        // [`String::as_str`] (const-stable since Rust 1.87, well within
+        // the workspace MSRV) rather than the non-const
+        // [`Option::as_deref`] the pre-lift bodies carried — and any
+        // future accidental downgrade to non-`const` fails the
+        // corresponding `<name>_via_const_fn` wrapper at caixa-core
+        // build time with E0015 (`cannot call non-const method`),
+        // strictly stronger than a runtime `assert!` and strictly
+        // stronger than a module-scope `const _: () = assert!(…)` pin
+        // (which cannot be formed on a `&Caixa` fixture because the
+        // type's `String` / `Option<String>` carriers rule out
+        // `const`-context value construction; the `const fn` wrapper
+        // is the load-bearing shape that side-steps the destructor-in-
+        // const restriction on the value axis while still pinning the
+        // `const`-fn posture on the callee — mirror of the sibling
+        // [`caixa_universal_axis_scalar_accessor_pair_is_const_fn`]
+        // pin's discipline verbatim on the peer non-`Option`
+        // `String → &str` axis at the same struct).
+        //
+        // Peer of the sibling per-M2/M3-slot `Option<String> →
+        // Option<&str>` accessor family pin
+        // [`m3_option_string_scalar_accessor_family_is_const_fn`] on
+        // the M3 mesh-slot atom axes ([`WitContract::endpoint`] /
+        // [`WitContract::subject`] / [`WitContract::slot`] on the
+        // per-`:contratos` payload-carrier trio,
+        // [`Placement::shard_key`] / [`Placement::affinity`] on the
+        // per-`:placement` optional-scalar pair).
+        const fn licenca_via_const_fn(c: &Caixa) -> Option<&str> {
+            c.licenca()
+        }
+        const fn repositorio_via_const_fn(c: &Caixa) -> Option<&str> {
+            c.repositorio()
+        }
+        const fn descricao_via_const_fn(c: &Caixa) -> Option<&str> {
+            c.descricao()
+        }
+        const fn edicao_via_const_fn(c: &Caixa) -> Option<&str> {
+            c.edicao()
+        }
+        const fn restart_window_via_const_fn(c: &Caixa) -> Option<&str> {
+            c.restart_window()
+        }
+        // Sweep both the `Some`-carrying arm (author-declared slot,
+        // the byte-string projection payload) and the `None`-carrying
+        // arm (author-omitted slot, the default-path projection) on
+        // every accessor so the `const fn` wrapper family pins each
+        // axis's canonical two-arm partition through the same const
+        // dispatch as the runtime path.
+        let mut c1 = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        c1.licenca = Some("MIT".to_string());
+        c1.repositorio = Some("https://github.com/pleme-io/demo".to_string());
+        c1.descricao = Some("demo caixa".to_string());
+        c1.edicao = Some("2024".to_string());
+        c1.restart_window = Some("60s".to_string());
+        assert_eq!(licenca_via_const_fn(&c1), c1.licenca());
+        assert_eq!(repositorio_via_const_fn(&c1), c1.repositorio());
+        assert_eq!(descricao_via_const_fn(&c1), c1.descricao());
+        assert_eq!(edicao_via_const_fn(&c1), c1.edicao());
+        assert_eq!(restart_window_via_const_fn(&c1), c1.restart_window());
+        assert_eq!(c1.licenca(), Some("MIT"));
+        assert_eq!(c1.repositorio(), Some("https://github.com/pleme-io/demo"));
+        assert_eq!(c1.descricao(), Some("demo caixa"));
+        assert_eq!(c1.edicao(), Some("2024"));
+        assert_eq!(c1.restart_window(), Some("60s"));
+        let mut c2 = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        c2.licenca = None;
+        c2.repositorio = None;
+        c2.descricao = None;
+        c2.edicao = None;
+        c2.restart_window = None;
+        assert_eq!(licenca_via_const_fn(&c2), None);
+        assert_eq!(repositorio_via_const_fn(&c2), None);
+        assert_eq!(descricao_via_const_fn(&c2), None);
+        assert_eq!(edicao_via_const_fn(&c2), None);
+        assert_eq!(restart_window_via_const_fn(&c2), None);
     }
 
     #[test]
