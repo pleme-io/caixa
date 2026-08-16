@@ -14855,6 +14855,93 @@ pub const GATEWAY_API_KEY_REQUEST: &str = "request";
 /// [cf]: ../../caixa_flux/index.html
 pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 
+/// Canonical Helm 3 `Chart.yaml` `dependencies[0].repository` chart-source
+/// URL every rendered `lareira-<nome>` chart declares against the
+/// substrate-canonical [`DEFAULT_LIBRARY_NAME`] library chart — the
+/// `file://` per-chart-dep resolver scheme pointing at the sibling
+/// `pleme-io/helmworks/charts/<library-chart>` directory on disk that
+/// Helm's `helm dependency build` vendors the library chart bytes from
+/// before every rendered chart consumes its templates.
+///
+/// The single source of truth every downstream library-repo consumer
+/// reaches for:
+///
+///   - [`caixa-helm`][ch]'s `DEFAULT_LIBRARY_REPO` re-export — the
+///     default value of [`caixa_helm::RenderOpts::library_repo`], which
+///     lands verbatim as the per-chart `Chart.yaml`
+///     `dependencies[0].repository` field the caixa-helm-side
+///     `build_chart_yaml` emitter writes into every emitted
+///     `lareira-<nome>` chart, keyed against the canonical
+///     [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] Helm chart-schema
+///     per-dep sub-key axis.
+///   - Every future per-Servico renderer the absorption-roadmap
+///     acknowledges (the future per-edition library-chart fork's per-
+///     cluster / per-namespace / per-tenant variant of the canonical
+///     library-chart repo path the [`DEFAULT_LIBRARY_NAME`] docstring
+///     names as a trajectory item; the future OCI-registry-backed
+///     chart-source migration once `pleme-io/helmworks/charts` lands
+///     as an OCI-published chart-source and the per-dep resolver
+///     scheme flips from `file://` to `oci://` on the canonical seed).
+///
+/// Until this lift landed the canonical library-chart repo URL lived at
+/// one production-code call site: a `pub const DEFAULT_LIBRARY_REPO:
+/// &str = "file://../pleme-computeunit"` in [`caixa-helm`][ch] (the
+/// [`caixa_helm::RenderOpts::library_repo`] default, consumed by the
+/// chart's `Chart.yaml` `dependencies[0].repository` axis). The residence
+/// at the renderer crate rather than the substrate primitive was the
+/// drift footgun a future second cross-crate consumer — the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Servico
+/// library-chart-dep repo resolver, the future per-Aplicacao library-
+/// chart's per-Servico per-dep repo emitter, the future per-cluster
+/// per-registry chart-source mirror the operator pins through a future
+/// [`ClusterBundleOpts`]-scoped library-repo override — would have had
+/// to reach across a crate boundary to a caixa-helm-owned symbol whose
+/// ownership convention differed from the peer canonicalized
+/// [`DEFAULT_LIBRARY_NAME`] on the sibling per-dep sub-key axis, or,
+/// worse, would have re-declared a sibling `pub const
+/// DEFAULT_LIBRARY_REPO: &str = "file://../pleme-computeunit"` at its
+/// own crate root that happened to carry the same string at source but
+/// pointed at a different `&'static str` allocation, exactly the drift
+/// the [`assert_str_reexport_identity`] helper's docstring names as the
+/// canonical footgun the substrate-primitive-lift discipline closes.
+///
+/// A future library-chart-source-scheme rebrand (`file://` → `oci://`
+/// on the OCI-registry-backed chart-source migration, `file://../…` →
+/// `file://<workspace-relative>/…` on a workspace-layout migration, the
+/// per-cluster per-registry chart-source mirror any future
+/// [`ClusterBundleOpts`]-scoped override reaches through) without a
+/// coordinated edit on every consumer would have silently split the
+/// per-chart-dep resolver scheme every renderer emits — some rendered
+/// per-Servico charts would carry the old file:// path (silently
+/// pointing at a directory `helm dependency build` refuses to vendor
+/// from once the workspace layout shifts), others the new; Helm's per-
+/// dep resolver would refuse to vendor the library chart at
+/// chart-consumption time with `chart <library-name> not found in
+/// file://../<old-name>`, far from the rebrand commit's source. The
+/// apply-time symptom (per-chart install fails at the per-dep
+/// vendoring floor with no field naming the offending default-drift
+/// root cause) is invisible at author time and surfaces only at
+/// operator-side `helm install` time.
+///
+/// Lifting it to caixa-core's render-constants block alongside the peer
+/// [`DEFAULT_LIBRARY_NAME`] makes the library-repo axis discipline
+/// structural: every renderer that reaches for the canonical
+/// library-chart repo URL consults the same `&'static str`, and every
+/// future renderer inherits the same value by construction with no
+/// opportunity for per-renderer drift. The `(NAME, REPO)` two-const
+/// canonical coherence — every emitted `Chart.yaml`
+/// `dependencies[0]`'s `(name, repository)` per-dep tuple must resolve
+/// to the same library-chart identity on disk — is now enforced at
+/// caixa-core build time via the paired
+/// [`default_library_repo_ends_with_default_library_name`] structural
+/// pin. Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_LIBRARY_NAME`] (41438dc) lift applies on the sibling per-
+/// dep name axis; extends the discipline onto the per-dep repository
+/// axis every rendered `Chart.yaml` `dependencies[0]` entry carries.
+///
+/// [ch]: ../../caixa_helm/index.html
+pub const DEFAULT_LIBRARY_REPO: &str = "file://../pleme-computeunit";
+
 /// Canonical Flux v2 `spec.interval` reconcile-poll cadence duration
 /// scalar every [`caixa-flux`][cf]-emitted Flux v2 CR (the per-caixa
 /// `cluster_bundle` triplet's `GitRepository` + `HelmRelease` +
@@ -17752,7 +17839,7 @@ pub const HELM_CHART_DEPENDENCY_KEY_VERSION: &str = "version";
 /// (`file://…`, `https://…`, `oci://…`) Helm's per-dep resolver
 /// consults at `helm dependency build` time to fetch the per-dep
 /// chart bytes. At the caixa-helm substrate the default value is the
-/// canonical [`caixa_helm::DEFAULT_LIBRARY_REPO`] pointing at the
+/// canonical [`DEFAULT_LIBRARY_REPO`] pointing at the
 /// helmworks file:// path; the future per-edition library-chart
 /// re-emission for the OCI registry (once `pleme-io/helmworks/charts`
 /// lands as an OCI-registry-backed chart-source) reaches this axis
@@ -29064,6 +29151,85 @@ mod tests {
              per the Go-duration-format grammar — the trailing unit \
              follows the magnitude; an unterminated magnitude defeats \
              `metav1.ParseDuration`"
+        );
+    }
+
+    #[test]
+    fn default_library_repo_pins_canonical_value() {
+        // Pin the actual scalar so a typo in the canonicalization pass
+        // can't silently rebrand the substrate-side default Helm 3
+        // `Chart.yaml` `dependencies[0].repository` chart-source URL the
+        // paired caixa-helm [`RenderOpts::library_repo`] default seeds
+        // into every emitted per-Servico `lareira-<nome>` chart's per-
+        // dep entry against the substrate-canonical
+        // [`DEFAULT_LIBRARY_NAME`] library chart. The scalar is part of
+        // the cluster-side contract with Helm's per-chart-dep resolver
+        // — the per-dep source scheme (`file://`, `oci://`, `https://`)
+        // is the discriminator `helm dependency build` routes the per-
+        // dep vendoring on before every rendered chart consumes its
+        // templates — so a rebrand of the substrate default is a
+        // coordinated multi-repo migration (a `file://` → `oci://`
+        // scheme migration once `pleme-io/helmworks/charts` lands as an
+        // OCI-registry-backed chart-source, a `file://../…` →
+        // `file://<workspace-relative>/…` workspace-layout migration,
+        // any per-cluster per-registry chart-source mirror a future
+        // [`ClusterBundleOpts`]-scoped override reaches through), not
+        // an incidental edit. Peer to
+        // [`default_library_name_pins_canonical_value`]-shaped canonical
+        // value pins the sibling substrate-side per-Chart.yaml-dep
+        // scalar-value defaults already carry.
+        assert_eq!(DEFAULT_LIBRARY_REPO, "file://../pleme-computeunit");
+    }
+
+    #[test]
+    fn default_library_repo_ends_with_default_library_name() {
+        // Structural cross-const coherence pin: [`DEFAULT_LIBRARY_REPO`]
+        // embeds [`DEFAULT_LIBRARY_NAME`] verbatim as its trailing
+        // directory-name component (the canonical
+        // `file://../<library-chart-name>` shape every sibling
+        // `lareira-<nome>` chart's `Chart.yaml` `dependencies[0]` entry
+        // consults for a two-axis `(name, repository)` per-dep tuple that
+        // Helm's per-chart-dep resolver `(chart-source-scheme + chart-
+        // name)` navigator round-trips). The two axes must stay coupled:
+        // the library-chart-directory on disk (the repo's trailing
+        // component) and the library-chart's declared `name:` in its own
+        // [`DEFAULT_LIBRARY_NAME`]-published `Chart.yaml` are the same
+        // load-bearing chart-name identity. Prior to canonicalizing
+        // [`DEFAULT_LIBRARY_REPO`] to the substrate primitive alongside
+        // [`DEFAULT_LIBRARY_NAME`], the two consts sat at separate
+        // residences (name at caixa-core, repo at caixa-helm) with the
+        // structural coherence pin living on the caixa-helm side alone —
+        // a future substrate-side library-chart rebrand
+        // (`pleme-computeunit` → `pleme-cu` on a shorter-form migration,
+        // `pleme-computeunit` → `caixa-computeunit` on a substrate-
+        // alignment migration, a per-edition library-chart fork the
+        // [`DEFAULT_LIBRARY_NAME`] docstring names as a trajectory item)
+        // on the [`DEFAULT_LIBRARY_NAME`] canonical without a coordinated
+        // edit on the paired [`DEFAULT_LIBRARY_REPO`] canonical would
+        // silently emit rendered `Chart.yaml` documents whose
+        // `dependencies[0].name` names the new chart while
+        // `dependencies[0].repository` points at the old directory —
+        // `helm dependency build` would refuse to resolve the dep
+        // ("chart <new-name> not found in file://../<old-name>") at
+        // chart-consumption time, far from the constant-rebrand commit's
+        // source, with no field naming the two-axis coherence drift root
+        // cause. Pinning the structural `ends_with(DEFAULT_LIBRARY_NAME)`
+        // invariant here at caixa-core surfaces the drift as a caixa-core
+        // build-time test failure at the canonical residence — before
+        // any renderer consumes either value — and forces the coordinated
+        // `(NAME, REPO)` edit to move together. Peer of the caixa-helm-
+        // side [`caixa_helm::tests::default_library_repo_ends_with_lifted_default_library_name`]
+        // pin on the sibling re-export axis — both anchor the same
+        // coherence invariant at both ends of the re-export bridge, so
+        // a drift on either side surfaces at the crate that owns the
+        // regressing declaration.
+        assert!(
+            DEFAULT_LIBRARY_REPO.ends_with(DEFAULT_LIBRARY_NAME),
+            "DEFAULT_LIBRARY_REPO {DEFAULT_LIBRARY_REPO:?} must terminate \
+             with the canonical DEFAULT_LIBRARY_NAME {DEFAULT_LIBRARY_NAME:?} \
+             — the two-axis (repository, name) per-Chart.yaml-dep tuple must \
+             resolve to the same library-chart identity on disk, so a rebrand \
+             on either canonical const must move both"
         );
     }
 
