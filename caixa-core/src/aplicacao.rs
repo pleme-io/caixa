@@ -2346,7 +2346,7 @@ impl Membro {
     /// canonical caixa-identity vocabulary rather than shadowing the
     /// field's storage-side `caixa` label.
     #[must_use]
-    pub fn nome(&self) -> &str {
+    pub const fn nome(&self) -> &str {
         self.caixa.as_str()
     }
 
@@ -2418,7 +2418,7 @@ impl Membro {
     /// discipline extended onto the per-`:membros` member-`:versao`
     /// semver-requirement byte-string axis.
     #[must_use]
-    pub fn versao_requirement(&self) -> &str {
+    pub const fn versao_requirement(&self) -> &str {
         self.versao.as_str()
     }
 }
@@ -5907,7 +5907,7 @@ impl Entrada {
     /// [`Entrada::resolved_paths`] lifts apply on the sibling per-
     /// `:entrada` scalar-value + list-value axes.
     #[must_use]
-    pub fn hostname(&self) -> &str {
+    pub const fn hostname(&self) -> &str {
         self.host.as_str()
     }
 
@@ -6000,7 +6000,7 @@ impl Entrada {
     /// per-`:entrada` reader now routes through a typed dispatch on
     /// the substrate primitive.
     #[must_use]
-    pub fn destination(&self) -> &str {
+    pub const fn destination(&self) -> &str {
         self.para.as_str()
     }
 
@@ -11820,6 +11820,86 @@ mod tests {
             assert_eq!(c.is_pubsub(), is_pubsub);
             assert_eq!(c.is_store(), is_store);
             assert_eq!(c.is_capability(), is_capability);
+        }
+    }
+
+    #[test]
+    fn m3_membros_and_entrada_string_scalar_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the four M3 mesh-slot
+        // `String → &str` scalar accessors ([`Membro::nome`] /
+        // [`Membro::versao_requirement`] on the per-`:membros` axis,
+        // [`Entrada::hostname`] / [`Entrada::destination`] on the
+        // per-`:entrada` axis) — each projects the typed slot's
+        // [`String`] storage through the `pub const fn`
+        // [`String::as_str`] (const-stable since Rust 1.87, well
+        // within the workspace MSRV) and any future accidental
+        // downgrade to non-`const` fails the corresponding
+        // `<name>_via_const_fn` wrapper at caixa-core build time with
+        // E0015 (`cannot call non-const method`), strictly stronger
+        // than a runtime `assert!` and strictly stronger than a
+        // module-scope `const _: () = assert!(…)` pin (which cannot
+        // be formed on `&Membro` / `&Entrada` fixtures because the
+        // types' `String` carriers rule out `const`-context value
+        // construction; the `const fn` wrapper is the load-bearing
+        // shape that side-steps the destructor-in-const restriction
+        // on the value axis while still pinning the `const`-fn
+        // posture on the callee — mirror of the sibling
+        // [`wit_contract_pre_projection_accessor_family_is_const_fn`]
+        // (279823b) pin on the per-`:contratos` axis). Peer of the
+        // sibling per-M2/M3/universal-axis `String → &str` accessor
+        // family pins on the sibling `const`-eval-surface passes
+        // ([`crate::Caixa::nome`] / [`crate::Caixa::versao`] at the
+        // top-level manifest, [`crate::CaixaVersion::as_str`] at the
+        // typed-newtype wrapper,
+        // [`crate::supervisor::ChildSpec::nome`] /
+        // [`crate::supervisor::ChildSpec::versao_requirement`] at the
+        // M2 supervisor-tree axis,
+        // [`crate::upgrade::UpgradeFromEntry::prior_versao`] at the
+        // M2 upgrade axis, [`crate::dep::Dep::nome`] /
+        // [`crate::dep::Dep::versao_requirement`] at the dep-graph
+        // axis, and the sibling per-`:contratos`
+        // [`WitContract::source`] / [`WitContract::destination`] /
+        // [`WitContract::world_ref`] trio at 279823b).
+        const fn membro_nome_via_const_fn(m: &Membro) -> &str {
+            m.nome()
+        }
+        const fn membro_versao_via_const_fn(m: &Membro) -> &str {
+            m.versao_requirement()
+        }
+        const fn entrada_hostname_via_const_fn(e: &Entrada) -> &str {
+            e.hostname()
+        }
+        const fn entrada_destination_via_const_fn(e: &Entrada) -> &str {
+            e.destination()
+        }
+        for (caixa, versao) in [
+            ("cart", "^0.1"),
+            ("catalog-v2", "~0.2.3"),
+            ("checkout", "*"),
+        ] {
+            let m = Membro {
+                caixa: caixa.into(),
+                versao: versao.into(),
+            };
+            assert_eq!(membro_nome_via_const_fn(&m), m.nome());
+            assert_eq!(membro_versao_via_const_fn(&m), m.versao_requirement());
+            assert_eq!(m.nome(), caixa);
+            assert_eq!(m.versao_requirement(), versao);
+        }
+        for (host, para) in [
+            ("cart.example.com", "cart"),
+            ("api.checkout.io", "checkout"),
+        ] {
+            let e = Entrada {
+                host: host.into(),
+                para: para.into(),
+                paths: vec![],
+                port: DEFAULT_SERVICO_PORT,
+            };
+            assert_eq!(entrada_hostname_via_const_fn(&e), e.hostname());
+            assert_eq!(entrada_destination_via_const_fn(&e), e.destination());
+            assert_eq!(e.hostname(), host);
+            assert_eq!(e.destination(), para);
         }
     }
 

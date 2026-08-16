@@ -140,8 +140,8 @@ impl UpgradeFromEntry {
     /// the four validate-side call sites + every downstream error-
     /// variant carrying `:from`.
     #[must_use]
-    pub fn prior_versao(&self) -> &str {
-        &self.from
+    pub const fn prior_versao(&self) -> &str {
+        self.from.as_str()
     }
 
     /// Substrate-canonical per-`:upgrade-from :instructions`
@@ -2206,6 +2206,43 @@ mod tests {
         UpgradeFromEntry {
             from: from.into(),
             instructions: instrs,
+        }
+    }
+
+    #[test]
+    fn upgrade_from_entry_prior_versao_accessor_is_const_fn() {
+        // Fail-before-pass-after pin on
+        // [`UpgradeFromEntry::prior_versao`]'s `const`-eval-surface
+        // posture. The accessor projects the per-`:upgrade-from :from`
+        // [`String`] storage through the `pub const fn`
+        // [`String::as_str`] (const-stable since Rust 1.87, well within
+        // the workspace MSRV) — any future accidental downgrade to
+        // non-`const` fails `prior_versao_via_const_fn` at caixa-core
+        // build time with E0015 (`cannot call non-const method`),
+        // strictly stronger than a runtime `assert!`. Sibling of the
+        // peer M2/M3 slot family pins on the sibling `const`-eval-
+        // surface passes ([`crate::Caixa::nome`] /
+        // [`crate::Caixa::versao`], [`crate::CaixaVersion::as_str`],
+        // [`crate::aplicacao::Membro::nome`] /
+        // [`crate::aplicacao::Membro::versao_requirement`],
+        // [`crate::aplicacao::Entrada::hostname`] /
+        // [`crate::aplicacao::Entrada::destination`],
+        // [`crate::supervisor::ChildSpec::nome`] /
+        // [`crate::supervisor::ChildSpec::versao_requirement`],
+        // [`crate::dep::Dep::nome`] /
+        // [`crate::dep::Dep::versao_requirement`], and the
+        // per-`:contratos`
+        // [`crate::aplicacao::WitContract::source`] /
+        // [`crate::aplicacao::WitContract::destination`] /
+        // [`crate::aplicacao::WitContract::world_ref`] trio the
+        // sibling pin at 279823b already anchors).
+        const fn prior_versao_via_const_fn(e: &UpgradeFromEntry) -> &str {
+            e.prior_versao()
+        }
+        for from in ["0.1.0", "1.2.3-alpha.1", "0.0.0"] {
+            let e = entry(from, vec![]);
+            assert_eq!(prior_versao_via_const_fn(&e), e.prior_versao());
+            assert_eq!(e.prior_versao(), from);
         }
     }
 

@@ -21,8 +21,8 @@ impl CaixaVersion {
 
     /// Borrow the string form.
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub const fn as_str(&self) -> &str {
+        self.0.as_str()
     }
 }
 
@@ -280,6 +280,43 @@ mod tests {
         let v: CaixaVersion = "1.2.3".into();
         assert_eq!(v.as_str(), "1.2.3");
         assert_eq!(v.parse().unwrap().to_string(), "1.2.3");
+    }
+
+    #[test]
+    fn caixa_version_as_str_accessor_is_const_fn() {
+        // Fail-before-pass-after pin on [`CaixaVersion::as_str`]'s
+        // `const`-eval-surface posture. The accessor projects the typed
+        // newtype's inner [`String`] through the `pub const fn`
+        // [`String::as_str`] (const-stable since Rust 1.87, well within
+        // the workspace MSRV) — any future accidental downgrade to
+        // non-`const` fails `as_str_via_const_fn` at caixa-core build
+        // time with E0015 (`cannot call non-const method`), strictly
+        // stronger than a runtime `assert!`. Sibling of the peer
+        // per-M2/M3/universal-axis `String → &str` scalar-accessor
+        // family pins on the sibling `const`-eval-surface passes
+        // ([`crate::Caixa::nome`] / [`crate::Caixa::versao`] at the
+        // top-level manifest, [`crate::aplicacao::Membro::nome`] /
+        // [`crate::aplicacao::Membro::versao_requirement`] at the M3
+        // membership axis, [`crate::aplicacao::Entrada::hostname`] /
+        // [`crate::aplicacao::Entrada::destination`] at the M3 ingress
+        // axis, [`crate::supervisor::ChildSpec::nome`] /
+        // [`crate::supervisor::ChildSpec::versao_requirement`] at the
+        // M2 supervisor-tree axis,
+        // [`crate::upgrade::UpgradeFromEntry::prior_versao`] at the M2
+        // upgrade axis, [`crate::dep::Dep::nome`] /
+        // [`crate::dep::Dep::versao_requirement`] at the dep-graph
+        // axis, and the peer per-`:contratos` [`crate::aplicacao::WitContract::source`] /
+        // [`crate::aplicacao::WitContract::destination`] /
+        // [`crate::aplicacao::WitContract::world_ref`] trio the
+        // sibling pin at 279823b already anchors).
+        const fn as_str_via_const_fn(v: &CaixaVersion) -> &str {
+            v.as_str()
+        }
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            assert_eq!(as_str_via_const_fn(&v), v.as_str());
+            assert_eq!(v.as_str(), versao);
+        }
     }
 
     #[test]

@@ -2521,7 +2521,7 @@ impl Dep {
     /// match the target caixa's `:nome`") and the peer caixa-identity
     /// accessor family the substrate already carries.
     #[must_use]
-    pub fn nome(&self) -> &str {
+    pub const fn nome(&self) -> &str {
         self.nome.as_str()
     }
 
@@ -2607,7 +2607,7 @@ impl Dep {
     /// [`crate::supervisor::ChildSpec::versao_requirement`] naming
     /// discipline verbatim.
     #[must_use]
-    pub fn versao_requirement(&self) -> &str {
+    pub const fn versao_requirement(&self) -> &str {
         self.versao.as_str()
     }
 
@@ -4366,6 +4366,54 @@ mod tests {
         assert!(d.fonte.is_none());
         assert!(!d.opcional());
         assert!(d.caracteristicas().is_empty());
+    }
+
+    #[test]
+    fn dep_string_scalar_accessor_pair_is_const_fn() {
+        // Fail-before-pass-after pin on [`Dep::nome`] +
+        // [`Dep::versao_requirement`]'s `const`-eval-surface posture.
+        // Each accessor projects the per-`:deps` / per-`:deps-dev`
+        // entry's [`String`] storage through the `pub const fn`
+        // [`String::as_str`] (const-stable since Rust 1.87, well
+        // within the workspace MSRV) — any future accidental
+        // downgrade to non-`const` fails the corresponding
+        // `<name>_via_const_fn` wrapper at caixa-core build time with
+        // E0015 (`cannot call non-const method`), strictly stronger
+        // than a runtime `assert!`. Sibling of the peer
+        // per-M2/M3/universal-axis `String → &str` scalar-accessor
+        // family pins on the sibling `const`-eval-surface passes
+        // ([`crate::Caixa::nome`] / [`crate::Caixa::versao`] at the
+        // top-level manifest, [`crate::CaixaVersion::as_str`] at the
+        // typed-newtype wrapper, [`crate::aplicacao::Membro::nome`] /
+        // [`crate::aplicacao::Membro::versao_requirement`] at the M3
+        // membership axis, [`crate::aplicacao::Entrada::hostname`] /
+        // [`crate::aplicacao::Entrada::destination`] at the M3
+        // ingress axis, [`crate::supervisor::ChildSpec::nome`] /
+        // [`crate::supervisor::ChildSpec::versao_requirement`] at the
+        // M2 supervisor-tree axis,
+        // [`crate::upgrade::UpgradeFromEntry::prior_versao`] at the
+        // M2 upgrade axis, and the per-`:contratos`
+        // [`crate::aplicacao::WitContract::source`] /
+        // [`crate::aplicacao::WitContract::destination`] /
+        // [`crate::aplicacao::WitContract::world_ref`] trio the
+        // sibling pin at 279823b already anchors).
+        const fn nome_via_const_fn(d: &Dep) -> &str {
+            d.nome()
+        }
+        const fn versao_via_const_fn(d: &Dep) -> &str {
+            d.versao_requirement()
+        }
+        for (nome, versao) in [
+            ("caixa-teia", "^0.1"),
+            ("caixa-mesh", "~0.2.3"),
+            ("caixa-helm", "*"),
+        ] {
+            let d = Dep::simple(nome, versao);
+            assert_eq!(nome_via_const_fn(&d), d.nome());
+            assert_eq!(versao_via_const_fn(&d), d.versao_requirement());
+            assert_eq!(d.nome(), nome);
+            assert_eq!(d.versao_requirement(), versao);
+        }
     }
 
     #[test]

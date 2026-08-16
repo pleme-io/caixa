@@ -1211,8 +1211,8 @@ impl Caixa {
     /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
     /// slot's docstring already carries.
     #[must_use]
-    pub fn nome(&self) -> &str {
-        &self.nome
+    pub const fn nome(&self) -> &str {
+        self.nome.as_str()
     }
 
     /// Substrate-canonical per-`Caixa` `:versao` universal-axis SemVer-2
@@ -1303,8 +1303,8 @@ impl Caixa {
     /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
     /// slot's docstring already carries.
     #[must_use]
-    pub fn versao(&self) -> &str {
-        &self.versao
+    pub const fn versao(&self) -> &str {
+        self.versao.as_str()
     }
 
     /// Substrate-canonical per-`Caixa` `:kind` universal-axis
@@ -5898,6 +5898,49 @@ mod tests {
         assert_eq!(c.bibliotecas, vec!["lib/demo.lisp".to_string()]);
         assert!(c.deps.is_empty());
         assert!(c.deps_dev.is_empty());
+    }
+
+    #[test]
+    fn caixa_universal_axis_scalar_accessor_pair_is_const_fn() {
+        // Fail-before-pass-after pin on [`Caixa::nome`] +
+        // [`Caixa::versao`]'s `const`-eval-surface posture. Each
+        // accessor projects the top-level manifest's per-`:nome` /
+        // per-`:versao` [`String`] storage through the `pub const fn`
+        // [`String::as_str`] (const-stable since Rust 1.87, well within
+        // the workspace MSRV) — any future accidental downgrade to
+        // non-`const` fails the corresponding `<name>_via_const_fn`
+        // wrapper at caixa-core build time with E0015 (`cannot call
+        // non-const method`), strictly stronger than a runtime
+        // `assert!`. Sibling of the peer per-M2/M3-slot `String → &str`
+        // scalar-accessor family pins on the sibling `const`-eval-
+        // surface passes ([`crate::CaixaVersion::as_str`] at the
+        // typed-newtype wrapper, [`crate::aplicacao::Membro::nome`] /
+        // [`crate::aplicacao::Membro::versao_requirement`] at the M3
+        // membership axis, [`crate::aplicacao::Entrada::hostname`] /
+        // [`crate::aplicacao::Entrada::destination`] at the M3 ingress
+        // axis, [`crate::supervisor::ChildSpec::nome`] /
+        // [`crate::supervisor::ChildSpec::versao_requirement`] at the
+        // M2 supervisor-tree axis,
+        // [`crate::upgrade::UpgradeFromEntry::prior_versao`] at the M2
+        // upgrade axis, [`crate::dep::Dep::nome`] /
+        // [`crate::dep::Dep::versao_requirement`] at the dep-graph
+        // axis, and the per-`:contratos`
+        // [`crate::aplicacao::WitContract::source`] /
+        // [`crate::aplicacao::WitContract::destination`] /
+        // [`crate::aplicacao::WitContract::world_ref`] trio the
+        // sibling pin at 279823b already anchors).
+        const fn nome_via_const_fn(c: &Caixa) -> &str {
+            c.nome()
+        }
+        const fn versao_via_const_fn(c: &Caixa) -> &str {
+            c.versao()
+        }
+        let src = Caixa::template("demo");
+        let c = Caixa::from_lisp(&src).expect("template must parse");
+        assert_eq!(nome_via_const_fn(&c), c.nome());
+        assert_eq!(versao_via_const_fn(&c), c.versao());
+        assert_eq!(c.nome(), "demo");
+        assert_eq!(c.versao(), "0.1.0");
     }
 
     #[test]
