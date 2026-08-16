@@ -1409,7 +1409,7 @@ impl Caixa {
     /// the accessor's identity maps onto the canonical CAIXA-SDLC §I
     /// vocabulary the slot's docstring already carries.
     #[must_use]
-    pub fn kind(&self) -> CaixaKind {
+    pub const fn kind(&self) -> CaixaKind {
         self.kind
     }
 
@@ -3122,7 +3122,7 @@ impl Caixa {
     /// OTP-shape supervision vocabulary the [`RestartStrategy`] enum's
     /// docstring already carries.
     #[must_use]
-    pub fn estrategia(&self) -> Option<crate::supervisor::RestartStrategy> {
+    pub const fn estrategia(&self) -> Option<crate::supervisor::RestartStrategy> {
         self.estrategia
     }
 
@@ -6044,6 +6044,92 @@ mod tests {
         assert_eq!(descricao_via_const_fn(&c2), None);
         assert_eq!(edicao_via_const_fn(&c2), None);
         assert_eq!(restart_window_via_const_fn(&c2), None);
+    }
+
+    #[test]
+    fn caixa_outer_copy_return_accessor_pair_is_const_fn() {
+        // Fail-before-pass-after pin on the two outer-[`Caixa`]
+        // `Copy`-return accessors — [`Caixa::kind`] on the required
+        // [`CaixaKind`] enum-discriminant axis and [`Caixa::estrategia`]
+        // on the M2 supervisor-tree flat-spread `Option<RestartStrategy>`
+        // axis. Both accessors project a `Copy`-carrier field
+        // (`CaixaKind: Copy` at caixa-core/src/kind.rs:17,
+        // `RestartStrategy: Copy` at caixa-core/src/supervisor.rs:33 →
+        // `Option<RestartStrategy>: Copy`) by value through a bare
+        // `self.<field>` field-access — no dispatch, no destructor, no
+        // heap. Any future accidental downgrade to non-`const` fails
+        // the corresponding `<name>_via_const_fn` wrapper at caixa-core
+        // build time with E0015 (`cannot call non-const method`),
+        // strictly stronger than a runtime `assert!` and strictly
+        // stronger than a module-scope `const _: () = assert!(…)` pin
+        // (which cannot be formed on a `&Caixa` fixture because the
+        // type's `String` / `Vec` / `Option<Composite>` carriers rule
+        // out `const`-context value construction; the `const fn`
+        // wrapper is the load-bearing shape that side-steps the
+        // destructor-in-const restriction on the value axis while still
+        // pinning the `const`-fn posture on the callee — mirror of the
+        // sibling [`caixa_universal_axis_scalar_accessor_pair_is_const_fn`]
+        // + [`caixa_option_string_scalar_accessor_family_is_const_fn`]
+        // pins' discipline verbatim on the peer outer-`Caixa`
+        // `String → &str` + `Option<String> → Option<&str>` axes at the
+        // same struct).
+        //
+        // Peer of the sibling per-M2/M3-slot `Copy`-return accessor pin
+        // family on the inner-altitude nested-spec typed-slot
+        // discriminator axes: [`crate::supervisor::SupervisorSpec::estrategia`]
+        // + [`crate::supervisor::ChildSpec::restart`] on the M2
+        // supervisor-tree axis (pinned at 152c868), and
+        // [`crate::aplicacao::Placement::estrategia`] +
+        // [`crate::aplicacao::Entrada::port`] on the M3 mesh-slot axis
+        // (pinned at bafa004) — the outer-`Caixa` altitude is the last
+        // unlifted altitude for the `Copy`-return-accessor family.
+        const fn kind_via_const_fn(c: &Caixa) -> CaixaKind {
+            c.kind()
+        }
+        const fn estrategia_via_const_fn(c: &Caixa) -> Option<crate::supervisor::RestartStrategy> {
+            c.estrategia()
+        }
+        // Sweep every arm of both discriminant partitions the accessors
+        // fan on — every [`CaixaKind`] variant the six-arm required
+        // discriminant carries (Biblioteca / Binario / Servico /
+        // Supervisor / Aplicacao / Acao) and both arms of the
+        // [`Option<RestartStrategy>`] flat-spread supervisor-tree slot
+        // (`Some(<strategy>)` on an author-declared supervisor and
+        // `None` on the author-omitted default arm every non-Supervisor
+        // caixa carries by `#[serde(default)]`) — so the `const fn`
+        // wrapper family pins the closed-set partition through the
+        // same const dispatch as the runtime path.
+        let mut c1 = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        c1.kind = CaixaKind::Servico;
+        c1.estrategia = Some(crate::supervisor::RestartStrategy::OneForAll);
+        assert_eq!(kind_via_const_fn(&c1), c1.kind());
+        assert_eq!(estrategia_via_const_fn(&c1), c1.estrategia());
+        assert_eq!(c1.kind(), CaixaKind::Servico);
+        assert_eq!(
+            c1.estrategia(),
+            Some(crate::supervisor::RestartStrategy::OneForAll)
+        );
+        let mut c2 = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        c2.kind = CaixaKind::Aplicacao;
+        c2.estrategia = None;
+        assert_eq!(kind_via_const_fn(&c2), CaixaKind::Aplicacao);
+        assert_eq!(estrategia_via_const_fn(&c2), None);
+        // Anchor the remaining discriminant arms so any future
+        // reordering of [`CaixaKind`]'s six-variant enum surfaces
+        // through the wrapper dispatch, not just through the direct
+        // method call.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+            c.kind = kind;
+            assert_eq!(kind_via_const_fn(&c), kind);
+        }
     }
 
     #[test]
