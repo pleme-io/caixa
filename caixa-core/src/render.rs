@@ -14942,6 +14942,95 @@ pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 /// [ch]: ../../caixa_helm/index.html
 pub const DEFAULT_LIBRARY_REPO: &str = "file://../pleme-computeunit";
 
+/// Canonical Helm 3 `Chart.yaml` `dependencies[0].version` semver-
+/// requirement scalar every rendered `lareira-<nome>` chart declares
+/// against the substrate-canonical [`DEFAULT_LIBRARY_NAME`] library
+/// chart — the `semver::VersionReq`-shaped constraint Helm's per-chart-
+/// dep resolver (`helm dependency build`, `helm dependency update`)
+/// intersects with the [`DEFAULT_LIBRARY_NAME`] library chart's own
+/// published versions to pick the concrete tarball to vendor before
+/// every per-Servico chart consumes its templates.
+///
+/// The single source of truth every downstream library-version
+/// consumer reaches for:
+///
+///   - [`caixa-helm`][ch]'s `DEFAULT_LIBRARY_VERSION` re-export — the
+///     default value of `caixa_helm::RenderOpts::library_version`,
+///     which lands verbatim as the per-chart `Chart.yaml`
+///     `dependencies[0].version` field the caixa-helm-side
+///     `build_chart_yaml` emitter writes into every emitted
+///     `lareira-<nome>` chart, keyed against the canonical
+///     [`HELM_CHART_DEPENDENCY_KEY_VERSION`] Helm chart-schema per-dep
+///     sub-key axis.
+///   - Every future per-Servico renderer the absorption-roadmap
+///     acknowledges (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+///     CR materializer's per-Servico library-chart-dep version
+///     resolver, the future per-Aplicacao library-chart's per-Servico
+///     per-dep version emitter, the future per-cluster library-chart-
+///     version pin the operator threads through a future
+///     [`ClusterBundleOpts`]-scoped library-version override).
+///
+/// Until this lift landed the canonical library-chart requirement
+/// lived at one production-code call site: a `pub const
+/// DEFAULT_LIBRARY_VERSION: &str = "~0.1.0"` in [`caixa-helm`][ch] (the
+/// `caixa_helm::RenderOpts::library_version` default, consumed by the
+/// chart's `Chart.yaml` `dependencies[0].version` axis). The residence
+/// at the renderer crate rather than the substrate primitive was the
+/// drift footgun the co-resident [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`DEFAULT_LIBRARY_REPO`] (dabc525) canonicalization commits already
+/// closed on the sibling `(name, repository)` per-dep sub-key axes but
+/// left open on the third `version` leg — a future second cross-crate
+/// consumer (the future per-Aplicacao library-chart's per-Servico
+/// per-dep version emitter, the future per-cluster library-chart-
+/// version override) would have had to reach across a crate boundary
+/// to a caixa-helm-owned symbol whose ownership convention differed
+/// from the two peer canonicalized siblings, or, worse, would have
+/// re-declared a sibling `pub const DEFAULT_LIBRARY_VERSION: &str =
+/// "~0.1.0"` at its own crate root that happened to carry the same
+/// bytes at source but pointed at a different `&'static str`
+/// allocation, exactly the drift the [`assert_str_reexport_identity`]
+/// helper's docstring names as the canonical footgun the substrate-
+/// primitive-lift discipline closes.
+///
+/// A future library-chart-version bump (`"~0.1.0"` → `"~0.2.0"` on the
+/// `pleme-io/helmworks` `pleme-computeunit` next-minor cut, `"~0.1.0"` →
+/// `"^0.1.0"` on a wider-acceptance sigil swap, `"~0.1.0"` → `">=0.1.0,
+/// <0.3.0"` on a compound-constraint pin the substrate reaches for once
+/// the library chart cuts across two minors it wants to admit) without
+/// a coordinated edit on every consumer would have silently split the
+/// per-chart-dep resolver intersection every renderer emits — some
+/// rendered per-Servico charts would carry the old requirement (silently
+/// vendoring an older library-chart tarball whose template surface pre-
+/// dates the caller's expected surface), others the new; the apply-time
+/// symptom (the workload comes up against a mixed-version library-chart
+/// fleet across the cluster's per-Servico release set) is invisible at
+/// author time and surfaces only at cross-Servico version-skew debugging
+/// far from the bump commit's source.
+///
+/// Lifting it to caixa-core's render-constants block alongside the peer
+/// [`DEFAULT_LIBRARY_NAME`] / [`DEFAULT_LIBRARY_REPO`] makes the
+/// library-version axis discipline structural: every renderer that
+/// reaches for the canonical library-chart requirement consults the
+/// same `&'static str`, and every future renderer inherits the same
+/// value by construction with no opportunity for per-renderer drift.
+/// The `(NAME, REPO, VERSION)` three-const canonical coherence — every
+/// emitted `Chart.yaml` `dependencies[0]`'s `(name, repository,
+/// version)` per-dep triple must resolve to one identifiable library-
+/// chart tarball on disk — is now closed at caixa-core build time via
+/// the paired [`default_library_version_is_a_valid_semver_requirement`]
+/// grammar-floor pin alongside the sibling
+/// [`default_library_repo_ends_with_default_library_name`] structural
+/// pin. Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_LIBRARY_NAME`] (41438dc) / [`DEFAULT_LIBRARY_REPO`]
+/// (dabc525) lifts apply on the sibling per-dep name / repository
+/// axes; extends the discipline onto the per-dep version axis every
+/// rendered `Chart.yaml` `dependencies[0]` entry carries and closes
+/// the per-`Chart.yaml`-dep default-triple's substrate-primitive-
+/// residence pass at the canonical residence.
+///
+/// [ch]: ../../caixa_helm/index.html
+pub const DEFAULT_LIBRARY_VERSION: &str = "~0.1.0";
+
 /// Canonical Flux v2 `spec.interval` reconcile-poll cadence duration
 /// scalar every [`caixa-flux`][cf]-emitted Flux v2 CR (the per-caixa
 /// `cluster_bundle` triplet's `GitRepository` + `HelmRelease` +
@@ -29231,6 +29320,76 @@ mod tests {
              resolve to the same library-chart identity on disk, so a rebrand \
              on either canonical const must move both"
         );
+    }
+
+    #[test]
+    fn default_library_version_pins_canonical_value() {
+        // Pin the actual scalar so a typo in the canonicalization pass
+        // can't silently rebrand the substrate-side default Helm 3
+        // `Chart.yaml` `dependencies[0].version` semver-requirement the
+        // paired caixa-helm [`caixa_helm::RenderOpts::library_version`]
+        // default seeds into every emitted per-Servico `lareira-<nome>`
+        // chart's per-dep entry against the substrate-canonical
+        // [`DEFAULT_LIBRARY_NAME`] library chart. The scalar is part of
+        // the cluster-side contract with Helm's per-chart-dep resolver
+        // — the per-dep semver-requirement is the discriminator
+        // `helm dependency build` / `helm dependency update` intersect
+        // against the library-chart's own published version set to pick
+        // the concrete tarball to vendor before every rendered chart
+        // consumes its templates — so a bump of the substrate default is
+        // a coordinated multi-repo migration (a `~0.1.0` → `~0.2.0`
+        // next-minor cut on the `pleme-io/helmworks` `pleme-computeunit`
+        // canonical, a `~0.1.0` → `^0.1.0` wider-acceptance sigil swap,
+        // a `~0.1.0` → `">=0.1.0, <0.3.0"` compound-constraint pin the
+        // substrate reaches for once the library chart cuts across two
+        // minors it wants to admit), not an incidental edit. Peer to
+        // [`default_library_repo_pins_canonical_value`]-shaped canonical
+        // value pins the sibling substrate-side per-Chart.yaml-dep
+        // scalar-value defaults already carry.
+        assert_eq!(DEFAULT_LIBRARY_VERSION, "~0.1.0");
+    }
+
+    #[test]
+    fn default_library_version_is_a_valid_semver_requirement() {
+        // Cross-axis grammar-floor invariant: [`DEFAULT_LIBRARY_VERSION`]
+        // carries a Cargo-shaped semver-requirement string that lands
+        // verbatim in every rendered `lareira-<nome>` chart's `Chart.yaml`
+        // `dependencies[0].version` field. Helm 3's chart-schema parser
+        // (`helm dependency build`, `helm lint`, `helm template`,
+        // `helm install`) validates the scalar against the same
+        // `semver::VersionReq` grammar [`crate::parse_requirement`] wraps,
+        // and rejects a malformed shape (`"~0.1.,0"` — paste-from-
+        // typography stray comma; `"v0.1.0"` — accidental Zig-style
+        // publish-tag prefix leaking back from
+        // [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] into the requirement
+        // axis; `"0.1"` with a trailing sigil dropped by a fat-fingered
+        // edit) with the load-bearing `Error: found operator …, expected
+        // version` diagnostic surfacing at chart-consumption time — far
+        // from the constant-drift commit's source, with no field naming
+        // the offending caixa or the drifted default. Routing through
+        // [`crate::parse_requirement`] here at the canonical residence —
+        // the same requirement-parser entry-point every peer typed
+        // `:versao` requirement slot (`:deps`, `:deps-dev`, `:membros`,
+        // `:children`) routes through via
+        // [`crate::require_valid_versao_requirement`] — closes the drift
+        // structurally at caixa-core build time and pins the const's
+        // accepted set to exactly the set the peer author-facing
+        // requirement axes accept: any shape a caixa author cannot write
+        // in `:deps :versao` is a shape the substrate cannot seed as the
+        // library-chart-dep default. Sibling to the co-resident
+        // [`default_library_repo_ends_with_default_library_name`]
+        // structural pin on the `(name, repository, version)` per-
+        // Chart.yaml-dep triple — completes the triple's grammar-floor
+        // pin surface at the substrate primitive.
+        crate::parse_requirement(DEFAULT_LIBRARY_VERSION).unwrap_or_else(|e| {
+            panic!(
+                "DEFAULT_LIBRARY_VERSION {DEFAULT_LIBRARY_VERSION:?} must parse as a valid \
+                 semver::VersionReq — every rendered lareira-<nome> chart's Chart.yaml \
+                 dependencies[0].version axis lands this scalar verbatim, and Helm 3's \
+                 chart-schema parser rejects a malformed shape at chart-consumption time \
+                 far from the constant-drift commit's source: {e}",
+            )
+        });
     }
 
     #[test]
