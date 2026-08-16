@@ -23,7 +23,6 @@
 1	clippy::needless_lifetimes	caixa-ast/src/span.rs
 8	clippy::assertions_on_constants	caixa-core/src/aplicacao.rs
 4	clippy::borrow_as_ptr	caixa-core/src/aplicacao.rs
-2	clippy::derivable_impls	caixa-core/src/aplicacao.rs
 4	clippy::doc_lazy_continuation	caixa-core/src/aplicacao.rs
 17	clippy::doc_markdown	caixa-core/src/aplicacao.rs
 7	clippy::manual_string_new	caixa-core/src/aplicacao.rs
