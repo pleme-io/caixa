@@ -795,8 +795,39 @@ impl ChildSpec {
     /// name maps onto the canonical OTP-shape per-child restart-decision-
     /// policy vocabulary the [`RestartPolicy`] enum's docstring already
     /// carries.
+    ///
+    /// Declared `pub const fn` to close the last non-`const`
+    /// `Copy`-return raw-field-getter posture on the M2
+    /// per-`:children` [`ChildSpec`] substrate-primitive surface — peer
+    /// of the sibling M2 per-`:supervisor`
+    /// [`SupervisorSpec::estrategia`] (converted in this commit)
+    /// `Copy`-composite-enum accessor, the sibling M2 per-`:supervisor`
+    /// [`SupervisorSpec::max_restarts`] (b698ec0) `Copy`-`u32` accessor
+    /// already lifted, and the peer M3 mesh-slot per-`:entrada`
+    /// [`crate::Entrada::port`] (bafa004) / per-`:placement`
+    /// [`crate::Placement::estrategia`] (bafa004) `Copy`-return
+    /// `pub const fn` scalar accessors on the sibling M3 surface. Every
+    /// downstream substrate-side `const`-context consumer of the
+    /// per-`:children` restart-decision-policy scalar (a future
+    /// module-scope `const _:() = assert!(matches!(child.restart(),
+    /// RestartPolicy::Permanent))` invariant pin on a typed fixture, a
+    /// future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer
+    /// admission-webhook `const fn` per-child restart-decision floor
+    /// over a typed [`ChildSpec`], any future `const fn` supervisor-tree
+    /// composer over the substrate primitive that fans on the per-child
+    /// restart-decision policy at compile time) now reaches through the
+    /// same typed dispatch on the substrate primitive at const-eval
+    /// time as at runtime. A future non-`Copy`-return promotion of the
+    /// scalar (an `Option<RestartPolicy>`-shape migration on the
+    /// per-child restart-decision axis once heterogeneous per-cluster
+    /// restart-policy overlays land, a per-tenant restart-policy-alias
+    /// table the M4 CR materializer resolves per-CR) that would drop
+    /// the `const` qualifier fails the fail-before-pass-after pin
+    /// [`tests::child_spec_restart_accessor_is_const_fn`] at caixa-core
+    /// build time rather than surfacing as a downstream consumer
+    /// regression.
     #[must_use]
-    pub fn restart(&self) -> RestartPolicy {
+    pub const fn restart(&self) -> RestartPolicy {
         self.restart
     }
 }
@@ -1425,8 +1456,39 @@ impl SupervisorSpec {
     /// verbatim; the accessor's identity name maps onto the canonical
     /// OTP-shape supervision vocabulary the [`RestartStrategy`] enum's
     /// docstring already carries.
+    ///
+    /// Declared `pub const fn` to close the M2 supervisor-slot
+    /// `Copy`-return raw-field-getter `const`-eval-surface pass —
+    /// sibling of the peer M2 per-`:children` [`ChildSpec::restart`]
+    /// (converted in this commit) `Copy`-composite-enum accessor, peer
+    /// of the sibling M2 per-`:supervisor`
+    /// [`SupervisorSpec::max_restarts`] (b698ec0) `Copy`-`u32` accessor
+    /// already lifted, and mirror of the peer M3 mesh-slot
+    /// per-`:placement` [`crate::Placement::estrategia`] (bafa004)
+    /// `Copy`-return `pub const fn` scalar accessor whose method-name
+    /// discipline this accessor was authored to match. Every downstream
+    /// substrate-side `const`-context consumer of the per-`:supervisor`
+    /// sibling-restart-strategy scalar (a future module-scope `const
+    /// _:() = assert!(matches!(sup.estrategia(),
+    /// RestartStrategy::OneForOne))` invariant pin on a typed fixture,
+    /// a future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer
+    /// admission-webhook `const fn` per-supervisor strategy-arm floor
+    /// over a typed [`SupervisorSpec`], any future `const fn`
+    /// supervisor-tree composer over the substrate primitive that fans
+    /// on the sibling-restart-strategy at compile time) now reaches
+    /// through the same typed dispatch on the substrate primitive at
+    /// const-eval time as at runtime. A future non-`Copy`-return
+    /// promotion of the scalar (an `Option<RestartStrategy>`-shape
+    /// migration once the substrate grows per-cluster strategy overlays
+    /// the [`SupervisorSpec`] docstring already anticipates, a
+    /// per-tenant strategy-alias table the M4 CR materializer resolves
+    /// per-CR) that would drop the `const` qualifier fails the
+    /// fail-before-pass-after pin
+    /// [`tests::supervisor_spec_estrategia_accessor_is_const_fn`] at
+    /// caixa-core build time rather than surfacing as a downstream
+    /// consumer regression.
     #[must_use]
-    pub fn estrategia(&self) -> RestartStrategy {
+    pub const fn estrategia(&self) -> RestartStrategy {
         self.estrategia
     }
 
@@ -7459,5 +7521,141 @@ mod tests {
             "the per-child validate loop's traversal input must be a \
              two-element slice per the accessor's projection",
         );
+    }
+
+    #[test]
+    fn child_spec_restart_accessor_is_const_fn() {
+        // The [`ChildSpec::restart`] per-`:children` restart-decision-
+        // policy `Copy`-return scalar accessor is declared
+        // `#[must_use] pub const fn` — matching the sibling M2
+        // per-`:supervisor` [`SupervisorSpec::estrategia`] (pinned by
+        // [`supervisor_spec_estrategia_accessor_is_const_fn`] below,
+        // both converted in this commit), the sibling M2
+        // per-`:supervisor` [`SupervisorSpec::max_restarts`] (b698ec0)
+        // `Copy`-`u32` accessor already `pub const fn`, and the peer M3
+        // mesh-slot per-`:entrada` [`crate::Entrada::port`] (bafa004) /
+        // per-`:placement` [`crate::Placement::estrategia`] (bafa004)
+        // `Copy`-return `pub const fn` scalar accessors on the sibling
+        // M3 surface. Pin the `const`-eval posture here so a future
+        // accidental downgrade to non-`const` (an added runtime helper
+        // reachable only from a non-`const` context, an
+        // `Option<RestartPolicy>`-shape migration on the per-child
+        // restart-decision axis once heterogeneous per-cluster
+        // restart-policy overlays land that would silently drop the
+        // `const` qualifier, a manual hand-rolled shadow) trips at
+        // caixa-core build time rather than surfacing as a downstream
+        // `const`-context regression far from the declaration.
+        //
+        // Same shape as the sibling M3
+        // [`crate::aplicacao::tests::placement_estrategia_accessor_is_const_fn`]
+        // and [`crate::aplicacao::tests::entrada_port_accessor_is_const_fn`]
+        // (bafa004) pins on the peer M3 mesh-slot `Copy`-return scalar
+        // accessor axis — the load-bearing witness lives in the
+        // module-scope `const fn` wrapper `restart_via_const_fn` below:
+        // a body that calls [`ChildSpec::restart`] under a `const fn`
+        // signature is well-formed only when the callee is itself
+        // `const fn`, so any future accidental downgrade of
+        // [`ChildSpec::restart`] to non-`const` fails at caixa-core
+        // build time (const-eval E0015 `cannot call non-const method`),
+        // strictly stronger than a runtime `assert!(CONST)` and
+        // side-stepping the destructor-in-const restriction that
+        // blocks direct `const _: RestartPolicy = FIXTURE.restart()`
+        // items on `ChildSpec`'s `String` carriers.
+        //
+        // The runtime body sweeps every closed-set [`RestartPolicy`]
+        // arm and asserts the wrapped and direct dispatches agree.
+        const fn restart_via_const_fn(c: &ChildSpec) -> RestartPolicy {
+            c.restart()
+        }
+        for restart in [
+            RestartPolicy::Permanent,
+            RestartPolicy::Transient,
+            RestartPolicy::Temporary,
+        ] {
+            let c = ChildSpec {
+                caixa: "worker".into(),
+                versao: "^0.1".into(),
+                restart,
+            };
+            assert_eq!(
+                restart_via_const_fn(&c),
+                c.restart(),
+                "const-fn-wrapped and direct dispatch on \
+                 ChildSpec::restart must agree for {restart:?}",
+            );
+            assert_eq!(
+                c.restart(),
+                restart,
+                "ChildSpec::restart must return the storage-side \
+                 RestartPolicy verbatim for {restart:?} (a violation \
+                 means the accessor stopped being a raw field-return \
+                 copy)",
+            );
+        }
+    }
+
+    #[test]
+    fn supervisor_spec_estrategia_accessor_is_const_fn() {
+        // The [`SupervisorSpec::estrategia`] per-`:supervisor`
+        // sibling-restart-strategy `Copy`-return scalar accessor is
+        // declared `#[must_use] pub const fn` — matching the sibling M2
+        // per-`:children` [`ChildSpec::restart`] (pinned by
+        // [`child_spec_restart_accessor_is_const_fn`] above, both
+        // converted in this commit), the sibling M2 per-`:supervisor`
+        // [`SupervisorSpec::max_restarts`] (b698ec0) `Copy`-`u32`
+        // accessor already `pub const fn`, and mirroring the peer M3
+        // mesh-slot per-`:placement`
+        // [`crate::Placement::estrategia`] (bafa004) `Copy`-return
+        // `pub const fn` scalar accessor whose method-name discipline
+        // the [`SupervisorSpec::estrategia`] method was authored to
+        // match. Pin the `const`-eval posture here so a future
+        // accidental downgrade to non-`const` (an added runtime helper
+        // reachable only from a non-`const` context, an
+        // `Option<RestartStrategy>`-shape migration once the substrate
+        // grows per-cluster strategy overlays that would silently drop
+        // the `const` qualifier, a manual hand-rolled shadow) trips at
+        // caixa-core build time rather than surfacing as a downstream
+        // `const`-context regression far from the declaration.
+        //
+        // Same shape as the sibling
+        // [`child_spec_restart_accessor_is_const_fn`] pin above — the
+        // load-bearing witness lives in the module-scope `const fn`
+        // wrapper `estrategia_via_const_fn` below: a body that calls
+        // [`SupervisorSpec::estrategia`] under a `const fn` signature
+        // is well-formed only when the callee is itself `const fn`,
+        // side-stepping the destructor-in-const restriction that would
+        // otherwise block a direct
+        // `const _: RestartStrategy = FIXTURE.estrategia()` item on
+        // `SupervisorSpec`'s `Vec<ChildSpec>` / `Option<Duration>`
+        // carriers.
+        //
+        // The runtime body sweeps every closed-set [`RestartStrategy`]
+        // arm via [`RestartStrategy::ALL`] and asserts the wrapped and
+        // direct dispatches agree.
+        const fn estrategia_via_const_fn(s: &SupervisorSpec) -> RestartStrategy {
+            s.estrategia()
+        }
+        for &estrategia in RestartStrategy::ALL {
+            let s = SupervisorSpec {
+                estrategia,
+                max_restarts: 5,
+                restart_window: Some(Duration::from_secs(60)),
+                children: Vec::new(),
+            };
+            assert_eq!(
+                estrategia_via_const_fn(&s),
+                s.estrategia(),
+                "const-fn-wrapped and direct dispatch on \
+                 SupervisorSpec::estrategia must agree for {estrategia:?}",
+            );
+            assert_eq!(
+                s.estrategia(),
+                estrategia,
+                "SupervisorSpec::estrategia must return the storage-side \
+                 RestartStrategy verbatim for {estrategia:?} (a violation \
+                 means the accessor stopped being a raw field-return \
+                 copy)",
+            );
+        }
     }
 }
