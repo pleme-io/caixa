@@ -989,8 +989,35 @@ impl WitContract {
     /// payload-carrier axes. Every projection returns the same six
     /// scalar accessors' outputs; the three methods differ only in
     /// which arms they surface.
+    ///
+    /// Declared `pub const fn` — every callee is itself `pub const fn`
+    /// ([`Self::source`] / [`Self::destination`] / [`Self::world_ref`]
+    /// project through `pub const fn` [`String::as_str`], const-stable
+    /// since Rust 1.87; [`Self::endpoint`] / [`Self::subject`] /
+    /// [`Self::slot`] project through the same `String::as_str` under a
+    /// `match &self.<field> { Some(s) => Some(s.as_str()), None => None }`
+    /// arm — the sibling `Option<String> → Option<&str>` shape 0650f64
+    /// closed the const-eval surface on) and tuple construction from
+    /// borrowed-reference / `Option`-of-borrowed-reference arms is
+    /// itself trivially const. The `ContratoIdentity<'_>` alias
+    /// resolves to a `(&str, &str, &str, Option<&str>, Option<&str>,
+    /// Option<&str>)` tuple whose every arm is `Copy` — no destructor,
+    /// no heap allocation, no non-const call folded through the tuple's
+    /// construction. Sibling in `const`-eval posture to the peer
+    /// `pub const fn` [`WitContract::is_http`] / [`Self::is_pubsub`] /
+    /// [`Self::is_store`] / [`Self::is_capability`] WIT-shape-predicate
+    /// composite-projection family the sibling
+    /// [`wit_contract_pre_projection_accessor_family_is_const_fn`] pin
+    /// already anchors — this extends the same `const`-eval-surface
+    /// posture onto the peer six-arm composite-projection axis where
+    /// the projection surfaces the full identity tuple rather than a
+    /// per-`(:de, :para, :wit)`-triple boolean shape probe. Pinned load-
+    /// bearing by
+    /// [`wit_contract_identity_projection_accessor_is_const_fn`] below
+    /// (a future accidental downgrade fires E0015 at the wrapper at
+    /// caixa-core build time).
     #[must_use]
-    pub fn identity(&self) -> ContratoIdentity<'_> {
+    pub const fn identity(&self) -> ContratoIdentity<'_> {
         (
             self.source(),
             self.destination(),
@@ -11835,6 +11862,87 @@ mod tests {
             assert_eq!(c.is_pubsub(), is_pubsub);
             assert_eq!(c.is_store(), is_store);
             assert_eq!(c.is_capability(), is_capability);
+        }
+    }
+
+    #[test]
+    fn wit_contract_identity_projection_accessor_is_const_fn() {
+        // Fail-before-pass-after pin on the [`WitContract::identity`]
+        // six-arm composite-projection accessor's `const`-eval-surface
+        // posture. The accessor projects the typed edge's six identity
+        // arms (`:de` / `:para` / `:wit` / `:endpoint` / `:subject` /
+        // `:slot`) as a borrowed [`ContratoIdentity<'_>`] six-tuple —
+        // every callee is itself `pub const fn` ([`WitContract::source`]
+        // / [`WitContract::destination`] / [`WitContract::world_ref`]
+        // through `String::as_str`, const-stable since Rust 1.87;
+        // [`WitContract::endpoint`] / [`WitContract::subject`] /
+        // [`WitContract::slot`] through the sibling `match &self
+        // .<field> { Some(s) => Some(s.as_str()), None => None }` shape
+        // 0650f64 closed the const-eval surface on) and the tuple
+        // constructor from borrowed-reference / `Option`-of-borrowed-
+        // reference arms is trivially const. Any future accidental
+        // downgrade fails the `identity_via_const_fn` wrapper at
+        // caixa-core build time with E0015 (`cannot call non-const
+        // method`), strictly stronger than a runtime `assert!` and
+        // strictly stronger than a module-scope `const _: () =
+        // assert!(…)` pin (which cannot be formed on a `&WitContract`
+        // fixture because the type's `String` / `Option<String>`
+        // carriers rule out `const`-context value construction; the
+        // `const fn` wrapper is the load-bearing shape that side-steps
+        // the destructor-in-const restriction on the value axis while
+        // still pinning the `const`-fn posture on the callee — mirror
+        // of the sibling
+        // [`wit_contract_pre_projection_accessor_family_is_const_fn`]
+        // pin's discipline verbatim on the peer scalar-accessor
+        // surface).
+        //
+        // Peer of the sibling
+        // [`wit_contract_pre_projection_accessor_family_is_const_fn`]
+        // (279823b) pin on the six per-`:contratos` scalar-accessor
+        // callees this composite-projection reads through — where that
+        // pin anchors the const-eval surface at the six individual
+        // scalar-accessor arms, this pin extends the same posture onto
+        // the composite six-tuple projection every consumer that dedups
+        // typed edges on the [`ContratoIdentity`] axis keys off (the
+        // [`AplicacaoSpec::validate`]-side duplicate-`:contratos`
+        // scanner + its BTreeMap dedup key; a future per-Aplicacao CR
+        // materializer's per-edge identity-based admission webhook; a
+        // future L7 policy-emitter that shards CNPs by identity-tuple
+        // rather than by name). Same fail-before-pass-after wrapper
+        // discipline as the peer M2 / M3 accessor-family pins on the
+        // sibling `const`-eval-surface passes.
+        const fn identity_via_const_fn(c: &WitContract) -> ContratoIdentity<'_> {
+            c.identity()
+        }
+        // Sweep one canonical WIT-shape sample per payload-carrier arm
+        // plus a payload-less capability sample so the pin exercises
+        // both `Some(_)`-carrying and `None`-carrying arms on all three
+        // `Option<String>` payload-carrier axes (`:endpoint` / `:subject`
+        // / `:slot`) — every wrapper dispatch must agree byte-for-byte
+        // with the direct method call on every arm of the closed WIT-
+        // shape partition.
+        for (wit, endpoint, subject, slot) in [
+            ("wasi:http/proxy", Some("/checkout"), None, None),
+            ("http:incoming", Some("/api"), None, None),
+            ("nats:events", None, Some("orders.placed"), None),
+            ("kafka:topic", None, Some("orders.stream"), None),
+            ("wasi:keyvalue/store", None, None, Some("carts/{id}")),
+            ("kv:cache", None, None, Some("session/{token}")),
+            ("custom:capability-only", None, None, None),
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert_eq!(identity_via_const_fn(&c), c.identity());
+            assert_eq!(
+                c.identity(),
+                ("cart", "catalog", wit, endpoint, subject, slot,),
+            );
         }
     }
 
