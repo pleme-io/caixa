@@ -107,7 +107,22 @@ impl GraphArgs {
                 // peer [`WitTarget::CAPABILITY_GRAPH_LABEL`] const so
                 // its byte-string is single-sourced next to the variant
                 // declaration.
-                let label = c.target().expect("validated by typed_view").graph_label();
+                // Route the post-validation typed-view projection through
+                // the lifted [`caixa_core::WitContract::target_projected`]
+                // accessor rather than the raw `.target().expect(
+                // "validated by typed_view")` pair — the peer of the
+                // [`caixa_mesh::cilium_network_policies`] L7 CNP emit
+                // branch at `caixa-mesh/src/lib.rs:2825` on the same
+                // "call `.target()` then `.expect(…)` with the message
+                // spelled twice" duplication axis. Both post-validation
+                // consumers now dispatch through the substrate
+                // primitive's [`caixa_core::WitContract::target_projected`]
+                // accessor, which threads the canonical
+                // [`caixa_core::WitContract::PROJECTED_INVARIANT_MSG`]
+                // panic message — a future rebrand on the message axis
+                // lands at one caixa-core edit rather than a
+                // coordinated per-consumer sweep.
+                let label = c.target_projected().graph_label();
                 println!(
                     "    - {} → {}  via {}  [{}]",
                     c.source(),

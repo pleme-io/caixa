@@ -1316,6 +1316,110 @@ impl WitContract {
         }
         Ok(WitTarget::Capability)
     }
+
+    /// Substrate-canonical post-validation projection of the typed
+    /// [`WitTarget`] view — the panic-on-failure shorthand every renderer
+    /// downstream of an [`AplicacaoSpec`] that has already crossed the
+    /// [`AplicacaoSpec::validate`] gate (typically via a caixa-mesh
+    /// [`typed_view`]-shaped entry point that composes `validate` into
+    /// the projection) reaches through when it needs the typed
+    /// [`WitTarget`] and knows the containing [`AplicacaoSpec::validate`]
+    /// has already admitted the `(:wit, :endpoint/:subject/:slot)` shape
+    /// coherence for every `:contratos` entry. The peer accessor to the
+    /// [`Self::target`] `Result`-returning validator on the same
+    /// per-`:contratos` typed-projection axis — [`Self::target`] is the
+    /// pre-validation validator that computes the projection *and* raises
+    /// the [`AplicacaoError::Contrato*`] diagnostic cascade on any
+    /// (`:wit`, payload) mismatch; this method is the post-validation
+    /// projection every downstream consumer reaches through once the
+    /// pre-validation gate has succeeded.
+    ///
+    /// [`typed_view`]: https://docs.rs/caixa-mesh/latest/caixa_mesh/fn.typed_view.html
+    ///
+    /// Prior to this lift the "call `.target()` then `.expect(…)` with
+    /// the same message" pattern sat inline at two production sites with
+    /// no compile-time link between them: the
+    /// [`caixa_mesh::cilium_network_policies`] per-`(:de, :para)` CNP
+    /// L7 introspection branch at `caixa-mesh/src/lib.rs:2825`
+    /// (`c.target().expect("validated by typed_view").http_endpoint()`)
+    /// and the [`caixa_feira::cmd::app`] `feira app graph` per-`:contratos`
+    /// payload-column printer at `caixa-feira/src/cmd/app.rs:110`
+    /// (`c.target().expect("validated by typed_view").graph_label()`),
+    /// each open-coding the same `.target().expect("validated by
+    /// typed_view")` pair with the message spelled twice. A future
+    /// vocabulary shift on the panic-message axis (a tightening from
+    /// `"validated by typed_view"` to `"validated by AplicacaoSpec::
+    /// validate"` as the substrate's validator entry-point vocabulary
+    /// sharpens, a per-consumer disambiguation, an M4 promotion of the
+    /// panic to a `debug_assert` under a `--release` build profile) would
+    /// have had to be threaded through both open-coded call sites in
+    /// lockstep or one consumer would silently disagree with the peer on
+    /// which invariant the panic message names. Same "same shape written
+    /// verbatim ≥ 2 times becomes a typed helper" duplication-budget
+    /// discipline the sibling [`Self::edge_pair`] /
+    /// [`Self::edge_triple`] / [`Self::identity`] composite-projection
+    /// lifts already establish on the paired composite-projection axis;
+    /// this lift extends it onto the post-validation typed-view axis.
+    ///
+    /// Every future downstream consumer of the projected typed view
+    /// (the future M4 per-`(:de, :para)` `mesh.pleme.io/v1alpha1/Aplicacao`
+    /// CR materializer's per-edge admission webhook, the future
+    /// Envoy-side per-typed-arm `local_rate_limit.descriptor_entries`
+    /// bucket-key resolver, the future per-`:contratos`-edge mTLS overlay
+    /// resolver, the future `feira app graph --l7` / `--pubsub` /
+    /// `--kv` per-shape column emitters) reaches through this one typed
+    /// dispatch on the substrate primitive rather than an open-coded
+    /// per-consumer `.target().expect(…)` pair with the message
+    /// re-inlined. The invariant the accessor's panic path pins — "this
+    /// call is only reachable after [`AplicacaoSpec::validate`] has
+    /// succeeded on the containing spec" — is the substrate's answer to
+    /// give exactly once, at the primitive, not once per consumer.
+    ///
+    /// # Panics
+    ///
+    /// Panics with [`Self::PROJECTED_INVARIANT_MSG`] if [`Self::target`]
+    /// would return an `Err` — i.e. if this contract's
+    /// (`:wit`, `:endpoint`/`:subject`/`:slot`) shape has not been
+    /// crossed by the [`AplicacaoSpec::validate`] gate cascade. Call
+    /// this accessor only from a code path that has already reached the
+    /// containing [`AplicacaoSpec`] through a validating entry-point
+    /// (caixa-mesh's [`typed_view`], caixa-feira's `feira app graph`'s
+    /// [`typed_view`] compose, the future M4 CR admission webhook's
+    /// per-CR validate). Use [`Self::target`] instead on any pre-
+    /// validation code path.
+    ///
+    /// [`typed_view`]: https://docs.rs/caixa-mesh/latest/caixa_mesh/fn.typed_view.html
+    #[must_use]
+    pub fn target_projected(&self) -> WitTarget<'_> {
+        self.target().expect(Self::PROJECTED_INVARIANT_MSG)
+    }
+
+    /// Canonical panic message the [`Self::target_projected`]
+    /// post-validation projection accessor threads through when the
+    /// caller has violated the "call only after [`AplicacaoSpec::validate`]
+    /// has succeeded" precondition. Lifted as a `pub const` on the
+    /// [`WitContract`] surface so the byte-string lives in one place
+    /// across the substrate — the [`Self::target_projected`] method
+    /// body, the two prior production call sites' comments now naming
+    /// the const, and every future consumer that must format-match the
+    /// panic-message shape (a future test suite that asserts the panic-
+    /// message byte-string across a fuzzed invalid-contract corpus,
+    /// a future custom-panic hook in `caixa-operator` that surfaces the
+    /// message with per-`:contratos` telemetry, the future admission
+    /// webhook's per-CR validate-error report) reaches through the same
+    /// canonical `&'static str`. A future rebrand on the panic-message
+    /// axis (a tightening from `"validated by typed_view"` to `"validated
+    /// by AplicacaoSpec::validate"` as the substrate's validator
+    /// entry-point vocabulary sharpens once caixa-core grows a
+    /// `Caixa::validated_aplicacao_view` companion to caixa-mesh's
+    /// [`typed_view`]) lands at one caixa-core edit rather than a
+    /// coordinated per-consumer sweep — same "one canonical declaration
+    /// per axis, next to the accessor that reads it" discipline the peer
+    /// [`WitTarget::CAPABILITY_LABEL`] / [`WitTarget::CAPABILITY_EXPECTED`]
+    /// / [`WitTarget::CAPABILITY_GRAPH_LABEL`] payload-less-arm scalar-
+    /// const family already establishes on the paired per-consumer-axis
+    /// diagnostic-scalar surface.
+    pub const PROJECTED_INVARIANT_MSG: &'static str = "validated by typed_view";
 }
 
 /// Borrowed identity key for the typed-graph duplicate-`:contratos`
@@ -11295,6 +11399,99 @@ mod tests {
         };
         assert!(cap.is_capability());
         assert!(cap.target().unwrap().is_capability());
+    }
+
+    #[test]
+    fn target_projected_returns_byte_equal_typed_view_across_all_four_arms() {
+        // Load-bearing contract pin: on every canonical
+        // `(:wit, :endpoint/:subject/:slot)` shape the substrate admits,
+        // [`WitContract::target_projected`] returns byte-equal to
+        // [`WitContract::target`]`().unwrap()` — the post-validation
+        // projection accessor is a thin panicking wrapper over the
+        // pre-validation validator, no extra work in the projection
+        // path. Any future divergence (a validator-side normalization
+        // the projection doesn't route through, an accessor-side
+        // caching layer the validator doesn't populate) would surface
+        // here at caixa-core build time rather than a silent per-consumer
+        // split at renderer emit time. Sweeps the closed 4-arm
+        // [`WitTarget`] partition ([`WitTarget::Http`] /
+        // [`WitTarget::PubSub`] / [`WitTarget::Store`] /
+        // [`WitTarget::Capability`]) so every arm carries a byte-equality
+        // pin on the two-accessor pair.
+        for (wit, endpoint, subject, slot) in [
+            ("wasi:http/proxy", Some("/x"), None, None),
+            ("nats:pub-sub", None, Some("events.x"), None),
+            ("wasi:keyvalue/store", None, None, Some("checkout/$orderId")),
+            ("custom:capability-only", None, None, None),
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert_eq!(
+                c.target_projected(),
+                c.target().unwrap(),
+                "target_projected must return byte-equal to target().unwrap() at wit={wit:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "validated by typed_view")]
+    fn target_projected_panics_with_canonical_message_on_unvalidated_contract() {
+        // Panic-path pin: [`WitContract::target_projected`] threads the
+        // canonical [`WitContract::PROJECTED_INVARIANT_MSG`] byte-string
+        // through its expect-panic when called on a contract whose
+        // (`:wit`, payload) shape has not been crossed by
+        // [`AplicacaoSpec::validate`] — a contract with a structurally-
+        // invalid `:wit` (hyphen-for-colon typo) that would surface
+        // [`AplicacaoError::ContratoWitInvalid`] at the validator gate.
+        // A future rebrand on the panic-message axis would land at one
+        // caixa-core edit on [`WitContract::PROJECTED_INVARIANT_MSG`]
+        // and this pin's [`should_panic(expected = …)`] literal would
+        // migrate alongside — the pin catches drift between the const
+        // and the accessor's `expect(…)` call by construction.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            // Hyphen-for-colon typo: `WitContract::target` returns
+            // [`AplicacaoError::ContratoWitInvalid`] on this shape,
+            // driving the [`WitContract::target_projected`] expect-panic.
+            wit: "wasi-http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        };
+        let _ = c.target_projected();
+    }
+
+    #[test]
+    fn target_projected_invariant_msg_matches_prior_inline_call_site_literal() {
+        // Byte-equivalence pin: [`WitContract::PROJECTED_INVARIANT_MSG`]
+        // carries the exact byte-string the two prior open-coded
+        // `.target().expect("validated by typed_view")` production
+        // consumers threaded through inline before this lift converged
+        // them onto [`WitContract::target_projected`] — the caixa-mesh
+        // per-`(:de, :para)` CNP L7 introspection branch at
+        // `caixa-mesh/src/lib.rs:2825` and the caixa-feira `feira app
+        // graph` per-`:contratos` payload-column printer at
+        // `caixa-feira/src/cmd/app.rs:110`. Locks the panic-message
+        // byte-string load-bearing so a well-meaning const-side rebrand
+        // that didn't carry a matched pin migration would surface here
+        // at caixa-core build time rather than a silent per-consumer
+        // panic-message drift at cluster-apply time. Peer of the
+        // sibling [`WitTarget::CAPABILITY_LABEL`] /
+        // [`WitTarget::CAPABILITY_EXPECTED`] /
+        // [`WitTarget::CAPABILITY_GRAPH_LABEL`] byte-equivalence pins on
+        // the paired payload-less-arm scalar-const family.
+        assert_eq!(
+            WitContract::PROJECTED_INVARIANT_MSG,
+            "validated by typed_view"
+        );
     }
 
     #[test]
