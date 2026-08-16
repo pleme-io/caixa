@@ -5171,9 +5171,27 @@ impl Placement {
     /// the substrate primitive. Named `estrategia()` to match the storage
     /// field's name; the accessor's identity name maps onto the
     /// canonical MESH-COMPOSITION §II.4 vocabulary the slot's docstring
-    /// already carries.
+    /// already carries. Declared `pub const fn` (matching the peer M3
+    /// mesh-slot `Copy`-return accessor family — [`MeshPolicy::timeout`]
+    /// / [`MeshPolicy::retries`] / [`MeshPolicy::mtls_required`] /
+    /// [`MeshPolicy::rate_limit`] / [`MeshPolicy::circuit_breaker`] on
+    /// the parent [`MeshPolicy`], [`CircuitBreaker::max_failures`] /
+    /// [`CircuitBreaker::window`] on the sibling [`CircuitBreaker`],
+    /// [`RateLimit::rate`] / [`RateLimit::window`] on the sibling
+    /// [`RateLimit`] — every one a `pub const fn`) so every future
+    /// substrate-side `const`-context consumer of the resolved
+    /// distribution-strategy variant (a `const _: () = assert!(…)`
+    /// module-scope invariant pin on a per-fixture typed [`Placement`],
+    /// a future M4 admission-webhook `const fn` resolver over a typed
+    /// [`Placement`], any `const fn` composer that fans on the strategy
+    /// at compile time) reaches through the same typed dispatch on the
+    /// substrate primitive at const-eval time as at runtime. Pinned by
+    /// [`placement_estrategia_accessor_is_const_fn`] which witnesses the
+    /// const-eval posture at module scope via `const _:() = …` items so
+    /// any future accidental downgrade to non-`const` trips at caixa-core
+    /// build time.
     #[must_use]
-    pub fn estrategia(&self) -> PlacementStrategy {
+    pub const fn estrategia(&self) -> PlacementStrategy {
         self.estrategia
     }
 
@@ -5618,9 +5636,30 @@ impl Entrada {
     /// M3 mesh-slot Copy-scalar axis. Named `port()` to match the
     /// storage field's name; the accessor's identity name maps onto the
     /// canonical MESH-COMPOSITION §II.5 vocabulary the slot's docstring
-    /// already carries.
+    /// already carries. Declared `pub const fn` (matching the peer M3
+    /// mesh-slot `Copy`-return accessor family — [`MeshPolicy::timeout`]
+    /// / [`MeshPolicy::retries`] / [`MeshPolicy::mtls_required`] /
+    /// [`MeshPolicy::rate_limit`] / [`MeshPolicy::circuit_breaker`] on
+    /// the parent [`MeshPolicy`], [`CircuitBreaker::max_failures`] /
+    /// [`CircuitBreaker::window`] on the sibling [`CircuitBreaker`],
+    /// [`RateLimit::rate`] / [`RateLimit::window`] on the sibling
+    /// [`RateLimit`], and the sibling per-`:placement`
+    /// [`Placement::estrategia`] on the peer M3 mesh-slot `Copy`-composite-
+    /// enum scalar axis — every one a `pub const fn`) so every future
+    /// substrate-side `const`-context consumer of the resolved
+    /// per-`:entrada` L4-port scalar (a `const _: () = assert!(…)`
+    /// module-scope pin on a per-fixture typed [`Entrada`] anchoring
+    /// `entrada.port() >= SERVICO_PORT_MIN` at compile time, a future M4
+    /// admission-webhook `const fn` per-CR gateway-port floor over a
+    /// typed [`Entrada`], any `const fn` composer that fans on the port
+    /// at compile time) reaches through the same typed dispatch on the
+    /// substrate primitive at const-eval time as at runtime. Pinned by
+    /// [`entrada_port_accessor_is_const_fn`] which witnesses the
+    /// const-eval posture at module scope via `const _:() = …` items so
+    /// any future accidental downgrade to non-`const` trips at caixa-core
+    /// build time.
     #[must_use]
-    pub fn port(&self) -> u16 {
+    pub const fn port(&self) -> u16 {
         self.port
     }
 
@@ -14819,6 +14858,132 @@ mod tests {
             "runtime and const-eval dispatch on \
              PlacementStrategy::requires_shard_key must agree on every arm",
         );
+    }
+
+    #[test]
+    fn placement_estrategia_accessor_is_const_fn() {
+        // The [`Placement::estrategia`] per-`:placement` distribution-
+        // strategy `Copy`-return scalar accessor is declared
+        // `#[must_use] pub const fn` — matching the peer M3 mesh-slot
+        // `Copy`-return accessor family ([`MeshPolicy::timeout`] /
+        // [`MeshPolicy::retries`] / [`MeshPolicy::mtls_required`] /
+        // [`MeshPolicy::rate_limit`] / [`MeshPolicy::circuit_breaker`]
+        // on the parent [`MeshPolicy`], [`CircuitBreaker::max_failures`]
+        // / [`CircuitBreaker::window`] on the sibling [`CircuitBreaker`],
+        // [`RateLimit::rate`] / [`RateLimit::window`] on the sibling
+        // [`RateLimit`], every one a `pub const fn`). Pin the
+        // `const`-eval posture here so a future accidental downgrade to
+        // non-`const` (an added runtime helper reachable only from a
+        // non-`const` context, a slot promotion to a non-`Copy` return
+        // that would silently drop the `const` qualifier, a manual
+        // hand-rolled shadow) trips at caixa-core build time rather
+        // than surfacing as a downstream `const`-context regression far
+        // from the declaration.
+        //
+        // Same shape as the sibling
+        // [`placement_strategy_requires_shard_key_is_const_fn`] pin on
+        // the peer [`PlacementStrategy::requires_shard_key`] `const fn`
+        // predicate axis — the load-bearing witness lives in the
+        // module-scope `const fn` wrapper `estrategia_via_const_fn`
+        // below: a body that calls [`Placement::estrategia`] under a
+        // `const fn` signature is well-formed only when the callee is
+        // itself `const fn`, so any future accidental downgrade of
+        // [`Placement::estrategia`] to non-`const` fails at caixa-core
+        // build time (const-eval E0015 / E0658 depending on the arm),
+        // strictly stronger than a runtime `assert!(CONST)` and
+        // side-stepping the destructor-in-const restriction that
+        // blocks direct `const _: PlacementStrategy = FIXTURE.estrategia()`
+        // items on `Placement`'s `Vec<String>` / `Option<String>`
+        // carriers.
+        //
+        // The runtime body witnesses that the const-eval-shaped
+        // wrapper agrees with a direct call on every closed-set arm.
+        const fn estrategia_via_const_fn(p: &Placement) -> PlacementStrategy {
+            p.estrategia()
+        }
+        for estrategia in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            let placement = Placement {
+                estrategia,
+                clusters: Vec::new(),
+                affinity: None,
+                shard_key: None,
+            };
+            assert_eq!(
+                estrategia_via_const_fn(&placement),
+                placement.estrategia(),
+                "const-fn-wrapped and direct dispatch on \
+                 Placement::estrategia must agree for {estrategia:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn entrada_port_accessor_is_const_fn() {
+        // The [`Entrada::port`] per-`:entrada` L4-port `Copy`-return
+        // scalar accessor is declared `#[must_use] pub const fn` —
+        // matching the peer M3 mesh-slot `Copy`-return accessor family
+        // ([`MeshPolicy::timeout`] / [`MeshPolicy::retries`] /
+        // [`MeshPolicy::mtls_required`] / [`MeshPolicy::rate_limit`] /
+        // [`MeshPolicy::circuit_breaker`] on the parent [`MeshPolicy`],
+        // [`CircuitBreaker::max_failures`] / [`CircuitBreaker::window`]
+        // on the sibling [`CircuitBreaker`], [`RateLimit::rate`] /
+        // [`RateLimit::window`] on the sibling [`RateLimit`], the
+        // sibling per-`:placement` [`Placement::estrategia`] pinned by
+        // [`placement_estrategia_accessor_is_const_fn`] above — every
+        // one a `pub const fn`). Pin the `const`-eval posture here so
+        // a future accidental downgrade to non-`const` (an added
+        // runtime helper reachable only from a non-`const` context, an
+        // `Option<u16>`-shape migration once the substrate grows
+        // per-`:membros` heterogeneous listener ports that would
+        // silently drop the `const` qualifier, a manual hand-rolled
+        // shadow) trips at caixa-core build time rather than surfacing
+        // as a downstream `const`-context regression far from the
+        // declaration.
+        //
+        // Same shape as the sibling
+        // [`placement_estrategia_accessor_is_const_fn`] pin above — the
+        // load-bearing witness lives in the module-scope `const fn`
+        // wrapper `port_via_const_fn`: a body that calls
+        // [`Entrada::port`] under a `const fn` signature is well-formed
+        // only when the callee is itself `const fn`, side-stepping the
+        // destructor-in-const restriction that would otherwise block a
+        // direct `const _: u16 = FIXTURE.port()` item on `Entrada`'s
+        // `String` / `Vec<String>` carriers.
+        //
+        // The runtime body sweeps a representative port set spanning
+        // the [`SERVICO_PORT_MIN`] floor, the substrate-canonical
+        // [`DEFAULT_SERVICO_PORT`] default, and the top-edge `u16::MAX`
+        // ceiling — the const-fn-wrapped call must agree with a direct
+        // call on every fixture (a violation trips the test) and every
+        // returned scalar must byte-equal the input `port` (a violation
+        // means the accessor stopped being a raw field-return copy).
+        const fn port_via_const_fn(e: &Entrada) -> u16 {
+            e.port()
+        }
+        for port in [SERVICO_PORT_MIN, DEFAULT_SERVICO_PORT, u16::MAX] {
+            let entrada = Entrada {
+                host: String::new(),
+                para: String::new(),
+                port,
+                paths: Vec::new(),
+            };
+            assert_eq!(
+                port_via_const_fn(&entrada),
+                entrada.port(),
+                "const-fn-wrapped and direct dispatch on Entrada::port \
+                 must agree for port={port}",
+            );
+            assert_eq!(
+                entrada.port(),
+                port,
+                "Entrada::port must return the storage-side u16 verbatim \
+                 for port={port}",
+            );
+        }
     }
 
     #[test]
