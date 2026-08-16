@@ -131,9 +131,53 @@ pub const WIT_STORE_SHAPE_PREFIXES: &[&str] = &["wasi:keyvalue/", "kv:"];
 /// [`WitTarget::payload_pair`] (6788ed6) already established for the
 /// downstream per-arm `(field, payload)` dispatch, extended to the
 /// upstream per-arm `PREFIXES → bool` dispatch.
+///
+/// Declared `pub const fn` — the four peer classifiers
+/// ([`wit_shape_is_http`] / [`wit_shape_is_pubsub`] /
+/// [`wit_shape_is_store`] / [`wit_shape_is_capability`]) route through
+/// this combinator in `const`-eval context, so the raw `&str → bool`
+/// WIT-shape dispatch reaches every substrate-side `const`-context
+/// consumer (the module-scope `const _: () = assert!(…)` canonical-
+/// accept-set + partition-witness pins immediately below the four
+/// peer classifiers, any future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer admission-
+/// webhook `const fn` per-`:contratos :wit` shape-arm resolver over a
+/// raw &str, any future `const fn` per-`:contratos`-edge WIT-registry
+/// prefix-set overlay resolver over the substrate primitive that fans
+/// on the shape arm at compile time) through the same typed dispatch
+/// on the substrate primitive at const-eval time as at runtime. The
+/// prior `prefixes.iter().any(|p| wit.starts_with(p))` body carried
+/// non-`const` bounds on stable Rust 1.94 (`.iter()` / `.any()` /
+/// `str::starts_with(&str)` via the non-`const` `Pattern` trait); the
+/// new body routes the per-prefix probe through a manual byte-level
+/// `starts_with` loop over the paired `str::as_bytes` (`pub const fn`)
+/// slice projections, dispatching through primitive-`u8` `!=` and
+/// `usize` comparison + `pub const fn` `<[u8]>::len` and const-stable
+/// slice indexing (since Rust 1.79) — every operation `const`-eval-
+/// callable on stable, no iterator methods, no `Pattern` trait.
 #[must_use]
-pub fn wit_shape_matches(wit: &str, prefixes: &[&str]) -> bool {
-    prefixes.iter().any(|p| wit.starts_with(p))
+pub const fn wit_shape_matches(wit: &str, prefixes: &[&str]) -> bool {
+    let bytes = wit.as_bytes();
+    let mut i = 0;
+    while i < prefixes.len() {
+        let prefix = prefixes[i].as_bytes();
+        if prefix.len() <= bytes.len() {
+            let mut j = 0;
+            let mut matches = true;
+            while j < prefix.len() {
+                if bytes[j] != prefix[j] {
+                    matches = false;
+                    break;
+                }
+                j += 1;
+            }
+            if matches {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
 }
 
 /// True when `wit` — a raw `:contratos :wit` value — targets an
@@ -151,8 +195,17 @@ pub fn wit_shape_matches(wit: &str, prefixes: &[&str]) -> bool {
 /// the lifted [`wit_shape_matches`] combinator so the
 /// `PREFIXES.iter().any(|p| wit.starts_with(p))` scan lives at one
 /// canonical primitive, not one open-coded copy per peer arm.
+///
+/// Declared `pub const fn` — routes through the peer `pub const fn`
+/// [`wit_shape_matches`] combinator so every substrate-side
+/// `const`-context WIT-shape-arm-classifier consumer (the module-scope
+/// `const _: () = assert!(…)` canonical-accept-set + partition-witness
+/// pins immediately below, any future M4 admission-webhook
+/// `const fn` per-`:contratos :wit` HTTP-arm resolver over a raw &str)
+/// reaches through the same typed dispatch on the substrate primitive
+/// at const-eval time as at runtime.
 #[must_use]
-pub fn wit_shape_is_http(wit: &str) -> bool {
+pub const fn wit_shape_is_http(wit: &str) -> bool {
     wit_shape_matches(wit, WIT_HTTP_SHAPE_PREFIXES)
 }
 
@@ -162,8 +215,12 @@ pub fn wit_shape_is_http(wit: &str) -> bool {
 /// [`wit_shape_is_store`] on the shape-dispatch axis; see
 /// [`wit_shape_is_http`] for the lift rationale. Routes through the
 /// lifted [`wit_shape_matches`] combinator.
+///
+/// Declared `pub const fn` — sibling in `const`-eval posture to the
+/// peer [`wit_shape_is_http`] classifier; see that function's `const`
+/// posture-block for the full rationale.
 #[must_use]
-pub fn wit_shape_is_pubsub(wit: &str) -> bool {
+pub const fn wit_shape_is_pubsub(wit: &str) -> bool {
     wit_shape_matches(wit, WIT_PUBSUB_SHAPE_PREFIXES)
 }
 
@@ -173,8 +230,13 @@ pub fn wit_shape_is_pubsub(wit: &str) -> bool {
 /// [`wit_shape_is_pubsub`] on the shape-dispatch axis; see
 /// [`wit_shape_is_http`] for the lift rationale. Routes through the
 /// lifted [`wit_shape_matches`] combinator.
+///
+/// Declared `pub const fn` — sibling in `const`-eval posture to the
+/// peer [`wit_shape_is_http`] / [`wit_shape_is_pubsub`] classifiers;
+/// see [`wit_shape_is_http`]'s `const` posture-block for the full
+/// rationale.
 #[must_use]
-pub fn wit_shape_is_store(wit: &str) -> bool {
+pub const fn wit_shape_is_store(wit: &str) -> bool {
     wit_shape_matches(wit, WIT_STORE_SHAPE_PREFIXES)
 }
 
@@ -244,10 +306,57 @@ pub fn wit_shape_is_store(wit: &str) -> bool {
 /// [`AplicacaoError::EmptyWit`] / [`AplicacaoError::ContratoWitInvalid`]
 /// diagnostic surfaces — this function is the classifier, not the
 /// validator.
+///
+/// Declared `pub const fn` — closes the 4-arm classifier family's
+/// `const`-eval-surface pass on the payload-less capability arm,
+/// peer of the sibling `pub const fn` [`wit_shape_is_http`] /
+/// [`wit_shape_is_pubsub`] / [`wit_shape_is_store`] classifiers, so
+/// the raw `&str → bool` WIT-shape partition on the capability arm
+/// reaches every substrate-side `const`-context consumer through one
+/// typed dispatch. See [`wit_shape_is_http`]'s `const` posture-block
+/// for the full rationale.
 #[must_use]
-pub fn wit_shape_is_capability(wit: &str) -> bool {
+pub const fn wit_shape_is_capability(wit: &str) -> bool {
     !wit_shape_is_http(wit) && !wit_shape_is_pubsub(wit) && !wit_shape_is_store(wit)
 }
+
+// Compile-time pins on the 4-arm WIT-shape classifier family — the
+// module-scope const-eval assertions below trip at caixa-core build
+// time (not test time) if a future edit rewires any of the four
+// classifier's arm-set away from the accept-set MESH-COMPOSITION §II.3
+// pins. Anchor the `const`-eval-surface posture of the four peer
+// classifiers on canonical accept-set samples (one per WIT_*_SHAPE_PREFIXES
+// prefix) plus pairwise-exclusion samples asserting the trio partitions
+// the payload-carrying arm-set and the capability arm carries the
+// complementary payload-less remainder. Any future accidental downgrade
+// of one classifier to non-`const` fails these items at caixa-core build
+// time; any future prefix-set edit that overlaps two arms (e.g. a `kv:`
+// prefix accidentally re-emitted under `WIT_HTTP_SHAPE_PREFIXES`) trips
+// the corresponding partition-witness item. Peer of the sibling M3
+// [`PlacementStrategy::requires_shard_key`] partition pins at
+// aplicacao.rs:5121-5123 on the sibling closed-set typed-enum
+// discriminator axis.
+const _: () = assert!(wit_shape_is_http("wasi:http/proxy"));
+const _: () = assert!(wit_shape_is_http("http:incoming"));
+const _: () = assert!(wit_shape_is_pubsub("nats:events"));
+const _: () = assert!(wit_shape_is_pubsub("kafka:topic"));
+const _: () = assert!(wit_shape_is_store("wasi:keyvalue/store"));
+const _: () = assert!(wit_shape_is_store("kv:cache"));
+const _: () = assert!(wit_shape_is_capability("wasi:filesystem/preopens"));
+const _: () = assert!(wit_shape_is_capability(""));
+// Pairwise-exclusion pins — the three payload-carrying arms are
+// pairwise disjoint on the canonical accept-set samples, and the
+// capability arm is the exact-inverse disjunction of the trio
+// (the free-function classifier family's 4-way partition witness).
+const _: () = assert!(!wit_shape_is_http("nats:events"));
+const _: () = assert!(!wit_shape_is_http("kv:cache"));
+const _: () = assert!(!wit_shape_is_pubsub("wasi:http/proxy"));
+const _: () = assert!(!wit_shape_is_pubsub("wasi:keyvalue/store"));
+const _: () = assert!(!wit_shape_is_store("wasi:http/proxy"));
+const _: () = assert!(!wit_shape_is_store("nats:events"));
+const _: () = assert!(!wit_shape_is_capability("wasi:http/proxy"));
+const _: () = assert!(!wit_shape_is_capability("nats:events"));
+const _: () = assert!(!wit_shape_is_capability("wasi:keyvalue/store"));
 
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
@@ -11196,6 +11305,146 @@ mod tests {
                  at wit={wit:?}"
             );
         }
+    }
+
+    #[test]
+    fn wit_shape_classifier_family_is_const_fn() {
+        // Fail-before-pass-after pin on the 4-arm free-function WIT-
+        // shape classifier family's `const`-eval posture. Each of the
+        // four peer classifiers ([`wit_shape_is_http`] /
+        // [`wit_shape_is_pubsub`] / [`wit_shape_is_store`] /
+        // [`wit_shape_is_capability`]) and the underlying combinator
+        // [`wit_shape_matches`] must be `pub const fn` — any future
+        // accidental downgrade to non-`const` fails the `const fn`
+        // wrappers below at caixa-core build time with E0015
+        // (`cannot call non-const function`), strictly stronger than
+        // a runtime `assert!` and strictly stronger than the module-
+        // scope `const _: () = assert!(…)` pins immediately after the
+        // classifier declarations (those anchor specific accept-set
+        // truth-table entries; this pin anchors the `const` posture
+        // itself via `const fn` wrappers that are only well-formed
+        // when the callee is itself `const fn`).
+        //
+        // Verified fail-before-pass-after by locally reverting
+        // `pub const fn` → `pub fn` on each classifier and observing
+        // E0015 at every corresponding wrapper call site (build
+        // error, no test-time surface), then restoring `pub const fn`
+        // and observing the pin pass at test time. Peer of the
+        // sibling M3
+        // [`rate_limit_unit_from_window_accessor_is_const_fn`] /
+        // [`rate_limit_canonical_unit_accessor_is_const_fn`] (974bbd8),
+        // M2
+        // [`child_spec_restart_accessor_is_const_fn`] /
+        // [`supervisor_spec_estrategia_accessor_is_const_fn`] (152c868),
+        // and M3
+        // [`placement_estrategia_accessor_is_const_fn`] /
+        // [`entrada_port_accessor_is_const_fn`] (bafa004) pins on the
+        // sibling `const`-eval-surface-pass axes.
+        const fn matches_via_const_fn(wit: &str, prefixes: &[&str]) -> bool {
+            wit_shape_matches(wit, prefixes)
+        }
+        const fn http_via_const_fn(wit: &str) -> bool {
+            wit_shape_is_http(wit)
+        }
+        const fn pubsub_via_const_fn(wit: &str) -> bool {
+            wit_shape_is_pubsub(wit)
+        }
+        const fn store_via_const_fn(wit: &str) -> bool {
+            wit_shape_is_store(wit)
+        }
+        const fn capability_via_const_fn(wit: &str) -> bool {
+            wit_shape_is_capability(wit)
+        }
+        // Sweep one canonical accept-set sample per arm plus the
+        // payload-less/empty capability samples, asserting the
+        // wrapper and direct dispatches agree byte-for-byte across
+        // the closed 4-arm partition.
+        let cases: [(&str, bool, bool, bool, bool); 6] = [
+            ("wasi:http/proxy", true, false, false, false),
+            ("http:incoming", true, false, false, false),
+            ("nats:events", false, true, false, false),
+            ("kafka:topic", false, true, false, false),
+            ("wasi:keyvalue/store", false, false, true, false),
+            ("kv:cache", false, false, true, false),
+        ];
+        for (wit, is_http, is_pubsub, is_store, _is_capability) in cases {
+            assert_eq!(
+                matches_via_const_fn(wit, WIT_HTTP_SHAPE_PREFIXES),
+                wit_shape_matches(wit, WIT_HTTP_SHAPE_PREFIXES),
+                "wit_shape_matches const fn wrapper disagrees at wit={wit:?}",
+            );
+            assert_eq!(http_via_const_fn(wit), wit_shape_is_http(wit));
+            assert_eq!(pubsub_via_const_fn(wit), wit_shape_is_pubsub(wit));
+            assert_eq!(store_via_const_fn(wit), wit_shape_is_store(wit));
+            assert_eq!(capability_via_const_fn(wit), wit_shape_is_capability(wit));
+            assert_eq!(wit_shape_is_http(wit), is_http);
+            assert_eq!(wit_shape_is_pubsub(wit), is_pubsub);
+            assert_eq!(wit_shape_is_store(wit), is_store);
+        }
+        // Payload-less capability arm (the 4th partition arm).
+        let capability_samples: [&str; 3] =
+            ["wasi:filesystem/preopens", "custom:capability-only", ""];
+        for wit in capability_samples {
+            assert_eq!(capability_via_const_fn(wit), wit_shape_is_capability(wit));
+            assert!(wit_shape_is_capability(wit));
+            assert!(!wit_shape_is_http(wit));
+            assert!(!wit_shape_is_pubsub(wit));
+            assert!(!wit_shape_is_store(wit));
+        }
+    }
+
+    #[test]
+    fn wit_shape_matches_composes_through_bytes_starts_with_across_boundary_lengths() {
+        // Composition-witness pin: [`wit_shape_matches`] agrees with
+        // the reference `prefixes.iter().any(|p| wit.starts_with(p))`
+        // dispatch (the prior non-`const` implementation) across
+        // boundary lengths — empty `wit`, empty prefix, one-byte
+        // slack, prefix longer than `wit`, one-byte trailing slack.
+        // The rewrite to a byte-level manual starts_with loop (the
+        // enabler for the `pub const fn` posture) must not change any
+        // truth-table entry on the canonical accept-set — this pin
+        // sweeps a targeted boundary corpus and asserts byte-for-byte
+        // agreement, locking the const-fn rewrite's semantics against
+        // the prior iterator body by construction.
+        let prefixes = &["wasi:http/", "http:"][..];
+        let cases: [(&str, bool); 12] = [
+            ("wasi:http/proxy", true),
+            ("wasi:http/", true), // exact-length match on prefix
+            ("wasi:http", false), // one byte short
+            ("http:", true),
+            ("http:incoming", true),
+            ("http", false), // one byte short
+            ("", false),
+            ("wasi:https/proxy", false),
+            ("nats:events", false),
+            ("HTTPS:", false), // uppercase — no case-fold in classifier
+            ("wasi:HTTP/proxy", false),
+            ("wasi:http", false),
+        ];
+        for (wit, expected) in cases {
+            assert_eq!(
+                wit_shape_matches(wit, prefixes),
+                expected,
+                "wit_shape_matches disagrees with reference at wit={wit:?}",
+            );
+            // Byte-equal to the iterator body it replaced.
+            let via_iter = prefixes.iter().any(|p| wit.starts_with(p));
+            assert_eq!(
+                wit_shape_matches(wit, prefixes),
+                via_iter,
+                "wit_shape_matches must byte-equal iter().any(starts_with) at wit={wit:?}",
+            );
+        }
+        // Empty prefix set → always false regardless of `wit`.
+        let empty: &[&str] = &[];
+        assert!(!wit_shape_matches("", empty));
+        assert!(!wit_shape_matches("wasi:http/proxy", empty));
+        // Empty prefix inside a non-empty set → always true (every
+        // string starts with the empty string, matching the
+        // iterator body's semantics on `str::starts_with("")`).
+        let contains_empty: &[&str] = &["nats:", ""];
+        assert!(wit_shape_matches("", contains_empty));
+        assert!(wit_shape_matches("wasi:http/proxy", contains_empty));
     }
 
     #[test]
