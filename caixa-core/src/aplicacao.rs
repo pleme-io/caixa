@@ -5748,7 +5748,7 @@ impl Placement {
     /// the `pub clusters` field for the mutation-carrying serde
     /// round-trip and per-test fixture-mutation paths).
     #[must_use]
-    pub fn clusters(&self) -> &[String] {
+    pub const fn clusters(&self) -> &[String] {
         self.clusters.as_slice()
     }
 }
@@ -6169,7 +6169,7 @@ impl Entrada {
     /// the `pub paths` field for the mutation-carrying serde round-trip
     /// and per-test fixture-mutation paths).
     #[must_use]
-    pub fn paths(&self) -> &[String] {
+    pub const fn paths(&self) -> &[String] {
         self.paths.as_slice()
     }
 }
@@ -6430,7 +6430,7 @@ impl AplicacaoSpec {
     /// reachable through the `pub membros` field for the mutation-
     /// carrying serde round-trip and per-test fixture-mutation paths).
     #[must_use]
-    pub fn membros(&self) -> &[Membro] {
+    pub const fn membros(&self) -> &[Membro] {
         self.membros.as_slice()
     }
 
@@ -6553,7 +6553,7 @@ impl AplicacaoSpec {
     /// reachable through the `pub contratos` field for the mutation-
     /// carrying serde round-trip and per-test fixture-mutation paths).
     #[must_use]
-    pub fn contratos(&self) -> &[WitContract] {
+    pub const fn contratos(&self) -> &[WitContract] {
         self.contratos.as_slice()
     }
 
@@ -6667,7 +6667,7 @@ impl AplicacaoSpec {
     /// emptiness probe) without cloning the composite through every
     /// consumer's fast path.
     #[must_use]
-    pub fn politicas(&self) -> &MeshPolicy {
+    pub const fn politicas(&self) -> &MeshPolicy {
         &self.politicas
     }
 
@@ -6782,7 +6782,7 @@ impl AplicacaoSpec {
     /// (per-axis accessor dispatch, serde composite-serialization) without
     /// cloning the composite through every consumer's fast path.
     #[must_use]
-    pub fn placement(&self) -> &Placement {
+    pub const fn placement(&self) -> &Placement {
         &self.placement
     }
 
@@ -6916,7 +6916,7 @@ impl AplicacaoSpec {
     /// the raw `Option<Entrada>` slot's presence bit through the
     /// reference-return unchanged.
     #[must_use]
-    pub fn entrada(&self) -> Option<&Entrada> {
+    pub const fn entrada(&self) -> Option<&Entrada> {
         self.entrada.as_ref()
     }
 
@@ -12018,6 +12018,176 @@ mod tests {
             assert_eq!(placement_affinity_via_const_fn(&p), p.affinity());
             assert_eq!(p.shard_key(), shard_key);
             assert_eq!(p.affinity(), affinity);
+        }
+    }
+
+    #[test]
+    fn m3_placement_entrada_slice_return_accessor_pair_is_const_fn() {
+        // Fail-before-pass-after pin on the two M3-mesh-slot inner-
+        // composite `Vec → &[String]` slice-return accessors on
+        // [`Placement::clusters`] and [`Entrada::paths`]. Each
+        // destructures the typed slot's `Vec<String>` storage through
+        // the `pub const fn` [`Vec::as_slice`] (const-stable since Rust
+        // 1.66, well within the workspace MSRV) — any future accidental
+        // downgrade to non-`const` fails the corresponding
+        // `<name>_via_const_fn` wrapper at caixa-core build time with
+        // E0015 (`cannot call non-const method`), strictly stronger
+        // than a runtime `assert!`. Sibling of the peer
+        // [`m3_aplicacao_spec_reference_return_accessor_family_is_const_fn`]
+        // pin on the outer-`AplicacaoSpec` reference-return family
+        // (`:membros` / `:contratos` slice-return + `:politicas` /
+        // `:placement` / `:entrada` composite-reference), and of the
+        // peer M2 slice-return axis pins
+        // [`crate::supervisor::tests::supervisor_children_slice_return_accessor_is_const_fn`]
+        // (on `SupervisorSpec::children`) and
+        // [`crate::upgrade::tests::upgrade_from_entry_instructions_slice_return_accessor_is_const_fn`]
+        // (on `UpgradeFromEntry::instructions`). Together the four
+        // pins close the last unlifted reference-return accessor
+        // family across the substrate primitive.
+        const fn placement_clusters_via_const_fn(p: &Placement) -> &[String] {
+            p.clusters()
+        }
+        const fn entrada_paths_via_const_fn(e: &Entrada) -> &[String] {
+            e.paths()
+        }
+        // Sweep both the empty-Vec (no author-declared entries) and
+        // the populated-Vec arms on every slice-return accessor so
+        // each carries a const-dispatch pin on both arms.
+        let p_empty = Placement {
+            estrategia: PlacementStrategy::default(),
+            clusters: vec![],
+            affinity: None,
+            shard_key: None,
+        };
+        let p_full = Placement {
+            estrategia: PlacementStrategy::default(),
+            clusters: vec!["prod-a".into(), "prod-b".into()],
+            affinity: None,
+            shard_key: None,
+        };
+        assert_eq!(
+            placement_clusters_via_const_fn(&p_empty),
+            p_empty.clusters()
+        );
+        assert_eq!(placement_clusters_via_const_fn(&p_full), p_full.clusters());
+        assert!(p_empty.clusters().is_empty());
+        assert_eq!(p_full.clusters(), &["prod-a", "prod-b"]);
+        let e_empty = Entrada {
+            host: "web.example.com".into(),
+            para: "web".into(),
+            paths: vec![],
+            port: DEFAULT_SERVICO_PORT,
+        };
+        let e_full = Entrada {
+            host: "web.example.com".into(),
+            para: "web".into(),
+            paths: vec!["/api".into(), "/health".into()],
+            port: DEFAULT_SERVICO_PORT,
+        };
+        assert_eq!(entrada_paths_via_const_fn(&e_empty), e_empty.paths());
+        assert_eq!(entrada_paths_via_const_fn(&e_full), e_full.paths());
+        assert!(e_empty.paths().is_empty());
+        assert_eq!(e_full.paths(), &["/api", "/health"]);
+    }
+
+    #[test]
+    fn m3_aplicacao_spec_reference_return_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the five outer-`AplicacaoSpec`
+        // reference-return accessors — the two `Vec → &[T]` slice-
+        // return accessors on [`AplicacaoSpec::membros`] and
+        // [`AplicacaoSpec::contratos`] (each routes through the
+        // `pub const fn` [`Vec::as_slice`], const-stable since Rust
+        // 1.66), the two `&Composite` composite-reference accessors
+        // on [`AplicacaoSpec::politicas`] and
+        // [`AplicacaoSpec::placement`] (each routes through a raw
+        // `&self.<field>` borrow, trivially const), and the one
+        // `Option<&Composite>` optional-composite-reference accessor
+        // on [`AplicacaoSpec::entrada`] (routes through the
+        // `pub const fn` [`Option::as_ref`], const-stable since Rust
+        // 1.83). Any future accidental downgrade to non-`const` fails
+        // the corresponding `<name>_via_const_fn` wrapper at caixa-
+        // core build time with E0015 (`cannot call non-const
+        // method`), strictly stronger than a runtime `assert!`.
+        // Sibling of the peer inner-composite pin
+        // [`m3_placement_entrada_slice_return_accessor_pair_is_const_fn`]
+        // on the `Placement::clusters` + `Entrada::paths` slice-
+        // return pair, and of the peer M2 axis pins on
+        // [`crate::supervisor::SupervisorSpec::children`] and
+        // [`crate::upgrade::UpgradeFromEntry::instructions`].
+        const fn aplicacao_membros_via_const_fn(s: &AplicacaoSpec) -> &[Membro] {
+            s.membros()
+        }
+        const fn aplicacao_contratos_via_const_fn(s: &AplicacaoSpec) -> &[WitContract] {
+            s.contratos()
+        }
+        const fn aplicacao_politicas_via_const_fn(s: &AplicacaoSpec) -> &MeshPolicy {
+            s.politicas()
+        }
+        const fn aplicacao_placement_via_const_fn(s: &AplicacaoSpec) -> &Placement {
+            s.placement()
+        }
+        const fn aplicacao_entrada_via_const_fn(s: &AplicacaoSpec) -> Option<&Entrada> {
+            s.entrada()
+        }
+        // Construct both a minimal "no :entrada" (internal-only
+        // mesh) and a full "with :entrada" (external-gateway)
+        // fixture so the family pins both the `None`-arm (author-
+        // omitted `:entrada`) and the `Some`-arm (author-declared
+        // `:entrada`) on the optional-composite axis.
+        let membro = Membro {
+            caixa: "web".into(),
+            versao: "^0.1".into(),
+        };
+        let entrada_full = Entrada {
+            host: "web.example.com".into(),
+            para: "web".into(),
+            paths: vec!["/api".into()],
+            port: DEFAULT_SERVICO_PORT,
+        };
+        let internal_only = AplicacaoSpec {
+            membros: vec![membro.clone()],
+            contratos: vec![],
+            politicas: MeshPolicy::default(),
+            placement: Placement::default(),
+            entrada: None,
+        };
+        let with_entrada = AplicacaoSpec {
+            membros: vec![membro],
+            contratos: vec![],
+            politicas: MeshPolicy::default(),
+            placement: Placement::default(),
+            entrada: Some(entrada_full),
+        };
+        assert_eq!(
+            aplicacao_membros_via_const_fn(&internal_only),
+            internal_only.membros()
+        );
+        assert_eq!(
+            aplicacao_membros_via_const_fn(&with_entrada),
+            with_entrada.membros()
+        );
+        assert_eq!(
+            aplicacao_contratos_via_const_fn(&internal_only),
+            internal_only.contratos()
+        );
+        assert!(std::ptr::eq(
+            aplicacao_politicas_via_const_fn(&internal_only),
+            internal_only.politicas(),
+        ));
+        assert!(std::ptr::eq(
+            aplicacao_placement_via_const_fn(&internal_only),
+            internal_only.placement(),
+        ));
+        assert!(aplicacao_entrada_via_const_fn(&internal_only).is_none());
+        match (
+            aplicacao_entrada_via_const_fn(&with_entrada),
+            with_entrada.entrada(),
+        ) {
+            (Some(a), Some(b)) => assert!(std::ptr::eq(a, b)),
+            _ => panic!(
+                "aplicacao_entrada_via_const_fn must agree with \
+                 AplicacaoSpec::entrada on the Some-arm reference"
+            ),
         }
     }
 

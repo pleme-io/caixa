@@ -1807,7 +1807,7 @@ impl SupervisorSpec {
     /// `Caixa::supervisor_view` fold-in path in
     /// `manifest.rs:supervisor_view`).
     #[must_use]
-    pub fn children(&self) -> &[ChildSpec] {
+    pub const fn children(&self) -> &[ChildSpec] {
         self.children.as_slice()
     }
 
@@ -2639,6 +2639,55 @@ mod tests {
             assert_eq!(c.nome(), caixa);
             assert_eq!(c.versao_requirement(), versao);
         }
+    }
+
+    #[test]
+    fn supervisor_children_slice_return_accessor_is_const_fn() {
+        // Fail-before-pass-after pin on [`SupervisorSpec::children`]'s
+        // `const`-eval-surface posture. The accessor destructures the
+        // per-`:children` `Vec<ChildSpec>` storage through the
+        // `pub const fn` [`Vec::as_slice`] (const-stable since Rust
+        // 1.66, well within the workspace MSRV) — any future
+        // accidental downgrade to non-`const` fails
+        // `children_via_const_fn` at caixa-core build time with E0015
+        // (`cannot call non-const method`), strictly stronger than a
+        // runtime `assert!`. Sibling of the peer per-M3-mesh-slot
+        // `Vec → &[T]` slice-return accessor family pin
+        // [`crate::aplicacao::tests::m3_reference_return_accessor_family_is_const_fn`]
+        // on the M3 mesh-slot per-`:clusters` / per-`:paths` /
+        // per-`:membros` / per-`:contratos` slice-return axes, and of
+        // the peer M2 upgrade-appup axis pin
+        // [`crate::upgrade::tests::upgrade_from_entry_instructions_slice_return_accessor_is_const_fn`]
+        // on the per-`:upgrade-from :instructions` slice-return axis.
+        const fn children_via_const_fn(s: &SupervisorSpec) -> &[ChildSpec] {
+            s.children()
+        }
+        // Sweep both the empty-children (leaf-supervisor with no
+        // static children — the `SimpleOneForOne` dynamic-child
+        // arm's canonical shape) and the populated-children
+        // (`OneForOne` / `OneForAll` / `RestForOne` static-child
+        // arm's canonical shape) axes so the accessor carries a
+        // const-dispatch pin on both arms.
+        let s_empty = SupervisorSpec {
+            estrategia: RestartStrategy::SimpleOneForOne,
+            max_restarts: SUPERVISOR_MAX_RESTARTS_DEFAULT,
+            restart_window: Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
+            children: vec![],
+        };
+        assert!(children_via_const_fn(&s_empty).is_empty());
+        assert_eq!(children_via_const_fn(&s_empty), s_empty.children());
+        let s_full = SupervisorSpec {
+            estrategia: RestartStrategy::OneForOne,
+            max_restarts: SUPERVISOR_MAX_RESTARTS_DEFAULT,
+            restart_window: Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
+            children: vec![
+                child("worker-a", "^0.1", RestartPolicy::Permanent),
+                child("worker-b", "~0.2.3", RestartPolicy::Transient),
+                child("collector", "*", RestartPolicy::Temporary),
+            ],
+        };
+        assert_eq!(children_via_const_fn(&s_full).len(), 3);
+        assert_eq!(children_via_const_fn(&s_full), s_full.children());
     }
 
     #[test]

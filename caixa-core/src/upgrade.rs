@@ -290,7 +290,7 @@ impl UpgradeFromEntry {
     /// the mutation-carrying `Serialize`/`Deserialize` derive
     /// round-trip and per-test fixture-mutation paths).
     #[must_use]
-    pub fn instructions(&self) -> &[UpgradeInstruction] {
+    pub const fn instructions(&self) -> &[UpgradeInstruction] {
         self.instructions.as_slice()
     }
 
@@ -2244,6 +2244,56 @@ mod tests {
             assert_eq!(prior_versao_via_const_fn(&e), e.prior_versao());
             assert_eq!(e.prior_versao(), from);
         }
+    }
+
+    #[test]
+    fn upgrade_from_entry_instructions_slice_return_accessor_is_const_fn() {
+        // Fail-before-pass-after pin on
+        // [`UpgradeFromEntry::instructions`]'s `const`-eval-surface
+        // posture. The accessor destructures the per-`:upgrade-from
+        // :instructions` `Vec<UpgradeInstruction>` storage through the
+        // `pub const fn` [`Vec::as_slice`] (const-stable since Rust
+        // 1.66, well within the workspace MSRV) — any future
+        // accidental downgrade to non-`const` fails
+        // `instructions_via_const_fn` at caixa-core build time with
+        // E0015 (`cannot call non-const method`), strictly stronger
+        // than a runtime `assert!`. Sibling of the peer per-M3-mesh-
+        // slot `Vec → &[T]` slice-return accessor family pin
+        // [`crate::aplicacao::tests::m3_reference_return_accessor_family_is_const_fn`]
+        // on the M3 mesh-slot per-`:clusters` / per-`:paths` /
+        // per-`:membros` / per-`:contratos` slice-return axes, and of
+        // the peer M2 supervisor-tree axis pin
+        // [`crate::supervisor::tests::supervisor_children_slice_return_accessor_is_const_fn`]
+        // on the per-`:children` slice-return axis.
+        const fn instructions_via_const_fn(e: &UpgradeFromEntry) -> &[UpgradeInstruction] {
+            e.instructions()
+        }
+        // Sweep both the empty-instructions arm (author-declared
+        // per-`:from` entry with no migration steps — the degenerate
+        // shape the appup `restart`-only path folds through) and the
+        // populated-instructions arm (the canonical OTP-appup shape
+        // carrying a `LoadModule` + `StateChange` + `SoftPurge`
+        // chain) so the accessor carries a const-dispatch pin on
+        // both arms.
+        let e_empty = entry("0.1.0", vec![]);
+        assert!(instructions_via_const_fn(&e_empty).is_empty());
+        assert_eq!(instructions_via_const_fn(&e_empty), e_empty.instructions());
+        let e_full = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+            ],
+        );
+        assert_eq!(instructions_via_const_fn(&e_full).len(), 3);
+        assert_eq!(instructions_via_const_fn(&e_full), e_full.instructions());
     }
 
     #[test]
