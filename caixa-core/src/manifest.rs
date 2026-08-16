@@ -274,6 +274,82 @@ pub enum LeituraError {
     Dialeto(#[from] crate::dialeto::DialetoError),
 }
 
+/// Substrate-canonical universal-axis per-[`Caixa`] `:licenca` SPDX-shaped
+/// license-expression fallback for the `Option<String>` `:licenca` slot —
+/// the `"MIT"` SPDX identifier every [`caixa-helm`]-rendered
+/// `lareira-<nome>` Helm chart's `README.md` `## License` section folds an
+/// author-omitted (`None`) `:licenca` slot through, extracted as a typed
+/// `pub const` so every substrate-side consumer that resolves "what license
+/// scalar does an author-omitted `:licenca` degrade onto?" reaches for
+/// exactly one substrate-primitive `&'static str`.
+///
+/// The `:licenca` fallback axis has one production consumer today — the
+/// [`caixa-helm`] `build_readme` fold at `caixa-helm/src/lib.rs`'s
+/// `caixa.licenca().unwrap_or(CAIXA_LICENCA_DEFAULT)` `README.md`
+/// `## License` section body — with three sibling caixa-core sites that
+/// cite the `"MIT"` fallback in prose (this crate's [`Caixa::licenca`]
+/// accessor's docstring, [`Self::validate_licenca`]'s docstring, and the
+/// [`ManifestError::LicencaEmpty`] `#[error]` template's user-facing text)
+/// all quoting the exact byte-string a future substrate-side rebrand of the
+/// fallback (a tightening to `"Apache-2.0"` as the substrate absorbs the
+/// wasm-component-model conventions the `wasi:*` WIT worlds already carry,
+/// a per-cluster license-default overlay the M4 CR materializer resolves
+/// per-CR, a promotion to the plain `Option<String>` byte-string into a
+/// richer `SpdxExpression` enum once the SPDX-expression parser lands per
+/// [`Self::validate_licenca`]'s docstring roadmap) would silently split
+/// against — the caixa-helm renderer would emit the new byte, the
+/// docstrings would still cite the prior byte, and every author who reads
+/// the accessor docstring before authoring would file a fresh
+/// `:licenca "MIT"` verbatim rather than defer to the substrate default,
+/// with the drift surfacing at chart-README-audit time far from the
+/// substrate rebrand commit.
+///
+/// Prior to this lift the sole production emitter (`build_readme`) carried
+/// an inline `"MIT"` byte literal at
+/// `caixa-helm/src/lib.rs:1018`'s `.unwrap_or("MIT")` fallback arm — one
+/// occurrence of the same load-bearing per-`Caixa` universal-axis
+/// SPDX-shaped license-expression convention as the four sibling caixa-core
+/// docstring citations, drift-prone by construction ahead of the second
+/// occurrence the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao registry-annotation synthesis (the
+/// [`Self::validate_licenca`] roadmap already names the `Chart.yaml
+/// annotations["artifacthub.io/license"]` axis every registry-facing chart
+/// carries as the second consumer) will surface.
+///
+/// The `"MIT"` value pins the canonical CAIXA-SDLC §I license scaffold
+/// every `feira init`-emitted [`Self::template`] carries verbatim
+/// (`:licenca "MIT"`) and every substrate-side renderer fixture
+/// ([`caixa-helm`]'s `sample_caixa`, [`caixa-flux`]'s renderer fixtures,
+/// [`caixa-mesh`]'s renderer fixtures) seeds by construction, matching the
+/// pleme-io repo `LICENSE` header this workspace itself ships under. The
+/// alternatives an author declares explicitly (compound SPDX expressions
+/// like `"Apache-2.0 OR MIT"`, permissive-family peers like
+/// `"Apache-2.0"` / `"BSD-3-Clause"`, license-with-exception forms like
+/// `"Apache-2.0 WITH LLVM-exception"`) express deliberate license postures
+/// an author declares explicitly, never a posture an author-omitted slot
+/// should silently assume by default.
+///
+/// Lifted as a typed `pub const` so the substrate's chosen license
+/// fallback has exactly one source of truth on the `:licenca` fallback
+/// axis, on the same substrate-primitive lift discipline the peer
+/// per-`Caixa` load-bearing-scalar constants
+/// ([`crate::version::DEFAULT_PUBLISH_TAG_PREFIX`],
+/// [`crate::version::DEFAULT_GIT_REMOTE`],
+/// [`crate::version::DEFAULT_PLEME_GIT_ORG`]) already carry on the sibling
+/// per-`Caixa` universal-axis publish-side convention surface, and the
+/// same discipline the sibling M2 per-supervisor default set carries
+/// end-to-end ([`crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT`],
+/// [`crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT`],
+/// [`crate::supervisor::SUPERVISOR_RESTART_WINDOW_DEFAULT`],
+/// [`crate::supervisor::SUPERVISOR_CHILD_RESTART_DEFAULT`]) and the M3
+/// per-`:placement` default set already carries
+/// ([`crate::aplicacao::PLACEMENT_ESTRATEGIA_DEFAULT`]) on the paired
+/// M2 / M3 typed-slot-default axes. First typed default on the outer
+/// top-level [`Caixa`] universal-axis surface to converge onto the
+/// substrate-primitive-lift discipline the M2 / M3 typed-slot families
+/// already carry.
+pub const CAIXA_LICENCA_DEFAULT: &str = "MIT";
+
 impl Caixa {
     /// Parse a `caixa.lisp` source string to a typed `Caixa`.
     ///
@@ -18265,5 +18341,31 @@ mod tests {
                  flowed through DepList::ALL + Caixa::deps_of"
             );
         }
+    }
+
+    #[test]
+    fn caixa_licenca_default_pins_canonical_mit_byte() {
+        // Bridge-arm pin: [`CAIXA_LICENCA_DEFAULT`] resolves to the
+        // canonical SPDX-`"MIT"` byte today, the same license expression
+        // every peer substrate-side consumer of the author-omitted
+        // `:licenca` slot ([`caixa-helm`]'s `build_readme` fallback arm at
+        // `caixa-helm/src/lib.rs`, the future M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+        // `Chart.yaml annotations["artifacthub.io/license"]` emitter this
+        // crate's [`Caixa::validate_licenca`] docstring roadmap already
+        // names as the second consumer) fills into its per-consumer
+        // README/annotation emit site. Pin the literal here (peer with the
+        // [`crate::version::DEFAULT_PUBLISH_TAG_PREFIX`] /
+        // [`crate::version::DEFAULT_GIT_REMOTE`] /
+        // [`crate::version::DEFAULT_PLEME_GIT_ORG`] canonical-literal pins
+        // on the sibling lifted-constant surfaces) so a future
+        // substrate-side license-fallback rebrand surfaces here as a
+        // coordinated edit-point: the sibling caixa-helm
+        // `build_readme_license_line_routes_through_lifted_caixa_licenca_default`
+        // pinning test already pins the equality at the renderer-emit
+        // axis; this pin closes the second coordinate of the pair by
+        // anchoring the lifted constant's current byte to the canonical
+        // CAIXA-SDLC §I license scaffold's documented shape.
+        assert_eq!(CAIXA_LICENCA_DEFAULT, "MIT");
     }
 }

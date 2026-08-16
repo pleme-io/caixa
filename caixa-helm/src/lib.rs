@@ -195,6 +195,23 @@ pub const DEFAULT_LIBRARY_VERSION: &str = "~0.1.0";
 /// canonical-K8s-axis-constant surface.
 pub use caixa_core::DEFAULT_LIBRARY_NAME;
 
+/// Canonical substrate-side per-[`caixa_core::Caixa`] author-omitted
+/// `:licenca` SPDX-shaped license-expression fallback every
+/// [`build_readme`]-emitted `lareira-<nome>` chart `README.md` `## License`
+/// section body seeds when the author-omitted `:licenca` slot lands past
+/// the [`caixa_core::Caixa::licenca`] `Option<&str>` accessor's `None` arm.
+/// Re-export of the lifted [`caixa_core::CAIXA_LICENCA_DEFAULT`] so the
+/// load-bearing byte-string lives in exactly one place across the
+/// substrate — the caixa-helm `build_readme` fold here + every future
+/// substrate-side per-`Caixa` registry-facing renderer consumer (the M4
+/// `Chart.yaml annotations["artifacthub.io/license"]` emitter the
+/// [`caixa_core::Caixa::validate_licenca`] docstring roadmap names) reach
+/// through one `&'static str` by construction. Same shape as the peer
+/// [`caixa_core::DEFAULT_LIBRARY_NAME`] / [`caixa_core::DEFAULT_NAMESPACE`]
+/// / [`caixa_core::DEFAULT_SERVICO_PORT`] lifts on the sibling
+/// canonical-load-bearing-scalar surface.
+pub use caixa_core::CAIXA_LICENCA_DEFAULT;
+
 /// Canonical Helm 3 `Chart.yaml` `apiVersion` every rendered
 /// `lareira-<nome>` chart declares. Re-export of the lifted
 /// [`caixa_core::HELM_CHART_API_VERSION`] so the Helm-side
@@ -1015,7 +1032,32 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
         descricao = descricao,
         repo = caixa.canonical_git_url(),
         versao = caixa.versao(),
-        license = caixa.licenca().unwrap_or("MIT"),
+        // Route the per-`README.md` `## License` line's `{license}`
+        // interpolation through the substrate-canonical
+        // [`caixa_core::CAIXA_LICENCA_DEFAULT`] typed `pub const` rather
+        // than the prior raw `"MIT"` byte literal fallback arm — one
+        // source of truth for the substrate-side per-`Caixa`
+        // author-omitted-`:licenca` SPDX-shaped license-expression
+        // fallback that every substrate-side consumer of the
+        // author-omitted `:licenca` slot degrades onto. Peer of the
+        // sibling `## Origin` line's `{repo}` interpolation already
+        // routed through [`caixa_core::Caixa::canonical_git_url`]
+        // (124f864) on the paired per-`README.md` universal-axis
+        // fallback surface — the two typed dispatches jointly close
+        // the `lareira-<nome>` chart's `README.md` universal-axis
+        // author-omitted-slot fallback resolution at the substrate
+        // primitive. Same "close the substrate-side default at one
+        // canonical arm on the substrate primitive, converge every
+        // prior open-coded caller onto the arm" discipline the sibling
+        // M3 per-`:placement :estrategia`
+        // [`caixa_core::PLACEMENT_ESTRATEGIA_DEFAULT`] (29c21ca) and
+        // the M2 per-`:supervisor` default set carry on the paired
+        // typed-slot-default axes, extended to the outer top-level
+        // [`caixa_core::Caixa`] universal-axis `:licenca` fallback.
+        // Pinned by
+        // `build_readme_license_line_routes_through_lifted_caixa_licenca_default`
+        // in the tests module.
+        license = caixa.licenca().unwrap_or(caixa_core::CAIXA_LICENCA_DEFAULT),
     )
 }
 
@@ -3298,6 +3340,81 @@ spec:
              combinator on the `Chart.yaml` YAML leaf — otherwise \
              the 9 routed per-artifact typed-parse readback sites \
              regress silently on the parse-target axis",
+        );
+    }
+
+    #[test]
+    fn caixa_licenca_default_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CAIXA_LICENCA_DEFAULT` was lifted from the
+        // production-code inline `"MIT"` byte literal at [`build_readme`]'s
+        // `caixa.licenca().unwrap_or("MIT")` `README.md` `## License`
+        // fallback (formerly `caixa-helm/src/lib.rs:1018`) to a re-export
+        // of [`caixa_core::CAIXA_LICENCA_DEFAULT`] so the substrate-side
+        // per-`Caixa` author-omitted-`:licenca` SPDX-shaped license-
+        // expression fallback lives in exactly one place across every
+        // caixa renderer. Pin the equality + `&'static` static-data
+        // identity here so any local re-introduction of a sibling `pub
+        // const CAIXA_LICENCA_DEFAULT: &str = "…"` at this crate — the
+        // canonical drift footgun where a sibling local `pub const` could
+        // happen to carry the same byte at the source while pointing at a
+        // different `&'static` allocation — is a build-time test failure
+        // naming the offending drift, not a silent per-README license-line
+        // fall-through to a stale SPDX identifier at chart-consumption
+        // time far from the drift site. Peer to
+        // [`helm_chart_readme_filename_re_export_points_at_caixa_core_canonical`]
+        // / [`helm_values_key_enabled_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Helm-per-lifted-const re-export
+        // surfaces.
+        caixa_core::assert_str_reexport_identity(
+            "CAIXA_LICENCA_DEFAULT",
+            CAIXA_LICENCA_DEFAULT,
+            caixa_core::CAIXA_LICENCA_DEFAULT,
+        );
+    }
+
+    #[test]
+    fn build_readme_license_line_routes_through_lifted_caixa_licenca_default() {
+        // Emit-path pin: on a `:licenca`-null caixa the [`build_readme`]
+        // license-line fallback substitutes
+        // `caixa.licenca().unwrap_or(caixa_core::CAIXA_LICENCA_DEFAULT)`,
+        // which must derive its terminal SPDX byte-string from the lifted
+        // [`caixa_core::CAIXA_LICENCA_DEFAULT`] `pub const` rather than the
+        // pre-lift inline `"MIT"` byte literal at the emit site. Before
+        // this converge the fallback carried the raw `"MIT"` scalar,
+        // expressing no compile-time link back to the substrate-side
+        // per-`Caixa` author-omitted-`:licenca` SPDX-shaped license-
+        // expression fallback the sibling caixa-core
+        // [`caixa_licenca_default_pins_canonical_mit_byte`] pinning test
+        // anchors. Byte-equal today (the lifted const resolves to `"MIT"`);
+        // the pin catches any future substrate-side license-fallback
+        // rebrand whose emit-side regresses to the raw literal. Sibling of
+        // the [`readme_repositorio_null_fallback_routes_through_canonical_git_url_accessor`]
+        // (aaf1028) / [`readme_body_version_routes_through_caixa_versao_accessor`]
+        // (eb912de) peer emit-path pins on the paired per-`README.md`
+        // universal-axis fallback surfaces — completes the
+        // per-`lareira-<nome>` chart-directory `README.md`
+        // universal-axis author-omitted-slot fallback resolution's
+        // substrate-primitive routing at the sole rendered leaf.
+        let caixa = Caixa {
+            licenca: None,
+            ..sample_caixa()
+        };
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let readme_file =
+            find_file_by_path(&dir.files, HELM_CHART_README_FILENAME).expect("README.md present");
+        let expected = format!(
+            "## License\n\n{license}.\n",
+            license = caixa_core::CAIXA_LICENCA_DEFAULT,
+        );
+        assert!(
+            readme_file.contents.contains(&expected),
+            "README.md `:licenca`-null fallback must carry the lifted \
+             `caixa_core::CAIXA_LICENCA_DEFAULT` byte-string ({expected:?}) \
+             verbatim — a regression that re-inlines `\"MIT\"` at the emit \
+             site silently splits the README license-fallback axis from \
+             every future substrate-side license-fallback rebrand. Full \
+             contents:\n{contents}",
+            contents = readme_file.contents,
         );
     }
 }
