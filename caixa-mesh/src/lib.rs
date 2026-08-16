@@ -2822,7 +2822,24 @@ pub(crate) fn cilium_network_policies_from_spec(
             // coordinated rewrite of every renderer's raw `if let`
             // pattern-match on the [`WitTarget::Http`] arm's payload
             // field.
-            if let Some(endpoint) = c.target().expect("validated by typed_view").http_endpoint() {
+            //
+            // The post-validation projection routes through the lifted
+            // [`caixa_core::WitContract::target_projected`] typed
+            // accessor rather than the raw `.target().expect("validated
+            // by typed_view")` pair — the "call `.target()` then
+            // `.expect(…)` with the same `"validated by typed_view"`
+            // message" duplication that the peer
+            // [`caixa_feira::cmd::app`] `feira app graph` payload-column
+            // printer at `caixa-feira/src/cmd/app.rs:110` also
+            // re-inlined now lives at one caixa-core edit on the
+            // substrate primitive's [`caixa_core::WitContract::PROJECTED_INVARIANT_MSG`]
+            // canonical panic-message const. A future vocabulary shift
+            // on the panic-message axis (a tightening as caixa-core
+            // grows a `Caixa::validated_aplicacao_view` companion, an
+            // M4 promotion of the panic to a `debug_assert` under
+            // `--release`) reaches both call sites by construction
+            // rather than through a coordinated per-consumer rewrite.
+            if let Some(endpoint) = c.target_projected().http_endpoint() {
                 let mut http_rule = serde_yaml::Mapping::new();
                 http_rule.insert_string(CILIUM_KEY_PATH, endpoint.to_string());
                 let mut rules = serde_yaml::Mapping::new();
