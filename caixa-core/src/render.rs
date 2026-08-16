@@ -16573,6 +16573,90 @@ pub const FLUX_KUSTOMIZATION_KEY_TIMEOUT: &str = "timeout";
 /// [cf]: ../../caixa_flux/index.html
 pub const DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT: &str = "5m";
 
+/// Canonical wall-clock cap the [`caixa-tatara`][ct]-emitted `Process`
+/// grants its ephemeral install-and-verify phase — the paired per-
+/// `Process` wall-clock-cap scalar-value that both the tatara
+/// `AplicacaoIntent.install_timeout` (the Helm helm-controller install-
+/// phase wall-clock cap Flux passes through to `helm install` for the
+/// rendered chart) and the enclosing `Boundary.timeout` (the tatara-
+/// substrate outer wall-clock cap the ephemeral `Process` outcome must
+/// land within) travel on. Both layers pin the same 25-minute ceiling
+/// by construction — an ephemeral `Process` whose outer boundary is
+/// shorter than its inner Helm install budget would let the substrate
+/// declare failure under a Helm apply that's still running (a wasted
+/// retry cycle that stops the operator from ever observing a
+/// `HelmReleaseReleased` postcondition transition), and a boundary that's
+/// longer than the Helm budget would let a `HelmReleaseReleased`
+/// postcondition wait past the point Helm has already given up on the
+/// install (a wasted wall-clock the operator stops the ephemeral timer
+/// against).
+///
+/// Until this canonicalization landed the const lived at
+/// [`caixa_tatara::DEFAULT_APLICACAO_INSTALL_TIMEOUT`][ct-const] as a
+/// crate-local `pub const` even though its role — a canonical
+/// substrate-side wall-clock cap the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+/// admission-webhook floor consults, the future per-cluster snapshot
+/// bundle emitter's per-`Process`-CR wall-clock-cap axis carries, the
+/// future per-`:placement`-scoped install-timeout overlay the operator
+/// pins through — was a substrate-canonical scalar-value-default on the
+/// same footing as the sibling [`DEFAULT_FLUX_RECONCILE_INTERVAL`] /
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] /
+/// [`DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] lifts already carried here.
+/// The prior residence was the drift footgun: a future substrate-side
+/// canonicalization pass that added a second cross-crate consumer (the
+/// M4 CR materializer, the peer per-cluster snapshot bundle) would have
+/// had to reach across a crate boundary to a `caixa-tatara`-owned
+/// symbol whose ownership convention differed from every peer default
+/// this block already carries — or, worse, would have re-declared a
+/// sibling `pub const DEFAULT_APLICACAO_INSTALL_TIMEOUT: &str = "25m"`
+/// at its own crate root that happened to carry the same string at
+/// source but pointed at a different `&'static str` allocation, exactly
+/// the drift the [`assert_str_reexport_identity`] helper's docstring
+/// names as the canonical footgun the substrate-primitive-lift
+/// discipline closes.
+///
+/// The single source of truth every downstream install-wall-clock-cap
+/// consumer reaches for:
+///
+///   - [`caixa-tatara`][ct]'s
+///     [`caixa_tatara::DEFAULT_APLICACAO_INSTALL_TIMEOUT`][ct-const]
+///     re-export — the paired `AplicacaoIntent.install_timeout` +
+///     enclosing `Boundary.timeout` construction sites in
+///     [`caixa_tatara::process_for_aplicacao`][ct-fn] both consult
+///     this re-export, so the inner Helm install budget and the outer
+///     tatara-substrate boundary stay pinned to the same
+///     `&'static str` by construction.
+///   - Every future M4-and-beyond per-`Process` renderer the
+///     absorption-roadmap acknowledges (the M4
+///     `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+///     admission-webhook install-cap floor, the future per-cluster
+///     snapshot bundle emitter's per-`Process`-CR install-timeout
+///     carrier, the future per-`:placement`-scoped install-timeout
+///     overlay the operator pins through).
+///
+/// A future substrate-wide install-wall-clock-cap migration (`"25m"` →
+/// `"30m"` on longer chart install cycles, `"25m"` → `"15m"` on faster
+/// ephemeral turnaround SLAs, promotion to a per-cluster overlay the
+/// operator pins through a future `:placement`-scoped slot) is a one-
+/// line edit on this canonical declaration — every consumer inherits by
+/// construction, no coordinated multi-crate rewrite, no opportunity for
+/// per-renderer drift. Same "the typed constant lives in one place"
+/// discipline the sibling [`DEFAULT_FLUX_RECONCILE_INTERVAL`] (908180f)
+/// / [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) /
+/// [`DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] (64bdb2b) lifts apply on the
+/// peer canonical-substrate-default-load-bearing-scalar surface —
+/// extends the canonical-substrate-default single-sourcing discipline
+/// from the peer per-Flux-v2-CR default surfaces onto the sibling
+/// per-tatara-`Process`-CR install-wall-clock-cap surface, closing the
+/// last cross-crate residence-of-a-substrate-primitive gap on the
+/// canonical Flux-v2-emit-side scalar-value-default surface.
+///
+/// [ct]: ../../caixa_tatara/index.html
+/// [ct-const]: ../../caixa_tatara/constant.DEFAULT_APLICACAO_INSTALL_TIMEOUT.html
+/// [ct-fn]: ../../caixa_tatara/fn.process_for_aplicacao.html
+pub const DEFAULT_APLICACAO_INSTALL_TIMEOUT: &str = "25m";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -28893,6 +28977,92 @@ mod tests {
              must be an ASCII lowercase alphabetic unit suffix per the \
              Go-duration-format grammar — the trailing unit follows the \
              magnitude; an unterminated magnitude defeats \
+             `metav1.ParseDuration`"
+        );
+    }
+
+    #[test]
+    fn default_aplicacao_install_timeout_pins_canonical_value() {
+        // Pin the actual scalar so a typo in the canonicalization pass
+        // can't silently rebrand the substrate-side default tatara
+        // `Process.spec.intent.aplicacao.install_timeout` +
+        // `Process.spec.boundary.timeout` wall-clock cap the paired
+        // caixa-tatara `AplicacaoIntent.install_timeout` /
+        // `Boundary.timeout` construction sites in
+        // [`caixa_tatara::process_for_aplicacao`] seed into every emitted
+        // per-Aplicacao tatara `Process` CR. The value is part of the
+        // cluster-side contract with the Flux v2 helm-controller (the
+        // per-`HelmRelease` install-phase wall-clock cap Flux passes
+        // through to `helm install` for the rendered chart), so a
+        // rebrand of the substrate default is a coordinated multi-repo
+        // migration (tightening on faster ephemeral turnaround SLAs,
+        // widening on longer chart install cycles once the substrate
+        // discovers larger per-Aplicacao manifest sets), not an
+        // incidental edit. Peer to
+        // [`default_flux_reconcile_interval_pins_canonical_value`] /
+        // [`default_flux_kustomization_timeout_pins_canonical_value`] /
+        // [`flux_helmrelease_remediation_retries_default_pins_canonical_value`]
+        // on the canonical Flux-v2-per-CR-substrate-default-scalar pin
+        // surface; extends the discipline onto the per-tatara-`Process`-
+        // CR install-wall-clock-cap surface every caixa-tatara-emitted
+        // ephemeral `Process` carries.
+        assert_eq!(DEFAULT_APLICACAO_INSTALL_TIMEOUT, "25m");
+    }
+
+    #[test]
+    fn default_aplicacao_install_timeout_is_a_valid_metav1_duration_scalar() {
+        // Cross-axis grammar invariant: the Flux v2 helm-controller-side
+        // per-`HelmRelease` install-phase wall-clock cap the substrate
+        // seeds via `AplicacaoIntent.install_timeout` is parsed by the
+        // upstream Flux v2 controller through
+        // `metav1.ParseDuration` before the install-phase watch is
+        // installed — the same Go-duration-format grammar the sibling
+        // [`DEFAULT_FLUX_RECONCILE_INTERVAL`] +
+        // [`DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] canonical-value pins
+        // already anchor on the peer per-CR reconcile-poll-cadence +
+        // per-Kustomization-CR reconcile-cap surfaces. Pin a floor that
+        // catches the canonical drift footguns — an empty scalar (`""`
+        // — admission gate rejects), a non-ASCII-alphanumeric byte
+        // (`"25 m"` — the whitespace defeats the parser), a missing-
+        // unit scalar (`"25"` — the parser rejects for lack of a unit
+        // suffix), or a leading-non-digit scalar (`"m25"` — the parser
+        // rejects for lack of a leading magnitude). A future rebrand
+        // on the canonical lift that lands a value outside the Go-
+        // duration-format grammar would surface here at caixa-core
+        // build time, before any caixa-tatara emit path consumes the
+        // value at operator-side `helm install` time. Same shape as
+        // [`default_flux_kustomization_timeout_is_a_valid_metav1_duration_scalar`]
+        // on the peer canonical-substrate-default-grammar-floor
+        // surface.
+        let v = DEFAULT_APLICACAO_INSTALL_TIMEOUT;
+        assert!(
+            !v.is_empty(),
+            "DEFAULT_APLICACAO_INSTALL_TIMEOUT {v:?} must be non-empty \
+             per the Flux v2 helm-controller-side `metav1.ParseDuration` \
+             install-phase admission gate"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "DEFAULT_APLICACAO_INSTALL_TIMEOUT {v:?} must be ASCII-\
+             alphanumeric throughout per the Go-duration-format grammar \
+             — no whitespace / separator bytes the `metav1.ParseDuration` \
+             install-phase admission gate would reject"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_digit(),
+            "DEFAULT_APLICACAO_INSTALL_TIMEOUT {v:?} first byte \
+             {first:?} must be an ASCII digit per the Go-duration-format \
+             grammar — the leading magnitude precedes the unit suffix; \
+             a leading non-digit defeats `metav1.ParseDuration`"
+        );
+        let last = v.chars().next_back().expect("non-empty");
+        assert!(
+            last.is_ascii_alphabetic() && last.is_ascii_lowercase(),
+            "DEFAULT_APLICACAO_INSTALL_TIMEOUT {v:?} last byte \
+             {last:?} must be an ASCII lowercase alphabetic unit suffix \
+             per the Go-duration-format grammar — the trailing unit \
+             follows the magnitude; an unterminated magnitude defeats \
              `metav1.ParseDuration`"
         );
     }
