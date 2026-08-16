@@ -176,6 +176,19 @@ pub struct ChartDependency {
     pub alias: Option<String>,
 }
 
+/// Canonical Helm library-chart name every `lareira-<nome>` chart depends
+/// on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`] so
+/// the load-bearing string lives in exactly one place across every
+/// caixa renderer (caixa-helm's `RenderOpts::library_name` default
+/// here + caixa-flux's `cluster_bundle` `helmrelease.yaml` wrap key).
+/// A future per-edition library-chart fork — every entry on the
+/// absorption-roadmap that names a per-cluster / per-namespace /
+/// per-tenant variant of the canonical library chart — reaches both
+/// consumers through one `&'static str` by construction. Same shape
+/// as the [`caixa_core::DEFAULT_NAMESPACE`] (a085b26) /
+/// [`caixa_core::DEFAULT_SERVICO_PORT`] (1e22add) lifts on the peer
+/// canonical-K8s-axis-constant surface.
+pub use caixa_core::DEFAULT_LIBRARY_NAME;
 /// Canonical Helm 3 `Chart.yaml` `dependencies[0].repository` chart-source
 /// URL every rendered `lareira-<nome>` chart declares against the
 /// substrate-canonical [`DEFAULT_LIBRARY_NAME`] library chart — the
@@ -198,20 +211,27 @@ pub struct ChartDependency {
 /// axis every emitted per-Servico `Chart.yaml` `dependencies[0]` entry
 /// carries.
 pub use caixa_core::DEFAULT_LIBRARY_REPO;
-pub const DEFAULT_LIBRARY_VERSION: &str = "~0.1.0";
-/// Canonical Helm library-chart name every `lareira-<nome>` chart depends
-/// on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`] so
-/// the load-bearing string lives in exactly one place across every
-/// caixa renderer (caixa-helm's `RenderOpts::library_name` default
-/// here + caixa-flux's `cluster_bundle` `helmrelease.yaml` wrap key).
-/// A future per-edition library-chart fork — every entry on the
-/// absorption-roadmap that names a per-cluster / per-namespace /
-/// per-tenant variant of the canonical library chart — reaches both
-/// consumers through one `&'static str` by construction. Same shape
-/// as the [`caixa_core::DEFAULT_NAMESPACE`] (a085b26) /
-/// [`caixa_core::DEFAULT_SERVICO_PORT`] (1e22add) lifts on the peer
-/// canonical-K8s-axis-constant surface.
-pub use caixa_core::DEFAULT_LIBRARY_NAME;
+/// Canonical Helm 3 `Chart.yaml` `dependencies[0].version` semver-
+/// requirement scalar every rendered `lareira-<nome>` chart declares
+/// against the substrate-canonical [`DEFAULT_LIBRARY_NAME`] library
+/// chart — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_VERSION`]
+/// so the load-bearing per-dep semver-requirement string lives in
+/// exactly one place across every caixa renderer. The single
+/// production-code call site consuming it, the
+/// `RenderOpts::library_version` field seed at
+/// [`RenderOpts::default()`], now consults exactly one substrate-
+/// primitive `&'static str` allocation, sibling to the paired
+/// [`caixa_core::DEFAULT_LIBRARY_NAME`] / [`caixa_core::DEFAULT_LIBRARY_REPO`]
+/// re-exports on the peer per-dep name / repository axes. Completes
+/// the `(name, repository, version)` per-Chart.yaml-dep canonical-
+/// scalar triple's substrate-primitive-residence pass at the caixa-
+/// helm re-export surface — every future substrate-side per-Servico
+/// renderer consumer (the future per-Aplicacao library-chart's per-
+/// Servico per-dep version emitter, the future per-cluster library-
+/// chart-version pin the operator threads through a future
+/// [`caixa_flux::ClusterBundleOpts`]-scoped library-version override)
+/// inherits the same `&'static str` by construction.
+pub use caixa_core::DEFAULT_LIBRARY_VERSION;
 
 /// Canonical substrate-side per-[`caixa_core::Caixa`] author-omitted
 /// `:licenca` SPDX-shaped license-expression fallback every
@@ -1612,6 +1632,47 @@ spec:
             "DEFAULT_LIBRARY_REPO",
             DEFAULT_LIBRARY_REPO,
             caixa_core::DEFAULT_LIBRARY_REPO,
+        );
+    }
+
+    #[test]
+    fn default_library_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub const DEFAULT_LIBRARY_VERSION: &str =
+        // "~0.1.0"` was lifted to a re-export of
+        // [`caixa_core::DEFAULT_LIBRARY_VERSION`] so the Helm 3
+        // `Chart.yaml` `dependencies[0].version` semver-requirement
+        // scalar every rendered `lareira-<nome>` chart declares against
+        // the substrate-canonical [`DEFAULT_LIBRARY_NAME`] library
+        // chart lives in exactly one place across every caixa renderer
+        // (caixa-helm's `RenderOpts::library_version` default here +
+        // every future substrate-side per-Servico renderer consumer the
+        // caixa-core [`caixa_core::DEFAULT_LIBRARY_VERSION`] docstring
+        // enumerates). Pin the equality + `&'static` static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const DEFAULT_LIBRARY_VERSION: &str = "…"` at this crate —
+        // the canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same bytes at the source while
+        // pointing at a different `&'static str` allocation (silently
+        // splitting the substrate-canonical per-dep semver-requirement
+        // from the caixa-core-owned canonical), or, worse, could drift
+        // on a future library-chart-version bump (`~0.1.0` → `~0.2.0`
+        // on the `pleme-io/helmworks` `pleme-computeunit` next-minor
+        // cut, `~0.1.0` → `^0.1.0` on a wider-acceptance sigil swap)
+        // that landed on the caixa-core canonical without rebump of
+        // the sibling local — is a build-time test failure naming the
+        // offending drift, not a silent apply-time per-chart-dep
+        // resolver-intersection mismatch surfacing at operator-side
+        // `helm dependency build` time far from the drift site. Peer
+        // to the sibling
+        // [`default_library_name_re_export_points_at_caixa_core_canonical`]
+        // / [`default_library_repo_re_export_points_at_caixa_core_canonical`]
+        // pins on the co-resident `(name, repository, version)`
+        // per-Chart.yaml-dep re-export triple — completes the triple's
+        // per-caixa-helm re-export identity pin surface.
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_LIBRARY_VERSION",
+            DEFAULT_LIBRARY_VERSION,
+            caixa_core::DEFAULT_LIBRARY_VERSION,
         );
     }
 
