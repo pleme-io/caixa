@@ -4567,9 +4567,89 @@ pub enum PlacementStrategy {
     Sharded,
 }
 
+/// Substrate-canonical M3-mesh-shaped per-`:placement :estrategia`
+/// distribution-strategy default for the `:placement :estrategia` axis —
+/// the [`PlacementStrategy::Replicated`] active-active-across-every-named-
+/// cluster arm (MESH-COMPOSITION §II.2), extracted as a typed `pub const`
+/// so every substrate-side consumer that resolves "what
+/// [`PlacementStrategy`] variant does an author-omitted `:placement
+/// :estrategia` slot degrade onto?" reaches for exactly one substrate-
+/// primitive [`PlacementStrategy`].
+///
+/// The `:placement :estrategia` default axis has three production
+/// consumers on the substrate side today: the [`Default for
+/// PlacementStrategy`] impl's return arm, the [`Default for Placement`]
+/// impl's struct-literal `estrategia` field, and the serde-side
+/// `#[serde(default)]` on [`Placement::estrategia`] that resolves an
+/// author-omitted `:placement :estrategia` scalar through the [`Default
+/// for PlacementStrategy`] impl. Prior to this lift the three folded onto
+/// a raw `Self::Replicated` arm at the [`Default for PlacementStrategy`]
+/// impl and implicit `PlacementStrategy::default()` routes at the sibling
+/// consumers, with no compile-time link back to the paired
+/// [`crate::manifest::Caixa::aplicacao_view`] fold's
+/// `.unwrap_or_default()` `Option<Placement>` collapse arm — the fourth
+/// production consumer that resolves an author-omitted `:placement` slot
+/// (entirely omitted, not just the `:estrategia` scalar within a declared
+/// `:placement` block) through [`Placement::default`] which then routes
+/// through this same discriminator. A future coherent rebrand of the
+/// `:placement :estrategia` default (a widening to `Sharded` once the
+/// substrate discovers hash-keyed distribution as the more common
+/// production shape, a tightening to `SingleNode` for stateful Erlang/OTP
+/// distributed-app-takeover semantics MESH-COMPOSITION §II.1 already
+/// names, a per-cluster overlay the operator pins through a future
+/// `:placement-overrides` slot) would have had to migrate a lifted
+/// discriminator on one path and open-coded discriminators on the peers
+/// in lockstep or the four consumers would silently drift out of
+/// pairing. Lifting the resolution rule to a typed `pub const` on the
+/// substrate primitive means the M3-mesh-canonical `:placement
+/// :estrategia` default migrates as one unit on any future axis change.
+///
+/// The [`PlacementStrategy::Replicated`] value pins MESH-COMPOSITION
+/// §II.2's active-active-across-every-named-cluster arm — the closest
+/// canonical M3 production reference the substrate carries, matching the
+/// caixa-mesh default axis every M3 renderer already keys off (a
+/// `programs.yaml` fan-out that emits one `HelmRelease` per cluster is
+/// the canonical shape a `:membros`+`:contratos`-declared Aplicacao lands on
+/// under the substrate's fleet-programs aggregator without an explicit
+/// `:placement :estrategia` override). The two alternatives the closed
+/// [`PlacementStrategy::ALL`] accept-set carries
+/// ([`PlacementStrategy::SingleNode`] — Erlang/OTP distributed-app
+/// takeover, MESH-COMPOSITION §II.1; [`PlacementStrategy::Sharded`] —
+/// Akka-style hash-keyed distribution across clusters,
+/// MESH-COMPOSITION §II.4) express deliberate takeover / hash-keyed
+/// postures an author declares explicitly, never a posture an omitted
+/// slot should silently assume.
+///
+/// Lifted as a typed `pub const` so the M3-mesh-canonical default has
+/// exactly one source of truth on the `:placement :estrategia` axis, on
+/// the same substrate-primitive lift discipline the sibling M2
+/// per-supervisor default set carries
+/// ([`crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT`],
+/// [`crate::supervisor::SUPERVISOR_MAX_RESTARTS_DEFAULT`],
+/// [`crate::supervisor::SUPERVISOR_RESTART_WINDOW_DEFAULT`],
+/// [`crate::supervisor::SUPERVISOR_CHILD_RESTART_DEFAULT`]) and the peer
+/// per-renderer defaults on the caixa-flux / caixa-helm rendering axes
+/// ([`crate::render::DEFAULT_NAMESPACE`],
+/// [`crate::render::DEFAULT_LIBRARY_NAME`],
+/// [`crate::render::DEFAULT_SERVICO_PORT`]). The first typed default on
+/// the M3 mesh-primitive-defining slot family to converge onto the
+/// substrate-primitive-lift discipline the M2 supervisor-slot family
+/// already carries end-to-end.
+pub const PLACEMENT_ESTRATEGIA_DEFAULT: PlacementStrategy = PlacementStrategy::Replicated;
+
 impl Default for PlacementStrategy {
     fn default() -> Self {
-        Self::Replicated
+        // Route the [`Default for PlacementStrategy`] impl through the
+        // substrate-canonical [`PLACEMENT_ESTRATEGIA_DEFAULT`] typed
+        // `pub const` rather than a raw `Self::Replicated` arm — one
+        // source of truth for the M3-mesh-canonical active-active-
+        // across-every-named-cluster `:placement :estrategia` default
+        // (MESH-COMPOSITION §II.2), on the same substrate-primitive
+        // lift discipline the sibling M2 per-supervisor default set
+        // ([`crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT`] +
+        // paired halves) carries end-to-end. Pinned by
+        // `placement_strategy_default_routes_through_lifted_default`.
+        PLACEMENT_ESTRATEGIA_DEFAULT
     }
 }
 
@@ -5217,7 +5297,18 @@ impl Placement {
 impl Default for Placement {
     fn default() -> Self {
         Self {
-            estrategia: PlacementStrategy::default(),
+            // Route the struct-literal `estrategia` default arm through
+            // the substrate-canonical [`PLACEMENT_ESTRATEGIA_DEFAULT`]
+            // typed `pub const` rather than the transitively-derived
+            // [`PlacementStrategy::default`] route — one source of truth
+            // for the M3-mesh-canonical [`PlacementStrategy::Replicated`]
+            // active-active-across-every-named-cluster arm
+            // (MESH-COMPOSITION §II.2) that both this struct-literal
+            // altitude and the sibling [`Default for PlacementStrategy`]
+            // impl already key off through the same substrate primitive.
+            // Pinned by
+            // `placement_default_estrategia_routes_through_lifted_default`.
+            estrategia: PLACEMENT_ESTRATEGIA_DEFAULT,
             clusters: Vec::new(),
             affinity: None,
             shard_key: None,
@@ -26122,5 +26213,113 @@ mod tests {
                  verbatim by copy — got {first:?}, expected {window:?}",
             );
         }
+    }
+
+    #[test]
+    fn placement_estrategia_default_pins_m3_canonical_value() {
+        // Pin [`PLACEMENT_ESTRATEGIA_DEFAULT`] at
+        // [`PlacementStrategy::Replicated`] — MESH-COMPOSITION §II.2's
+        // active-active-across-every-named-cluster arm, the closest
+        // canonical M3 production reference the substrate carries and
+        // the arm the caixa-mesh `programs.yaml` fan-out already keys off
+        // for every un-`:placement`-declared Aplicacao. Pinning the arm
+        // here surfaces a future rebrand of the M3-canonical
+        // distribution default (a widening to `Sharded` once the
+        // substrate discovers hash-keyed distribution as the more
+        // common production shape, a tightening to `SingleNode` for
+        // stateful Erlang/OTP distributed-app-takeover semantics
+        // MESH-COMPOSITION §II.1 names, a per-cluster overlay the
+        // operator pins through a future `:placement-overrides` slot)
+        // as a deliberate test edit, not a silent contract migration.
+        // Peer of the sibling M2 per-supervisor value pins
+        // [`crate::supervisor::tests::supervisor_estrategia_default_pins_otp_canonical_value`]
+        // /
+        // [`crate::supervisor::tests::supervisor_child_restart_default_pins_otp_canonical_value`]
+        // extended onto the M3 mesh-primitive-defining `:placement
+        // :estrategia` axis.
+        assert_eq!(PLACEMENT_ESTRATEGIA_DEFAULT, PlacementStrategy::Replicated);
+    }
+
+    #[test]
+    fn placement_strategy_default_routes_through_lifted_default() {
+        // Composition pin: the [`Default for PlacementStrategy`] impl's
+        // return arm must route through the substrate-canonical
+        // [`PLACEMENT_ESTRATEGIA_DEFAULT`] typed `pub const` rather than
+        // a raw `Self::Replicated` arm. Prior to the lift the impl
+        // carried an inline `Self::Replicated` arm with no compile-time
+        // link back to the shared M3-canonical `Replicated` arm the
+        // paired [`Default for Placement`] impl's struct-literal
+        // `estrategia` field, the serde-side `#[serde(default)]` on
+        // [`Placement::estrategia`] that resolves an author-omitted
+        // wire-form `:placement :estrategia` scalar through the impl,
+        // and the [`crate::manifest::Caixa::aplicacao_view`] fold's
+        // `.unwrap_or_default()` `Option<Placement>` collapse arm (which
+        // routes through [`Placement::default`] which routes through the
+        // strategy default) all key off — so a future rebrand of the
+        // M3-canonical distribution default would have had to be threaded
+        // through the `Default` impl and the three peer routes in
+        // lockstep or the four consumers would silently split. Byte-
+        // parity against the lifted constant closes the split. Peer of
+        // the sibling
+        // [`crate::supervisor::tests::restart_strategy_default_routes_through_lifted_default`]
+        // /
+        // [`crate::supervisor::tests::restart_policy_default_routes_through_lifted_default`]
+        // composition pins on the M2 per-supervisor axes.
+        assert_eq!(PlacementStrategy::default(), PLACEMENT_ESTRATEGIA_DEFAULT);
+    }
+
+    #[test]
+    fn placement_default_estrategia_routes_through_lifted_default() {
+        // Composition pin: the [`Default for Placement`] impl's
+        // struct-literal `estrategia` field must route through the
+        // substrate-canonical [`PLACEMENT_ESTRATEGIA_DEFAULT`] typed
+        // `pub const` (either directly, or via the [`PlacementStrategy::default`]
+        // impl that the sibling
+        // `placement_strategy_default_routes_through_lifted_default` pin
+        // already routes onto the constant). Structurally: every
+        // `Placement::default()` call must yield an `estrategia` field
+        // byte-equal to the lifted constant so the two paired defaults —
+        // the [`Default for PlacementStrategy`] impl arm and the
+        // struct-literal default arm here — cannot silently split on any
+        // future M3-canonical distribution-default rebrand. Peer of the
+        // sibling M2
+        // [`crate::supervisor::tests::supervisor_spec_default_estrategia_routes_through_lifted_default`]
+        // byte-parity pin on the [`Default for SupervisorSpec`]
+        // struct-literal `estrategia` field extended onto the M3
+        // mesh-primitive-defining slot family.
+        assert_eq!(
+            Placement::default().estrategia,
+            PLACEMENT_ESTRATEGIA_DEFAULT,
+        );
+    }
+
+    #[test]
+    fn placement_serde_default_estrategia_routes_through_lifted_default() {
+        // Composition pin: the serde-side `#[serde(default)]` on
+        // [`Placement::estrategia`] — the wire-format author-omitted
+        // `:placement :estrategia` arm — must resolve onto the substrate-
+        // canonical [`PLACEMENT_ESTRATEGIA_DEFAULT`] typed `pub const`
+        // (via the [`Default for PlacementStrategy`] impl the sibling
+        // `placement_strategy_default_routes_through_lifted_default` pin
+        // already routes onto the constant). Structurally: a `Placement`
+        // deserialized from a payload that omits the `estrategia` key
+        // must yield an `estrategia` field byte-equal to the lifted
+        // constant, so the wire-format author-omitted arm and the
+        // [`PlacementStrategy::default`] impl arm cannot silently split
+        // on any future M3-canonical distribution-default rebrand. Peer
+        // of the sibling M2
+        // [`crate::supervisor::tests::child_spec_serde_default_restart_routes_through_lifted_default`]
+        // byte-parity pin on the wire-format author-omitted `:children
+        // :restart` scalar extended onto the M3 mesh-primitive-defining
+        // slot family.
+        let omitted: Placement = serde_json::from_str("{}")
+            .expect("Placement must deserialize with the estrategia key omitted");
+        assert_eq!(
+            omitted.estrategia, PLACEMENT_ESTRATEGIA_DEFAULT,
+            "an author-omitted :placement :estrategia slot must degrade onto \
+             the PLACEMENT_ESTRATEGIA_DEFAULT typed pub const (got \
+             {:?}, expected {:?})",
+            omitted.estrategia, PLACEMENT_ESTRATEGIA_DEFAULT,
+        );
     }
 }
