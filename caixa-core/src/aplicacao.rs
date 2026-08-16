@@ -2970,8 +2970,28 @@ impl RateLimit {
     /// scalar-value axes, extended onto the per-`RateLimit` typed-unit
     /// projection axis (the third scalar accessor on the [`RateLimit`]
     /// axis, first typed-enum-return projection).
+    ///
+    /// `pub const fn` — the typed-`RateLimit`-projection dispatch onto
+    /// the canonical [`RateLimitUnit`] arm now carries the same
+    /// `const`-eval-surface posture the sibling `pub const fn`
+    /// [`Self::rate`] / [`Self::window`] scalar-projection accessors on
+    /// this typed sub-struct already carry, composing through the
+    /// peer-lifted `pub const fn` [`RateLimitUnit::from_window`]
+    /// reverse-resolver in `const` context. Any downstream substrate-
+    /// side `const`-context consumer of the typed unit (a module-scope
+    /// `const _:() = assert!(matches!(rl.canonical_unit(), Some(RateLimitUnit::Second)))`
+    /// invariant pin on a typed fixture, a future M4 admission-webhook
+    /// `const fn` per-`:politicas :rate-limit :window` canonical-arm
+    /// resolver over a typed [`RateLimit`], any future `const fn`
+    /// per-`:contratos`-edge rate-limit-override overlay resolver over
+    /// the substrate primitive) now reaches the same typed dispatch on
+    /// the substrate primitive at const-eval time as at runtime.
+    ///
+    /// Pinned load-bearing at the substrate-primitive level by
+    /// [`tests::rate_limit_canonical_unit_accessor_is_const_fn`] (const-
+    /// eval-surface pin via `const fn` wrapper).
     #[must_use]
-    pub fn canonical_unit(&self) -> Option<RateLimitUnit> {
+    pub const fn canonical_unit(&self) -> Option<RateLimitUnit> {
         RateLimitUnit::from_window(self.window)
     }
 }
@@ -3090,12 +3110,67 @@ impl RateLimitUnit {
     /// [`Self::window`] emits. The single `Duration → Self` projection
     /// [`rate_limit_codec::render`] + [`is_canonical_rate_limit_window`]
     /// both consume.
+    ///
+    /// `pub const fn` — the reverse `Duration → Self` projection now
+    /// carries the same `const`-eval-surface posture the sibling
+    /// `pub const fn` [`Self::as_suffix`] / [`Self::window`] scalar-
+    /// projection accessors on this closed-set typed enum already
+    /// carry, and the paired `pub const fn` [`RateLimit::canonical_unit`]
+    /// typed-`RateLimit`-projection sibling composes through in `const`
+    /// context. Routes byte-for-byte through the peer `pub const fn`
+    /// [`Self::window`] canonical-`Duration` projection so any future
+    /// arm-magnitude edit on the sibling accessor reaches this reverse
+    /// resolver by construction — the `s == Self::<Arm>.window().as_secs()`
+    /// per-arm probes each dispatch through one `pub const fn` on the
+    /// substrate primitive rather than a hand-authored per-arm second-
+    /// magnitude literal that would silently drift on any future
+    /// [`Self::window`] arm-magnitude edit.
+    ///
+    /// Prior to the `const` lift the body dispatched through
+    /// `Self::ALL.iter().copied().find(|u| u.window() == window)` — an
+    /// iterator-driven linear scan whose iterator methods
+    /// (`.iter()` / `.copied()` / `.find()`) and `Duration`-side
+    /// `PartialEq` dispatch each carry non-`const` bounds on stable
+    /// Rust 1.94, so any downstream substrate-side `const`-context
+    /// consumer of the reverse resolver (a module-scope
+    /// `const _:() = assert!(RateLimitUnit::from_window(<canonical>).is_some())`
+    /// invariant pin on a typed fixture, a future M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer admission-
+    /// webhook `const fn` per-`:politicas` canonical-window floor over a
+    /// typed [`RateLimit`] scalar, any future `const fn`
+    /// per-`:contratos`-edge rate-limit-override overlay resolver over
+    /// the substrate primitive that wants to fan on the canonical unit
+    /// at compile time) surfaced as a downstream E0015 far from the
+    /// resolver's own declaration. The `pub const fn` posture closes
+    /// the drift structurally at caixa-core build time.
+    ///
+    /// Pinned load-bearing at the substrate-primitive level by
+    /// [`tests::rate_limit_unit_from_window_accessor_is_const_fn`] (const-
+    /// eval-surface pin via `const fn` wrapper) and
+    /// [`tests::rate_limit_unit_from_window_composes_through_window_accessor`]
+    /// (composition-witness pin against the peer `Self::window` scalar
+    /// dispatch).
     #[must_use]
-    pub fn from_window(window: Duration) -> Option<Self> {
+    pub const fn from_window(window: Duration) -> Option<Self> {
         if window.subsec_nanos() != 0 {
             return None;
         }
-        Self::ALL.iter().copied().find(|u| u.window() == window)
+        // Route through the peer `pub const fn` [`Self::window`]
+        // canonical-`Duration` projection so any future arm-magnitude
+        // edit on the sibling accessor reaches this reverse resolver by
+        // construction — the per-arm `secs` comparison keys off
+        // `Duration::as_secs` (`pub const fn`), not a hand-authored
+        // per-arm second-magnitude literal that would silently drift.
+        let secs = window.as_secs();
+        if secs == Self::Second.window().as_secs() {
+            Some(Self::Second)
+        } else if secs == Self::Minute.window().as_secs() {
+            Some(Self::Minute)
+        } else if secs == Self::Hour.window().as_secs() {
+            Some(Self::Hour)
+        } else {
+            None
+        }
     }
 
     /// Canonical rate-limit `Duration` for a unit suffix, or `None` when
@@ -16428,6 +16503,153 @@ mod tests {
                 parsed, *unit,
                 "RateLimitUnit::from_window(RateLimitUnit::{unit:?}.window()) \
                  must return RateLimitUnit::{unit:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_window_accessor_is_const_fn() {
+        // Fail-before-pass-after pin: witnesses the
+        // [`RateLimitUnit::from_window`] `const`-eval posture via a
+        // `const fn` wrapper `from_window_via_const_fn(window: Duration)
+        // -> Option<RateLimitUnit>` whose body calls
+        // `RateLimitUnit::from_window(window)`, well-formed only when
+        // the callee is itself `const fn` (any future downgrade to
+        // non-`const` fails at caixa-core build time with E0015 `cannot
+        // call non-const function`, strictly stronger than a runtime
+        // `assert!`, side-stepping the destructor-in-const restriction
+        // that blocks direct `const _: Option<RateLimitUnit> =
+        // RateLimitUnit::from_window(...)` items on `Duration`'s
+        // carrier). The runtime body sweeps every closed-set
+        // [`RateLimitUnit::ALL`] arm plus a representative non-canonical
+        // rejection sample (`Duration::from_millis(500)` sub-second
+        // residue) and asserts the wrapped and direct dispatches agree
+        // — a violation means the wrapper stopped compiling under a
+        // future `const`-posture downgrade, or the reverse resolver's
+        // arm-set silently split from the peer `Self::window` emitter's
+        // arm-set. Peer of the sibling
+        // [`crate::supervisor::tests::child_spec_restart_accessor_is_const_fn`]
+        // (152c868) /
+        // [`crate::supervisor::tests::supervisor_spec_estrategia_accessor_is_const_fn`]
+        // (152c868) /
+        // [`entrada_port_accessor_is_const_fn`] (bafa004) /
+        // [`placement_estrategia_accessor_is_const_fn`] (bafa004)
+        // `const`-eval-surface pins on the peer M2 / M3 substrate-
+        // primitive `Copy`-return accessor axes, extended onto the
+        // reverse `Duration → RateLimitUnit` projection axis on the
+        // M3 mesh-slot rate-limit closed-set typed enum.
+        const fn from_window_via_const_fn(window: Duration) -> Option<super::RateLimitUnit> {
+            super::RateLimitUnit::from_window(window)
+        }
+        for unit in super::RateLimitUnit::ALL {
+            let window = unit.window();
+            let via_wrapper = from_window_via_const_fn(window);
+            let direct = super::RateLimitUnit::from_window(window);
+            assert_eq!(
+                via_wrapper, direct,
+                "RateLimitUnit::from_window({window:?}) via const fn \
+                 wrapper must agree with direct dispatch for {unit:?}"
+            );
+            assert_eq!(
+                via_wrapper,
+                Some(*unit),
+                "RateLimitUnit::from_window({window:?}) via const fn \
+                 wrapper must return Some({unit:?}) for the peer \
+                 window() output"
+            );
+        }
+        assert!(from_window_via_const_fn(Duration::from_millis(500)).is_none());
+        assert!(from_window_via_const_fn(Duration::from_secs(30)).is_none());
+    }
+
+    #[test]
+    fn rate_limit_unit_from_window_composes_through_window_accessor() {
+        // Composition-witness pin on the routing-through-peer discipline:
+        // [`RateLimitUnit::from_window`]'s per-arm probes each dispatch
+        // through the peer `pub const fn` [`RateLimitUnit::window`]
+        // canonical-`Duration` projection rather than a hand-authored
+        // per-arm second-magnitude literal — a future arm-magnitude edit
+        // on the sibling `window()` accessor (a `Second → 2s` typo, a
+        // `Hour → 3599s` off-by-one) must therefore reach this reverse
+        // resolver by construction. A pin that hard-coded the three
+        // second-magnitudes here would silently split from the peer
+        // emitter on any such edit; instead, this pin asserts the
+        // composition invariant `from_window(u.window()) == Some(u)`
+        // holds byte-for-byte on every closed-set [`RateLimitUnit::ALL`]
+        // arm — a violation means either the peer `Self::window`
+        // accessor drifted (breaking every downstream consumer that
+        // reads through it), or the reverse resolver stopped routing
+        // through the peer (introducing a hand-authored literal that
+        // silently disagrees with the emitter). Either failure is a
+        // caixa-core-build-time surface, not a downstream renderer
+        // round-trip regression.
+        //
+        // Peer of the sibling
+        // [`crate::render::assert_str_reexport_identity`] discipline on
+        // the substrate-primitive `&'static str` re-export axis and the
+        // [`rate_limit_unit_from_window_and_window_round_trip`]
+        // round-trip pin on the peer projection direction; extends the
+        // one-canonical-dispatch-per-projection discipline onto the
+        // reverse-resolver's per-arm probe axis.
+        for unit in super::RateLimitUnit::ALL {
+            let window_via_peer = unit.window();
+            let resolved = super::RateLimitUnit::from_window(window_via_peer);
+            assert_eq!(
+                resolved,
+                Some(*unit),
+                "RateLimitUnit::from_window(RateLimitUnit::{unit:?}.window()) \
+                 must return Some({unit:?}) — the reverse resolver's per-arm \
+                 probes must route through the peer `Self::window` accessor \
+                 so any future arm-magnitude edit reaches both projection \
+                 directions by construction"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_canonical_unit_accessor_is_const_fn() {
+        // Fail-before-pass-after pin: witnesses the
+        // [`RateLimit::canonical_unit`] `const`-eval posture via a
+        // `const fn` wrapper
+        // `canonical_unit_via_const_fn(rl: &RateLimit) -> Option<RateLimitUnit>`
+        // whose body calls `rl.canonical_unit()`, well-formed only when
+        // the callee is itself `const fn` (any future downgrade to
+        // non-`const` fails at caixa-core build time with E0015 `cannot
+        // call non-const method`). The runtime body sweeps every
+        // closed-set [`RateLimitUnit::ALL`] arm — for each arm,
+        // constructs a typed [`RateLimit`] with the peer `Self::window`
+        // canonical `Duration`, then asserts both the wrapper and the
+        // direct dispatch agree and both return `Some(unit)`. Composes
+        // with the sibling
+        // [`rate_limit_unit_from_window_accessor_is_const_fn`] pin: the
+        // typed [`RateLimit`] projection layer's `const`-posture is
+        // load-bearing on the reverse resolver's `const`-posture, and
+        // both must migrate together (a downgrade of either surface
+        // splits the paired `const`-eval-surface pass on the M3
+        // mesh-slot rate-limit `Duration ↔ Self` bijection).
+        const fn canonical_unit_via_const_fn(
+            rl: &super::RateLimit,
+        ) -> Option<super::RateLimitUnit> {
+            rl.canonical_unit()
+        }
+        for unit in super::RateLimitUnit::ALL {
+            let rl = super::RateLimit {
+                rate: 1,
+                window: unit.window(),
+            };
+            let via_wrapper = canonical_unit_via_const_fn(&rl);
+            let direct = rl.canonical_unit();
+            assert_eq!(
+                via_wrapper, direct,
+                "RateLimit::canonical_unit() via const fn wrapper must \
+                 agree with direct dispatch for {unit:?}"
+            );
+            assert_eq!(
+                via_wrapper,
+                Some(*unit),
+                "RateLimit::canonical_unit() via const fn wrapper must \
+                 return Some({unit:?}) for a RateLimit whose window is \
+                 the peer RateLimitUnit::{unit:?}.window() output"
             );
         }
     }
