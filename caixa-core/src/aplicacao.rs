@@ -658,8 +658,11 @@ impl WitContract {
     /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
     /// docstring already carries.
     #[must_use]
-    pub fn endpoint(&self) -> Option<&str> {
-        self.endpoint.as_deref()
+    pub const fn endpoint(&self) -> Option<&str> {
+        match &self.endpoint {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`:contratos` `:subject` pub-sub-shaped
@@ -736,8 +739,11 @@ impl WitContract {
     /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
     /// docstring already carries.
     #[must_use]
-    pub fn subject(&self) -> Option<&str> {
-        self.subject.as_deref()
+    pub const fn subject(&self) -> Option<&str> {
+        match &self.subject {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`:contratos` `:slot` key/value-store-
@@ -816,8 +822,11 @@ impl WitContract {
     /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
     /// docstring already carries.
     #[must_use]
-    pub fn slot(&self) -> Option<&str> {
-        self.slot.as_deref()
+    pub const fn slot(&self) -> Option<&str> {
+        match &self.slot {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`:contratos` `(caller, callee)` owned-form
@@ -5448,8 +5457,11 @@ impl Placement {
     /// maps onto the canonical MESH-COMPOSITION §II.4 vocabulary the
     /// slot's docstring already carries.
     #[must_use]
-    pub fn shard_key(&self) -> Option<&str> {
-        self.shard_key.as_deref()
+    pub const fn shard_key(&self) -> Option<&str> {
+        match &self.shard_key {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`:placement` `:affinity` M3-Adaptive-
@@ -5513,8 +5525,11 @@ impl Placement {
     /// identity name maps onto the canonical MESH-COMPOSITION §II.4
     /// vocabulary the slot's docstring already carries.
     #[must_use]
-    pub fn affinity(&self) -> Option<&str> {
-        self.affinity.as_deref()
+    pub const fn affinity(&self) -> Option<&str> {
+        match &self.affinity {
+            Some(s) => Some(s.as_str()),
+            None => None,
+        }
     }
 
     /// Substrate-canonical per-`:placement` `:estrategia` distribution-
@@ -11900,6 +11915,109 @@ mod tests {
             assert_eq!(entrada_destination_via_const_fn(&e), e.destination());
             assert_eq!(e.hostname(), host);
             assert_eq!(e.destination(), para);
+        }
+    }
+
+    #[test]
+    fn m3_option_string_scalar_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the five M3 mesh-slot
+        // `Option<String> → Option<&str>` scalar accessors
+        // ([`WitContract::endpoint`] / [`WitContract::subject`] /
+        // [`WitContract::slot`] on the per-`:contratos` HTTP /
+        // pub-sub / key-value payload-carrier trio,
+        // [`Placement::shard_key`] / [`Placement::affinity`] on the
+        // per-`:placement` Akka-sharding-key + Adaptive-compression-
+        // hint pair). Each accessor destructures the typed slot's
+        // `Option<String>` storage through the `match &self.<field> {
+        // Some(s) => Some(s.as_str()), None => None }` shape —
+        // routing through [`String::as_str`] (const-stable since Rust
+        // 1.87, well within the workspace MSRV) rather than the
+        // non-const [`Option::as_deref`] the pre-lift bodies carried
+        // — and any future accidental downgrade to non-`const` fails
+        // the corresponding `<name>_via_const_fn` wrapper at
+        // caixa-core build time with E0015 (`cannot call non-const
+        // method`), strictly stronger than a runtime `assert!` and
+        // strictly stronger than a module-scope `const _: () =
+        // assert!(…)` pin (which cannot be formed on `&WitContract`
+        // / `&Placement` fixtures because the types' `String` /
+        // `Option<String>` carriers rule out `const`-context value
+        // construction; the `const fn` wrapper is the load-bearing
+        // shape that side-steps the destructor-in-const restriction
+        // on the value axis while still pinning the `const`-fn
+        // posture on the callee — mirror of the sibling
+        // [`wit_contract_pre_projection_accessor_family_is_const_fn`]
+        // (279823b) and
+        // [`m3_membros_and_entrada_string_scalar_accessor_family_is_const_fn`]
+        // (29c5d7e) pins on the peer `String → &str` axes at the same
+        // structs).
+        //
+        // Peer of the sibling per-`Caixa` `Option<String> →
+        // Option<&str>` accessor family pin
+        // [`crate::manifest::tests::caixa_option_string_scalar_accessor_family_is_const_fn`]
+        // on the top-level manifest's optional universal-axis surface
+        // (`:licenca` / `:repositorio` / `:descricao` / `:edicao` /
+        // `:restart-window`).
+        const fn wit_endpoint_via_const_fn(w: &WitContract) -> Option<&str> {
+            w.endpoint()
+        }
+        const fn wit_subject_via_const_fn(w: &WitContract) -> Option<&str> {
+            w.subject()
+        }
+        const fn wit_slot_via_const_fn(w: &WitContract) -> Option<&str> {
+            w.slot()
+        }
+        const fn placement_shard_key_via_const_fn(p: &Placement) -> Option<&str> {
+            p.shard_key()
+        }
+        const fn placement_affinity_via_const_fn(p: &Placement) -> Option<&str> {
+            p.affinity()
+        }
+        // Sweep every closed shape-arm partition on the
+        // per-`:contratos` payload-carrier trio: HTTP (`:endpoint`
+        // Some, sibling pair None), pub-sub (`:subject` Some, sibling
+        // pair None), key-value (`:slot` Some, sibling pair None),
+        // and Capability (all three None) so each accessor's
+        // Some/None arm carries a pin through the const dispatch.
+        for (wit, endpoint, subject, slot) in [
+            ("wasi:http/proxy", Some("/api"), None, None),
+            ("nats:pub-sub", None, Some("orders.paid"), None),
+            ("wasi:keyvalue/store", None, None, Some("checkout/$orderId")),
+            ("custom:capability-only", None, None, None),
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert_eq!(wit_endpoint_via_const_fn(&c), c.endpoint());
+            assert_eq!(wit_subject_via_const_fn(&c), c.subject());
+            assert_eq!(wit_slot_via_const_fn(&c), c.slot());
+            assert_eq!(c.endpoint(), endpoint);
+            assert_eq!(c.subject(), subject);
+            assert_eq!(c.slot(), slot);
+        }
+        // Sweep both `Some`/`None` arms on each per-`:placement`
+        // optional-scalar so the shard-key + affinity pair carries a
+        // const-dispatch pin on both arms.
+        for (shard_key, affinity) in [
+            (Some("tenantId"), Some("data-locality")),
+            (Some("$tenantId"), None),
+            (None, Some("low-latency")),
+            (None, None),
+        ] {
+            let p = Placement {
+                estrategia: PlacementStrategy::default(),
+                clusters: vec![],
+                affinity: affinity.map(str::to_string),
+                shard_key: shard_key.map(str::to_string),
+            };
+            assert_eq!(placement_shard_key_via_const_fn(&p), p.shard_key());
+            assert_eq!(placement_affinity_via_const_fn(&p), p.affinity());
+            assert_eq!(p.shard_key(), shard_key);
+            assert_eq!(p.affinity(), affinity);
         }
     }
 
