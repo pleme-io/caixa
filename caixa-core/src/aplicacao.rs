@@ -409,8 +409,25 @@ impl WitContract {
     /// axis — same "one typed dispatch on the substrate primitive,
     /// thin projections at each consumer" discipline extended onto the
     /// per-`:contratos` caller-Servico byte-string axis.
+    ///
+    /// Declared `pub const fn` — the body composes exclusively through
+    /// the `pub const fn` [`String::as_str`] projection (const-stable
+    /// since Rust 1.87, well within the workspace MSRV), so every
+    /// downstream `const`-context consumer of the per-`:contratos`
+    /// caller-Servico byte-string reaches through the same substrate-
+    /// primitive dispatch at const-eval time as at runtime. Peer of
+    /// the sibling `pub const fn` [`Self::destination`] /
+    /// [`Self::world_ref`] scalar accessors on the same
+    /// per-`:contratos` byte-string trio (the family closure the
+    /// [`wit_contract_pre_projection_accessor_family_is_const_fn`] pin
+    /// locks load-bearing), and mirror on the method-surface of the
+    /// sibling free-function [`wit_shape_matches`] +
+    /// [`wit_shape_is_http`] / [`wit_shape_is_pubsub`] /
+    /// [`wit_shape_is_store`] / [`wit_shape_is_capability`] `const`-
+    /// eval-surface pass (d46420c) on the raw `&str → bool` WIT-shape
+    /// dispatch family.
     #[must_use]
-    pub fn source(&self) -> &str {
+    pub const fn source(&self) -> &str {
         self.de.as_str()
     }
 
@@ -470,8 +487,15 @@ impl WitContract {
     /// `(:de, :para)` L4 port axis to the same typed dispatch the peer
     /// `HTTPRoute` `backendRefs[0].port` axis reaches through with
     /// `spec.port_for_destination(entrada.destination())`.
+    ///
+    /// Declared `pub const fn` — sibling in `const`-eval posture to the
+    /// peer `pub const fn` [`Self::source`] / [`Self::world_ref`]
+    /// per-`:contratos` byte-string scalar accessors, all three
+    /// projecting through the `pub const fn` [`String::as_str`]
+    /// (const-stable since Rust 1.87). See [`Self::source`] for the
+    /// family-closure rationale.
     #[must_use]
-    pub fn destination(&self) -> &str {
+    pub const fn destination(&self) -> &str {
         self.para.as_str()
     }
 
@@ -535,8 +559,21 @@ impl WitContract {
     /// scalar (the WIT-world-reference arm).
     ///
     /// [fag]: caixa-feira/src/cmd/app.rs
+    ///
+    /// Declared `pub const fn` — sibling in `const`-eval posture to the
+    /// peer `pub const fn` [`Self::source`] / [`Self::destination`]
+    /// per-`:contratos` byte-string scalar accessors on the trio, and
+    /// the load-bearing enabler for the paired `pub const fn`
+    /// [`Self::is_http`] / [`Self::is_pubsub`] / [`Self::is_store`] /
+    /// [`Self::is_capability`] WIT-shape-predicate family (each
+    /// composes as `wit_shape_is_<arm>(self.world_ref())` and inherits
+    /// the `const`-eval posture by construction once this accessor
+    /// carries it). See [`Self::source`] for the family-closure
+    /// rationale and the paired
+    /// [`wit_contract_pre_projection_accessor_family_is_const_fn`] pin
+    /// for the load-bearing witness.
     #[must_use]
-    pub fn world_ref(&self) -> &str {
+    pub const fn world_ref(&self) -> &str {
         self.wit.as_str()
     }
 
@@ -956,20 +993,44 @@ impl WitContract {
     }
 
     /// True when this contract targets an HTTP-shaped WIT world.
+    ///
+    /// Declared `pub const fn` — routes through the paired `pub const
+    /// fn` [`Self::world_ref`] scalar accessor and the substrate's
+    /// `pub const fn` free-function classifier [`wit_shape_is_http`]
+    /// (d46420c). Sibling in `const`-eval posture to the peer
+    /// `pub const fn` [`Self::is_pubsub`] / [`Self::is_store`] /
+    /// [`Self::is_capability`] WIT-shape-predicate family; the closed
+    /// 4-arm partition on the raw `:contratos :wit` axis now carries
+    /// the same `const`-eval-surface posture as the free-function
+    /// classifier family it composes through. Pinned load-bearing by
+    /// the [`wit_contract_pre_projection_accessor_family_is_const_fn`]
+    /// test (a future accidental downgrade to non-`const` fires E0015
+    /// at the corresponding `<arm>_via_const_fn` wrapper at caixa-core
+    /// build time).
     #[must_use]
-    pub fn is_http(&self) -> bool {
+    pub const fn is_http(&self) -> bool {
         wit_shape_is_http(self.world_ref())
     }
 
     /// True when this contract targets a pub-sub-shaped WIT world.
+    ///
+    /// Declared `pub const fn` — sibling in `const`-eval posture to
+    /// the peer `pub const fn` [`Self::is_http`] / [`Self::is_store`] /
+    /// [`Self::is_capability`] WIT-shape-predicate family. See
+    /// [`Self::is_http`] for the family-closure rationale.
     #[must_use]
-    pub fn is_pubsub(&self) -> bool {
+    pub const fn is_pubsub(&self) -> bool {
         wit_shape_is_pubsub(self.world_ref())
     }
 
     /// True when this contract targets a key/value-shaped WIT world.
+    ///
+    /// Declared `pub const fn` — sibling in `const`-eval posture to
+    /// the peer `pub const fn` [`Self::is_http`] / [`Self::is_pubsub`] /
+    /// [`Self::is_capability`] WIT-shape-predicate family. See
+    /// [`Self::is_http`] for the family-closure rationale.
     #[must_use]
-    pub fn is_store(&self) -> bool {
+    pub const fn is_store(&self) -> bool {
         wit_shape_is_store(self.world_ref())
     }
 
@@ -1073,8 +1134,14 @@ impl WitContract {
     /// is where the [`AplicacaoError::EmptyWit`] /
     /// [`AplicacaoError::ContratoWitInvalid`] diagnostic surfaces — this
     /// predicate is the classifier, not the validator.
+    ///
+    /// Declared `pub const fn` — closes the WIT-shape-predicate
+    /// family's `const`-eval-surface pass at the fourth (payload-less)
+    /// arm; peer of the sibling `pub const fn` [`Self::is_http`] /
+    /// [`Self::is_pubsub`] / [`Self::is_store`] payload-arm predicates.
+    /// See [`Self::is_http`] for the family-closure rationale.
     #[must_use]
-    pub fn is_capability(&self) -> bool {
+    pub const fn is_capability(&self) -> bool {
         wit_shape_is_capability(self.world_ref())
     }
 
@@ -11648,6 +11715,112 @@ mod tests {
         };
         assert!(cap.is_capability());
         assert!(cap.target().unwrap().is_capability());
+    }
+
+    #[test]
+    fn wit_contract_pre_projection_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the [`WitContract`] pre-
+        // projection accessor family's `const`-eval-surface posture.
+        // Each of the three per-`:contratos` byte-string scalar
+        // accessors ([`WitContract::source`] / [`WitContract::destination`]
+        // / [`WitContract::world_ref`], each projecting through
+        // `String::as_str` — const-stable since Rust 1.87, well within
+        // the workspace MSRV) and each of the four peer WIT-shape
+        // predicates ([`WitContract::is_http`] /
+        // [`WitContract::is_pubsub`] / [`WitContract::is_store`] /
+        // [`WitContract::is_capability`], each composing
+        // `wit_shape_is_<arm>(self.world_ref())` on the `pub const fn`
+        // free-function classifier family the sibling
+        // [`wit_shape_classifier_family_is_const_fn`] pin already
+        // anchors on the raw `&str → bool` axis) must be `pub const fn`
+        // — any future accidental downgrade to non-`const` fails the
+        // `const fn` wrappers below at caixa-core build time with E0015
+        // (`cannot call non-const function`), strictly stronger than a
+        // runtime `assert!` and strictly stronger than a
+        // module-scope `const _: () = assert!(…)` pin (which cannot be
+        // formed on a `&WitContract` fixture because the type's
+        // `String` / `Option<String>` carriers rule out `const`-context
+        // construction; the `const fn` wrapper is the load-bearing
+        // shape that side-steps the destructor-in-const restriction on
+        // the value axis while still pinning the `const`-fn posture on
+        // the callee).
+        //
+        // Peer of the sibling free-function classifier pin
+        // [`wit_shape_classifier_family_is_const_fn`] (d46420c) on the
+        // raw `&str → bool` axis — this pin extends the same
+        // `const`-eval-surface discipline onto the peer method surface
+        // that composes through those free-function classifiers, and
+        // simultaneously onto the underlying per-`:contratos`
+        // byte-string scalar-accessor trio each predicate reads
+        // through. Sibling of the peer M3
+        // [`rate_limit_unit_from_window_accessor_is_const_fn`] /
+        // [`rate_limit_canonical_unit_accessor_is_const_fn`] (974bbd8),
+        // M2
+        // [`child_spec_restart_accessor_is_const_fn`] /
+        // [`supervisor_spec_estrategia_accessor_is_const_fn`] (152c868),
+        // and M3
+        // [`placement_estrategia_accessor_is_const_fn`] /
+        // [`entrada_port_accessor_is_const_fn`] (bafa004) pins on the
+        // sibling `const`-eval-surface-pass axes.
+        const fn source_via_const_fn(c: &WitContract) -> &str {
+            c.source()
+        }
+        const fn destination_via_const_fn(c: &WitContract) -> &str {
+            c.destination()
+        }
+        const fn world_ref_via_const_fn(c: &WitContract) -> &str {
+            c.world_ref()
+        }
+        const fn is_http_via_const_fn(c: &WitContract) -> bool {
+            c.is_http()
+        }
+        const fn is_pubsub_via_const_fn(c: &WitContract) -> bool {
+            c.is_pubsub()
+        }
+        const fn is_store_via_const_fn(c: &WitContract) -> bool {
+            c.is_store()
+        }
+        const fn is_capability_via_const_fn(c: &WitContract) -> bool {
+            c.is_capability()
+        }
+        // Sweep one canonical accept-set sample per WIT-shape arm plus
+        // a payload-less capability sample, asserting the wrapper and
+        // direct dispatches agree byte-for-byte across the closed
+        // 4-arm partition on both the scalar-accessor trio and the
+        // WIT-shape-predicate family.
+        for (wit, is_http, is_pubsub, is_store, is_capability) in [
+            ("wasi:http/proxy", true, false, false, false),
+            ("http:incoming", true, false, false, false),
+            ("nats:events", false, true, false, false),
+            ("kafka:topic", false, true, false, false),
+            ("wasi:keyvalue/store", false, false, true, false),
+            ("kv:cache", false, false, true, false),
+            ("custom:capability-only", false, false, false, true),
+            ("", false, false, false, true),
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: wit.into(),
+                endpoint: None,
+                subject: None,
+                slot: None,
+            };
+            assert_eq!(source_via_const_fn(&c), c.source());
+            assert_eq!(destination_via_const_fn(&c), c.destination());
+            assert_eq!(world_ref_via_const_fn(&c), c.world_ref());
+            assert_eq!(is_http_via_const_fn(&c), c.is_http());
+            assert_eq!(is_pubsub_via_const_fn(&c), c.is_pubsub());
+            assert_eq!(is_store_via_const_fn(&c), c.is_store());
+            assert_eq!(is_capability_via_const_fn(&c), c.is_capability());
+            assert_eq!(c.source(), "cart");
+            assert_eq!(c.destination(), "catalog");
+            assert_eq!(c.world_ref(), wit);
+            assert_eq!(c.is_http(), is_http);
+            assert_eq!(c.is_pubsub(), is_pubsub);
+            assert_eq!(c.is_store(), is_store);
+            assert_eq!(c.is_capability(), is_capability);
+        }
     }
 
     #[test]
