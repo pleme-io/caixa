@@ -66,26 +66,56 @@ pub use caixa_core::OCI_SCHEME_PREFIX;
 /// past the point Helm has already given up on the install (a wasted
 /// wall-clock the operator stops the ephemeral timer against).
 ///
-/// Prior to this lift the same `"25m"` byte-string sat inline at
-/// both the `AplicacaoIntent.install_timeout` construction site and
-/// the `Boundary.timeout` construction site in [`process_for_aplicacao`],
-/// plus the paired `assert_eq!(a.install_timeout.as_deref(), Some("25m"))`
-/// test-side probe — a 3-site duplication of the load-bearing wall-clock
-/// scalar-value whose byte-shape had no compile-time link. A future
-/// per-substrate wall-clock-cap migration (`"25m"` → `"30m"` on longer
+/// Re-export of the canonical
+/// [`caixa_core::DEFAULT_APLICACAO_INSTALL_TIMEOUT`] so the
+/// install-wall-clock-cap scalar lives in exactly one place across the
+/// substrate — this crate's `AplicacaoIntent.install_timeout` +
+/// `Boundary.timeout` construction sites in [`process_for_aplicacao`]
+/// and every future substrate-side install-wall-clock-cap consumer (the
+/// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+/// admission-webhook install-cap floor, the future per-cluster snapshot
+/// bundle emitter's per-`Process`-CR install-timeout carrier, the future
+/// per-`:placement`-scoped install-timeout overlay the operator pins
+/// through) all consult the same `&'static str`, so a future substrate-
+/// side install-wall-clock-cap migration (`"25m"` → `"30m"` on longer
 /// chart install cycles, `"25m"` → `"15m"` on faster ephemeral turnaround
-/// SLAs) would have required a coordinated three-way edit whose miss
-/// at any one site silently emitted a `Process` whose outer boundary
-/// disagreed with its inner Helm budget by construction. Every consumer
-/// now routes through this `&'static str`, so the same migration is a
-/// one-line edit on the const.
+/// SLAs) is a one-line edit on the canonical
+/// [`caixa_core::DEFAULT_APLICACAO_INSTALL_TIMEOUT`] declaration, not a
+/// coordinated rewrite across a `caixa-tatara`-owned symbol and every
+/// future cross-crate consumer that would otherwise reach across the
+/// crate boundary.
 ///
-/// Peer to the sibling [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`]
-/// / [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] lifts
-/// on the canonical Flux-v2-emit-side scalar-value-default surface —
-/// each pinned by a single canonical const the tatara / Flux emitters
-/// jointly consult.
-pub const DEFAULT_APLICACAO_INSTALL_TIMEOUT: &str = "25m";
+/// Prior to this canonicalization the const lived as a crate-local
+/// `pub const` at `caixa-tatara/src/lib.rs:88` even though its role — a
+/// canonical substrate-side wall-clock cap on the same footing as the
+/// sibling [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] /
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] /
+/// [`caixa_core::DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] canonical Flux-v2-
+/// emit-side scalar-value-default surface — was a substrate-canonical
+/// scalar-value-default whose residence at the renderer crate rather
+/// than the substrate primitive was the drift footgun a future second
+/// cross-crate consumer would surface as either a coordinated cross-
+/// crate rewrite or a re-declared sibling `pub const
+/// DEFAULT_APLICACAO_INSTALL_TIMEOUT: &str = "25m"` at its own crate
+/// root that happened to carry the same string at source but pointed at
+/// a different `&'static str` allocation, exactly the drift the
+/// [`caixa_core::assert_str_reexport_identity`] helper's docstring names
+/// as the canonical footgun the substrate-primitive-lift discipline
+/// closes.
+///
+/// The prior 3-site duplication inside this crate — the
+/// `AplicacaoIntent.install_timeout` construction site, the
+/// `Boundary.timeout` construction site, and the paired
+/// `assert_eq!(a.install_timeout.as_deref(), Some("25m"))` test-side
+/// probe — was closed on the 813343f original in-crate lift. This
+/// canonicalization takes the same const and moves its residence from
+/// the renderer crate onto the substrate primitive so every future
+/// cross-crate consumer inherits the same value by construction. Peer
+/// with the sibling [`caixa_core::DEFAULT_LIBRARY_NAME`] canonicalization
+/// on the same "the substrate-canonical const lives in caixa-core, the
+/// renderer crate re-exports for local ergonomics" residence-of-a-
+/// substrate-primitive discipline.
+pub use caixa_core::DEFAULT_APLICACAO_INSTALL_TIMEOUT;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -701,6 +731,46 @@ mod tests {
         // fires at test time when a future accidental edit changes
         // the const's value.
         assert_eq!(DEFAULT_APLICACAO_INSTALL_TIMEOUT, "25m");
+    }
+
+    #[test]
+    fn default_aplicacao_install_timeout_re_export_points_at_caixa_core_canonical() {
+        // The crate's [`DEFAULT_APLICACAO_INSTALL_TIMEOUT`] was
+        // canonicalized from a local `pub const DEFAULT_APLICACAO_INSTALL_TIMEOUT:
+        // &str = "25m"` at `caixa-tatara/src/lib.rs:88` to a re-export
+        // of [`caixa_core::DEFAULT_APLICACAO_INSTALL_TIMEOUT`] so the
+        // substrate-canonical per-`Process` install-wall-clock-cap scalar
+        // lives in exactly one place across every substrate-side
+        // consumer — this crate's paired `AplicacaoIntent.install_timeout`
+        // + `Boundary.timeout` construction sites in
+        // [`process_for_aplicacao`] and every future cross-crate
+        // consumer (the future M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+        // admission-webhook install-cap floor, the future per-cluster
+        // snapshot bundle emitter's per-`Process`-CR install-timeout
+        // carrier, the future per-`:placement`-scoped install-timeout
+        // overlay the operator pins through). Pin the equality + `&'static`
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const DEFAULT_APLICACAO_INSTALL_TIMEOUT: &str =
+        // "…"` at this crate — the canonical drift footgun where a
+        // sibling local `pub const` could happen to carry the same
+        // string at the source while pointing at a different
+        // `&'static` allocation — is a build-time test failure naming
+        // the offending drift, not a silent apply-time wall-clock-cap
+        // divergence between the two composition sites this crate
+        // hosts. Peer to the sibling
+        // [`caixa_helm::tests::default_library_name_re_export_points_at_caixa_core_canonical`]
+        // / [`caixa_flux::tests::default_library_name_re_export_points_at_caixa_core_canonical`]
+        // pins on the sibling
+        // [`caixa_core::DEFAULT_LIBRARY_NAME`]-canonicalization axis;
+        // this pin closes the analogous re-export identity axis on the
+        // [`caixa_core::DEFAULT_APLICACAO_INSTALL_TIMEOUT`]
+        // canonicalization.
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_APLICACAO_INSTALL_TIMEOUT",
+            DEFAULT_APLICACAO_INSTALL_TIMEOUT,
+            caixa_core::DEFAULT_APLICACAO_INSTALL_TIMEOUT,
+        );
     }
 
     #[test]
