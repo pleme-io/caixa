@@ -178,6 +178,77 @@ pub fn wit_shape_is_store(wit: &str) -> bool {
     wit_shape_matches(wit, WIT_STORE_SHAPE_PREFIXES)
 }
 
+/// True when `wit` — a raw `:contratos :wit` value — targets *none* of
+/// the three known payload-shape WIT worlds; the payload-less
+/// capability arm of the 4-way WIT-shape partition on the raw
+/// `:contratos :wit` axis. Peer of [`wit_shape_is_http`] /
+/// [`wit_shape_is_pubsub`] / [`wit_shape_is_store`] on the shape-
+/// dispatch axis — closes the free-function classifier family the
+/// three payload-arm predicates opened onto the exact-inverse
+/// disjunction of the trio, so any downstream consumer that must
+/// classify a raw `:wit` `&str` onto the payload-less capability arm
+/// (a future substrate-side capability-shape-only emitter — the M4
+/// per-Aplicacao WIT-registry capability-import materializer, the
+/// future `feira app graph --capability` filter, the future per-
+/// cluster capability-scope reconciler that skips L4/L7 emission for
+/// payload-less edges, the future `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR admission webhook's per-shape histogram) reaches for exactly
+/// one typed dispatch at the substrate primitive rather than an
+/// open-coded per-consumer `!wit_shape_is_http(wit) &&
+/// !wit_shape_is_pubsub(wit) && !wit_shape_is_store(wit)` triplet
+/// negation — each of which would silently misclassify a future 4th
+/// payload-arm addition (a hypothetical `wasi:sockets/*` transport-
+/// layer shape, an `oci:*` capability-import carrier per the sibling
+/// [`wit_shape_matches`] docstring's trajectory bullet) as
+/// capability without a compile-time signal at the consumer site.
+///
+/// Fourth arm on the free-function WIT-shape-predicate family — closes
+/// the {[`wit_shape_is_http`], [`wit_shape_is_pubsub`],
+/// [`wit_shape_is_store`]} trio into a 4-way partition witness on the
+/// raw `:contratos :wit` `&str` axis, mirroring the paired sibling
+/// [`WitContract`]-surface [`WitContract::is_capability`] predicate and
+/// the post-projection [`WitTarget`]-side
+/// `gen_platform::IsVariant`-derived [`WitTarget::is_capability`]
+/// (7f6aa98 `IsVariant` derive lift on the peer arm-set). Every
+/// [`WitTarget`] variant now carries a matched peer predicate on both
+/// the raw `&str` axis (this function + [`wit_shape_is_http`] /
+/// [`wit_shape_is_pubsub`] / [`wit_shape_is_store`]) and the
+/// [`WitContract`] surface (the sibling 4-arm predicate family
+/// [`WitContract::is_http`] / [`WitContract::is_pubsub`] /
+/// [`WitContract::is_store`] / [`WitContract::is_capability`]),
+/// pinned in load-bearing by the sibling
+/// [`tests::wit_shape_is_capability_partitions_the_wit_shape_space_on_the_raw_str_axis`]
+/// partition-witness pin and the peer
+/// [`tests::wit_contract_shape_methods_delegate_to_free_functions`]
+/// delegation pin.
+///
+/// Prior to this lift the "not one of the three known payload shapes"
+/// classification only reached the raw `&str` axis by materializing a
+/// scratch [`WitContract`] and delegating through
+/// [`WitContract::is_capability`] — a five-field constructor at every
+/// classification point for a pure `&str → bool` question, and a
+/// dependency on the payload-carrier scalar layout the classifier
+/// does not read. Same "one canonical combinator, thin per-arm
+/// projections" discipline the peer [`wit_shape_is_http`] /
+/// [`wit_shape_is_pubsub`] / [`wit_shape_is_store`] trio already
+/// established, extended to close the 4-arm partition on the raw
+/// `&str` axis.
+///
+/// Note: purely syntactic classification on the negated `:wit` prefix-
+/// set — unlike [`WitContract::target`], which additionally rejects
+/// value-shape-invalid `:wit` strings (uppercase, hyphen-for-colon
+/// typo, empty package) via [`crate::render::is_wit_world_ref`] and
+/// payload-shape mismatches. An empty or structurally malformed `wit`
+/// string returns `true` here (the prefix set matches nothing), and
+/// the surrounding validate-side gate cascade is where the
+/// [`AplicacaoError::EmptyWit`] / [`AplicacaoError::ContratoWitInvalid`]
+/// diagnostic surfaces — this function is the classifier, not the
+/// validator.
+#[must_use]
+pub fn wit_shape_is_capability(wit: &str) -> bool {
+    !wit_shape_is_http(wit) && !wit_shape_is_pubsub(wit) && !wit_shape_is_store(wit)
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -895,7 +966,7 @@ impl WitContract {
     /// predicate is the classifier, not the validator.
     #[must_use]
     pub fn is_capability(&self) -> bool {
-        !self.is_http() && !self.is_pubsub() && !self.is_store()
+        wit_shape_is_capability(self.world_ref())
     }
 
     /// True when this contract's caller equals its callee — a
@@ -10874,7 +10945,152 @@ mod tests {
                 assert_eq!(c.is_http(), wit_shape_is_http(&c.wit));
                 assert_eq!(c.is_pubsub(), wit_shape_is_pubsub(&c.wit));
                 assert_eq!(c.is_store(), wit_shape_is_store(&c.wit));
+                assert_eq!(c.is_capability(), wit_shape_is_capability(&c.wit));
             }
+        }
+        // Capability-arm delegation sweep: two representative
+        // Capability-shaped `:wit` values (a bare non-prefix-matching
+        // WIT world, the deliberately-shaped empty string
+        // [`WitContract::is_capability`]'s docstring calls out as
+        // syntactically Capability). Extends the free-function
+        // delegation pin onto the fourth arm so a future
+        // [`WitContract::is_capability`] rewrite that grew an inline
+        // prefix-set scan (rather than delegating through
+        // [`wit_shape_is_capability`]) drifts loudly here on the first
+        // Capability-shaped sample.
+        for wit in ["custom:capability-only", ""] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: wit.into(),
+                endpoint: None,
+                subject: None,
+                slot: None,
+            };
+            assert_eq!(c.is_capability(), wit_shape_is_capability(&c.wit));
+        }
+    }
+
+    #[test]
+    fn wit_shape_is_capability_partitions_the_wit_shape_space_on_the_raw_str_axis() {
+        // 4-way partition-witness pin on the raw `&str` axis: for every
+        // canonical prefix in the three payload-arm accept-sets,
+        // exactly one of the four [`wit_shape_is_http`] /
+        // [`wit_shape_is_pubsub`] / [`wit_shape_is_store`] /
+        // [`wit_shape_is_capability`] free functions returns `true` and
+        // the other three return `false` — the four-arm partition
+        // witness that locks the free-function WIT-shape-classifier
+        // family into a partition of the `:contratos :wit` axis
+        // load-bearing. Peer of the sibling [`WitContract`]-surface
+        // [`wit_contract_is_capability_partitions_the_wit_shape_space`]
+        // partition pin — extends the discipline onto the raw `&str`
+        // axis so any future arm addition (a hypothetical
+        // `wasi:sockets/*` transport-layer shape, an `oci:*`
+        // capability-import carrier per the sibling
+        // [`wit_shape_matches`] docstring's trajectory bullet) that
+        // landed on one of the payload-arm free functions without
+        // shrinking [`wit_shape_is_capability`]'s accept-set surfaces
+        // here as two arms returning `true` simultaneously at
+        // caixa-core build time rather than a silent per-consumer
+        // misclassification at renderer emit time.
+        for shape_set in [
+            WIT_HTTP_SHAPE_PREFIXES,
+            WIT_PUBSUB_SHAPE_PREFIXES,
+            WIT_STORE_SHAPE_PREFIXES,
+        ] {
+            for prefix in shape_set {
+                let wit = format!("{prefix}x");
+                let hits = [
+                    wit_shape_is_http(&wit),
+                    wit_shape_is_pubsub(&wit),
+                    wit_shape_is_store(&wit),
+                    wit_shape_is_capability(&wit),
+                ]
+                .iter()
+                .filter(|&&b| b)
+                .count();
+                assert_eq!(
+                    hits,
+                    1,
+                    "raw-&str WIT-shape 4-way predicate partition must \
+                     admit exactly one arm per canonical prefix; got {hits} \
+                     hits at wit={wit:?} (is_http={}, is_pubsub={}, is_store={}, \
+                     is_capability={})",
+                    wit_shape_is_http(&wit),
+                    wit_shape_is_pubsub(&wit),
+                    wit_shape_is_store(&wit),
+                    wit_shape_is_capability(&wit),
+                );
+            }
+        }
+        // Capability-arm sweep on the raw `&str` axis: two
+        // representative Capability-shaped `:wit` values (a bare non-
+        // prefix-matching WIT world, the deliberately-shaped empty
+        // string the pure classifier still admits per
+        // [`wit_shape_is_capability`]'s docstring). Both must land on
+        // the fourth arm exclusively so the partition witness holds
+        // across the full 4-arm closure on the raw `&str` axis.
+        for wit in ["custom:capability-only", ""] {
+            let hits = [
+                wit_shape_is_http(wit),
+                wit_shape_is_pubsub(wit),
+                wit_shape_is_store(wit),
+                wit_shape_is_capability(wit),
+            ]
+            .iter()
+            .filter(|&&b| b)
+            .count();
+            assert_eq!(
+                hits, 1,
+                "raw-&str WIT-shape 4-way predicate partition must \
+                 admit exactly one arm on Capability-shaped wit={wit:?}"
+            );
+            assert!(
+                wit_shape_is_capability(wit),
+                "wit={wit:?} must project onto the Capability arm on the raw-&str axis"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_is_capability_composes_through_payload_arm_predicate_negation() {
+        // Composition-witness pin: [`wit_shape_is_capability`] is the
+        // exact-inverse disjunction of the sibling payload-arm free-
+        // function trio [`wit_shape_is_http`] / [`wit_shape_is_pubsub`]
+        // / [`wit_shape_is_store`]. A future reimplementation that
+        // grew its own prefix-set scan (e.g. inlining a fourth
+        // [`WIT_CAPABILITY_SHAPE_PREFIXES`] const the substrate does
+        // not own today) rather than delegating to the sibling trio
+        // would drift loudly here — the composition contract binds the
+        // fourth-arm free-function predicate to the exact-inverse of
+        // the three payload-arm free-function predicates, so any
+        // rebrand of any prefix-set const flows through
+        // [`wit_shape_is_capability`] by construction without a
+        // coordinated per-consumer rewrite. Peer of the sibling
+        // [`WitContract`]-surface
+        // [`wit_contract_is_capability_composes_through_shape_predicate_negation`]
+        // composition pin — extends the discipline onto the raw
+        // `&str` axis.
+        let mut cases: Vec<String> = Vec::new();
+        for shape_set in [
+            WIT_HTTP_SHAPE_PREFIXES,
+            WIT_PUBSUB_SHAPE_PREFIXES,
+            WIT_STORE_SHAPE_PREFIXES,
+        ] {
+            for prefix in shape_set {
+                cases.push(format!("{prefix}x"));
+            }
+        }
+        cases.push("custom:capability-only".to_string());
+        cases.push(String::new());
+        for wit in cases {
+            assert_eq!(
+                wit_shape_is_capability(&wit),
+                !wit_shape_is_http(&wit) && !wit_shape_is_pubsub(&wit) && !wit_shape_is_store(&wit),
+                "wit_shape_is_capability must equal \
+                 !wit_shape_is_http() && !wit_shape_is_pubsub() && !wit_shape_is_store() \
+                 at wit={wit:?}"
+            );
         }
     }
 
