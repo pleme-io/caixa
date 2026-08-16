@@ -176,10 +176,28 @@ pub struct ChartDependency {
     pub alias: Option<String>,
 }
 
-/// Repository for the `pleme-computeunit` library chart. Defaults to the
-/// helmworks file:// path used by lareira-* charts; consumers can override
-/// via `RenderOpts::library_repo` to point at the published OCI registry.
-pub const DEFAULT_LIBRARY_REPO: &str = "file://../pleme-computeunit";
+/// Canonical Helm 3 `Chart.yaml` `dependencies[0].repository` chart-source
+/// URL every rendered `lareira-<nome>` chart declares against the
+/// substrate-canonical [`DEFAULT_LIBRARY_NAME`] library chart — the
+/// `file://` per-chart-dep resolver scheme pointing at the sibling
+/// helmworks directory on disk that `helm dependency build` vendors the
+/// library chart bytes from. Re-export of the lifted
+/// [`caixa_core::DEFAULT_LIBRARY_REPO`] so the load-bearing per-dep
+/// resolver URL lives in exactly one place across every caixa renderer —
+/// the caixa-helm `RenderOpts::library_repo` default here + every future
+/// substrate-side per-Servico renderer consumer (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Servico
+/// library-chart-dep repo resolver, the future per-Aplicacao library-
+/// chart's per-Servico per-dep repo emitter, the future per-cluster
+/// per-registry chart-source mirror the operator pins through a future
+/// [`caixa_flux::ClusterBundleOpts`]-scoped library-repo override) reach
+/// through one `&'static str` by construction. Same shape as the peer
+/// [`DEFAULT_LIBRARY_NAME`] (41438dc) re-export on the sibling per-dep
+/// `Chart.yaml` `dependencies[0].name` axis — extends the substrate-
+/// primitive-residence discipline onto the paired per-dep repository
+/// axis every emitted per-Servico `Chart.yaml` `dependencies[0]` entry
+/// carries.
+pub use caixa_core::DEFAULT_LIBRARY_REPO;
 pub const DEFAULT_LIBRARY_VERSION: &str = "~0.1.0";
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`] so
@@ -1557,6 +1575,43 @@ spec:
             "DEFAULT_LIBRARY_NAME",
             DEFAULT_LIBRARY_NAME,
             caixa_core::DEFAULT_LIBRARY_NAME,
+        );
+    }
+
+    #[test]
+    fn default_library_repo_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub const DEFAULT_LIBRARY_REPO: &str =
+        // "file://../pleme-computeunit"` was lifted to a re-export of
+        // [`caixa_core::DEFAULT_LIBRARY_REPO`] so the Helm 3
+        // `Chart.yaml` `dependencies[0].repository` chart-source URL
+        // every rendered `lareira-<nome>` chart declares against the
+        // substrate-canonical [`DEFAULT_LIBRARY_NAME`] library chart
+        // lives in exactly one place across every caixa renderer
+        // (caixa-helm's `RenderOpts::library_repo` default here + every
+        // future substrate-side per-Servico renderer consumer the
+        // caixa-core [`caixa_core::DEFAULT_LIBRARY_REPO`] docstring
+        // enumerates). Pin the equality + `&'static` static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const DEFAULT_LIBRARY_REPO: &str = "…"` at this crate —
+        // the canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same bytes at the source while
+        // pointing at a different `&'static str` allocation (silently
+        // splitting the substrate-canonical per-dep resolver URL from
+        // the caixa-core-owned canonical), or, worse, could drift on a
+        // future scheme migration (`file://` → `oci://` once
+        // `pleme-io/helmworks/charts` lands as an OCI-registry-backed
+        // chart-source) that landed on the caixa-core canonical without
+        // rebrand of the sibling local — is a build-time test failure
+        // naming the offending drift, not a silent apply-time
+        // per-chart-dep vendoring floor mismatch surfacing at operator-
+        // side `helm dependency build` time far from the drift site.
+        // Peer to the sibling
+        // [`default_library_name_re_export_points_at_caixa_core_canonical`]
+        // pin on the sibling per-dep name-axis re-export.
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_LIBRARY_REPO",
+            DEFAULT_LIBRARY_REPO,
+            caixa_core::DEFAULT_LIBRARY_REPO,
         );
     }
 
