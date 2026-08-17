@@ -385,20 +385,20 @@ mod tests {
     use tempfile::tempdir;
 
     const SAMPLE: &str = r#"
-        (defephemeral akeyless-closed-loop-attest
-          :aplicacao (:chart-ref "oci://ghcr.io/pleme-io/charts/lareira-akeyless-deployment"
+        (defephemeral example-closed-loop-attest
+          :aplicacao (:chart-ref "oci://ghcr.io/pleme-io/charts/lareira-example-deployment"
                       :version "0.5.5"
-                      :profile "gateway-with-internal-saas"
+                      :profile "gateway-with-internal-db"
                       :values-overlay (:cluster (:name "ephemeral-test-01")
                                        :data (:mysql (:persistence (:enabled #f)))))
           :ttl "1h"
           :teardown OnAttested
           :postconditions
             ((:kind HelmReleaseReleased
-              :params (:name "akeyless-saas" :namespace "akeyless-test"))
+              :params (:name "example-release" :namespace "example-ephemeral"))
              (:kind ClosedLoopAuth
-              :params (:issuer (:service "gator" :port 8080)
-                       :consumer (:service "gateway" :port 8000)
+              :params (:issuer (:service "service-a" :port 8080)
+                       :consumer (:service "service-b" :port 8000)
                        :probeImage "ghcr.io/pleme-io/closed-loop-probe:0.1.0"))))
     "#;
 
@@ -407,15 +407,15 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("ephemeral.lisp");
         std::fs::write(&path, SAMPLE).unwrap();
-        let processes = lower_file(&path, "akeyless-test").unwrap();
+        let processes = lower_file(&path, "example-ephemeral").unwrap();
         assert_eq!(processes.len(), 1);
         assert_eq!(
             processes[0].metadata.name.as_deref(),
-            Some("akeyless-closed-loop-attest")
+            Some("example-closed-loop-attest")
         );
         assert_eq!(
             processes[0].metadata.namespace.as_deref(),
-            Some("akeyless-test")
+            Some("example-ephemeral")
         );
         // Sanity: intent.aplicacao landed.
         assert!(processes[0].spec.intent.aplicacao.is_some());

@@ -7655,7 +7655,7 @@ mod tests {
         // Positive-set sweep across the canonical author surface every
         // in-tree fixture uses (`hello-rio`, `cart`, `checkout`,
         // `worker`, the `checkout-aplicacao` example members, the
-        // `akeyless-attest` caixa-tatara fixture). Every value sits
+        // `example-attest` caixa-tatara fixture). Every value sits
         // far below the 55-byte per-`:nome` budget. Same shape every
         // peer per-axis baseline pin uses.
         for nome in [
@@ -7663,7 +7663,7 @@ mod tests {
             "cart",
             "checkout",
             "worker",
-            "akeyless-attest",
+            "example-attest",
             "demo",
             "a",
         ] {

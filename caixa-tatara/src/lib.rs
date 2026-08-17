@@ -163,7 +163,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct RenderInputs {
     /// OCI registry the rendered chart lives in.
     pub registry: String,
-    /// Architecture profile (e.g., `"gateway-with-internal-saas"`).
+    /// Architecture profile (e.g., `"gateway-with-internal-db"`).
     /// Empty = chart default.
     pub profile: String,
     /// Target namespace the Process + chart deploy into.
@@ -406,7 +406,7 @@ mod tests {
         // Smallest valid Aplicacao caixa.
         r#"
 (defcaixa
-  :nome "akeyless-attest"
+  :nome "example-attest"
   :kind Aplicacao
   :versao "0.1.0"
   :membros ())
@@ -417,8 +417,8 @@ mod tests {
     fn sample_inputs() -> RenderInputs {
         RenderInputs {
             registry: "ghcr.io/pleme-io/charts".into(),
-            profile: "gateway-with-internal-saas".into(),
-            target_namespace: "akeyless-test".into(),
+            profile: "gateway-with-internal-db".into(),
+            target_namespace: "example-ephemeral".into(),
             lifetime: RenderEphemeralLifetime {
                 ttl: "1h".into(),
                 teardown_policy: TeardownPolicy::OnAttested,
@@ -431,8 +431,8 @@ mod tests {
             extra_postconditions: vec![Condition {
                 kind: ConditionKind::ClosedLoopAuth,
                 params: serde_json::json!({
-                    "issuer":   { "service": "gator",   "port": 8080 },
-                    "consumer": { "service": "gateway", "port": 8000 },
+                    "issuer":   { "service": "service-a", "port": 8080 },
+                    "consumer": { "service": "service-b", "port": 8000 },
                 }),
             }],
         }
@@ -444,20 +444,23 @@ mod tests {
         let process = process_for_aplicacao(&caixa, &sample_inputs()).expect("render");
 
         // Name + namespace landed.
-        assert_eq!(process.metadata.name.as_deref(), Some("akeyless-attest"));
-        assert_eq!(process.metadata.namespace.as_deref(), Some("akeyless-test"));
+        assert_eq!(process.metadata.name.as_deref(), Some("example-attest"));
+        assert_eq!(
+            process.metadata.namespace.as_deref(),
+            Some("example-ephemeral")
+        );
 
         // Intent::Aplicacao resolves with correct chart_ref shape.
         match process.spec.intent.variant().expect("intent") {
             IntentVariant::Aplicacao(a) => {
                 assert_eq!(
                     a.chart_ref,
-                    "oci://ghcr.io/pleme-io/charts/lareira-akeyless-attest"
+                    "oci://ghcr.io/pleme-io/charts/lareira-example-attest"
                 );
                 assert_eq!(a.version, "0.1.0");
-                assert_eq!(a.profile, "gateway-with-internal-saas");
-                assert_eq!(a.release_name.as_deref(), Some("lareira-akeyless-attest"));
-                assert_eq!(a.target_namespace.as_deref(), Some("akeyless-test"));
+                assert_eq!(a.profile, "gateway-with-internal-db");
+                assert_eq!(a.release_name.as_deref(), Some("lareira-example-attest"));
+                assert_eq!(a.target_namespace.as_deref(), Some("example-ephemeral"));
                 assert_eq!(
                     a.install_timeout.as_deref(),
                     Some(DEFAULT_APLICACAO_INSTALL_TIMEOUT)
@@ -501,8 +504,8 @@ mod tests {
         // Released transition at
         // `tatara-reconciler/src/phase_machine.rs:543-549`). Read both
         // back at the lifted keys and pin the values against the
-        // fixture's release-name (`lareira-akeyless-attest`) + target
-        // namespace (`akeyless-test`).
+        // fixture's release-name (`lareira-example-attest`) + target
+        // namespace (`example-ephemeral`).
         //
         // Before the lift the emitter carried inline `"name"` /
         // `"namespace"` JSON keys and no test-side probe pinned them —
@@ -521,14 +524,14 @@ mod tests {
         let params = &process.spec.boundary.postconditions[0].params;
         assert_eq!(
             params.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
-            Some("lareira-akeyless-attest"),
+            Some("lareira-example-attest"),
             "HelmReleaseReleased postcondition params must carry the release \
              name at the lifted `caixa_core::KUBE_KEY_NAME` axis so the \
              tatara-reconciler's `params.get(\"name\")` probe resolves it"
         );
         assert_eq!(
             params.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
-            Some("akeyless-test"),
+            Some("example-ephemeral"),
             "HelmReleaseReleased postcondition params must carry the target \
              namespace at the lifted `caixa_core::KUBE_KEY_NAMESPACE` axis \
              so the tatara-reconciler's `params.get(\"namespace\")` probe \

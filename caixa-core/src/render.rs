@@ -34009,7 +34009,7 @@ mod tests {
             "worker",
             "checkout",
             "a",
-            "akeyless-attest",
+            "example-attest",
         ] {
             is_lareira_chart_name_shape(nome).unwrap_or_else(|e| {
                 panic!("canonical :nome {nome:?} must pass chart-name budget, got {e:?}")
@@ -34129,8 +34129,8 @@ mod tests {
         // regression rather than at cluster-apply time far from the
         // drift site.
         assert_eq!(
-            oci_chart_ref("ghcr.io/pleme-io/charts", "akeyless-attest"),
-            "oci://ghcr.io/pleme-io/charts/lareira-akeyless-attest"
+            oci_chart_ref("ghcr.io/pleme-io/charts", "example-attest"),
+            "oci://ghcr.io/pleme-io/charts/lareira-example-attest"
         );
         assert_eq!(
             oci_chart_ref("ghcr.io/pleme-io", "hello-rio"),
