@@ -1616,26 +1616,21 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     Ok(dur)
 }
 
-fn render_duration(d: Duration) -> String {
-    let total_ms = d.as_millis();
-    if total_ms == 0 {
-        return "0s".into();
-    }
-    if total_ms % (3600 * 1000) == 0 {
-        return format!("{}h", total_ms / (3600 * 1000));
-    }
-    if total_ms % (60 * 1000) == 0 {
-        return format!("{}m", total_ms / (60 * 1000));
-    }
-    if total_ms % 1000 == 0 {
-        return format!("{}s", total_ms / 1000);
-    }
-    format!("{total_ms}ms")
-}
-
 fn ser_duration<S: Serializer>(v: &Option<Duration>, s: S) -> Result<S::Ok, S::Error> {
+    // Route through the canonical `pub fn crate::supervisor::duration_codec::render`
+    // (supervisor.rs:2512) rather than re-inlining the magnitude/unit
+    // decision tree — the peer module's docstring pins that lift as the
+    // load-bearing single-owner primitive for duration bytes across every
+    // caixa typed-duration surface (`:limits :wall-clock`, `:politicas
+    // :timeout`, `:circuit-breaker :window`, future OTP `gen_server`
+    // per-call timeouts). Any future codec change (a `"1.5s"` fractional
+    // arm, a `"1d"` day unit, a leading-`+` acceptance) lands at exactly
+    // one caixa-core edit rather than a coordinated rewrite across the
+    // sibling free-function `render_duration` shadows a per-typed-slot
+    // serializer could otherwise carry. Load-bearing pinned by
+    // `tests::ser_duration_routes_through_supervisor_duration_codec_render_canonical`.
     match v {
-        Some(d) => s.serialize_str(&render_duration(*d)),
+        Some(d) => s.serialize_str(&crate::supervisor::duration_codec::render(*d)),
         None => s.serialize_none(),
     }
 }
@@ -1923,11 +1918,46 @@ mod tests {
     }
 
     #[test]
-    fn render_duration_canonical() {
-        assert_eq!(render_duration(Duration::from_secs(30)), "30s");
-        assert_eq!(render_duration(Duration::from_millis(500)), "500ms");
-        assert_eq!(render_duration(Duration::from_secs(120)), "2m");
-        assert_eq!(render_duration(Duration::from_secs(3600)), "1h");
+    fn ser_duration_routes_through_supervisor_duration_codec_render_canonical() {
+        // Routing pin: `ser_duration` (the `#[serde(serialize_with = …)]`
+        // hook on `LimitsSpec::wall_clock`) MUST emit exactly the bytes
+        // the canonical `crate::supervisor::duration_codec::render`
+        // primitive produces. Any future accidental re-introduction of a
+        // sibling free-function `render_duration` shadow inside this
+        // module — or a per-slot `serialize_with` closure that inlines
+        // its own magnitude/unit decision tree — surfaces here as a
+        // byte-value drift on the very first canonical form the two
+        // implementations disagree on, well before the drift reaches any
+        // downstream renderer's `wall_clock:` overlay. Same "one
+        // canonical dispatch per axis, thin projections at each consumer"
+        // discipline the sibling caixa-core substrate primitives already
+        // carry on the peer WIT-shape / M2 supervisor-strategy / M3
+        // mesh-slot free-function classifier families.
+        for d in [
+            Duration::from_secs(30),
+            Duration::from_millis(500),
+            Duration::from_secs(120),
+            Duration::from_secs(3600),
+            Duration::from_millis(0),
+            Duration::from_millis(1500),
+        ] {
+            let limits = LimitsSpec {
+                memory: None,
+                fuel: None,
+                wall_clock: Some(d),
+                cpu: None,
+            };
+            let json: serde_json::Value =
+                serde_json::from_str(&serde_json::to_string(&limits).unwrap()).unwrap();
+            let emitted = json[crate::render::M2_LIMITS_KEY_WALL_CLOCK]
+                .as_str()
+                .expect("wall_clock must serialize to a string");
+            let canonical = crate::supervisor::duration_codec::render(d);
+            assert_eq!(
+                emitted, canonical,
+                "ser_duration drifted from supervisor::duration_codec::render on {d:?}",
+            );
+        }
     }
 
     #[test]
@@ -3490,8 +3520,9 @@ mod tests {
     #[test]
     fn parse_duration_round_trips_through_render_for_every_canonical_form() {
         // The structural property the gate makes load-bearing: every
-        // value the parser accepts round-trips through `render_duration`
-        // to a string the parser also accepts — and to the *same* value.
+        // value the parser accepts round-trips through the canonical
+        // [`crate::supervisor::duration_codec::render`] primitive to a
+        // string the parser also accepts — and to the *same* value.
         // Sweep the values the renderer emits canonically (ms / s / m /
         // h boundaries plus a non-aligned millisecond) so a future
         // codec change that breaks round-trip convergence surfaces here.
@@ -3505,7 +3536,7 @@ mod tests {
             Duration::from_secs(120),
             Duration::from_secs(3600),
         ] {
-            let rendered = render_duration(d);
+            let rendered = crate::supervisor::duration_codec::render(d);
             let reparsed = parse_duration(&rendered)
                 .unwrap_or_else(|e| panic!("render({d:?}) = {rendered:?} must reparse, got {e:?}"));
             assert_eq!(

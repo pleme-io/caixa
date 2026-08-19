@@ -35,7 +35,7 @@
 1	clippy::doc_overindented_list_items	caixa-core/src/layout.rs
 1	clippy::too_many_lines	caixa-core/src/layout.rs
 3	clippy::doc_markdown	caixa-core/src/limits.rs
-4	clippy::manual_is_multiple_of	caixa-core/src/limits.rs
+1	clippy::manual_is_multiple_of	caixa-core/src/limits.rs
 3	clippy::ref_option	caixa-core/src/limits.rs
 1	clippy::trivially_copy_pass_by_ref	caixa-core/src/limits.rs
 2	clippy::clone_on_copy	caixa-core/src/manifest.rs
