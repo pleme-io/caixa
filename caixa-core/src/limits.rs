@@ -1368,7 +1368,7 @@ fn render_byte_size(n: u64) -> String {
         (1024, "KiB"),
     ];
     for (mult, label) in UNITS {
-        if n >= *mult && n % mult == 0 {
+        if n >= *mult && n.is_multiple_of(*mult) {
             return format!("{}{label}", n / mult);
         }
     }

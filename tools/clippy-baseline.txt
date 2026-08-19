@@ -34,7 +34,6 @@
 1	clippy::doc_overindented_list_items	caixa-core/src/layout.rs
 1	clippy::too_many_lines	caixa-core/src/layout.rs
 3	clippy::doc_markdown	caixa-core/src/limits.rs
-1	clippy::manual_is_multiple_of	caixa-core/src/limits.rs
 3	clippy::ref_option	caixa-core/src/limits.rs
 1	clippy::trivially_copy_pass_by_ref	caixa-core/src/limits.rs
 2	clippy::clone_on_copy	caixa-core/src/manifest.rs
@@ -54,7 +53,6 @@
 2	clippy::vec_init_then_push	caixa-core/src/render.rs
 14	clippy::doc_markdown	caixa-core/src/supervisor.rs
 1	clippy::field_reassign_with_default	caixa-core/src/supervisor.rs
-3	clippy::manual_is_multiple_of	caixa-core/src/supervisor.rs
 1	clippy::must_use_candidate	caixa-core/src/supervisor.rs
 1	clippy::doc_lazy_continuation	caixa-core/src/upgrade.rs
 5	clippy::doc_markdown	caixa-core/src/version.rs
@@ -144,7 +142,6 @@
 1	clippy::doc_markdown	caixa-teia-forge/src/lib.rs
 1	clippy::format_push_string	caixa-teia/src/instance.rs
 1	clippy::unnecessary_to_owned	caixa-teia/src/instance.rs
-1	clippy::manual_is_multiple_of	caixa-teia/src/manifest.rs
 2	clippy::match_same_arms	caixa-teia/src/manifest.rs
 1	clippy::doc_markdown	caixa-teia/src/reference.rs
 1	clippy::doc_markdown	caixa-teia/src/value.rs

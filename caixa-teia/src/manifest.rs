@@ -250,7 +250,7 @@ fn is_kwargs(items: &[Node]) -> bool {
     // rename or `#[is_variant(name = "…")]` override reaches this
     // dispatch through one edit at the primitive.
     !items.is_empty()
-        && items.len() % 2 == 0
+        && items.len().is_multiple_of(2)
         && items.iter().step_by(2).all(|n| n.kind.is_keyword())
 }
 
