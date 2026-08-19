@@ -83,7 +83,6 @@
 1	clippy::struct_excessive_bools	caixa-feira/src/cmd/lint.rs
 1	clippy::unnecessary_wraps	caixa-feira/src/cmd/lint.rs
 5	clippy::doc_markdown	caixa-feira/src/cmd/load.rs
-6	clippy::manual_let_else	caixa-feira/src/cmd/load.rs
 3	clippy::doc_markdown	caixa-feira/src/cmd/mod.rs
 1	clippy::map_unwrap_or	caixa-feira/src/cmd/nix.rs
 1	clippy::needless_raw_string_hashes	caixa-feira/src/cmd/nix.rs

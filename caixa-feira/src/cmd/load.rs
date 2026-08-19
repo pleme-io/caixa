@@ -477,6 +477,52 @@ mod tests {
     use caixa_core::CaixaKind;
     use tempfile::tempdir;
 
+    /// Assert every value in `bads` triggers `validator` to reject with
+    /// a diagnostic that surfaces both `arg_hint` (the offending
+    /// per-verb flag or positional — `"--cluster"`, `"--namespace"`,
+    /// `"<nome>"`) and the value verbatim.
+    ///
+    /// Lifts the six-site per-`validate_<arg>_arg` reject-sweep shape
+    /// on the per-verb arg-entry axis (PRIME DIRECTIVE — theory/
+    /// THEORY.md §I.5, "the duplication budget is zero") into a single
+    /// canonical helper. Before this lift the `--cluster` /
+    /// `--namespace` / `<nome>` path-traversal and boundary-hyphen
+    /// arms each open-coded the same for-loop + `match … { Err(e) =>
+    /// e, Ok(()) => panic!(...) }` + `format!("{err:?}")` + two
+    /// `contains(...)` asserts — six sites, one drift budget per
+    /// future edit to the diagnostic-shape contract every
+    /// `validate_<arg>_arg` gate carries (the "diagnostic must name
+    /// the offending flag/positional verbatim" pin and the
+    /// "diagnostic must name the offending value verbatim" pin, both
+    /// load-bearing so the operator can grep their shell history for
+    /// the bad flag ahead of the K8s apiserver's admission-time
+    /// rejection). A future per-verb arg-entry validator (the M4
+    /// `feira reconcile --to <cluster>` target-cluster arg the
+    /// absorption-roadmap acknowledges, any future DNS-1123-shaped
+    /// per-verb positional) inherits the canonical reject-sweep shape
+    /// by construction — one helper call, not another six-line copy.
+    fn assert_arg_rejects_each(
+        validator: impl Fn(&str) -> Result<()>,
+        arg_hint: &str,
+        scenario: &str,
+        bads: &[&str],
+    ) {
+        for bad in bads {
+            let Err(err) = validator(bad) else {
+                panic!("{scenario} {bad:?} must reject");
+            };
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains(arg_hint),
+                "diagnostic must name {arg_hint:?} for {bad:?} (got: {rendered:?})"
+            );
+            assert!(
+                rendered.contains(bad),
+                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
+            );
+        }
+    }
+
     #[test]
     fn caixa_manifest_path_resolves_root_join_canonical_filename() {
         // The shape every per-verb call-site relied on (verbatim
@@ -869,21 +915,12 @@ mod tests {
         // on the typed-slot axis. The diagnostic names the offending
         // `--cluster` value verbatim so the operator can grep their
         // shell history for the bad flag.
-        for bad in ["rio/..", "../rio", "rio/sub", "."] {
-            let err = match validate_cluster_arg(bad) {
-                Err(e) => e,
-                Ok(()) => panic!("path-traversal {bad:?} must reject"),
-            };
-            let rendered = format!("{err:?}");
-            assert!(
-                rendered.contains("--cluster"),
-                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
-            );
-            assert!(
-                rendered.contains(bad),
-                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
-            );
-        }
+        assert_arg_rejects_each(
+            validate_cluster_arg,
+            "--cluster",
+            "path-traversal",
+            &["rio/..", "../rio", "rio/sub", "."],
+        );
     }
 
     #[test]
@@ -951,21 +988,12 @@ mod tests {
         // reason wording names the boundary rule verbatim — peer with
         // the `validate_placement_cluster` rejection on the typed-slot
         // axis.
-        for bad in ["-rio", "rio-"] {
-            let err = match validate_cluster_arg(bad) {
-                Err(e) => e,
-                Ok(()) => panic!("boundary-`-` {bad:?} must reject"),
-            };
-            let rendered = format!("{err:?}");
-            assert!(
-                rendered.contains("--cluster"),
-                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
-            );
-            assert!(
-                rendered.contains(bad),
-                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
-            );
-        }
+        assert_arg_rejects_each(
+            validate_cluster_arg,
+            "--cluster",
+            "boundary-`-`",
+            &["-rio", "rio-"],
+        );
     }
 
     #[test]
@@ -1030,21 +1058,12 @@ mod tests {
         // parent-escape attempt surfaces with the offending value
         // named verbatim — peer with the [`validate_cluster_arg`]
         // path-traversal arm on the sibling per-verb axis.
-        for bad in ["default/..", "../default", "default/sub", "."] {
-            let err = match validate_namespace_arg(bad) {
-                Err(e) => e,
-                Ok(()) => panic!("path-traversal {bad:?} must reject"),
-            };
-            let rendered = format!("{err:?}");
-            assert!(
-                rendered.contains("--namespace"),
-                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
-            );
-            assert!(
-                rendered.contains(bad),
-                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
-            );
-        }
+        assert_arg_rejects_each(
+            validate_namespace_arg,
+            "--namespace",
+            "path-traversal",
+            &["default/..", "../default", "default/sub", "."],
+        );
     }
 
     #[test]
@@ -1110,21 +1129,12 @@ mod tests {
         // lifted predicate's reason wording names the boundary rule
         // verbatim — peer with the [`validate_cluster_arg`]
         // boundary-hyphen arm.
-        for bad in ["-default", "default-"] {
-            let err = match validate_namespace_arg(bad) {
-                Err(e) => e,
-                Ok(()) => panic!("boundary-`-` {bad:?} must reject"),
-            };
-            let rendered = format!("{err:?}");
-            assert!(
-                rendered.contains("--namespace"),
-                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
-            );
-            assert!(
-                rendered.contains(bad),
-                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
-            );
-        }
+        assert_arg_rejects_each(
+            validate_namespace_arg,
+            "--namespace",
+            "boundary-`-`",
+            &["-default", "default-"],
+        );
     }
 
     #[test]
@@ -1211,21 +1221,12 @@ mod tests {
         // value named verbatim — peer with the
         // [`validate_cluster_arg`] / [`validate_namespace_arg`]
         // path-traversal arms on the sibling per-verb axes.
-        for bad in ["../escape", "lib/../escape", "foo/bar", ".", ".."] {
-            let err = match validate_nome_arg(bad) {
-                Err(e) => e,
-                Ok(()) => panic!("path-traversal {bad:?} must reject"),
-            };
-            let rendered = format!("{err:?}");
-            assert!(
-                rendered.contains("<nome>"),
-                "diagnostic must name the offending positional for {bad:?} (got: {rendered:?})"
-            );
-            assert!(
-                rendered.contains(bad),
-                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
-            );
-        }
+        assert_arg_rejects_each(
+            validate_nome_arg,
+            "<nome>",
+            "path-traversal",
+            &["../escape", "lib/../escape", "foo/bar", ".", ".."],
+        );
     }
 
     #[test]
@@ -1300,21 +1301,12 @@ mod tests {
         // rule verbatim — peer with the
         // [`validate_cluster_arg`] / [`validate_namespace_arg`]
         // boundary-hyphen arms.
-        for bad in ["-hello", "hello-"] {
-            let err = match validate_nome_arg(bad) {
-                Err(e) => e,
-                Ok(()) => panic!("boundary-`-` {bad:?} must reject"),
-            };
-            let rendered = format!("{err:?}");
-            assert!(
-                rendered.contains("<nome>"),
-                "diagnostic must name the offending positional for {bad:?} (got: {rendered:?})"
-            );
-            assert!(
-                rendered.contains(bad),
-                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
-            );
-        }
+        assert_arg_rejects_each(
+            validate_nome_arg,
+            "<nome>",
+            "boundary-`-`",
+            &["-hello", "hello-"],
+        );
     }
 
     #[test]
