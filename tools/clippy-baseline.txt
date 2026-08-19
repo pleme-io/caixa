@@ -146,4 +146,3 @@
 1	clippy::doc_markdown	caixa-teia/src/reference.rs
 1	clippy::doc_markdown	caixa-teia/src/value.rs
 12	clippy::match_same_arms	caixa-theme/src/blackmatter.rs
-17	clippy::unreadable_literal	caixa-theme/src/palette.rs
