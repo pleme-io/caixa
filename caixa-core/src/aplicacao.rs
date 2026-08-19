@@ -4804,21 +4804,22 @@ mod rate_limit_codec {
     // closed-set enum's arm-table rather than through vestigial free-helper
     // delegates.
     use super::{RateLimit, RateLimitUnit};
-    use serde::{Deserialize, Deserializer, Serializer};
+    use serde::{Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(v: &Option<RateLimit>, s: S) -> Result<S::Ok, S::Error> {
-        match v {
-            Some(rl) => s.serialize_str(&render(*rl)),
-            None => s.serialize_none(),
-        }
+        // Route through the canonical [`crate::render::serialize_option_via_str`]
+        // — the substrate-side single-owner primitive for the forward
+        // arm of the typed-magnitude codec family. See its docstring
+        // for the full sibling roster.
+        crate::render::serialize_option_via_str(v, s, render)
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<RateLimit>, D::Error> {
-        let opt: Option<String> = Option::deserialize(d)?;
-        match opt {
-            None => Ok(None),
-            Some(s) => parse(&s).map(Some).map_err(serde::de::Error::custom),
-        }
+        // Route through the canonical [`crate::render::deserialize_option_via_str`]
+        // — the substrate-side single-owner primitive for the reverse
+        // arm of the typed-magnitude codec family. See its docstring
+        // for the full sibling roster.
+        crate::render::deserialize_option_via_str(d, parse)
     }
 
     fn parse(s: &str) -> Result<RateLimit, String> {
