@@ -988,6 +988,47 @@ impl RenderedFile {
             contents: contents.into(),
         }
     }
+
+    /// Predicate: does this rendered file's sandboxed relative [`Self::path`]
+    /// byte-equal `other`? Compares by borrow through
+    /// [`Path::as_ref`][`AsRef::as_ref`] on both sides, so no per-call
+    /// [`PathBuf`] is allocated to hold the right-hand side of the
+    /// comparison — the reader-side peer to the emitter-side
+    /// [`RenderedFile::new`] `impl Into<PathBuf>` constructor. The
+    /// substrate's canonical `.iter().find(predicate)` navigator on the
+    /// per-artifact `&[RenderedFile]` container ([`find_file_by_path`])
+    /// composes through this predicate, so every future
+    /// `RenderedFile.path`-keyed one-hop navigator on the substrate's
+    /// per-target renderer output routes through one caixa-core edit
+    /// rather than open-coding a per-call `let target = PathBuf::from(path);
+    /// files.iter().find(|f| f.path == target)` two-line dance.
+    ///
+    /// Accepts `impl AsRef<Path>` on the right-hand side so the same
+    /// predicate closes over both the substrate's canonical `&'static str`
+    /// filename constants ([`FLUX_GITREPOSITORY_YAML_FILENAME`] /
+    /// [`FLUX_HELMRELEASE_YAML_FILENAME`] /
+    /// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] /
+    /// [`HELM_CHART_YAML_FILENAME`] / [`HELM_VALUES_YAML_FILENAME`]) and
+    /// author-supplied paths ([`Path`] / [`PathBuf`] / `&PathBuf`) a future
+    /// per-target renderer would pick from — the same widened-input
+    /// discipline the emitter-side [`RenderedFile::new`] carries on its
+    /// `impl Into<PathBuf>` bound. The comparison walks
+    /// `self.path.as_path() == other.as_ref()`, so the `&str` case
+    /// zero-costs through [`Path::new`] and the [`PathBuf`] case zero-costs
+    /// through the `AsRef<Path>` blanket impl.
+    ///
+    /// Peer to the sibling substrate-side `&[Value]`-container-side
+    /// per-CR-axis predicates ([`kube_name_is`] / [`kube_namespace_is`] /
+    /// [`kube_kind_is`] / [`kube_api_version_is`] /
+    /// [`kube_metadata_label_is`]) — the reader-side accessor-then-predicate
+    /// discipline the K8s-API-machinery-side substrate navigator family
+    /// carries, lifted onto the `&[RenderedFile]`-container-side per-
+    /// artifact leaf-path axis so the two container-sides read as one
+    /// substrate primitive family.
+    #[must_use]
+    pub fn has_path<P: AsRef<Path>>(&self, other: P) -> bool {
+        self.path.as_path() == other.as_ref()
+    }
 }
 
 /// Predicate: find the first ASCII whitespace byte in `s`, or `None` if
@@ -20879,13 +20920,16 @@ pub fn find_by_label<'a>(
 /// at their invocation sites (`FLUX_*_YAML_FILENAME` /
 /// `HELM_*_YAML_FILENAME` — every one a `&'static str`), folding the
 /// per-caller `PathBuf::from(&str)` wrap into the helper. The equality
-/// comparison rebuilds a `PathBuf` once per call so the `&str`-in / `&str`-out
-/// interface stays symmetric with the sibling `&str` axis-key navigators
-/// on the K8s-CR side ([`find_by_kind`] / [`find_by_name`] /
-/// [`find_by_namespace`] / [`find_by_api_version`] all take `&str`
-/// axis-keys); a future performance-critical caller can bypass this by
-/// walking `files.iter()` directly, but no current caller sits on the
-/// per-artifact readback hot path.
+/// comparison itself now composes through the substrate's canonical
+/// [`RenderedFile::has_path`] reader-side accessor — a borrow-shaped
+/// [`AsRef<Path>`]-widened predicate that walks
+/// `self.path.as_path() == other.as_ref()` per iteration without
+/// allocating a per-call [`PathBuf`] on the right-hand side — so the
+/// `&str`-in / `&str`-out interface stays symmetric with the sibling
+/// `&str` axis-key navigators on the K8s-CR side ([`find_by_kind`] /
+/// [`find_by_name`] / [`find_by_namespace`] / [`find_by_api_version`]
+/// all take `&str` axis-keys) while the internal comparison zero-costs
+/// through [`Path::new`] on the substrate primitive.
 ///
 /// This closes the substrate-side one-hop navigator arity on the
 /// `RenderedFile::path` axis — bringing the [`RenderedFile`]-container
@@ -20906,8 +20950,7 @@ pub fn find_by_label<'a>(
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 #[must_use]
 pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'a RenderedFile> {
-    let target = PathBuf::from(path);
-    files.iter().find(|f| f.path == target)
+    files.iter().find(|f| f.has_path(path))
 }
 
 /// Locate the [`RenderedFile`] in `files` whose sandboxed relative
@@ -51198,6 +51241,67 @@ spec:
             PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME),
         );
         assert_eq!(via_new_from_pathbuf.contents, "kind: HelmRelease\n");
+    }
+
+    #[test]
+    #[allow(clippy::cmp_owned)] // Deliberate: the equivalence half of this
+    // pin exhibits the prior owning-`PathBuf::from(...)` comparand
+    // byte-for-byte on the substrate primitive so a caller-side rewire
+    // that would silently regress the borrow-shaped predicate reads as
+    // a build-time test failure rather than a silent behavior drift.
+    fn rendered_file_has_path_matches_owning_pathbuf_equality_shape() {
+        // Contract pin: [`RenderedFile::has_path`] (the canonical lifted
+        // reader-side per-artifact leaf-path predicate the paired
+        // substrate-side navigator [`find_file_by_path`] now composes
+        // through) returns exactly the boolean the pre-lift
+        // `let target = PathBuf::from(path); f.path == target` two-line
+        // owning-comparand shape produced at every per-artifact readback
+        // site — proven on both a filename-const positive
+        // ([`HELM_CHART_YAML_FILENAME`] on a leaf carrying that path)
+        // and a filename-const negative ([`HELM_VALUES_YAML_FILENAME`]
+        // on the same leaf) so a future accessor drift (a
+        // case-insensitive path predicate, a stem-only match, a swap
+        // onto `starts_with` that would silently widen the match set
+        // at the caixa-core edit and reach every routed per-target
+        // renderer's reader-side test axis through this canonical
+        // predicate) trips at caixa-core build time rather than
+        // surfacing as a divergent per-target renderer's leaf pick far
+        // from the source. Peer to the emitter-side
+        // [`rendered_file_new_matches_struct_literal_shape`] pin on
+        // the [`RenderedFile::new`] canonical constructor axis — the
+        // reader-side predicate and the emitter-side constructor are
+        // the two canonical substrate primitives every per-target
+        // renderer's per-artifact leaf pattern now threads through.
+        //
+        // The [`AsRef<Path>`]-widened bound closes over both the
+        // substrate's canonical `&'static str` filename constants and
+        // the [`Path`] / [`PathBuf`] shapes a future author-supplied
+        // path caller would pick from — a stricter `&str`-only bound
+        // trips the [`Path::new`] / [`PathBuf`]-input arms of this
+        // pin at caixa-core build time rather than at the first
+        // per-target renderer that reaches for the wider bound.
+        let f = RenderedFile::new(HELM_CHART_YAML_FILENAME, "apiVersion: v2\n");
+        assert!(f.has_path(HELM_CHART_YAML_FILENAME));
+        assert!(f.has_path(Path::new(HELM_CHART_YAML_FILENAME)));
+        assert!(f.has_path(PathBuf::from(HELM_CHART_YAML_FILENAME)));
+        let borrowed_pathbuf = PathBuf::from(HELM_CHART_YAML_FILENAME);
+        assert!(f.has_path(&borrowed_pathbuf));
+        assert!(!f.has_path(HELM_VALUES_YAML_FILENAME));
+        assert!(!f.has_path(FLUX_HELMRELEASE_YAML_FILENAME));
+        // Equivalence half: the lifted borrow-shaped predicate returns
+        // exactly the boolean the pre-lift owning-`PathBuf` comparand
+        // produced on every leaf-path axis-key the routed callers reach
+        // for, so the substrate primitive's substitution into
+        // `find_file_by_path` is behavior-preserving on every
+        // per-target renderer's reader-side per-artifact leaf pick.
+        assert_eq!(
+            f.has_path(HELM_CHART_YAML_FILENAME),
+            f.path == PathBuf::from(HELM_CHART_YAML_FILENAME),
+        );
+        assert_eq!(
+            f.has_path(HELM_VALUES_YAML_FILENAME),
+            f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME),
+        );
     }
 
     #[test]
