@@ -9865,7 +9865,7 @@ mod tests {
         s.contratos.push(WitContract {
             de: "cart".into(),
             para: "catalog".into(),
-            wit: "".into(),
+            wit: String::new(),
             endpoint: None,
             subject: None,
             slot: None,
@@ -14904,7 +14904,7 @@ mod tests {
     #[test]
     fn rejects_empty_entrada_path() {
         let mut s = three_member_spec();
-        s.entrada.as_mut().unwrap().paths = vec!["/api/cart".into(), "".into()];
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart".into(), String::new()];
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPathEmpty);
     }
 
@@ -15156,7 +15156,7 @@ mod tests {
         // site. (The predicate itself defends against direct
         // invocation by returning the same error on `""`.)
         let mut s = three_member_spec();
-        s.entrada.as_mut().unwrap().paths = vec!["".into()];
+        s.entrada.as_mut().unwrap().paths = vec![String::new()];
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPathEmpty);
     }
 
@@ -19250,7 +19250,7 @@ mod tests {
     #[test]
     fn rejects_empty_cluster_name() {
         let mut s = three_member_spec();
-        s.placement.clusters = vec!["rio".into(), "".into()];
+        s.placement.clusters = vec!["rio".into(), String::new()];
         assert_eq!(
             s.validate().unwrap_err(),
             AplicacaoError::PlacementClusterEmpty
@@ -19471,7 +19471,7 @@ mod tests {
         // `membro_caixa_empty_takes_precedence_over_invalid` pin
         // (3f9d7a0).
         let mut s = three_member_spec();
-        s.placement.clusters = vec!["rio".into(), "".into()];
+        s.placement.clusters = vec!["rio".into(), String::new()];
         let err = s.validate().unwrap_err();
         assert_eq!(err, AplicacaoError::PlacementClusterEmpty);
     }
@@ -19538,7 +19538,7 @@ mod tests {
     fn rejects_sharded_with_empty_shard_key() {
         let mut s = three_member_spec();
         s.placement.estrategia = PlacementStrategy::Sharded;
-        s.placement.shard_key = Some("".into());
+        s.placement.shard_key = Some(String::new());
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::ShardedKeyEmpty);
     }
 
@@ -19908,7 +19908,7 @@ mod tests {
     #[test]
     fn rejects_empty_affinity_hint() {
         let mut s = three_member_spec();
-        s.placement.affinity = Some("".into());
+        s.placement.affinity = Some(String::new());
         assert_eq!(
             s.validate().unwrap_err(),
             AplicacaoError::PlacementAffinityEmpty
