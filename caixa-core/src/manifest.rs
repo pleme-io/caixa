@@ -1502,7 +1502,7 @@ impl Caixa {
     /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
     /// carries.
     #[must_use]
-    pub fn autores(&self) -> &[String] {
+    pub const fn autores(&self) -> &[String] {
         self.autores.as_slice()
     }
 
@@ -1603,7 +1603,7 @@ impl Caixa {
     /// accessor's identity maps onto the canonical CAIXA-SDLC §I
     /// vocabulary the slot's docstring already carries.
     #[must_use]
-    pub fn etiquetas(&self) -> &[String] {
+    pub const fn etiquetas(&self) -> &[String] {
         self.etiquetas.as_slice()
     }
 
@@ -1722,7 +1722,7 @@ impl Caixa {
     /// accessor's identity maps onto the canonical CAIXA-SDLC §I
     /// vocabulary the slot's docstring already carries.
     #[must_use]
-    pub fn bibliotecas(&self) -> &[String] {
+    pub const fn bibliotecas(&self) -> &[String] {
         self.bibliotecas.as_slice()
     }
 
@@ -1844,7 +1844,7 @@ impl Caixa {
     /// maps onto the canonical CAIXA-SDLC §I vocabulary the slot's
     /// docstring already carries.
     #[must_use]
-    pub fn exe(&self) -> &[String] {
+    pub const fn exe(&self) -> &[String] {
         self.exe.as_slice()
     }
 
@@ -1999,7 +1999,7 @@ impl Caixa {
     /// accessor's identity maps onto the canonical CAIXA-SDLC §I
     /// vocabulary the slot's docstring already carries.
     #[must_use]
-    pub fn servicos(&self) -> &[String] {
+    pub const fn servicos(&self) -> &[String] {
         self.servicos.as_slice()
     }
 
@@ -2078,7 +2078,7 @@ impl Caixa {
     /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
     /// slot's docstring already carries.
     #[must_use]
-    pub fn deps(&self) -> &[Dep] {
+    pub const fn deps(&self) -> &[Dep] {
         self.deps.as_slice()
     }
 
@@ -2165,7 +2165,7 @@ impl Caixa {
     /// maps onto the canonical CAIXA-SDLC §I vocabulary the slot's
     /// docstring already carries.
     #[must_use]
-    pub fn deps_dev(&self) -> &[Dep] {
+    pub const fn deps_dev(&self) -> &[Dep] {
         self.deps_dev.as_slice()
     }
 
@@ -3457,7 +3457,7 @@ impl Caixa {
     /// canonical CAIXA-SDLC §II vocabulary the slot's docstring
     /// already carries.
     #[must_use]
-    pub fn upgrade_from(&self) -> &[UpgradeFromEntry] {
+    pub const fn upgrade_from(&self) -> &[UpgradeFromEntry] {
         self.upgrade_from.as_slice()
     }
 
@@ -3582,7 +3582,7 @@ impl Caixa {
     /// vocabulary the [`Caixa::children`] field's docstring already
     /// reaches for ("Static children of a supervisor").
     #[must_use]
-    pub fn children(&self) -> &[crate::supervisor::ChildSpec] {
+    pub const fn children(&self) -> &[crate::supervisor::ChildSpec] {
         self.children.as_slice()
     }
 
@@ -3704,7 +3704,7 @@ impl Caixa {
     /// vocabulary the [`Caixa::membros`] field's docstring already
     /// reaches for ("Member Servicos that make up this Aplicacao").
     #[must_use]
-    pub fn membros(&self) -> &[crate::aplicacao::Membro] {
+    pub const fn membros(&self) -> &[crate::aplicacao::Membro] {
         self.membros.as_slice()
     }
 
@@ -3827,7 +3827,7 @@ impl Caixa {
     /// docstring already reaches for ("WIT-typed inter-Servico
     /// contracts").
     #[must_use]
-    pub fn contratos(&self) -> &[crate::aplicacao::WitContract] {
+    pub const fn contratos(&self) -> &[crate::aplicacao::WitContract] {
         self.contratos.as_slice()
     }
 
@@ -6130,6 +6130,164 @@ mod tests {
             c.kind = kind;
             assert_eq!(kind_via_const_fn(&c), kind);
         }
+    }
+
+    #[test]
+    fn caixa_outer_string_slice_return_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the five outer-[`Caixa`]
+        // `Vec<String> → &[String]` slice-return accessors on the
+        // universal-axis surface — [`Caixa::autores`] / [`Caixa::etiquetas`]
+        // / [`Caixa::bibliotecas`] / [`Caixa::exe`] / [`Caixa::servicos`].
+        // Each body is a bare `self.<field>.as_slice()` dispatch through
+        // [`Vec::as_slice`] (const-stable since Rust 1.87, well within
+        // the workspace MSRV). Any future accidental downgrade to
+        // non-`const` fails the corresponding `<name>_via_const_fn`
+        // wrapper at caixa-core build time with E0015 (`cannot call
+        // non-const method`) — mirror of the sibling
+        // [`caixa_outer_copy_return_accessor_pair_is_const_fn`] pin's
+        // discipline on the peer outer-`Caixa` `Copy`-return accessor
+        // axis, and peer of the sibling composite-carrier slice-return
+        // pin below on the peer outer-`Caixa` composite-slice axis.
+        const fn autores_via_const_fn(c: &Caixa) -> &[String] {
+            c.autores()
+        }
+        const fn etiquetas_via_const_fn(c: &Caixa) -> &[String] {
+            c.etiquetas()
+        }
+        const fn bibliotecas_via_const_fn(c: &Caixa) -> &[String] {
+            c.bibliotecas()
+        }
+        const fn exe_via_const_fn(c: &Caixa) -> &[String] {
+            c.exe()
+        }
+        const fn servicos_via_const_fn(c: &Caixa) -> &[String] {
+            c.servicos()
+        }
+        // Sweep the empty arm (`autores` / `etiquetas` / `exe` /
+        // `servicos` — the template's `Vec::new()` default) and the
+        // populated arm (mutated below) on every accessor so the
+        // `const fn` wrapper family pins each axis's two-arm partition
+        // through the same const dispatch as the runtime path.
+        // [`Caixa::template`] seeds `lib/demo.lisp` into `:bibliotecas`,
+        // so that arm's "empty" fixture is the populated arm the
+        // mutation sweep covers.
+        let c_empty = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        assert!(autores_via_const_fn(&c_empty).is_empty());
+        assert!(etiquetas_via_const_fn(&c_empty).is_empty());
+        assert!(exe_via_const_fn(&c_empty).is_empty());
+        assert!(servicos_via_const_fn(&c_empty).is_empty());
+        let mut c_full = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        c_full.autores = vec!["ada".to_string(), "erlang".to_string()];
+        c_full.etiquetas = vec!["compounding".to_string()];
+        c_full.bibliotecas = vec!["lib/one.lisp".to_string(), "lib/two.lisp".to_string()];
+        c_full.exe = vec!["exe/cli.lisp".to_string()];
+        c_full.servicos = vec!["servicos/one.computeunit.yaml".to_string()];
+        assert_eq!(autores_via_const_fn(&c_full), c_full.autores());
+        assert_eq!(autores_via_const_fn(&c_full), &["ada", "erlang"]);
+        assert_eq!(etiquetas_via_const_fn(&c_full), c_full.etiquetas());
+        assert_eq!(etiquetas_via_const_fn(&c_full), &["compounding"]);
+        assert_eq!(bibliotecas_via_const_fn(&c_full), c_full.bibliotecas());
+        assert_eq!(
+            bibliotecas_via_const_fn(&c_full),
+            &["lib/one.lisp", "lib/two.lisp"]
+        );
+        assert_eq!(exe_via_const_fn(&c_full), c_full.exe());
+        assert_eq!(exe_via_const_fn(&c_full), &["exe/cli.lisp"]);
+        assert_eq!(servicos_via_const_fn(&c_full), c_full.servicos());
+        assert_eq!(
+            servicos_via_const_fn(&c_full),
+            &["servicos/one.computeunit.yaml"]
+        );
+    }
+
+    #[test]
+    fn caixa_outer_composite_slice_return_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the six outer-[`Caixa`] composite-
+        // carrier `Vec<T> → &[T]` slice-return accessors — [`Caixa::deps`]
+        // / [`Caixa::deps_dev`] on the dep-graph axis,
+        // [`Caixa::upgrade_from`] on the M2 appup axis, [`Caixa::children`]
+        // on the M2 supervisor-tree axis, and [`Caixa::membros`] /
+        // [`Caixa::contratos`] on the M3 mesh-slot axis. Each body is a
+        // bare `self.<field>.as_slice()` dispatch through
+        // [`Vec::as_slice`] (const-stable since Rust 1.87, well within
+        // the workspace MSRV) — peer of the sibling `String`-payload
+        // slice-return pin above on the peer outer-`Caixa` universal-
+        // axis surface, and peer of the sibling inner-composite-
+        // altitude reference-return pin family
+        // [`crate::aplicacao::tests::m3_aplicacao_spec_reference_return_accessor_family_is_const_fn`]
+        // + [`crate::supervisor::tests::supervisor_children_slice_return_accessor_is_const_fn`]
+        // + [`crate::upgrade::tests::upgrade_from_entry_instructions_slice_return_accessor_is_const_fn`]
+        // (all pinned at 0b23e0f).
+        const fn deps_via_const_fn(c: &Caixa) -> &[Dep] {
+            c.deps()
+        }
+        const fn deps_dev_via_const_fn(c: &Caixa) -> &[Dep] {
+            c.deps_dev()
+        }
+        const fn upgrade_from_via_const_fn(c: &Caixa) -> &[UpgradeFromEntry] {
+            c.upgrade_from()
+        }
+        const fn children_via_const_fn(c: &Caixa) -> &[crate::supervisor::ChildSpec] {
+            c.children()
+        }
+        const fn membros_via_const_fn(c: &Caixa) -> &[crate::aplicacao::Membro] {
+            c.membros()
+        }
+        const fn contratos_via_const_fn(c: &Caixa) -> &[crate::aplicacao::WitContract] {
+            c.contratos()
+        }
+        // Empty-arm sweep on all six composite-carrier axes — every
+        // `Caixa::template` starts with `Vec::new()` on each.
+        let c_empty = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        assert!(deps_via_const_fn(&c_empty).is_empty());
+        assert!(deps_dev_via_const_fn(&c_empty).is_empty());
+        assert!(upgrade_from_via_const_fn(&c_empty).is_empty());
+        assert!(children_via_const_fn(&c_empty).is_empty());
+        assert!(membros_via_const_fn(&c_empty).is_empty());
+        assert!(contratos_via_const_fn(&c_empty).is_empty());
+        // Populate `:membros` / `:contratos` directly via struct literals
+        // — the parser-side validation path fans on `:kind`-gated cross-
+        // slot invariants irrelevant to the accessor dispatch under test.
+        let mut c_full = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        c_full.membros = vec![
+            crate::aplicacao::Membro {
+                caixa: "demo-a".to_string(),
+                versao: "^0.1.0".to_string(),
+            },
+            crate::aplicacao::Membro {
+                caixa: "demo-b".to_string(),
+                versao: "^0.2.0".to_string(),
+            },
+        ];
+        c_full.contratos = vec![crate::aplicacao::WitContract {
+            de: "demo-a".to_string(),
+            para: "demo-b".to_string(),
+            wit: "wasi:http/proxy".to_string(),
+            endpoint: Some("/edge".to_string()),
+            subject: None,
+            slot: None,
+        }];
+        assert_eq!(membros_via_const_fn(&c_full), c_full.membros());
+        assert_eq!(contratos_via_const_fn(&c_full), c_full.contratos());
+        assert_eq!(membros_via_const_fn(&c_full).len(), 2);
+        assert_eq!(contratos_via_const_fn(&c_full).len(), 1);
+        // Alias-borrow check on the four remaining composite-carrier
+        // slice-return arms — the wrapper's return borrow must alias the
+        // caller's borrow so any future accessor re-routing that skips
+        // the storage field surfaces through the assertion.
+        assert!(std::ptr::eq(deps_via_const_fn(&c_full), c_full.deps()));
+        assert!(std::ptr::eq(
+            deps_dev_via_const_fn(&c_full),
+            c_full.deps_dev()
+        ));
+        assert!(std::ptr::eq(
+            upgrade_from_via_const_fn(&c_full),
+            c_full.upgrade_from()
+        ));
+        assert!(std::ptr::eq(
+            children_via_const_fn(&c_full),
+            c_full.children()
+        ));
     }
 
     #[test]
