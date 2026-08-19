@@ -48,7 +48,7 @@
 70	clippy::doc_lazy_continuation	caixa-core/src/render.rs
 167	clippy::doc_markdown	caixa-core/src/render.rs
 2	clippy::iter_count	caixa-core/src/render.rs
-3	clippy::must_use_candidate	caixa-core/src/render.rs
+1	clippy::must_use_candidate	caixa-core/src/render.rs
 3	clippy::redundant_closure_for_method_calls	caixa-core/src/render.rs
 7	clippy::too_many_lines	caixa-core/src/render.rs
 1	clippy::unnecessary_get_then_check	caixa-core/src/render.rs

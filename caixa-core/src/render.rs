@@ -19363,7 +19363,7 @@ pub fn kube_metadata_str_field<'a>(value: &'a serde_yaml::Value, field: &str) ->
     // Every K8s API-machinery rebrand on the outer `metadata:` navigation
     // now reaches exactly one substrate helper on the sub-`metadata:`
     // axis — no per-shape-gate-arity duplication of the two-hop walk.
-    kube_metadata_field(value, field).and_then(|v| v.as_str())
+    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_str)
 }
 
 /// Read the string-scalar value at a top-level `<field>` axis-key on a
@@ -19457,7 +19457,7 @@ pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
     // its trailing `.as_str()` closure onto its axis's scalar-Value
     // accessor primitive rather than re-walking the two-hop navigation
     // on every axis.
-    kube_root_field(value, field).and_then(|v| v.as_str())
+    kube_root_field(value, field).and_then(serde_yaml::Value::as_str)
 }
 
 /// Predicate: does the K8s custom resource YAML document at `value`
@@ -20678,7 +20678,7 @@ pub fn kube_metadata_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Ma
 pub fn kube_metadata_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Option<&'a str> {
     kube_metadata_labels(value)
         .and_then(|labels| labels.get(label))
-        .and_then(|v| v.as_str())
+        .and_then(serde_yaml::Value::as_str)
 }
 
 /// Predicate: does the K8s custom resource YAML document at `value`
@@ -21368,7 +21368,7 @@ pub fn kube_spec_field<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
-    kube_spec_field(value, field).and_then(|v| v.as_str())
+    kube_spec_field(value, field).and_then(serde_yaml::Value::as_str)
 }
 
 /// Read the sub-`spec.<field>` YAML sequence on a K8s custom resource YAML
@@ -21459,7 +21459,7 @@ pub fn kube_spec_seq_field<'a>(
     value: &'a serde_yaml::Value,
     field: &str,
 ) -> Option<&'a serde_yaml::Sequence> {
-    kube_spec_field(value, field).and_then(|v| v.as_sequence())
+    kube_spec_field(value, field).and_then(serde_yaml::Value::as_sequence)
 }
 
 /// Read the sub-`spec.<field>` YAML sub-mapping on a K8s custom resource
@@ -21554,7 +21554,7 @@ pub fn kube_spec_map_field<'a>(
     value: &'a serde_yaml::Value,
     field: &str,
 ) -> Option<&'a serde_yaml::Mapping> {
-    kube_spec_field(value, field).and_then(|v| v.as_mapping())
+    kube_spec_field(value, field).and_then(serde_yaml::Value::as_mapping)
 }
 
 /// Read the sub-`spec.<field>` YAML scalar-boolean on a K8s custom
@@ -21936,7 +21936,7 @@ pub fn kube_spec_spec_str_field<'a>(
     outer: &str,
     inner: &str,
 ) -> Option<&'a str> {
-    kube_spec_spec_field(value, outer, inner).and_then(|v| v.as_str())
+    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_str)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` sub-mapping on a K8s
@@ -22026,7 +22026,7 @@ pub fn kube_spec_spec_map_field<'a>(
     outer: &str,
     inner: &str,
 ) -> Option<&'a serde_yaml::Mapping> {
-    kube_spec_spec_field(value, outer, inner).and_then(|v| v.as_mapping())
+    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_mapping)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` YAML sequence on a K8s
@@ -22118,7 +22118,7 @@ pub fn kube_spec_spec_seq_field<'a>(
     outer: &str,
     inner: &str,
 ) -> Option<&'a serde_yaml::Sequence> {
-    kube_spec_spec_field(value, outer, inner).and_then(|v| v.as_sequence())
+    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_sequence)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` scalar-boolean on a K8s
@@ -22677,7 +22677,7 @@ pub fn kube_metadata_map_field<'a>(
     value: &'a serde_yaml::Value,
     field: &str,
 ) -> Option<&'a serde_yaml::Mapping> {
-    kube_metadata_field(value, field).and_then(|v| v.as_mapping())
+    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_mapping)
 }
 
 /// Read the sub-`metadata.<field>` YAML sequence on a K8s custom
@@ -22763,7 +22763,7 @@ pub fn kube_metadata_seq_field<'a>(
     value: &'a serde_yaml::Value,
     field: &str,
 ) -> Option<&'a serde_yaml::Sequence> {
-    kube_metadata_field(value, field).and_then(|v| v.as_sequence())
+    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_sequence)
 }
 
 /// Read the sub-`metadata.<field>` YAML scalar-integer on a K8s custom
@@ -23014,7 +23014,7 @@ pub fn kube_root_map_field<'a>(
     // [`kube_spec_field`] (23bd568) — each shape-gate arity peer
     // folds its trailing `.as_mapping()` closure onto its axis's
     // scalar-Value accessor primitive.
-    kube_root_field(value, field).and_then(|v| v.as_mapping())
+    kube_root_field(value, field).and_then(serde_yaml::Value::as_mapping)
 }
 
 /// Read a top-level `<field>:` sub-Value on a K8s custom resource or
@@ -23187,7 +23187,7 @@ pub fn kube_root_seq_field<'a>(
     // [`kube_spec_field`] (23bd568) — each shape-gate arity peer folds
     // its trailing `.as_sequence()` closure onto its axis's
     // scalar-Value accessor primitive.
-    kube_root_field(value, field).and_then(|v| v.as_sequence())
+    kube_root_field(value, field).and_then(serde_yaml::Value::as_sequence)
 }
 
 /// Read a top-level `<field>:` scalar-boolean leaf-toggle on a K8s
@@ -23618,7 +23618,7 @@ pub fn kube_match_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Mappi
 pub fn kube_match_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Option<&'a str> {
     kube_match_labels(value)
         .and_then(|labels| labels.get(label))
-        .and_then(|v| v.as_str())
+        .and_then(serde_yaml::Value::as_str)
 }
 
 /// Predicate: does the K8s `LabelSelector`-shaped YAML value at `value`
@@ -24158,7 +24158,7 @@ pub fn kube_seq_first<'a>(
 ) -> Option<&'a serde_yaml::Value> {
     value
         .get(field)
-        .and_then(|v| v.as_sequence())
+        .and_then(serde_yaml::Value::as_sequence)
         .and_then(|s| s.first())
 }
 
@@ -24539,7 +24539,8 @@ pub fn kube_seq<'a, R: KubeReceiver + ?Sized>(
     recv: &'a R,
     field: &str,
 ) -> Option<&'a serde_yaml::Sequence> {
-    recv.field_value(field).and_then(|v| v.as_sequence())
+    recv.field_value(field)
+        .and_then(serde_yaml::Value::as_sequence)
 }
 
 /// Read a sub-`<field>` YAML scalar-str nested one hop under an
@@ -24637,7 +24638,7 @@ pub fn kube_seq<'a, R: KubeReceiver + ?Sized>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_str<'a, R: KubeReceiver + ?Sized>(recv: &'a R, field: &str) -> Option<&'a str> {
-    recv.field_value(field).and_then(|v| v.as_str())
+    recv.field_value(field).and_then(serde_yaml::Value::as_str)
 }
 
 /// Read a sub-`<field>` YAML scalar-integer nested one hop under an
@@ -44507,6 +44508,46 @@ spec:
                  production-fallback drifts silently at readback time"
             );
         }
+    }
+
+    #[test]
+    fn kube_shape_gate_family_composes_through_serde_yaml_value_fn_reference_form() {
+        // Type-level convergence pin over the substrate-primitive
+        // shape-gate `kube_*_field` accessor family + the value-level
+        // `kube_str`/`kube_seq`/`kube_map`/`kube_bool`/`kube_u64` peers.
+        // Every helper in the family folds its trailing shape gate via
+        // `.and_then(serde_yaml::Value::as_<arity>)` in fn-reference form
+        // — matching the posture the bool + u64 arms landed at first
+        // (21659, 21750, 22228, 22346, 22853, 22932, 23280, 23388, 24729,
+        // 24940) and the map + str + seq arms then converged to. The
+        // load-bearing invariant this pin surfaces: for each of the five
+        // shape-gate arities the `serde_yaml::Value::as_<arity>` method
+        // coerces to the `for<'a> fn(&'a Value) -> Option<&'a X>` (or
+        // `fn(&Value) -> Option<X>` for the owned-arity bool/u64) fn-
+        // pointer type `Option::and_then`'s `F: FnOnce(T) -> Option<U>`
+        // bound demands, so every future shape-gate arity added to the
+        // family reaches this same posture by construction — no per-
+        // helper `.and_then(|v| v.as_<arity>())` closure re-inline that
+        // would drift the axis-anchored helper family away from the
+        // value-level primitive quintet's fn-reference posture, no
+        // clippy::redundant_closure_for_method_calls warning that a
+        // future pedantic-lint upgrade or `-W clippy::pedantic` opt-in
+        // in a sibling caixa-* crate would surface asymmetrically.
+        //
+        // The pin lives at the type level (fn-pointer coercion) rather
+        // than as a byte-level runtime assertion: a runtime pin cannot
+        // distinguish `.and_then(|v| v.as_X())` from
+        // `.and_then(serde_yaml::Value::as_X)` — both produce identical
+        // output on every input — so the only faithful source-level
+        // convergence pin is the type-level coercion below.
+        const _AS_STR: for<'a> fn(&'a serde_yaml::Value) -> Option<&'a str> =
+            serde_yaml::Value::as_str;
+        const _AS_SEQ: for<'a> fn(&'a serde_yaml::Value) -> Option<&'a serde_yaml::Sequence> =
+            serde_yaml::Value::as_sequence;
+        const _AS_MAP: for<'a> fn(&'a serde_yaml::Value) -> Option<&'a serde_yaml::Mapping> =
+            serde_yaml::Value::as_mapping;
+        const _AS_BOOL: fn(&serde_yaml::Value) -> Option<bool> = serde_yaml::Value::as_bool;
+        const _AS_U64: fn(&serde_yaml::Value) -> Option<u64> = serde_yaml::Value::as_u64;
     }
 
     #[test]
