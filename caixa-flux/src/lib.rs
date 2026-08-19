@@ -2015,8 +2015,31 @@ impl GitRefSpec {
     /// [`caixa_core::WitContract::edge_pair`] +
     /// [`caixa_core::WitContract::edge_triple`] already carry on the
     /// sibling M3 mesh-slot surface.
+    ///
+    /// Declared `pub const fn` — the body composes exclusively through
+    /// `const`-stable primitives: a `match` on `&self` (const-stable
+    /// since forever), tuple construction over `&'static str` +
+    /// `String::as_str` (`pub const fn`, const-stable since Rust 1.87).
+    /// Closes the const-eval-surface parity gap with the peer
+    /// `pub const fn` [`caixa_core::WitTarget::payload_pair`] tuple-
+    /// return dispatch on the M3 `:contratos` payload-arm surface —
+    /// until this lift, the peer M3 payload-arm dispatch was reachable
+    /// at compile time while the sibling FluxCD source-controller
+    /// `spec.ref.<field>` dispatch was reachable only at runtime, so
+    /// every substrate-side `const`-context reader that wanted to fan
+    /// on the paired-key/value shape across both typed surfaces (a
+    /// module-scope `const _: () = assert!(matches!(git_ref.ref_pair()
+    /// .0, FLUX_GITREPOSITORY_REF_KEY_TAG))` invariant pin on a typed
+    /// fixture, a future `const fn` per-`GitRefSpec` sub-selector-key
+    /// resolver over a typed `GitRefSpec` scalar, any future
+    /// `const fn` per-CR FluxCD-source-controller admission composer)
+    /// surfaced as a downstream E0015 far from the accessor's own
+    /// declaration. The `pub const fn` posture closes the drift
+    /// structurally at caixa-flux build time. Pinned load-bearing by
+    /// [`tests::gitrefspec_ref_pair_accessor_family_is_const_fn`]
+    /// (const-eval-surface pin via `const fn` wrapper).
     #[must_use]
-    pub fn ref_pair(&self) -> (&'static str, &str) {
+    pub const fn ref_pair(&self) -> (&'static str, &str) {
         match self {
             GitRefSpec::Tag(v) => (FLUX_GITREPOSITORY_REF_KEY_TAG, v.as_str()),
             GitRefSpec::Branch(v) => (FLUX_GITREPOSITORY_REF_KEY_BRANCH, v.as_str()),
@@ -2043,8 +2066,16 @@ impl GitRefSpec {
     /// [`caixa_core::WitTarget::field_name`] routes through
     /// [`caixa_core::WitTarget::payload_pair`] on the sibling M3
     /// `:contratos` payload-arm axis.
+    ///
+    /// Declared `pub const fn` — routes through the peer
+    /// `pub const fn` [`Self::ref_pair`] dispatch so the const-eval
+    /// posture on the sub-selector-key half of the paired dispatch
+    /// mirrors the peer `pub const fn` [`caixa_core::WitTarget::field_name`]
+    /// on the M3 `:contratos` payload-arm surface. Sibling in
+    /// const-eval posture to the peer per-half [`Self::ref_value`]
+    /// projection lifted on the same commit.
     #[must_use]
-    pub fn ref_field_name(&self) -> &'static str {
+    pub const fn ref_field_name(&self) -> &'static str {
         self.ref_pair().0
     }
 
@@ -2062,8 +2093,21 @@ impl GitRefSpec {
     /// consumer" discipline the peer [`caixa_core::WitTarget::field_name`]
     /// routes through [`caixa_core::WitTarget::payload_pair`] on the
     /// sibling M3 `:contratos` payload-arm axis.
+    ///
+    /// Declared `pub const fn` — routes through the peer
+    /// `pub const fn` [`Self::ref_pair`] dispatch so the const-eval
+    /// posture on the sub-selector-value half of the paired dispatch
+    /// mirrors the peer `pub const fn` [`caixa_core::WitTarget::payload`]
+    /// on the M3 `:contratos` payload-arm surface. Sibling in
+    /// const-eval posture to the peer per-half [`Self::ref_field_name`]
+    /// projection lifted on the same commit — both per-half accessors
+    /// now share the same `const`-eval posture as the underlying
+    /// [`Self::ref_pair`] dispatch, so a substrate-side `const`-context
+    /// reader that fans on either half reaches the same typed
+    /// dispatch on the substrate primitive at const-eval time as at
+    /// runtime.
     #[must_use]
-    pub fn ref_value(&self) -> &str {
+    pub const fn ref_value(&self) -> &str {
         self.ref_pair().1
     }
 }
@@ -7285,6 +7329,73 @@ spec:
                  the paired canonical FLUX_GITREPOSITORY_REF_KEY_* const \
                  the FluxCD source-controller reads its spec.ref.<field> \
                  sub-block under",
+            );
+        }
+    }
+
+    #[test]
+    fn gitrefspec_ref_pair_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin: witnesses the `const`-eval posture
+        // on the [`GitRefSpec::ref_pair`] paired-dispatch and its two
+        // sibling per-half projections [`GitRefSpec::ref_field_name`] +
+        // [`GitRefSpec::ref_value`] via three `const fn` wrappers whose
+        // bodies each call the underlying accessor — well-formed only
+        // when the callees are themselves `const fn` (any future
+        // downgrade to non-`const` fails at caixa-flux build time with
+        // E0015 `cannot call non-const function`, strictly stronger
+        // than a runtime `assert!`, side-stepping the destructor-in-
+        // const restriction that blocks direct `const _: … =
+        // GitRefSpec::…(...).ref_pair()` items on `GitRefSpec`'s
+        // `String`-carrying arms). The runtime body sweeps every
+        // closed-set [`GitRefSpec`] arm (`Tag` / `Branch` / `Commit`)
+        // and asserts the wrapped and direct dispatches agree byte-for-
+        // byte on the paired-tuple output + each per-half projection —
+        // a violation means either a wrapper stopped compiling under a
+        // future `const`-posture downgrade, or a per-half projection
+        // silently split from its underlying [`GitRefSpec::ref_pair`]
+        // dispatch. Peer of the sibling
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_window_accessor_is_const_fn`]
+        // (974bbd8) `const`-eval-surface pin on the peer M3 mesh-slot
+        // rate-limit closed-set typed-enum reverse resolver, and the
+        // sibling `caixa_core::aplicacao::WitTarget::payload_pair` /
+        // `field_name` / `payload` `pub const fn` trio (b399d60 / …)
+        // on the M3 `:contratos` payload-arm dispatch surface — first
+        // cross-crate closed-set typed-enum accessor family outside
+        // caixa-core to converge onto the same `const`-eval-posture-
+        // pin discipline, extended onto the FluxCD source-controller
+        // `spec.ref.<field>` paired-dispatch axis.
+        const fn ref_pair_via_const_fn(git_ref: &GitRefSpec) -> (&'static str, &str) {
+            git_ref.ref_pair()
+        }
+        const fn ref_field_name_via_const_fn(git_ref: &GitRefSpec) -> &'static str {
+            git_ref.ref_field_name()
+        }
+        const fn ref_value_via_const_fn(git_ref: &GitRefSpec) -> &str {
+            git_ref.ref_value()
+        }
+        let cases = [
+            GitRefSpec::Tag("v0.1.0".into()),
+            GitRefSpec::Branch("main".into()),
+            GitRefSpec::Commit("deadbeef".into()),
+        ];
+        for git_ref in &cases {
+            assert_eq!(
+                ref_pair_via_const_fn(git_ref),
+                git_ref.ref_pair(),
+                "GitRefSpec::{git_ref:?} ref_pair() via const fn wrapper \
+                 must agree with direct dispatch",
+            );
+            assert_eq!(
+                ref_field_name_via_const_fn(git_ref),
+                git_ref.ref_field_name(),
+                "GitRefSpec::{git_ref:?} ref_field_name() via const fn \
+                 wrapper must agree with direct dispatch",
+            );
+            assert_eq!(
+                ref_value_via_const_fn(git_ref),
+                git_ref.ref_value(),
+                "GitRefSpec::{git_ref:?} ref_value() via const fn wrapper \
+                 must agree with direct dispatch",
             );
         }
     }
