@@ -1229,9 +1229,81 @@ impl WitContract {
     /// `ContratoCycle` shape [`Self::detect_sync_cycles`] rejects) and
     /// to match the [`AplicacaoError::ContratoSelfLoop`] diagnostic
     /// variant already carrying the term.
+    ///
+    /// Declared `pub const fn` — closes the last unlifted per-`:contratos`
+    /// shape-predicate on the substrate's `const`-eval surface. The peer
+    /// per-`:contratos` shape-predicate family [`Self::is_http`] /
+    /// [`Self::is_pubsub`] / [`Self::is_store`] / [`Self::is_capability`]
+    /// (d46420c / 84c2325 / 279823b) already carries the `pub const fn`
+    /// posture on the WIT-world-ref classifier axis; this lift extends it
+    /// onto the peer caller-callee identity-space predicate. The body
+    /// projects the `:de` / `:para` `String` storage through the sibling
+    /// `pub const fn` [`Self::source`] / [`Self::destination`] scalar
+    /// accessors, then compares the resulting `&str` byte-slices under a
+    /// manual `while`-loop through `str::as_bytes` (`pub const fn`,
+    /// const-stable since Rust 1.39), primitive-`usize` `!=` on
+    /// [`<[u8]>::len`], and const-stable slice indexing (since Rust 1.79)
+    /// — every operation `const`-eval-callable on stable Rust, no
+    /// iterator methods, no `PartialEq for str` trait dispatch (which
+    /// remains non-`const` on stable). Mirrors the peer `pub const fn`
+    /// [`wit_shape_matches`] combinator's manual byte-level `starts_with`
+    /// loop verbatim on the paired-slice-equality shape. Every downstream
+    /// substrate-side `const`-context consumer of the per-`:contratos`
+    /// self-edge partition (a future `const _: () = assert!(…)` module-
+    /// scope invariant pin over a per-fixture typed [`WitContract`] once
+    /// the type's carriers admit `const`-context construction, a future
+    /// M4 admission-webhook `const fn` self-edge resolver, any `const fn`
+    /// composer that fans on the identity-space partition at compile
+    /// time) reaches through the same typed dispatch on the substrate
+    /// primitive at const-eval time as at runtime. Pinned by
+    /// [`tests::wit_contract_is_self_loop_predicate_is_const_fn`] which
+    /// witnesses the `const`-eval posture via a `const fn` wrapper so any
+    /// future accidental downgrade to non-`const` trips at caixa-core
+    /// build time with E0015 (`cannot call non-const method`), strictly
+    /// stronger than a runtime `assert!`.
     #[must_use]
-    pub fn is_self_loop(&self) -> bool {
-        self.source() == self.destination()
+    pub const fn is_self_loop(&self) -> bool {
+        // Compose through the paired `pub const fn` [`Self::source`] /
+        // [`Self::destination`] scalar accessors so any future rebrand of
+        // the underlying `:de` / `:para` storage (a lift from `String` to
+        // a typed `ServicoName(String)` newtype, a per-Aplicacao interning
+        // arena the M4 CR materializer authors, a `smol_str::SmolStr`
+        // inline-buffer swap) flows through the same one body without a
+        // coordinated per-consumer rewrite. Peer of the sibling
+        // [`Self::is_http`] / [`Self::is_pubsub`] / [`Self::is_store`] /
+        // [`Self::is_capability`] shape-predicate family — each of which
+        // composes through the paired [`Self::world_ref`] scalar accessor
+        // onto the peer `pub const fn` [`wit_shape_is_http`] /
+        // [`wit_shape_is_pubsub`] / [`wit_shape_is_store`] /
+        // [`wit_shape_is_capability`] free-function classifier — the same
+        // "typed dispatch composes with typed dispatch, not raw field
+        // access" discipline extended onto the caller-callee identity-
+        // space partition. Pinned by
+        // [`tests::wit_contract_is_self_loop_routes_through_source_destination_accessors`]
+        // above.
+        let a = self.source().as_bytes();
+        let b = self.destination().as_bytes();
+        if a.len() != b.len() {
+            return false;
+        }
+        // Manual byte-level equality loop — mirrors the peer
+        // [`wit_shape_matches`] combinator's manual `starts_with` loop
+        // verbatim on the paired-slice-equality shape. `PartialEq for
+        // str` remains non-`const` on stable Rust 1.94 (the `Pattern`
+        // trait dispatch it routes through is not `const`), so a naive
+        // `self.source() == self.destination()` body would trip on
+        // `const`-eval-callability; the byte-slice loop dispatches
+        // through primitive-`u8` `!=`, primitive-`usize` comparison, and
+        // const-stable slice indexing (since Rust 1.79) — every
+        // operation `const`-eval-callable on stable.
+        let mut i = 0;
+        while i < a.len() {
+            if a[i] != b[i] {
+                return false;
+            }
+            i += 1;
+        }
+        true
     }
 
     /// Typed view of the contract's payload target. Enforces that the
@@ -22482,6 +22554,96 @@ mod tests {
             inter_edge.source() == inter_edge.destination(),
             "WitContract::is_self_loop must compose exactly \
              `source() == destination()` on the complement arm too",
+        );
+    }
+
+    #[test]
+    fn wit_contract_is_self_loop_predicate_is_const_fn() {
+        // Fail-before-pass-after pin on the [`WitContract::is_self_loop`]
+        // caller-callee identity-space predicate's `const`-eval-surface
+        // posture. The wrapper below dispatches through
+        // [`WitContract::is_self_loop`] and is well-formed only when the
+        // callee is itself `pub const fn` — any future accidental
+        // downgrade to non-`const` fails the wrapper at caixa-core build
+        // time with E0015 (`cannot call non-const method`), strictly
+        // stronger than a runtime `assert!` and strictly stronger than a
+        // module-scope `const _: () = assert!(…)` pin (the type's
+        // `String` / `Option<String>` carriers rule out `const`-context
+        // value construction; the `const fn` wrapper is the load-bearing
+        // shape that side-steps the destructor-in-const restriction on
+        // the value axis while still pinning the `const`-fn posture on
+        // the callee — mirror of the sibling
+        // [`wit_contract_pre_projection_accessor_family_is_const_fn`]
+        // (279823b) and
+        // [`wit_contract_identity_projection_accessor_is_const_fn`]
+        // (1ab648c) pins' discipline verbatim on the peer scalar-
+        // accessor and composite-projection surfaces). Closes the last
+        // unlifted per-`:contratos` shape/identity predicate on the
+        // const-eval surface — the peer WIT-shape-partition family
+        // [`WitContract::is_http`] / [`WitContract::is_pubsub`] /
+        // [`WitContract::is_store`] / [`WitContract::is_capability`]
+        // already carried the `pub const fn` posture on the peer
+        // WIT-world-ref classifier axis (d46420c / 84c2325 / 279823b);
+        // this pin extends the same posture onto the caller-callee
+        // identity-space partition. Sweeps every WIT-shape arm on both
+        // the equal-endpoints (self-edge) and distinct-endpoints
+        // (inter-edge) arms of the identity-space partition, plus one
+        // same-length distinct-byte pair to pin the mid-loop `!=` arm
+        // past the leading length-mismatch shortcut.
+        const fn is_self_loop_via_const_fn(c: &WitContract) -> bool {
+            c.is_self_loop()
+        }
+        let mk = |de: &str, para: &str, wit: &str| WitContract {
+            de: de.into(),
+            para: para.into(),
+            wit: wit.into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        };
+        for (nome, wit) in [
+            ("cart", "wasi:http/proxy"),
+            ("checkout", "nats:pub-sub"),
+            ("kv", "wasi:keyvalue/store"),
+            ("audit", "wasi:logging"),
+        ] {
+            let self_edge = mk(nome, nome, wit);
+            assert!(
+                is_self_loop_via_const_fn(&self_edge),
+                "self-edge {nome:?} under {wit:?}"
+            );
+            assert_eq!(
+                is_self_loop_via_const_fn(&self_edge),
+                self_edge.is_self_loop()
+            );
+        }
+        for (de, para, wit) in [
+            ("cart", "catalog", "wasi:http/proxy"),
+            ("checkout", "orders", "nats:pub-sub"),
+            ("cart", "kv", "wasi:keyvalue/store"),
+            ("audit", "sink", "wasi:logging"),
+        ] {
+            let inter_edge = mk(de, para, wit);
+            assert!(
+                !is_self_loop_via_const_fn(&inter_edge),
+                "inter-edge {de:?}→{para:?} under {wit:?}",
+            );
+            assert_eq!(
+                is_self_loop_via_const_fn(&inter_edge),
+                inter_edge.is_self_loop()
+            );
+        }
+        // Same-length distinct-byte pair — pins the mid-loop `!=` arm
+        // past the leading `a.len() != b.len()` shortcut so the const-fn
+        // wrapper exercises every arm of the byte-slice equality loop.
+        let same_len_pair = mk("cart", "kart", "wasi:http/proxy");
+        assert!(
+            !is_self_loop_via_const_fn(&same_len_pair),
+            "same-length distinct-byte"
+        );
+        assert_eq!(
+            is_self_loop_via_const_fn(&same_len_pair),
+            same_len_pair.is_self_loop()
         );
     }
 
