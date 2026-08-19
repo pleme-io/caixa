@@ -2217,8 +2217,34 @@ impl Caixa {
     /// discipline the sibling per-slot read accessors ([`Self::nome`]
     /// e6b7d97, [`Self::versao`], [`Self::kind`]) carry — extended onto
     /// the outer-[`Caixa`] typed-dispatch read surface.
+    ///
+    /// Declared `pub const fn` — every operator in the body is already
+    /// `const`-callable (the [`crate::dep::DepList`] enum is a plain
+    /// closed-set `#[derive(Copy)]` discriminator so the `match` arms
+    /// are const-evaluable, and each arm forwards through the sibling
+    /// `pub const fn` [`Self::deps`] / [`Self::deps_dev`] per-slot
+    /// slice accessor). Pinned load-bearing by the paired
+    /// [`caixa_deps_of_is_const_fn`][pin] wrapper test (a
+    /// `const fn deps_of_via_const_fn(c: &Caixa, l: DepList) -> &[Dep]`
+    /// that forwards through this accessor) — any future accidental
+    /// downgrade to non-`const` fails the wrapper at caixa-core build
+    /// time with E0015 (`cannot call non-const method`), strictly
+    /// stronger than a runtime `assert!` and side-stepping the
+    /// destructor-in-const restriction the `Caixa` fixture's owning
+    /// carriers rule out on the direct-`const _: () = assert!(…)`
+    /// residence. Peer of the sibling per-`Dep` outer-accessor
+    /// family's parallel `const`-eval-surface pass and of the outer-
+    /// `Caixa` slice-return accessor family's earlier pass (231a968)
+    /// — same "one canonical dispatch per axis, `const`-eval posture
+    /// pinned at the substrate primitive, thin projections at each
+    /// consumer" discipline extended onto the outer-`Caixa`
+    /// typed-dispatch read surface on the [`DepList`]-keyed dep-list
+    /// axis.
+    ///
+    /// [DepList]: crate::dep::DepList
+    /// [pin]: tests::caixa_deps_of_is_const_fn
     #[must_use]
-    pub fn deps_of(&self, list: crate::dep::DepList) -> &[Dep] {
+    pub const fn deps_of(&self, list: crate::dep::DepList) -> &[Dep] {
         match list {
             crate::dep::DepList::Prod => self.deps(),
             crate::dep::DepList::Dev => self.deps_dev(),
@@ -18811,6 +18837,97 @@ mod tests {
                 (crate::render::DEP_AUTHOR_KEY_DEPS, 1, "caixa-teia"),
                 (crate::render::DEP_AUTHOR_KEY_DEPS_DEV, 1, "tatara-check"),
             ]
+        );
+    }
+
+    #[test]
+    fn caixa_deps_of_is_const_fn() {
+        // Fail-before-pass-after pin on [`Caixa::deps_of`]'s
+        // `const`-eval-surface posture. The typed-dispatch read
+        // accessor forwards through the sibling `pub const fn`
+        // [`Caixa::deps`] / [`Caixa::deps_dev`] per-slot slice
+        // accessors on the two [`crate::dep::DepList`] enum arms —
+        // every operator in the body is already `const`-callable
+        // (`DepList` is a plain `#[derive(Copy)]` closed-set
+        // discriminator so the `match` arms are const-evaluable, and
+        // each arm dispatches through the sibling `pub const fn`
+        // slice accessor). Any future accidental downgrade to
+        // non-`const` fails the `deps_of_via_const_fn` wrapper below
+        // at caixa-core build time with E0015 (`cannot call non-const
+        // method`), strictly stronger than a runtime `assert!` and
+        // side-stepping the destructor-in-const restriction the
+        // `Caixa` fixture's owning `String` / `Vec<Dep>` carriers
+        // rule out on the direct-`const _: () = assert!(...)`
+        // residence.
+        //
+        // Peer of the sibling outer-`Caixa` accessor family pins
+        // ([`caixa_outer_string_slice_return_accessor_family_is_const_fn`]
+        // on the `&[String]` universal-axis surface,
+        // [`caixa_outer_composite_slice_return_accessor_family_is_const_fn`]
+        // on the outer `&[T]` composite-slice surface,
+        // [`caixa_outer_option_composite_reference_return_accessor_family_is_const_fn`]
+        // on the outer `Option<&Composite>` surface) — this pin
+        // extends the `const`-eval-surface discipline onto the outer-
+        // `Caixa` typed-dispatch read surface on the [`DepList`]-keyed
+        // dep-list axis, closing the outer-`Caixa` accessor family's
+        // last unlifted `pub fn` on the read side.
+        const fn deps_of_via_const_fn(c: &Caixa, list: crate::dep::DepList) -> &[Dep] {
+            c.deps_of(list)
+        }
+        let src = Caixa::template("host");
+        let mut caixa = Caixa::from_lisp(&src).expect("template parses");
+        // Empty-list arm: both `Prod` and `Dev` degenerate to the
+        // empty slice with no silent `None` collapse — the
+        // `#[serde(default)]` `Vec::new()` fold every `defcaixa` form
+        // that omits the slot lands on.
+        assert!(deps_of_via_const_fn(&caixa, crate::dep::DepList::Prod).is_empty());
+        assert!(deps_of_via_const_fn(&caixa, crate::dep::DepList::Dev).is_empty());
+        assert_eq!(
+            deps_of_via_const_fn(&caixa, crate::dep::DepList::Prod),
+            caixa.deps()
+        );
+        assert_eq!(
+            deps_of_via_const_fn(&caixa, crate::dep::DepList::Dev),
+            caixa.deps_dev()
+        );
+        // Populated arms: each list carries its own entry, and the
+        // wrapper / direct dispatches agree byte-for-byte on the
+        // slice-view under both non-empty arms.
+        let prod_dep = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        let dev_dep = Dep {
+            nome: "tatara-check".to_string(),
+            versao: "*".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        caixa
+            .push_dep(crate::dep::DepList::Prod, prod_dep)
+            .expect("push into :deps succeeds");
+        caixa
+            .push_dep(crate::dep::DepList::Dev, dev_dep)
+            .expect("push into :deps-dev succeeds");
+        assert_eq!(
+            deps_of_via_const_fn(&caixa, crate::dep::DepList::Prod),
+            caixa.deps()
+        );
+        assert_eq!(
+            deps_of_via_const_fn(&caixa, crate::dep::DepList::Dev),
+            caixa.deps_dev()
+        );
+        assert_eq!(
+            deps_of_via_const_fn(&caixa, crate::dep::DepList::Prod)[0].nome(),
+            "caixa-teia"
+        );
+        assert_eq!(
+            deps_of_via_const_fn(&caixa, crate::dep::DepList::Dev)[0].nome(),
+            "tatara-check"
         );
     }
 
