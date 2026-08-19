@@ -1473,7 +1473,7 @@ mod tests {
         let layout =
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let mut c = caixa(CaixaKind::Biblioteca);
-        c.bibliotecas = vec!["".into()];
+        c.bibliotecas = vec![String::new()];
         let err = layout.verify(&c, &root).unwrap_err();
         // The wire-up wraps `ManifestError` Display into the
         // CodePathViolation envelope (peer of LimitsViolation /
@@ -1577,7 +1577,7 @@ mod tests {
         let layout =
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let mut c = caixa(CaixaKind::Biblioteca);
-        c.etiquetas = vec!["".into()];
+        c.etiquetas = vec![String::new()];
         let err = layout.verify(&c, &root).unwrap_err();
         let LayoutError::EtiquetasViolation { caixa, issue } = err else {
             panic!("expected LayoutError::EtiquetasViolation, got {err:?}");
@@ -1635,7 +1635,7 @@ mod tests {
         let layout =
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let mut c = caixa(CaixaKind::Biblioteca);
-        c.etiquetas = vec!["".into()];
+        c.etiquetas = vec![String::new()];
         c.membros = vec![crate::aplicacao::Membro {
             caixa: "x".into(),
             versao: "^0.1".into(),
@@ -1664,7 +1664,7 @@ mod tests {
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let mut c = caixa(CaixaKind::Biblioteca);
         c.deps = vec![crate::Dep::simple("Caixa-Teia", "^0.1")]; // uppercase :nome
-        c.etiquetas = vec!["".into()];
+        c.etiquetas = vec![String::new()];
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(
             matches!(err, LayoutError::DepsViolation { .. }),
@@ -1756,7 +1756,7 @@ mod tests {
         let layout =
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let mut c = caixa(CaixaKind::Biblioteca);
-        c.autores = vec!["".into()];
+        c.autores = vec![String::new()];
         let err = layout.verify(&c, &root).unwrap_err();
         let LayoutError::AutoresViolation { caixa, issue } = err else {
             panic!("expected LayoutError::AutoresViolation, got {err:?}");
@@ -1817,7 +1817,7 @@ mod tests {
         let layout =
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let mut c = caixa(CaixaKind::Biblioteca);
-        c.autores = vec!["".into()];
+        c.autores = vec![String::new()];
         c.membros = vec![crate::aplicacao::Membro {
             caixa: "x".into(),
             versao: "^0.1".into(),
@@ -1846,8 +1846,8 @@ mod tests {
         let layout =
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let mut c = caixa(CaixaKind::Biblioteca);
-        c.etiquetas = vec!["".into()];
-        c.autores = vec!["".into()];
+        c.etiquetas = vec![String::new()];
+        c.autores = vec![String::new()];
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(
             matches!(err, LayoutError::EtiquetasViolation { .. }),
