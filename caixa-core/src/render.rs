@@ -13555,14 +13555,54 @@ pub const CILIUM_AUTH_MODE_DISABLED: &str = "disabled";
 /// value pair, per-typed-arm dispatch projection)` compound.
 ///
 /// [cm]: ../../caixa_mesh/index.html
+///
+/// `pub const fn` posture: the body is one primitive-`bool` branch onto one
+/// of two `pub const &'static str` references — every operator is
+/// const-callable on stable Rust 1.94, so any downstream substrate-side
+/// `const`-context consumer of the `MutualAuthenticationMode` bijection (a
+/// future `const _: &str = cilium_auth_mode(true);` witness that pins the
+/// affirmative arm's scalar-value at compile time, an M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook `const fn`
+/// dispatch that projects an author-declared `:politicas :mtls-required`
+/// tristate onto the Cilium CNP mode-discriminator scalar at compile
+/// time, a `const fn` composer that fans on the `bool` tristate arm at
+/// compile time) reaches through one typed dispatch on the substrate
+/// primitive at const-eval time as at runtime. The paired module-scope
+/// [`cilium_auth_mode`] `const` witnesses at render.rs:~13580 and the
+/// paired [`tests::cilium_auth_mode_projection_is_const_fn`] wrapper pin
+/// close the const-eval-surface posture at caixa-core build time — any
+/// future accidental downgrade to non-`const` fails the witness bindings
+/// with E0015 (`cannot call non-const function`), strictly stronger than
+/// a runtime `assert!`. Peer of the sibling per-`:contratos` WIT-shape
+/// classifier family [`wit_shape_is_http`] / [`wit_shape_is_pubsub`] /
+/// [`wit_shape_is_store`] / [`wit_shape_is_capability`] (d46420c /
+/// 84c2325 / 279823b) on the sibling free-function projection axis — the
+/// first M3 mesh-render `bool → &'static str` bijection to converge onto
+/// the same discipline.
 #[must_use]
-pub fn cilium_auth_mode(required: bool) -> &'static str {
+pub const fn cilium_auth_mode(required: bool) -> &'static str {
     if required {
         CILIUM_AUTH_MODE_REQUIRED
     } else {
         CILIUM_AUTH_MODE_DISABLED
     }
 }
+
+// Module-scope `const`-eval-surface witnesses on the [`cilium_auth_mode`]
+// M3-mesh-render `bool → &'static str` bijection projection: each item
+// forces const-evaluation of the projection at caixa-core build time, so
+// any future accidental downgrade of [`cilium_auth_mode`] to non-`const`
+// fails the item with E0015 (`cannot call non-const function`), strictly
+// stronger than a runtime `assert!` and strictly stronger than the
+// wrapper-family pin in `tests::cilium_auth_mode_projection_is_const_fn`
+// alone (the wrapper anchors the posture at test-time; these items
+// anchor it at build-time). Sweeps both arms of the closed `bool` input
+// space so a per-arm downgrade on one branch surfaces as a distinct
+// failing item — mirror of the sibling free-function classifier family's
+// `const _: () = assert!(wit_shape_is_*(…));` module-scope pin block at
+// aplicacao.rs:339-359 verbatim on the peer projection surface.
+const _CILIUM_AUTH_MODE_TRUE_CONST_EVAL_WITNESS: &str = cilium_auth_mode(true);
+const _CILIUM_AUTH_MODE_FALSE_CONST_EVAL_WITNESS: &str = cilium_auth_mode(false);
 
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts its
@@ -32011,6 +32051,49 @@ mod tests {
              a collapsed-arm regression would silently render both \
              `:mtls-required t` and `:mtls-required nil` identically at \
              the cluster artifact",
+        );
+    }
+
+    #[test]
+    fn cilium_auth_mode_projection_is_const_fn() {
+        // Fail-before-pass-after pin on the [`cilium_auth_mode`]
+        // M3-mesh-render `bool → &'static str` bijection projection's
+        // `const`-eval-surface posture. The wrapper below dispatches
+        // through [`cilium_auth_mode`] and is well-formed only when the
+        // callee is itself `pub const fn` — any future accidental
+        // downgrade to non-`const` fails the wrapper at caixa-core build
+        // time with E0015 (`cannot call non-const function`), strictly
+        // stronger than a runtime `assert!` and complementary to the
+        // module-scope [`_CILIUM_AUTH_MODE_TRUE_CONST_EVAL_WITNESS`] /
+        // [`_CILIUM_AUTH_MODE_FALSE_CONST_EVAL_WITNESS`] pin items at
+        // render.rs:~13590 (those anchor the per-arm scalar-value
+        // bindings at build time; this pin anchors the projection's
+        // dispatch surface at test time). Mirror of the sibling
+        // [`wit_shape_classifier_family_is_const_fn`] (d46420c) pin's
+        // discipline verbatim on the peer M3-mesh-render `bool →
+        // &'static str` bijection surface — the first M3-mesh-render
+        // free-function projection to converge onto the `const`-eval-
+        // surface-pass discipline the WIT-shape classifier family already
+        // carries on the sibling per-`:contratos` axis.
+        const fn cilium_auth_mode_via_const_fn(required: bool) -> &'static str {
+            cilium_auth_mode(required)
+        }
+        // Both arms of the closed `bool` input space — sweeps both arms
+        // of the `MutualAuthenticationMode` OpenAPI schema enum's author-
+        // reachable scalar-value pair, so a per-arm downgrade on one
+        // branch surfaces as a distinct failing assertion.
+        assert_eq!(cilium_auth_mode_via_const_fn(true), cilium_auth_mode(true));
+        assert_eq!(
+            cilium_auth_mode_via_const_fn(false),
+            cilium_auth_mode(false)
+        );
+        assert_eq!(
+            cilium_auth_mode_via_const_fn(true),
+            CILIUM_AUTH_MODE_REQUIRED
+        );
+        assert_eq!(
+            cilium_auth_mode_via_const_fn(false),
+            CILIUM_AUTH_MODE_DISABLED
         );
     }
 
