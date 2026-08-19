@@ -111,7 +111,6 @@
 3	clippy::needless_raw_string_hashes	caixa-fmt/tests/special_shapes.rs
 2	clippy::format_push_string	caixa-lacre/src/lock.rs
 1	clippy::if_same_then_else	caixa-lacre/src/lock.rs
-9	clippy::collapsible_if	caixa-lint/src/rules.rs
 3	clippy::needless_raw_string_hashes	caixa-lint/src/rules.rs
 2	clippy::string_extend_chars	caixa-lint/src/rules.rs
 2	clippy::uninlined_format_args	caixa-lint/src/rules.rs

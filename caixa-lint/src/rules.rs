@@ -95,35 +95,35 @@ fn check_keyword_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
         // to the peer `check_enum_pascal` / `keyword_present` /
         // `matches_kwarg` / `items_has_key` sites (all converged in
         // this run) and to the [`caixa_ast::Node::kwarg`] pair-loop.
-        if let Some(k) = n.kind.as_keyword() {
-            if !is_kebab(k) {
-                let kebabed = to_kebab(k);
-                // Only attach an autofix if the canonicalized form is
-                // ITSELF valid kebab — guards against pathological
-                // inputs like `__type` whose mechanical to_kebab gives
-                // `--type` (invalid: starts with dash). Those need
-                // human-chosen names.
-                let fixable = kebabed != k && is_kebab(&kebabed);
-                let hint = if fixable {
-                    format!("rename to :{kebabed}")
-                } else {
-                    "this name has no mechanical kebab equivalent — pick a fresh name".into()
-                };
-                let mut diag = Diagnostic::new(
-                    "keyword-kebab-case",
-                    Severity::Warning,
-                    n.span,
-                    format!(":{k} should be kebab-case"),
-                )
-                .with_hint(hint);
-                if fixable {
-                    diag = diag.with_fix_replace(
-                        format!("rename keyword to :{kebabed}"),
-                        format!(":{kebabed}"),
-                    );
-                }
-                diags.push(diag);
+        if let Some(k) = n.kind.as_keyword()
+            && !is_kebab(k)
+        {
+            let kebabed = to_kebab(k);
+            // Only attach an autofix if the canonicalized form is
+            // ITSELF valid kebab — guards against pathological
+            // inputs like `__type` whose mechanical to_kebab gives
+            // `--type` (invalid: starts with dash). Those need
+            // human-chosen names.
+            let fixable = kebabed != k && is_kebab(&kebabed);
+            let hint = if fixable {
+                format!("rename to :{kebabed}")
+            } else {
+                "this name has no mechanical kebab equivalent — pick a fresh name".into()
+            };
+            let mut diag = Diagnostic::new(
+                "keyword-kebab-case",
+                Severity::Warning,
+                n.span,
+                format!(":{k} should be kebab-case"),
+            )
+            .with_hint(hint);
+            if fixable {
+                diag = diag.with_fix_replace(
+                    format!("rename keyword to :{kebabed}"),
+                    format!(":{kebabed}"),
+                );
             }
+            diags.push(diag);
         }
     });
 }
@@ -155,34 +155,34 @@ fn check_enum_pascal(node: &Node, diags: &mut Vec<Diagnostic>) {
         // `check_keyword_kebab` / `keyword_present` / `matches_kwarg` /
         // `items_has_key` sites (all converged in this run) and to the
         // [`caixa_ast::Node::kwarg`] pair-loop.
-        if let Some(k) = items[i].kind.as_keyword() {
-            if ENUM_KEYS.contains(&k) {
-                let v = &items[i + 1];
-                match &v.kind {
-                    NodeKind::Str(s) => {
-                        diags.push(
-                            Diagnostic::new(
-                                "enum-variant-pascal-case",
-                                Severity::Warning,
-                                v.span,
-                                format!(":{k} expects a bare symbol, not a quoted string"),
-                            )
-                            .with_hint(format!("write `{}` without quotes", s)),
-                        );
-                    }
-                    NodeKind::Symbol(s) if !is_pascal(s) => {
-                        diags.push(
-                            Diagnostic::new(
-                                "enum-variant-pascal-case",
-                                Severity::Warning,
-                                v.span,
-                                format!(":{k} symbol '{s}' should be PascalCase"),
-                            )
-                            .with_hint(format!("rename to {}", to_pascal(s))),
-                        );
-                    }
-                    _ => {}
+        if let Some(k) = items[i].kind.as_keyword()
+            && ENUM_KEYS.contains(&k)
+        {
+            let v = &items[i + 1];
+            match &v.kind {
+                NodeKind::Str(s) => {
+                    diags.push(
+                        Diagnostic::new(
+                            "enum-variant-pascal-case",
+                            Severity::Warning,
+                            v.span,
+                            format!(":{k} expects a bare symbol, not a quoted string"),
+                        )
+                        .with_hint(format!("write `{}` without quotes", s)),
+                    );
                 }
+                NodeKind::Symbol(s) if !is_pascal(s) => {
+                    diags.push(
+                        Diagnostic::new(
+                            "enum-variant-pascal-case",
+                            Severity::Warning,
+                            v.span,
+                            format!(":{k} symbol '{s}' should be PascalCase"),
+                        )
+                        .with_hint(format!("rename to {}", to_pascal(s))),
+                    );
+                }
+                _ => {}
             }
         }
         i += 2;
@@ -200,18 +200,18 @@ fn check_nome_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
     // detector (both converged in this run) that partition on the
     // outer-`NodeKind` `Str` arm through the same substrate-canonical
     // accessor.
-    if let Some(s) = v.kind.as_str() {
-        if !is_kebab(s) {
-            diags.push(
-                Diagnostic::new(
-                    "caixa-nome-kebab-case",
-                    Severity::Warning,
-                    v.span,
-                    format!(":nome {s:?} should be kebab-case"),
-                )
-                .with_hint(format!("rename to {:?}", to_kebab(s))),
-            );
-        }
+    if let Some(s) = v.kind.as_str()
+        && !is_kebab(s)
+    {
+        diags.push(
+            Diagnostic::new(
+                "caixa-nome-kebab-case",
+                Severity::Warning,
+                v.span,
+                format!(":nome {s:?} should be kebab-case"),
+            )
+            .with_hint(format!("rename to {:?}", to_kebab(s))),
+        );
     }
 }
 
@@ -267,10 +267,10 @@ fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {
         // `check_consistent_quote` sites (all converged in this run)
         // and to the caixa-ast [`caixa_ast::Node::head_symbol`] list-
         // head projection.
-        if let Some(name) = items.first().and_then(|n| n.kind.as_symbol()) {
-            if POSITIONAL_KW_HEADS.contains(&name) {
-                return;
-            }
+        if let Some(name) = items.first().and_then(|n| n.kind.as_symbol())
+            && POSITIONAL_KW_HEADS.contains(&name)
+        {
+            return;
         }
 
         // Only flag lists that clearly look kwargs-y: the FIRST AND
@@ -336,15 +336,15 @@ fn check_no_fixme(node: &Node, diags: &mut Vec<Diagnostic>) {
     // `:nome`-value site and the caixa-fmt `is_flag_token` command-
     // argument detector, all converged in this run onto the same
     // outer-`NodeKind` `Str`-arm substrate accessor.
-    if let Some(s) = d.kind.as_str() {
-        if s.contains("FIXME") {
-            diags.push(Diagnostic::new(
-                "no-fixme-descricao",
-                Severity::Error,
-                d.span,
-                ":descricao still contains FIXME",
-            ));
-        }
+    if let Some(s) = d.kind.as_str()
+        && s.contains("FIXME")
+    {
+        diags.push(Diagnostic::new(
+            "no-fixme-descricao",
+            Severity::Error,
+            d.span,
+            ":descricao still contains FIXME",
+        ));
     }
 }
 
@@ -445,17 +445,17 @@ fn check_git_pin(node: &Node, diags: &mut Vec<Diagnostic>) {
 
 fn check_small_forms(node: &Node, diags: &mut Vec<Diagnostic>) {
     // Only flag top-level def* forms that span > 60 source lines.
-    if let Some(head) = node.head_symbol() {
-        if head.starts_with("def") {
-            let lines = span_lines(node);
-            if lines > 60 {
-                diags.push(Diagnostic::new(
-                    "small-forms",
-                    Severity::Info,
-                    node.span,
-                    format!("'{head}' form is {lines} lines — consider splitting"),
-                ));
-            }
+    if let Some(head) = node.head_symbol()
+        && head.starts_with("def")
+    {
+        let lines = span_lines(node);
+        if lines > 60 {
+            diags.push(Diagnostic::new(
+                "small-forms",
+                Severity::Info,
+                node.span,
+                format!("'{head}' form is {lines} lines — consider splitting"),
+            ));
         }
     }
 }
@@ -485,18 +485,19 @@ fn check_consistent_quote(node: &Node, diags: &mut Vec<Diagnostic>) {
         }
         _ => {}
     });
-    if saw_reader_quote && saw_quote_form {
-        if let Some(s) = first_offender_span {
-            diags.push(
-                Diagnostic::new(
-                    "consistent-quote-style",
-                    Severity::Warning,
-                    s,
-                    "file mixes 'x reader quote with (quote x) form",
-                )
-                .with_hint("pick one — we prefer the reader quote 'x"),
-            );
-        }
+    if saw_reader_quote
+        && saw_quote_form
+        && let Some(s) = first_offender_span
+    {
+        diags.push(
+            Diagnostic::new(
+                "consistent-quote-style",
+                Severity::Warning,
+                s,
+                "file mixes 'x reader quote with (quote x) form",
+            )
+            .with_hint("pick one — we prefer the reader quote 'x"),
+        );
     }
 }
 
@@ -554,32 +555,27 @@ fn matches_kwarg<P: Fn(&Node) -> bool>(items: &[Node], key: &str, pred: P) -> bo
         // `check_keyword_kebab` / `check_enum_pascal` / `keyword_present`
         // / `items_has_key` sites (all converged in this run) and to
         // the [`caixa_ast::Node::kwarg`] pair-loop.
-        if let Some(k) = items[i].kind.as_keyword() {
-            if k == key && pred(&items[i + 1]) {
-                return true;
-            }
+        if let Some(k) = items[i].kind.as_keyword()
+            && k == key
+            && pred(&items[i + 1])
+        {
+            return true;
         }
         i += 2;
     }
     false
 }
 
+/// Presence-only variant of [`matches_kwarg`] — asks whether `key`
+/// appears in the paired-kwargs stream at all, with no predicate on
+/// the value slot. Delegates to `matches_kwarg(items, key, |_| true)`
+/// so the pair-loop / [`caixa_ast::NodeKind::as_keyword`] accessor
+/// dispatch lives at exactly one site; the two callers keep the
+/// intention-revealing name at the call site (`items_has_key(items,
+/// "tag")` reads more directly than `matches_kwarg(items, "tag", |_|
+/// true)` for the presence-only check-git-pin call pattern).
 fn items_has_key(items: &[Node], key: &str) -> bool {
-    let mut i = 0;
-    while i + 1 < items.len() {
-        // Sibling per-item keyword-name projection to `matches_kwarg`
-        // above — routes through the lifted
-        // [`caixa_ast::NodeKind::as_keyword`] `Option<&str>` accessor
-        // for the same reason and closes the caixa-lint per-`Keyword`-
-        // arm consumer-set on the substrate accessor.
-        if let Some(k) = items[i].kind.as_keyword() {
-            if k == key {
-                return true;
-            }
-        }
-        i += 2;
-    }
-    false
+    matches_kwarg(items, key, |_| true)
 }
 
 fn span_lines(n: &Node) -> u32 {
@@ -839,5 +835,28 @@ mod tests {
         let d = lint(src);
         let errors: Vec<_> = d.iter().filter(|d| d.severity.is_error()).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
+    }
+
+    #[test]
+    fn items_has_key_is_matches_kwarg_with_true_predicate() {
+        // Pin the delegation `items_has_key(items, key) ≡
+        // matches_kwarg(items, key, |_| true)` at test time — a future
+        // edit that decouples the two (say, inlining a hand-rolled
+        // pair-loop back into `items_has_key`) must trip this pin
+        // before it lands, keeping the two callers routed through the
+        // single per-item [`caixa_ast::NodeKind::as_keyword`] accessor
+        // dispatch site. Exercises each branch of `matches_kwarg`:
+        // key-present-and-predicate-true, key-present-but-predicate-
+        // false, key-absent, and odd-arity trailing tail.
+        let parsed = parse(r#"(:tipo git :repo "r" :tag "v1.2.3" :rev)"#).unwrap();
+        let node = &parsed[0];
+        let items = node.kind.as_list().expect(":fonte form is a list");
+        for key in ["tipo", "repo", "tag", "rev", "branch", "nome"] {
+            assert_eq!(
+                items_has_key(items, key),
+                matches_kwarg(items, key, |_| true),
+                "items_has_key vs matches_kwarg(_, _, |_| true) diverged on key {key:?}",
+            );
+        }
     }
 }
