@@ -28636,7 +28636,9 @@ mod tests {
         // all. Both are substrate-side policy choices the operator
         // inherits when the per-caixa `ClusterBundleOpts` doesn't pin an
         // override.
-        assert!(FLUX_KUSTOMIZATION_PRUNE_DEFAULT);
+        const {
+            assert!(FLUX_KUSTOMIZATION_PRUNE_DEFAULT);
+        }
     }
 
     #[test]
@@ -28666,7 +28668,9 @@ mod tests {
         // the scalar-value default half) — the pair as-a-unit reads as
         // the substrate's chosen `prune: true` per-CR opt-in.
         assert_eq!(FLUX_KUSTOMIZATION_KEY_PRUNE, "prune");
-        assert!(FLUX_KUSTOMIZATION_PRUNE_DEFAULT);
+        const {
+            assert!(FLUX_KUSTOMIZATION_PRUNE_DEFAULT);
+        }
     }
 
     #[test]
@@ -28708,7 +28712,9 @@ mod tests {
         // known-good release once the retry-cap ceiling is exhausted.
         // Both are substrate-side policy choices the operator inherits
         // when the per-caixa `ClusterBundleOpts` doesn't pin an override.
-        assert!(FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT);
+        const {
+            assert!(FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT);
+        }
     }
 
     #[test]
@@ -28743,7 +28749,9 @@ mod tests {
             FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
             "remediateLastFailure"
         );
-        assert!(FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT);
+        const {
+            assert!(FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT);
+        }
     }
 
     #[test]
@@ -28789,7 +28797,9 @@ mod tests {
         // key pair [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] (ba9ab8b) /
         // [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] (96581b7)
         // already closed on the key half.
-        assert!(FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT);
+        const {
+            assert!(FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT);
+        }
     }
 
     #[test]
@@ -28820,7 +28830,9 @@ mod tests {
         // the pair as-a-unit reads as the substrate's chosen
         // `createNamespace: true` per-CR opt-in.
         assert_eq!(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE, "createNamespace");
-        assert!(FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT);
+        const {
+            assert!(FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT);
+        }
     }
 
     #[test]
@@ -28860,7 +28872,9 @@ mod tests {
         // default surface — all four defaults are substrate-side policy
         // choices the operator inherits when the per-caixa
         // `ClusterBundleOpts` doesn't pin an override.
-        assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
+        const {
+            assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
+        }
     }
 
     #[test]
@@ -28898,7 +28912,9 @@ mod tests {
         // (be1904b) on the sibling canonical-Flux-v2-per-CR-
         // substrate-default paired-halves surfaces.
         assert_eq!(HELM_VALUES_KEY_ENABLED, "enabled");
-        assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
+        const {
+            assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
+        }
     }
 
     #[test]
@@ -28938,7 +28954,9 @@ mod tests {
         // together they close the mirror-symmetric standalone / composition
         // per-values-block child-chart-enablement-toggle scalar-value
         // default pair.
-        assert!(!STANDALONE_LAREIRA_ENABLED_DEFAULT);
+        const {
+            assert!(!STANDALONE_LAREIRA_ENABLED_DEFAULT);
+        }
     }
 
     #[test]
@@ -28976,7 +28994,9 @@ mod tests {
         // standalone / composition path-selection the two scalar-value
         // defaults name.
         assert_eq!(HELM_VALUES_KEY_ENABLED, "enabled");
-        assert!(!STANDALONE_LAREIRA_ENABLED_DEFAULT);
+        const {
+            assert!(!STANDALONE_LAREIRA_ENABLED_DEFAULT);
+        }
     }
 
     #[test]
