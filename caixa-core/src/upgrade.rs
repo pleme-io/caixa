@@ -1746,7 +1746,7 @@ impl UpgradeInstruction {
     /// [`validate_module`]; extensible to future consumers on the
     /// same axis without further per-variant match sites).
     #[must_use]
-    pub fn declared_module(&self) -> Option<&str> {
+    pub const fn declared_module(&self) -> Option<&str> {
         match self {
             Self::LoadModule { module } | Self::SoftPurge { module } | Self::Purge { module } => {
                 Some(module.as_str())
@@ -1786,7 +1786,7 @@ impl UpgradeInstruction {
     /// migrates as a single caixa-core edit rather than a coordinated
     /// rewrite of four call sites.
     #[must_use]
-    pub fn declared_path(&self) -> Option<&PathBuf> {
+    pub const fn declared_path(&self) -> Option<&PathBuf> {
         match self {
             Self::StateChange { script } => Some(script),
             _ => None,
