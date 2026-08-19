@@ -3490,18 +3490,9 @@ spec:
              Aplicacao `HelmRelease` synthesis, the future admission-\
              webhook floor) reads at admit / reconcile time"
         );
-        assert!(
-            FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT,
-            "FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT must remain \
-             `true` — the substrate's canonical \"no chart apply leaves \
-             a per-caixa CR in a stalled, unremediated state\" \
-             (MESH-COMPOSITION.md §V) guarantee requires every emitted \
-             per-caixa `HelmRelease` opt into the helm-controller's per-CR \
-             upgrade-path post-retry-exhaustion rollback pipeline; a drift \
-             to `false` here silently leaves every terminally-failed \
-             upgrade parked at `Ready: False` without rolling back to the \
-             prior last-known-good release"
-        );
+        const {
+            assert!(FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT);
+        }
     }
 
     #[test]
@@ -3641,19 +3632,9 @@ spec:
              Aplicacao `HelmRelease` synthesis, the future admission-\
              webhook floor) reads at admit / reconcile time"
         );
-        assert!(
-            FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT,
-            "FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT must remain `true` \
-             — the substrate's canonical \"no per-caixa Servico apply is \
-             blocked on manual namespace preprovisioning\" \
-             (MESH-COMPOSITION.md §V install-path-fluency) guarantee \
-             requires every emitted per-caixa `HelmRelease` opt into the \
-             helm-controller's per-CR install-path pre-apply namespace-\
-             seeder pipeline; a drift to `false` here silently refuses \
-             every first-time per-caixa chart apply against a fresh \
-             cluster whose target namespace has not been pre-provisioned \
-             by an out-of-band pipeline"
-        );
+        const {
+            assert!(FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT);
+        }
     }
 
     #[test]
@@ -3705,20 +3686,9 @@ spec:
              Aplicacao `HelmRelease` synthesis) reads at admit / reconcile \
              time"
         );
-        assert!(
-            CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT,
-            "CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT must remain `true` — \
-             the `cluster_bundle` composition path is the substrate-side \
-             opt-in path where the operator has already asserted per-caixa \
-             cluster-scoped ownership by materializing a per-caixa \
-             GitRepository + HelmRelease + Kustomization trio, so the \
-             overlay must force the child chart on by seeding \
-             `enabled: true` under the `values.<library>` wrap; a drift to \
-             `false` here silently no-ops every per-caixa lareira child \
-             chart at the per-cluster `HelmRelease` apply step, leaving \
-             the paired standalone-chart-side `enabled: false` per-chart \
-             default un-overridden"
-        );
+        const {
+            assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
+        }
     }
 
     #[test]
@@ -3831,17 +3801,9 @@ spec:
              the future admission-webhook floor) reads at admit / \
              reconcile time"
         );
-        assert!(
-            FLUX_KUSTOMIZATION_PRUNE_DEFAULT,
-            "FLUX_KUSTOMIZATION_PRUNE_DEFAULT must remain `true` — the \
-             substrate's canonical sweep-what-you-removed semantic \
-             (CAIXA-SDLC.md §V author-to-live-convergence guarantee) \
-             requires every emitted per-caixa `Kustomization` opt into \
-             the kustomize-controller's per-CR resource-tracking \
-             garbage-collection loop; a drift to `false` here silently \
-             leaves orphaned resources dangling in every cluster the \
-             substrate reconciles into"
-        );
+        const {
+            assert!(FLUX_KUSTOMIZATION_PRUNE_DEFAULT);
+        }
     }
 
     #[test]
