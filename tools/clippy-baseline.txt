@@ -41,7 +41,7 @@
 9	clippy::doc_lazy_continuation	caixa-core/src/manifest.rs
 16	clippy::doc_markdown	caixa-core/src/manifest.rs
 1	clippy::single_element_loop	caixa-core/src/manifest.rs
-11	clippy::assertions_on_constants	caixa-core/src/render.rs
+1	clippy::assertions_on_constants	caixa-core/src/render.rs
 1	clippy::case_sensitive_file_extension_comparisons	caixa-core/src/render.rs
 2	clippy::collapsible_if	caixa-core/src/render.rs
 70	clippy::doc_lazy_continuation	caixa-core/src/render.rs
