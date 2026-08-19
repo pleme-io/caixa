@@ -1418,20 +1418,23 @@ fn render_byte_size(n: u64) -> String {
 }
 
 fn ser_byte_size<S: Serializer>(v: &Option<u64>, s: S) -> Result<S::Ok, S::Error> {
-    match v {
-        Some(n) => s.serialize_str(&render_byte_size(*n)),
-        None => s.serialize_none(),
-    }
+    // Route through the canonical [`crate::render::serialize_option_via_str`]
+    // — the substrate-side single-owner primitive for the forward arm
+    // of the typed-magnitude codec family. See its docstring for the
+    // full sibling roster and the compounding rationale that pins this
+    // lift; load-bearing pinned by
+    // `tests::ser_byte_size_routes_through_render_serialize_option_via_str_canonical`.
+    crate::render::serialize_option_via_str(v, s, render_byte_size)
 }
 
 fn de_byte_size<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
-    let opt: Option<String> = Option::deserialize(d)?;
-    match opt {
-        None => Ok(None),
-        Some(s) => parse_byte_size(&s)
-            .map(Some)
-            .map_err(serde::de::Error::custom),
-    }
+    // Route through the canonical [`crate::render::deserialize_option_via_str`]
+    // — the substrate-side single-owner primitive for the reverse arm
+    // of the typed-magnitude codec family. See its docstring for the
+    // full sibling roster and the compounding rationale that pins this
+    // lift; load-bearing pinned by
+    // `tests::de_byte_size_routes_through_render_deserialize_option_via_str_canonical`.
+    crate::render::deserialize_option_via_str(d, parse_byte_size)
 }
 
 // ── duration codec ─────────────────────────────────────────────────────
@@ -1617,32 +1620,29 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
 }
 
 fn ser_duration<S: Serializer>(v: &Option<Duration>, s: S) -> Result<S::Ok, S::Error> {
-    // Route through the canonical `pub fn crate::supervisor::duration_codec::render`
-    // (supervisor.rs:2512) rather than re-inlining the magnitude/unit
-    // decision tree — the peer module's docstring pins that lift as the
-    // load-bearing single-owner primitive for duration bytes across every
-    // caixa typed-duration surface (`:limits :wall-clock`, `:politicas
-    // :timeout`, `:circuit-breaker :window`, future OTP `gen_server`
-    // per-call timeouts). Any future codec change (a `"1.5s"` fractional
-    // arm, a `"1d"` day unit, a leading-`+` acceptance) lands at exactly
-    // one caixa-core edit rather than a coordinated rewrite across the
-    // sibling free-function `render_duration` shadows a per-typed-slot
-    // serializer could otherwise carry. Load-bearing pinned by
+    // Route through the canonical [`crate::render::serialize_option_via_str`]
+    // — the substrate-side single-owner primitive for the forward arm
+    // of the typed-magnitude codec family — around the canonical
+    // [`crate::supervisor::duration_codec::render`] duration-byte
+    // dispatch. The `render` dispatch is itself the load-bearing
+    // single-owner primitive for duration bytes across every caixa
+    // typed-duration surface (`:limits :wall-clock`,
+    // `:politicas :timeout`, `:circuit-breaker :window`, future OTP
+    // `gen_server` per-call timeouts); the outer
+    // `serialize_option_via_str` closes the `Some(_) => serialize_str`
+    // / `None => serialize_none` `Option`-arm dispatch every peer
+    // typed-magnitude serializer shares. Load-bearing pinned by
     // `tests::ser_duration_routes_through_supervisor_duration_codec_render_canonical`.
-    match v {
-        Some(d) => s.serialize_str(&crate::supervisor::duration_codec::render(*d)),
-        None => s.serialize_none(),
-    }
+    crate::render::serialize_option_via_str(v, s, crate::supervisor::duration_codec::render)
 }
 
 fn de_duration<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Duration>, D::Error> {
-    let opt: Option<String> = Option::deserialize(d)?;
-    match opt {
-        None => Ok(None),
-        Some(s) => parse_duration(&s)
-            .map(Some)
-            .map_err(serde::de::Error::custom),
-    }
+    // Route through the canonical [`crate::render::deserialize_option_via_str`]
+    // — the substrate-side single-owner primitive for the reverse arm
+    // of the typed-magnitude codec family. See its docstring for the
+    // full sibling roster and the compounding rationale that pins this
+    // lift.
+    crate::render::deserialize_option_via_str(d, parse_duration)
 }
 
 // ── millicores codec ───────────────────────────────────────────────────
@@ -1854,20 +1854,15 @@ fn render_millicores(m: u32) -> String {
 }
 
 fn ser_millicores<S: Serializer>(v: &Option<u32>, s: S) -> Result<S::Ok, S::Error> {
-    match v {
-        Some(m) => s.serialize_str(&render_millicores(*m)),
-        None => s.serialize_none(),
-    }
+    // Route through the canonical [`crate::render::serialize_option_via_str`]
+    // — see peer `ser_byte_size` / `ser_duration` routing notes above.
+    crate::render::serialize_option_via_str(v, s, render_millicores)
 }
 
 fn de_millicores<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Error> {
-    let opt: Option<String> = Option::deserialize(d)?;
-    match opt {
-        None => Ok(None),
-        Some(s) => parse_millicores(&s)
-            .map(Some)
-            .map_err(serde::de::Error::custom),
-    }
+    // Route through the canonical [`crate::render::deserialize_option_via_str`]
+    // — see peer `de_byte_size` / `de_duration` routing notes above.
+    crate::render::deserialize_option_via_str(d, parse_millicores)
 }
 
 #[cfg(test)]
@@ -1915,6 +1910,105 @@ mod tests {
         assert_eq!(render_byte_size(1024 * 1024 * 1024), "1GiB");
         assert_eq!(render_byte_size(1024), "1KiB");
         assert_eq!(render_byte_size(123), "123");
+    }
+
+    #[test]
+    fn ser_byte_size_routes_through_render_serialize_option_via_str_canonical() {
+        // Routing pin: `ser_byte_size` (the `#[serde(serialize_with = …)]`
+        // hook on `LimitsSpec::memory`) MUST emit exactly the bytes the
+        // canonical `crate::render::serialize_option_via_str` primitive
+        // produces when threaded through the peer `render_byte_size`
+        // dispatch. Any future accidental re-inline of a bespoke
+        // `match v { Some(_) => s.serialize_str(_), None =>
+        // s.serialize_none() }` block inside this module — the shape
+        // this lift removed — surfaces here as a byte-value drift on
+        // the very first canonical form the two implementations
+        // disagree on. Peer of
+        // `ser_duration_routes_through_supervisor_duration_codec_render_canonical`
+        // on the sibling `LimitsSpec::wall_clock` axis; same "one
+        // canonical dispatch per axis, thin projections at each
+        // consumer" discipline the sibling caixa-core substrate
+        // primitives already carry.
+        for n in [
+            0u64,
+            1,
+            1023,
+            1024,
+            64 * 1024 * 1024,
+            4 * 1024 * 1024 * 1024,
+        ] {
+            let limits = LimitsSpec {
+                memory: Some(n),
+                fuel: None,
+                wall_clock: None,
+                cpu: None,
+            };
+            let json: serde_json::Value =
+                serde_json::from_str(&serde_json::to_string(&limits).unwrap()).unwrap();
+            let emitted = json[crate::render::M2_LIMITS_KEY_MEMORY]
+                .as_str()
+                .expect("memory must serialize to a string");
+            let canonical = render_byte_size(n);
+            assert_eq!(
+                emitted, canonical,
+                "ser_byte_size drifted from render_byte_size via \
+                 serialize_option_via_str on {n} bytes",
+            );
+        }
+    }
+
+    #[test]
+    fn de_byte_size_routes_through_render_deserialize_option_via_str_canonical() {
+        // Routing pin: `de_byte_size` (the
+        // `#[serde(deserialize_with = …)]` hook on
+        // `LimitsSpec::memory`) MUST accept exactly the canonical
+        // string set the peer `parse_byte_size` function accepts, and
+        // reject everything else with the parser's typed `LimitsError`
+        // surfaced through `serde::de::Error::custom` — the shape the
+        // lifted `crate::render::deserialize_option_via_str` primitive
+        // enforces. A future accidental re-inline of a bespoke `let
+        // opt: Option<String> = Option::deserialize(d)?; match opt {
+        // … }` block inside this module — the shape this lift removed
+        // — that drifted on either arm (silently accepting a value the
+        // parser rejects, or swallowing a parser error as `Ok(None)`)
+        // surfaces here.
+        for raw in ["64MiB", "1024", "0", "4GiB"] {
+            let field = crate::render::M2_LIMITS_KEY_MEMORY;
+            let payload = format!("{{\"{field}\":\"{raw}\"}}");
+            let limits: LimitsSpec =
+                serde_json::from_str(&payload).expect("canonical memory string must round-trip");
+            let canonical = parse_byte_size(raw).expect("parse_byte_size accepts canonical form");
+            assert_eq!(
+                limits.memory,
+                Some(canonical),
+                "de_byte_size drifted from parse_byte_size via \
+                 deserialize_option_via_str on {raw:?}",
+            );
+        }
+        // Null-arm pin: `null` folds to `None` without invoking the
+        // parser — the exact contract the lifted primitive's null-arm
+        // test pins.
+        let field = crate::render::M2_LIMITS_KEY_MEMORY;
+        let null_payload = format!("{{\"{field}\":null}}");
+        let empty: LimitsSpec = serde_json::from_str(&null_payload)
+            .expect("null memory field must fold to LimitsSpec::memory = None");
+        assert_eq!(
+            empty.memory, None,
+            "de_byte_size must fold null → None via \
+             deserialize_option_via_str's null-arm",
+        );
+        // Reject-arm pin: a bogus string surfaces the parser's error
+        // through `serde::de::Error::custom` — not `Ok(None)`.
+        let bad_payload = format!("{{\"{field}\":\"64XiB\"}}");
+        let err = serde_json::from_str::<LimitsSpec>(&bad_payload)
+            .expect_err("bogus memory string must surface the parser's error");
+        let err_text = err.to_string();
+        assert!(
+            err_text.contains("64XiB") || err_text.contains("XiB"),
+            "de_byte_size must surface parse_byte_size's typed \
+             LimitsError through serde::de::Error::custom — got \
+             {err_text:?}",
+        );
     }
 
     #[test]

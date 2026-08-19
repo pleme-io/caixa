@@ -27497,6 +27497,120 @@ impl SequenceExt for Vec<serde_yaml::Value> {
     }
 }
 
+/// Serialize `Option<T>` as an optional canonical string via `render` —
+/// the substrate-side single-owner primitive for the forward arm of the
+/// typed-magnitude codec family (`:limits :memory` `u64` /
+/// `:limits :wall-clock` [`std::time::Duration`] /
+/// `:limits :cpu` `u32` in [`crate::limits`],
+/// `:supervisor :restart-window` / `:politicas :timeout` /
+/// `:politicas :circuit-breaker :window` [`std::time::Duration`] in
+/// [`crate::supervisor::duration_codec`], `:politicas :rate-limit`
+/// [`crate::aplicacao::RateLimit`] in [`crate::aplicacao`]'s
+/// `rate_limit_codec`).
+///
+/// Every typed-magnitude codec's `serialize_with` entry-point used to
+/// re-inline the identical block
+///
+/// ```ignore
+/// match v {
+///     Some(x) => s.serialize_str(&render(*x)),
+///     None => s.serialize_none(),
+/// }
+/// ```
+///
+/// around a one-token render dispatch — five verbatim copies across
+/// `limits::ser_byte_size` / `limits::ser_duration` /
+/// `limits::ser_millicores` / `supervisor::duration_codec::serialize` /
+/// `aplicacao::rate_limit_codec::serialize`. Folding onto this helper
+/// closes the forward-arm shape at one substrate-side dispatch: a
+/// future change (typed-error wrapping, sentinel-string for the `None`
+/// arm, tagged-serialization for a versioned typed-magnitude shape,
+/// alternate string-representation for a versioned YAML flavour) lands
+/// at one place rather than through a coordinated per-site rewrite.
+///
+/// Peer of [`deserialize_option_via_str`] on the reverse-arm codec
+/// axis — the two helpers together partition the substrate's
+/// `Option<T> <-> canonical-string` codec surface at the primitive
+/// layer. Structural peer of [`find_ascii_whitespace_byte`] /
+/// [`find_non_ascii_whitespace_char`] on the codec's parser-side
+/// canonical-form-drift-rejection axis.
+///
+/// The `T: Copy` bound matches every routed typed-magnitude shape
+/// (`u32`, `u64`, [`std::time::Duration`], [`crate::aplicacao::RateLimit`]);
+/// dropping the bound would force every call site to spell an adapter
+/// closure (`|n| render_byte_size(*n)`) around a bare function
+/// reference (`render_byte_size`), re-inserting the syntactic overhead
+/// this lift removes.
+#[allow(clippy::ref_option)]
+pub fn serialize_option_via_str<S, T, R>(v: &Option<T>, s: S, render: R) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    T: Copy,
+    R: FnOnce(T) -> String,
+{
+    match v {
+        Some(t) => s.serialize_str(&render(*t)),
+        None => s.serialize_none(),
+    }
+}
+
+/// Deserialize `Option<T>` from an optional canonical string via
+/// `parse` — the substrate-side single-owner primitive for the reverse
+/// arm of the typed-magnitude codec family (`:limits :memory` `u64` /
+/// `:limits :wall-clock` [`std::time::Duration`] /
+/// `:limits :cpu` `u32` in [`crate::limits`],
+/// `:supervisor :restart-window` / `:politicas :timeout` /
+/// `:politicas :circuit-breaker :window` [`std::time::Duration`] in
+/// [`crate::supervisor::duration_codec`], `:politicas :rate-limit`
+/// [`crate::aplicacao::RateLimit`] in [`crate::aplicacao`]'s
+/// `rate_limit_codec`).
+///
+/// Every typed-magnitude codec's `deserialize_with` entry-point used
+/// to re-inline the identical block
+///
+/// ```ignore
+/// let opt: Option<String> = Option::deserialize(d)?;
+/// match opt {
+///     None => Ok(None),
+///     Some(s) => parse(&s).map(Some).map_err(serde::de::Error::custom),
+/// }
+/// ```
+///
+/// around a one-token parse dispatch — five verbatim copies across
+/// `limits::de_byte_size` / `limits::de_duration` /
+/// `limits::de_millicores` / `supervisor::duration_codec::deserialize` /
+/// `aplicacao::rate_limit_codec::deserialize`. Folding onto this helper
+/// closes the reverse-arm shape at one substrate-side dispatch: a
+/// future change (a borrow-of-`&str` fast path when the input
+/// deserializer supports it, custom error framing that names the
+/// typed-magnitude slot, an alternate `Option<T>::None`
+/// representation) lands at one place rather than through a
+/// coordinated per-site rewrite.
+///
+/// Peer of [`serialize_option_via_str`] on the forward-arm codec axis
+/// — the two helpers together partition the substrate's
+/// `Option<T> <-> canonical-string` codec surface at the primitive
+/// layer.
+///
+/// `E: core::fmt::Display` matches every routed parser's error type
+/// ([`crate::LimitsError`] via its `thiserror::Error`-derived Display
+/// impl, [`String`] via its native Display impl on both
+/// [`crate::supervisor::duration_codec`] and
+/// [`crate::aplicacao::rate_limit_codec`]).
+pub fn deserialize_option_via_str<'de, D, T, E, F>(d: D, parse: F) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    E: core::fmt::Display,
+    F: FnOnce(&str) -> Result<T, E>,
+{
+    use serde::Deserialize;
+    let opt: Option<String> = Option::deserialize(d)?;
+    match opt {
+        None => Ok(None),
+        Some(s) => parse(&s).map(Some).map_err(serde::de::Error::custom),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59293,5 +59407,140 @@ spec:
                  caller's downstream continuation posture"
             );
         }
+    }
+
+    #[test]
+    fn serialize_option_via_str_forwards_some_arm_through_render() {
+        // Load-bearing contract: given a `Some(<T>)` input the helper
+        // dispatches through the caller-supplied `render` and emits the
+        // rendered `String` verbatim via `Serializer::serialize_str`.
+        // Exercised with a monomorphic `render` shim (the same shape
+        // the routed `limits::render_byte_size` / peer sites carry) so
+        // the primitive contract stays independent of any one caller's
+        // magnitude choice.
+        fn render_seven(n: u64) -> String {
+            format!("{n}-render-seven")
+        }
+        let opt: Option<u64> = Some(7);
+        let mut buf: Vec<u8> = Vec::new();
+        let mut ser = serde_yaml::Serializer::new(&mut buf);
+        serialize_option_via_str(&opt, &mut ser, render_seven)
+            .expect("serialize_option_via_str Some-arm must succeed");
+        drop(ser);
+        let emitted = String::from_utf8(buf).expect("YAML emitter yields UTF-8");
+        assert_eq!(
+            emitted.trim_end(),
+            "7-render-seven",
+            "serialize_option_via_str must forward the Some(_) arm \
+             through the caller-supplied render dispatch verbatim — \
+             the routed `limits::ser_byte_size` / `limits::ser_duration` \
+             / `limits::ser_millicores` / `supervisor::duration_codec::\
+             serialize` / `aplicacao::rate_limit_codec::serialize` sites \
+             all rely on this pass-through contract"
+        );
+    }
+
+    #[test]
+    fn serialize_option_via_str_forwards_none_arm_through_serialize_none() {
+        // Fold-through pin: the `None` arm dispatches through
+        // `Serializer::serialize_none`, which serde_yaml materializes
+        // as `null`. Pinning this arm keeps the helper's `None`-
+        // handling behaviourally identical to the prior inline
+        // `None => s.serialize_none()` block every routed site carried.
+        fn render_never(_: u64) -> String {
+            unreachable!("None arm must not call render")
+        }
+        let opt: Option<u64> = None;
+        let mut buf: Vec<u8> = Vec::new();
+        let mut ser = serde_yaml::Serializer::new(&mut buf);
+        serialize_option_via_str(&opt, &mut ser, render_never)
+            .expect("serialize_option_via_str None-arm must succeed");
+        drop(ser);
+        let emitted = String::from_utf8(buf).expect("YAML emitter yields UTF-8");
+        assert_eq!(
+            emitted.trim_end(),
+            "null",
+            "serialize_option_via_str's None arm must route through \
+             Serializer::serialize_none — silent drift to a rendered \
+             sentinel string would break the round-trip contract every \
+             routed typed-magnitude codec carries"
+        );
+    }
+
+    #[test]
+    fn deserialize_option_via_str_forwards_some_arm_through_parse() {
+        // Load-bearing contract: given a `Some(<canonical-string>)`
+        // input the helper dispatches through the caller-supplied
+        // `parse` and returns `Ok(Some(<parsed-T>))`. Exercised with
+        // a monomorphic `parse` shim so the primitive contract stays
+        // independent of any routed magnitude parser.
+        fn parse_stripped(s: &str) -> Result<u64, String> {
+            s.strip_suffix("-tail")
+                .ok_or_else(|| format!("expected -tail suffix in {s:?}"))
+                .and_then(|head| head.parse::<u64>().map_err(|e| e.to_string()))
+        }
+        let de = serde_yaml::Deserializer::from_str("\"42-tail\"");
+        let parsed = deserialize_option_via_str(de, parse_stripped)
+            .expect("Some-arm deserialize must succeed");
+        assert_eq!(
+            parsed,
+            Some(42u64),
+            "deserialize_option_via_str must forward the Some(_) arm \
+             through the caller-supplied parse dispatch — every routed \
+             `limits::de_byte_size` / `limits::de_duration` / `limits::\
+             de_millicores` / `supervisor::duration_codec::deserialize` \
+             / `aplicacao::rate_limit_codec::deserialize` site relies \
+             on this pass-through contract"
+        );
+    }
+
+    #[test]
+    fn deserialize_option_via_str_forwards_none_arm_without_calling_parse() {
+        // Fold-through pin: given the YAML `null` node the helper
+        // returns `Ok(None)` without invoking `parse` at all — the
+        // exact shape the prior inline block carried
+        // (`None => Ok(None)` before ever seeing an inner string).
+        fn parse_never(_: &str) -> Result<u64, String> {
+            unreachable!("None arm must not call parse")
+        }
+        let de = serde_yaml::Deserializer::from_str("null");
+        let parsed =
+            deserialize_option_via_str(de, parse_never).expect("None-arm deserialize must succeed");
+        assert_eq!(
+            parsed, None,
+            "deserialize_option_via_str's None arm must short-circuit \
+             to Ok(None) without invoking the parse dispatch — every \
+             routed typed-magnitude codec relies on the parse-avoidance \
+             contract on the null-YAML arm"
+        );
+    }
+
+    #[test]
+    fn deserialize_option_via_str_surfaces_parse_error_through_de_custom() {
+        // Error-arm pin: a `Some(<bad-string>)` input surfaces the
+        // parser's `E: Display` failure through
+        // `serde::de::Error::custom`, preserving the diagnostic text
+        // the prior inline `.map_err(serde::de::Error::custom)` chain
+        // carried at every routed site. A silent drift to `Ok(None)`
+        // on parser failure would lose the type-carrying error class
+        // every routed magnitude parser (LimitsError, `String` from
+        // `duration_codec` / `rate_limit_codec::parse`) already threads
+        // through the `E: Display` bound.
+        fn parse_reject(s: &str) -> Result<u64, String> {
+            Err(format!("reject {s:?}"))
+        }
+        let de = serde_yaml::Deserializer::from_str("\"anything\"");
+        let err = deserialize_option_via_str(de, parse_reject)
+            .expect_err("parse-error arm must surface as serde error");
+        let err_text = err.to_string();
+        assert!(
+            err_text.contains("reject") && err_text.contains("anything"),
+            "deserialize_option_via_str must surface the parser's \
+             E: Display text through `serde::de::Error::custom` — got \
+             {err_text:?}, expected substring `reject` and inner value \
+             `anything`. The routed typed-magnitude codecs (LimitsError \
+             / `String`-error `duration_codec` / `rate_limit_codec`) \
+             all rely on this diagnostic-preservation contract."
+        );
     }
 }
