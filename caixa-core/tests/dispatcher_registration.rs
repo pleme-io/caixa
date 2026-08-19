@@ -184,9 +184,18 @@ fn upgrade_instruction_is_variant_predicates() {
 fn upgrade_instruction_const_fn_in_const_context() {
     // Unit variant Restart works in const context — proves
     // Discriminant + IsVariant emit real `const fn`.
-    const IS_RESTART: bool = UpgradeInstruction::Restart.is_restart();
+    //
+    // The `is_restart` pin lives inside `const { assert!(..) }` so
+    // the compiler enforces both halves (arm predicate is `const`-
+    // callable AND returns `true` for the matching arm) at caixa-core
+    // compile time — peer to the sibling
+    // [`crate::CaixaKind::is_*`] + [`WitTarget::is_*`] +
+    // [`PlacementStrategy::is_*`] const-block pins on the closed-set
+    // typed enum arm-predicate const-callability axis.
     const RESTART_KIND: &str = UpgradeInstruction::Restart.discriminant();
-    assert!(IS_RESTART);
+    const {
+        assert!(UpgradeInstruction::Restart.is_restart());
+    }
     assert_eq!(RESTART_KIND, "restart");
 }
 

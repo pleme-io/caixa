@@ -14714,18 +14714,19 @@ mod tests {
         // through `&'static str` payloads — the same `'static`
         // lifetime the closed-set typed enum's four-arm partition
         // pin above already threads through.
-        const HTTP: WitTarget<'static> = WitTarget::Http { endpoint: "/x" };
-        const PUBSUB: WitTarget<'static> = WitTarget::PubSub { subject: "e" };
-        const STORE: WitTarget<'static> = WitTarget::Store { slot: "kv/x" };
-        const CAPABILITY: WitTarget<'static> = WitTarget::Capability;
-        const IS_HTTP: bool = HTTP.is_http();
-        const IS_PUBSUB: bool = PUBSUB.is_pubsub();
-        const IS_STORE: bool = STORE.is_store();
-        const IS_CAPABILITY: bool = CAPABILITY.is_capability();
-        assert!(IS_HTTP);
-        assert!(IS_PUBSUB);
-        assert!(IS_STORE);
-        assert!(IS_CAPABILITY);
+        //
+        // The pin lives inside a `const { assert!(..) }` block so the
+        // compiler enforces both halves (arm predicate is `const`-
+        // callable AND returns `true` for the matching arm) at
+        // caixa-core compile time — peer to the sibling
+        // [`crate::CaixaKind::is_*`] const-block pin on the closed-set
+        // typed enum arm-predicate const-callability axis.
+        const {
+            assert!(WitTarget::Http { endpoint: "/x" }.is_http());
+            assert!(WitTarget::PubSub { subject: "e" }.is_pubsub());
+            assert!(WitTarget::Store { slot: "kv/x" }.is_store());
+            assert!(WitTarget::Capability.is_capability());
+        }
     }
 
     #[test]
@@ -16241,12 +16242,19 @@ mod tests {
         // `impl` that shadows the derive-generated method) trips at
         // caixa-core build time rather than surfacing as a downstream
         // `const`-context regression far from the derive declaration.
-        const IS_SINGLE_NODE: bool = PlacementStrategy::SingleNode.is_single_node();
-        const IS_REPLICATED: bool = PlacementStrategy::Replicated.is_replicated();
-        const IS_SHARDED: bool = PlacementStrategy::Sharded.is_sharded();
-        assert!(IS_SINGLE_NODE);
-        assert!(IS_REPLICATED);
-        assert!(IS_SHARDED);
+        //
+        // The pin lives inside a `const { assert!(..) }` block so the
+        // compiler enforces both halves (arm predicate is `const`-
+        // callable AND returns `true` for the matching arm) at
+        // caixa-core compile time — peer to the sibling
+        // [`crate::CaixaKind::is_*`] + [`WitTarget::is_*`] const-block
+        // pins on the closed-set typed enum arm-predicate const-
+        // callability axis.
+        const {
+            assert!(PlacementStrategy::SingleNode.is_single_node());
+            assert!(PlacementStrategy::Replicated.is_replicated());
+            assert!(PlacementStrategy::Sharded.is_sharded());
+        }
     }
 
     #[test]
