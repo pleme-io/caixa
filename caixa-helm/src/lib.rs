@@ -2679,14 +2679,9 @@ spec:
              composition-path force-on inversion the caixa-core canonical \
              encodes."
         );
-        assert!(
-            !STANDALONE_LAREIRA_ENABLED_DEFAULT,
-            "STANDALONE_LAREIRA_ENABLED_DEFAULT must remain `false` — the \
-             standalone per-chart path is the substrate-side opt-out path \
-             where cluster operators must opt each caixa in per-cluster, \
-             inverse of the composition per-cluster-HelmRelease values-\
-             overlay path's opt-in force-on."
-        );
+        const {
+            assert!(!STANDALONE_LAREIRA_ENABLED_DEFAULT);
+        }
     }
 
     #[test]
