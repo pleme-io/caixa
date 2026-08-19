@@ -4823,49 +4823,30 @@ mod rate_limit_codec {
     }
 
     fn parse(s: &str) -> Result<RateLimit, String> {
-        // Whitespace-rejection arm — peer with the leading-`+`
-        // (`"+100/s"`) and leading-zero (`"0100/s"`) arms below on the
-        // same canonical-form render-determinism axis. Until this gate
-        // landed the parser silently tolerated leading / trailing /
-        // internal whitespace via the top-level `s.trim()` and the
-        // per-part `rate_str.trim()` / `unit.trim()` calls, so every
-        // whitespace-carrying shape (`" 100/s"`, `"100/s "`,
-        // `"100 /s"`, `"100/ s"`, `"100 / s"`, `"100/s\n"`,
-        // `"\t100/s"`) parsed to the same `RateLimit { 100, 1s }` and
-        // serde silently round-tripped to `"100/s"` on the next emit
-        // (a *different* canonical string) — breaking the THEORY.md
-        // Part V render-determinism contract on the same
-        // canonical-form-drift axis the leading-`+` arm below (the
-        // 4eeae98 predecessor) and the leading-zero arm below (the
-        // 4f46830 predecessor) already close.
+        // Paired whitespace-rejection arm — same canonical-form
+        // render-determinism discipline as the peer
+        // `limits::parse_byte_size` / `limits::parse_duration` /
+        // `limits::parse_millicores` /
+        // `supervisor::duration_codec::parse` sites: the ASCII
+        // byte-scan closes the WhatWG-conformant whitespace bytes
+        // (`0x20`, `0x09`, `0x0A`, `0x0C`, `0x0D`), the non-ASCII
+        // `char::is_whitespace` scan closes the strictly-complementary
+        // Unicode `White_Space` class (NBSP `\u{00A0}`, LINE SEPARATOR
+        // `\u{2028}`, EM-SPACE `\u{2003}`, and the peer typography
+        // codepoints) that `str::trim` at parse entry silently strips.
+        // Either drift class would round-trip through `render` to a
+        // *different* canonical form on next emit — breaking the
+        // THEORY.md Part V render-determinism contract on
+        // `:politicas :rate-limit`.
         //
-        // The canonical author shape is `<integer>/<s|m|h>` with no
-        // whitespace bytes anywhere — every string [`render`] emits
-        // carries none, so the parser's accepted set must match for
-        // serialize / deserialize to round-trip losslessly. This gate
-        // makes the pre-existing `s.trim()` / `rate_str.trim()` /
-        // `unit.trim()` calls below strict no-ops on the accepted set
-        // (every byte-position match they would perform is now already
-        // trimmed away by the accepted set itself), while the arm
-        // surfaces every rejected whitespace-carrying shape with a
-        // self-locating diagnostic naming the offending byte and the
-        // canonical form the author intended, peer with every prior
-        // canonical-form-drift arm on this codec.
-        //
-        // Routed through the lifted
-        // [`crate::render::find_ascii_whitespace_byte`] predicate — the
-        // same source of truth the four peer typed-magnitude codec
-        // sites (`limits::parse_byte_size`, `limits::parse_duration`,
-        // `limits::parse_millicores`, `supervisor::duration_codec`)
-        // share. `u8::is_ascii_whitespace()` at the predicate covers
-        // the five WhatWG-conformant ASCII whitespace bytes (space,
-        // tab, LF, FF, CR); the "single lifted predicate" discipline
-        // the peer non-ASCII arm below carries on the strictly-
-        // complementary Unicode `White_Space` class extends here to
-        // the ASCII byte set as well.
-        if let Some(b) = crate::render::find_ascii_whitespace_byte(s) {
-            return Err(format!(
-                "rate-limit: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
+        // Routed through the lifted [`crate::render::reject_whitespace`]
+        // primitive — the substrate-side single-owner paired-arm gate
+        // every typed-magnitude codec in caixa-core shares.
+        crate::render::reject_whitespace::<String, _, _>(
+            s,
+            |b| {
+                format!(
+                    "rate-limit: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
                  authoring form for `:politicas :rate-limit` is `<integer>/<s|m|h>` (e.g. \
                  `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) with no whitespace bytes \
                  anywhere. A whitespace-carrying shape (`\" 100/s\"`, `\"100/s \"`, \
@@ -4874,31 +4855,11 @@ mod rate_limit_codec {
                  on first serialize — breaking the THEORY.md Part V render-determinism \
                  contract every typed slot carries. Strip every whitespace byte (write \
                  `\"100/s\"` verbatim)"
-            ));
-        }
-        // Non-ASCII Unicode `White_Space` arm — the strictly-
-        // complementary class the ASCII arm above cannot see.
-        // `str::trim` at the top of every peer codec uses
-        // `char::is_whitespace` (Unicode `White_Space`, strictly
-        // wider than the ASCII byte set), so an NBSP (`\u{00A0}`) /
-        // LINE SEPARATOR (`\u{2028}`) / EM-SPACE (`\u{2003}`)
-        // survives the byte-scan (its UTF-8 bytes are not in
-        // `is_ascii_whitespace`), gets silently stripped by the
-        // top-level `s.trim()` below, and the value round-trips
-        // through `render` to a *different* canonical form
-        // (`\"100/s\"`) on next emit — breaking the THEORY.md Part V
-        // render-determinism contract every typed slot carries.
-        // Closed here (`:politicas :rate-limit`) and at the three
-        // peer codec sites (`limits::parse_byte_size`,
-        // `limits::parse_duration`, `supervisor::duration_codec`)
-        // through the shared
-        // [`crate::render::find_non_ascii_whitespace_char`] predicate
-        // — the "single lifted predicate across all four codec sites
-        // in one follow-up run" the 24a8ad4 commit body's `Forward
-        // compounding` bullet named as the next compounding step.
-        if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
-            return Err(format!(
-                "rate-limit: value {s:?} contains non-ASCII Unicode whitespace character \
+                )
+            },
+            |ch| {
+                format!(
+                    "rate-limit: value {s:?} contains non-ASCII Unicode whitespace character \
                  {ch:?} (U+{cp:04X}) — the canonical authoring form for `:politicas \
                  :rate-limit` is `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, \
                  `\"10000/h\"`) with no whitespace characters anywhere (ASCII or Unicode). \
@@ -4911,9 +4872,10 @@ mod rate_limit_codec {
                  serialize — breaking the THEORY.md Part V render-determinism contract \
                  every typed slot carries. Strip every non-ASCII whitespace character \
                  (write `\"100/s\"` verbatim with only ASCII bytes)",
-                cp = ch as u32
-            ));
-        }
+                    cp = ch as u32
+                )
+            },
+        )?;
         let s = s.trim();
         let (rate_str, unit) = s
             .split_once('/')

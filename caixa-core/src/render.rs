@@ -1163,6 +1163,62 @@ pub fn find_non_ascii_whitespace_char(s: &str) -> Option<char> {
     s.chars().find(|c| c.is_whitespace() && !c.is_ascii())
 }
 
+/// Gate: reject `s` if it carries any Unicode `White_Space` character —
+/// the paired ASCII-byte + non-ASCII-`char` rejection every typed-magnitude
+/// codec in caixa-core (`limits::parse_byte_size` /
+/// `limits::parse_duration` / `limits::parse_millicores` /
+/// `supervisor::duration_codec::parse` /
+/// `aplicacao::rate_limit_codec::parse`) runs at parse entry.
+///
+/// Composes [`find_ascii_whitespace_byte`] and
+/// [`find_non_ascii_whitespace_char`] into one dispatch: the ASCII arm
+/// fires first (the paste-from-shell-history / paste-from-aligned-doc /
+/// paste-from-YAML-block-scalar drift class every codec's byte-scan
+/// closed on landing — space (`0x20`), tab (`0x09`), LF (`0x0A`), FF
+/// (`0x0C`), CR (`0x0D`)), the non-ASCII arm fires second (the
+/// strictly-complementary Unicode `White_Space` class — NBSP
+/// (`\u{00A0}`), LINE SEPARATOR (`\u{2028}`), EM-SPACE (`\u{2003}`),
+/// IDEOGRAPHIC SPACE (`\u{3000}`), and the peer non-ASCII `White_Space`
+/// codepoints — that `str::trim` silently strips but the ASCII byte-scan
+/// does not see). Two separate error constructors let each routed codec
+/// keep its typed [`crate::LimitsError`] / `String`-diagnostic surfaces
+/// intact — the ASCII arm's diagnostic names the offending byte, the
+/// non-ASCII arm's diagnostic names the offending `char` (and its
+/// U+XXXX codepoint, when the caller derives one). Every routed
+/// codec's paired-arm block folds onto one call, so a future extension
+/// (a stricter classification, a shared diagnostic prefix, a distinct
+/// "first-offset" report) lands at exactly one caixa-core edit rather
+/// than through a coordinated per-codec rewrite.
+///
+/// Peer of [`serialize_option_via_str`] / [`deserialize_option_via_str`]
+/// on the same codec-hook altitude — the three primitives together
+/// partition the substrate's typed-magnitude codec surface: this gate
+/// closes the parser-side accepted-set drift class, the two codec
+/// primitives close the serde-side `Option<T> <-> canonical-string`
+/// dispatch shape, and each routed codec site is a thin composition
+/// over the three.
+///
+/// # Errors
+///
+/// Returns the error produced by `ascii_err` when the first ASCII
+/// whitespace byte in `s` is found; otherwise returns the error
+/// produced by `non_ascii_err` when the first non-ASCII Unicode
+/// `White_Space` character in `s` is found. Returns `Ok(())` when
+/// neither predicate matches.
+pub fn reject_whitespace<E, A, N>(s: &str, ascii_err: A, non_ascii_err: N) -> Result<(), E>
+where
+    A: FnOnce(u8) -> E,
+    N: FnOnce(char) -> E,
+{
+    if let Some(byte) = find_ascii_whitespace_byte(s) {
+        return Err(ascii_err(byte));
+    }
+    if let Some(ch) = find_non_ascii_whitespace_char(s) {
+        return Err(non_ascii_err(ch));
+    }
+    Ok(())
+}
+
 /// Predicate: `s` carries a leading-zero-padded magnitude — its length
 /// exceeds one byte and its first byte is ASCII `'0'`.
 ///
@@ -59541,6 +59597,124 @@ spec:
              `anything`. The routed typed-magnitude codecs (LimitsError \
              / `String`-error `duration_codec` / `rate_limit_codec`) \
              all rely on this diagnostic-preservation contract."
+        );
+    }
+
+    #[test]
+    fn reject_whitespace_accepts_whitespace_free_input_without_calling_either_closure() {
+        // Pass-arm pin: the whitespace-free canonical input every
+        // routed codec emits (`"64MiB"`, `"30s"`, `"500m"`, `"100/s"`)
+        // returns `Ok(())` without invoking either error constructor.
+        // A drift to always-call either closure would lose the codec's
+        // pass-through contract on the accepted set.
+        fn ascii_never(_: u8) -> String {
+            unreachable!("pass-arm must not invoke the ASCII error constructor")
+        }
+        fn non_ascii_never(_: char) -> String {
+            unreachable!("pass-arm must not invoke the non-ASCII error constructor")
+        }
+        for canonical in ["64MiB", "30s", "500m", "100/s", "0", "1024", ""] {
+            reject_whitespace::<String, _, _>(canonical, ascii_never, non_ascii_never)
+                .expect("whitespace-free canonical input must accept");
+        }
+    }
+
+    #[test]
+    fn reject_whitespace_ascii_arm_fires_first_via_ascii_closure() {
+        // Ascii-arm pin: every ASCII whitespace byte in the WhatWG-
+        // conformant set (`0x20`, `0x09`, `0x0A`, `0x0C`, `0x0D`)
+        // routes through the ASCII closure and surfaces the offending
+        // byte verbatim. The non-ASCII closure must never fire when
+        // the ASCII scan already matches — pinning this ordering keeps
+        // the routed codecs' diagnostic partition (typed
+        // `WhitespaceIn*` variant on the ASCII arm, typed
+        // `NonAsciiWhitespaceIn*` variant on the strictly-complementary
+        // arm) intact.
+        fn non_ascii_never(_: char) -> String {
+            unreachable!("ASCII arm must fire first when both would match")
+        }
+        for (input, expected_byte) in [
+            (" 64MiB", 0x20u8),
+            ("30s\n", 0x0Au8),
+            ("500m\t", 0x09u8),
+            ("100 /s", 0x20u8),
+        ] {
+            let err = reject_whitespace::<String, _, _>(
+                input,
+                |b| format!("ascii:{b:02x}"),
+                non_ascii_never,
+            )
+            .expect_err("ASCII whitespace input must be rejected");
+            assert_eq!(
+                err,
+                format!("ascii:{expected_byte:02x}"),
+                "reject_whitespace must forward the first ASCII \
+                 whitespace byte in {input:?} through the ASCII \
+                 closure verbatim"
+            );
+        }
+    }
+
+    #[test]
+    fn reject_whitespace_non_ascii_arm_fires_via_non_ascii_closure() {
+        // Non-ASCII-arm pin: an input whose ASCII scan returns `None`
+        // (no `is_ascii_whitespace` byte) but whose Unicode
+        // `White_Space` scan finds a non-ASCII character
+        // (NBSP `\u{00A0}`, LINE SEPARATOR `\u{2028}`, EM-SPACE
+        // `\u{2003}`, IDEOGRAPHIC SPACE `\u{3000}`) routes through the
+        // non-ASCII closure and surfaces the offending `char` verbatim.
+        // The ASCII closure must not fire — pinning this arm keeps the
+        // routed codecs' typed `NonAsciiWhitespaceIn*` diagnostic
+        // partition intact.
+        fn ascii_never(_: u8) -> String {
+            unreachable!("non-ASCII arm must not invoke the ASCII error constructor")
+        }
+        for (input, expected_ch) in [
+            ("\u{00A0}64MiB", '\u{00A0}'),
+            ("30s\u{2028}", '\u{2028}'),
+            ("100\u{2003}/s", '\u{2003}'),
+            ("\u{3000}500m", '\u{3000}'),
+        ] {
+            let err = reject_whitespace::<String, _, _>(input, ascii_never, |ch| {
+                format!("non-ascii:{cp:04X}", cp = ch as u32)
+            })
+            .expect_err("non-ASCII Unicode whitespace input must be rejected");
+            assert_eq!(
+                err,
+                format!("non-ascii:{cp:04X}", cp = expected_ch as u32),
+                "reject_whitespace must forward the first non-ASCII \
+                 Unicode `White_Space` char in {input:?} through the \
+                 non-ASCII closure verbatim"
+            );
+        }
+    }
+
+    #[test]
+    fn reject_whitespace_ascii_wins_when_both_present() {
+        // Ordering pin: an input carrying both an ASCII whitespace
+        // byte and a non-ASCII Unicode `White_Space` char surfaces the
+        // ASCII arm first (`find_ascii_whitespace_byte` is scanned
+        // before `find_non_ascii_whitespace_char`). This mirrors the
+        // pre-lift arm order at every routed codec site and keeps the
+        // diagnostic partitioning stable: a paste-from-typography input
+        // whose leading NBSP is also preceded by an ASCII space
+        // (`" \u{00A0}64MiB"`) surfaces the space, not the NBSP —
+        // matching the pre-lift `if ascii { … } if non_ascii { … }`
+        // ordering.
+        fn non_ascii_never(_: char) -> String {
+            unreachable!("ASCII byte must be surfaced first when both classes match")
+        }
+        let err = reject_whitespace::<String, _, _>(
+            " \u{00A0}64MiB",
+            |b| format!("ascii:{b:02x}"),
+            non_ascii_never,
+        )
+        .expect_err("mixed-class input must be rejected");
+        assert_eq!(
+            err, "ascii:20",
+            "reject_whitespace must fire the ASCII arm before the \
+             non-ASCII arm — preserving the pre-lift ordering every \
+             routed codec relies on for stable diagnostic partitioning"
         );
     }
 }
