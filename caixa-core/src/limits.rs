@@ -1166,86 +1166,44 @@ pub enum LimitsError {
 // ── byte-size codec ────────────────────────────────────────────────────
 
 fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
-    // Whitespace-rejection arm — peer with the leading-`+` / fractional
-    // arm below (`"+1024"`, `"1.5KiB"`) and the leading-zero arm below
-    // (`"064MiB"`) on the same canonical-form render-determinism axis.
-    // Until this gate landed the parser silently tolerated leading /
-    // trailing / internal whitespace via the top-level `s.trim()` at
-    // parse entry and the per-part `num_part.trim()` / `unit.trim()`
-    // calls below, so every whitespace-carrying shape (`" 64MiB"` —
-    // paste-from-aligned-doc / YAML-quoted-plain-scalar leading-space;
-    // `"64MiB "` — paste-from-shell-history trailing-space; `"64 MiB"`
-    // — paste-from-typography whitespace-between-magnitude-and-unit;
-    // `"\t64MiB"` — paste-from-indented-doc / YAML-block-scalar tab
-    // byte; `"64MiB\n"` — trailing newline from a multi-line paste)
-    // parsed to the same 64 * 1024 * 1024 bytes and serde silently
-    // round-tripped to `"64MiB"` on the next emit (a *different*
-    // canonical string) — breaking the THEORY.md Part V
-    // render-determinism contract every typed slot carries.
+    // Paired whitespace-rejection arm — the ASCII byte-scan
+    // (paste-from-aligned-doc leading space, shell-history trailing
+    // space, typography space between magnitude and unit, block-scalar
+    // tab, multi-line trailing newline) closes the WhatWG-conformant
+    // ASCII whitespace bytes (`0x20`, `0x09`, `0x0A`, `0x0C`, `0x0D`);
+    // the non-ASCII `char::is_whitespace` scan closes the strictly-
+    // complementary Unicode `White_Space` class (NBSP `\u{00A0}`, LINE
+    // SEPARATOR `\u{2028}`, EM-SPACE `\u{2003}`, and the peer
+    // typography codepoints) that `str::trim` at parse entry silently
+    // strips. Either drift class would round-trip through
+    // `render_byte_size` to a *different* canonical form on next emit
+    // — breaking the THEORY.md Part V render-determinism contract every
+    // typed slot carries. Diagnostics stay typed at
+    // `WhitespaceInByteSize` / `NonAsciiWhitespaceInByteSize` so the
+    // failing byte / char + U+XXXX codepoint reaches the author verbatim
+    // rather than being value-laundered through a downstream
+    // `BadByteMagnitude` arm.
     //
-    // The canonical author shape is `<integer><unit>` (or `<integer>`
-    // for the bare-integer-as-bytes shorthand) with no whitespace
-    // bytes anywhere — every string [`render_byte_size`] emits carries
-    // none, so the parser's accepted set must match for serialize /
-    // deserialize to round-trip losslessly. This gate makes the pre-
-    // existing `s.trim()` / `num_part.trim()` / `unit.trim()` calls
-    // below strict no-ops on the accepted set (every byte-position
-    // match they would perform is now already trimmed away by the
-    // accepted set itself), while the arm surfaces every rejected
-    // whitespace-carrying shape with a typed `WhitespaceInByteSize`
-    // diagnostic naming the offending byte and the canonical form the
-    // author intended, peer with every prior canonical-form-drift arm
-    // on this codec.
-    //
-    // Routed through the lifted
-    // [`crate::render::find_ascii_whitespace_byte`] predicate — the
-    // single source of truth every typed-magnitude codec in
-    // caixa-core (`parse_byte_size` / `parse_duration` /
-    // `parse_millicores` / `supervisor::duration_codec` /
-    // `rate_limit_codec`) shares. `u8::is_ascii_whitespace()` at the
-    // predicate covers the five WhatWG-conformant ASCII whitespace
-    // bytes every downstream YAML / JSON / TOML parser can feed
-    // through a quoted-scalar value verbatim — space (`0x20`), tab
-    // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — deliberately
-    // narrower than POSIX's `[:space:]` which also admits VT
-    // (`0x0B`). Drift between any two codec sites' rejection set is
-    // a single-edit fix at the shared predicate rather than five
-    // independent scans diverging over time — same "single lifted
-    // source of truth" discipline the peer non-ASCII arm below
-    // (routed through [`crate::render::find_non_ascii_whitespace_char`])
-    // carries on the strictly-complementary Unicode `White_Space`
-    // class.
-    if let Some(byte) = crate::render::find_ascii_whitespace_byte(s) {
-        return Err(LimitsError::WhitespaceInByteSize {
+    // Routed through the lifted [`crate::render::reject_whitespace`]
+    // primitive — the substrate-side single-owner gate every typed-
+    // magnitude codec in caixa-core (`parse_byte_size` /
+    // `parse_duration` / `parse_millicores` /
+    // `supervisor::duration_codec` / `rate_limit_codec`) shares. Drift
+    // between any two codec sites' paired-arm rejection set becomes a
+    // single-edit fix at the composed predicate rather than five
+    // independent paired-arm re-inlines diverging over time.
+    crate::render::reject_whitespace(
+        s,
+        |byte| LimitsError::WhitespaceInByteSize {
             value: s.into(),
             byte,
-        });
-    }
-    // Non-ASCII Unicode `White_Space` arm — the strictly-complementary
-    // class the ASCII arm above cannot see. `str::trim` at the top of
-    // the codec uses `char::is_whitespace` (the Unicode `White_Space`
-    // property, strictly wider than the ASCII byte set), so an NBSP
-    // (`\u{00A0}`) / LINE SEPARATOR (`\u{2028}`) / EM-SPACE
-    // (`\u{2003}`) survives the byte-scan (its UTF-8 bytes are not in
-    // `is_ascii_whitespace`), gets silently stripped by the top-level
-    // `s.trim()` below, and the value round-trips through
-    // `render_byte_size` to a *different* canonical form on the next
-    // emit — breaking the THEORY.md Part V render-determinism
-    // contract every typed slot carries. Same drift class across every
-    // typed-magnitude codec in caixa-core; closed here (byte-size),
-    // and at the peer sites (`parse_duration`,
-    // `supervisor::duration_codec`, `rate_limit_codec`) through the
-    // shared [`crate::render::find_non_ascii_whitespace_char`]
-    // predicate — the "single lifted predicate across all four codec
-    // sites in one follow-up run" the 24a8ad4 commit body's `Forward
-    // compounding` bullet named as the next compounding step.
-    if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
-        return Err(LimitsError::NonAsciiWhitespaceInByteSize {
+        },
+        |ch| LimitsError::NonAsciiWhitespaceInByteSize {
             value: s.into(),
             ch,
             codepoint: ch as u32,
-        });
-    }
+        },
+    )?;
     let s = s.trim();
     if s.is_empty() {
         return Err(LimitsError::EmptyByteSize(s.into()));
@@ -1440,70 +1398,37 @@ fn de_byte_size<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error
 // ── duration codec ─────────────────────────────────────────────────────
 
 fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
-    // Whitespace-rejection arm — peer with the leading-`+` / fractional
-    // arm below (`"+30s"`, `"1.5s"`) and the leading-zero arm below
-    // (`"030s"`) on the same canonical-form render-determinism axis.
-    // Until this gate landed the parser silently tolerated leading /
-    // trailing / internal whitespace via the top-level `s.trim()` at
-    // parse entry and the per-part `num_part.trim()` / `unit.trim()`
-    // calls below, so every whitespace-carrying shape (`" 30s"` —
-    // paste-from-aligned-doc / YAML-quoted-plain-scalar leading-space;
-    // `"30s "` — paste-from-shell-history trailing-space; `"30 s"` —
-    // paste-from-typography whitespace-between-magnitude-and-unit;
-    // `"\t30s"` — paste-from-indented-doc / YAML-block-scalar tab byte;
-    // `"30s\n"` — trailing newline from a multi-line paste) parsed to
-    // the same `Duration::from_secs(30)` and serde silently round-
-    // tripped to `"30s"` on the next emit (a *different* canonical
-    // string) — breaking the THEORY.md Part V render-determinism
-    // contract every typed slot carries.
+    // Paired whitespace-rejection arm — same canonical-form
+    // render-determinism discipline as the peer `parse_byte_size` /
+    // `parse_millicores` / `supervisor::duration_codec::parse` /
+    // `rate_limit_codec::parse` sites: the ASCII byte-scan closes the
+    // WhatWG-conformant whitespace bytes every downstream YAML / JSON /
+    // TOML parser can feed through a quoted-scalar value verbatim
+    // (`0x20`, `0x09`, `0x0A`, `0x0C`, `0x0D`), the non-ASCII
+    // `char::is_whitespace` scan closes the strictly-complementary
+    // Unicode `White_Space` class (NBSP `\u{00A0}`, LINE SEPARATOR
+    // `\u{2028}`, EM-SPACE `\u{2003}`, and the peer typography
+    // codepoints) that `str::trim` at parse entry silently strips.
+    // Either drift class would round-trip through `render_duration` to
+    // a *different* canonical form on next emit — breaking the
+    // THEORY.md Part V render-determinism contract. Diagnostics stay
+    // typed at `WhitespaceInDuration` / `NonAsciiWhitespaceInDuration`.
     //
-    // The canonical author shape is `<integer><unit>` (or `<integer>`
-    // for the bare-integer-as-seconds shorthand) with no whitespace
-    // bytes anywhere — every string [`render_duration`] emits carries
-    // none, so the parser's accepted set must match for serialize /
-    // deserialize to round-trip losslessly. This gate makes the pre-
-    // existing `s.trim()` / `num_part.trim()` / `unit.trim()` calls
-    // below strict no-ops on the accepted set (every byte-position
-    // match they would perform is now already trimmed away by the
-    // accepted set itself), while the arm surfaces every rejected
-    // whitespace-carrying shape with a typed `WhitespaceInDuration`
-    // diagnostic naming the offending byte and the canonical form the
-    // author intended, peer with every prior canonical-form-drift arm
-    // on this codec.
-    //
-    // Routed through the lifted
-    // [`crate::render::find_ascii_whitespace_byte`] predicate — the
-    // same source of truth the four peer typed-magnitude codec sites
-    // share. `u8::is_ascii_whitespace()` at the predicate covers the
-    // five WhatWG-conformant ASCII whitespace bytes (space, tab, LF,
-    // FF, CR); the "single lifted predicate" discipline the peer
-    // non-ASCII arm below carries on the strictly-complementary
-    // Unicode `White_Space` class extends here to the ASCII byte set
-    // as well.
-    if let Some(byte) = crate::render::find_ascii_whitespace_byte(s) {
-        return Err(LimitsError::WhitespaceInDuration {
+    // Routed through the lifted [`crate::render::reject_whitespace`]
+    // primitive — the substrate-side single-owner paired-arm gate every
+    // typed-magnitude codec in caixa-core shares.
+    crate::render::reject_whitespace(
+        s,
+        |byte| LimitsError::WhitespaceInDuration {
             value: s.into(),
             byte,
-        });
-    }
-    // Non-ASCII Unicode `White_Space` arm — the strictly-complementary
-    // class the ASCII arm above cannot see. Same shape as the
-    // `parse_byte_size` peer arm: `str::trim` uses
-    // `char::is_whitespace` (Unicode `White_Space`, strictly wider
-    // than the ASCII byte set), so an NBSP / LINE SEPARATOR / EM-SPACE
-    // survives the byte-scan, gets silently stripped at parse entry,
-    // and round-trips through `render_duration` to a *different*
-    // canonical form on next emit — breaking the THEORY.md Part V
-    // render-determinism contract. Closed here (`:limits :wall-clock`)
-    // and at the three peer codec sites through the shared
-    // [`crate::render::find_non_ascii_whitespace_char`] predicate.
-    if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
-        return Err(LimitsError::NonAsciiWhitespaceInDuration {
+        },
+        |ch| LimitsError::NonAsciiWhitespaceInDuration {
             value: s.into(),
             ch,
             codepoint: ch as u32,
-        });
-    }
+        },
+    )?;
     let s = s.trim();
     if s.is_empty() {
         return Err(LimitsError::EmptyDuration(s.into()));
@@ -1648,73 +1573,38 @@ fn de_duration<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Duration>, D::E
 // ── millicores codec ───────────────────────────────────────────────────
 
 fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
-    // Whitespace-rejection arm — peer with the `parse_byte_size` (24a8ad4),
-    // `parse_duration` (ebc3a75), `supervisor::duration_codec` (a7ae622),
-    // and `rate_limit_codec` (1ad7755) whitespace-rejection arms on the
-    // same canonical-form render-determinism axis. Until this gate landed
-    // the parser silently tolerated leading / trailing / internal
-    // whitespace via the top-level `s.trim()` at parse entry and the
-    // per-part `magnitude.trim()` calls below, so every whitespace-carrying
-    // shape (`" 500m"` — paste-from-aligned-doc / YAML-quoted-plain-scalar
-    // leading-space; `"500m "` — paste-from-shell-history trailing-space;
-    // `"500 m"` — paste-from-typography whitespace-between-magnitude-and-
-    // unit; `"\t500m"` — paste-from-indented-doc / YAML-block-scalar tab
-    // byte; `"500m\n"` — trailing newline from a multi-line paste) parsed
-    // to the same 500 millicores and serde silently round-tripped to
-    // `"500m"` on the next emit (a *different* canonical string) —
-    // breaking the THEORY.md Part V render-determinism contract every
-    // typed slot carries.
+    // Paired whitespace-rejection arm — same canonical-form
+    // render-determinism discipline as the peer `parse_byte_size` /
+    // `parse_duration` / `supervisor::duration_codec::parse` /
+    // `rate_limit_codec::parse` sites: the ASCII byte-scan closes the
+    // WhatWG-conformant whitespace bytes (`0x20`, `0x09`, `0x0A`,
+    // `0x0C`, `0x0D`), the non-ASCII `char::is_whitespace` scan closes
+    // the strictly-complementary Unicode `White_Space` class (NBSP
+    // `\u{00A0}`, LINE SEPARATOR `\u{2028}`, EM-SPACE `\u{2003}`, and
+    // the peer typography codepoints) that `str::trim` at parse entry
+    // silently strips. Either drift class would round-trip through
+    // `render_millicores` to a *different* canonical form on next emit
+    // — breaking the THEORY.md Part V render-determinism contract.
+    // Diagnostics stay typed at `WhitespaceInMillicores` /
+    // `NonAsciiWhitespaceInMillicores` — peer with every prior
+    // canonical-form-drift arm on this codec
+    // (`NonIntegerMillicoreMagnitude`, `LeadingZeroMillicoreMagnitude`).
     //
-    // The canonical author shape is `<integer>m` (or `<integer>` for the
-    // bare-core shorthand) with no whitespace bytes anywhere — every
-    // string [`render_millicores`] emits carries none, so the parser's
-    // accepted set must match for serialize / deserialize to round-trip
-    // losslessly. This gate makes the pre-existing `s.trim()` /
-    // `magnitude.trim()` calls below strict no-ops on the accepted set
-    // (every byte-position match they would perform is now already
-    // trimmed away by the accepted set itself), while the arm surfaces
-    // every rejected whitespace-carrying shape with a typed
-    // `WhitespaceInMillicores` diagnostic naming the offending byte and
-    // the canonical form the author intended, peer with every prior
-    // canonical-form-drift arm on this codec (`NonIntegerMillicoreMagnitude`,
-    // `LeadingZeroMillicoreMagnitude`).
-    //
-    // Routed through the lifted
-    // [`crate::render::find_ascii_whitespace_byte`] predicate — the
-    // same source of truth the four peer typed-magnitude codec sites
-    // share. `u8::is_ascii_whitespace()` at the predicate covers the
-    // five WhatWG-conformant ASCII whitespace bytes (space, tab, LF,
-    // FF, CR); the "single lifted predicate" discipline the peer
-    // non-ASCII arm below carries on the strictly-complementary
-    // Unicode `White_Space` class extends here to the ASCII byte set
-    // as well.
-    if let Some(byte) = crate::render::find_ascii_whitespace_byte(s) {
-        return Err(LimitsError::WhitespaceInMillicores {
+    // Routed through the lifted [`crate::render::reject_whitespace`]
+    // primitive — the substrate-side single-owner paired-arm gate every
+    // typed-magnitude codec in caixa-core shares.
+    crate::render::reject_whitespace(
+        s,
+        |byte| LimitsError::WhitespaceInMillicores {
             value: s.into(),
             byte,
-        });
-    }
-    // Non-ASCII Unicode `White_Space` arm — the strictly-complementary
-    // class the ASCII arm above cannot see. Same shape as the peer
-    // `parse_byte_size` / `parse_duration` arms (1b75b38): `str::trim`
-    // uses `char::is_whitespace` (Unicode `White_Space`, strictly wider
-    // than the ASCII byte set), so an NBSP (`\u{00A0}`) / LINE SEPARATOR
-    // (`\u{2028}`) / EM-SPACE (`\u{2003}`) survives the byte-scan, gets
-    // silently stripped at parse entry, and round-trips through
-    // `render_millicores` to a *different* canonical form on the next
-    // emit — breaking the THEORY.md Part V render-determinism contract.
-    // Closed here (`:limits :cpu`) through the shared
-    // [`crate::render::find_non_ascii_whitespace_char`] predicate — the
-    // "single lifted predicate across every typed-magnitude codec site"
-    // trajectory 1b75b38 landed on the four peer codecs, extended here
-    // to the fifth.
-    if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
-        return Err(LimitsError::NonAsciiWhitespaceInMillicores {
+        },
+        |ch| LimitsError::NonAsciiWhitespaceInMillicores {
             value: s.into(),
             ch,
             codepoint: ch as u32,
-        });
-    }
+        },
+    )?;
     let s_trim = s.trim();
     if s_trim.is_empty() {
         return Err(LimitsError::BadMillicores(s.into()));
@@ -2050,6 +1940,106 @@ mod tests {
             assert_eq!(
                 emitted, canonical,
                 "ser_duration drifted from supervisor::duration_codec::render on {d:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn parse_byte_size_routes_whitespace_through_render_reject_whitespace_canonical() {
+        // Routing pin: the paired whitespace-rejection block at the
+        // top of `parse_byte_size` MUST route through the substrate-
+        // side [`crate::render::reject_whitespace`] primitive — the
+        // single-owner paired-arm gate every typed-magnitude codec
+        // in caixa-core shares. Any future accidental re-inline of a
+        // bespoke
+        //
+        // ```ignore
+        // if let Some(byte) = find_ascii_whitespace_byte(s) { … }
+        // if let Some(ch)   = find_non_ascii_whitespace_char(s)  { … }
+        // ```
+        //
+        // block inside this module — the shape this lift removed —
+        // that drifted on either arm surfaces here as a variant-shape
+        // drift on the very first canonical form the two
+        // implementations disagree on. Byte-shape pins cover the
+        // ASCII WhatWG-conformant set (space / tab / LF / FF / CR)
+        // and the strictly-complementary non-ASCII Unicode
+        // `White_Space` class (NBSP / LINE SEPARATOR / EM-SPACE /
+        // IDEOGRAPHIC SPACE) on the exemplar `:limits :memory` axis
+        // — peer of the pre-existing `ser_byte_size_routes_through_
+        // render_serialize_option_via_str_canonical` /
+        // `de_byte_size_routes_through_render_deserialize_option_
+        // via_str_canonical` pins on the sibling codec-hook axis.
+        for (raw, byte) in [
+            (" 64MiB", 0x20u8),
+            ("64MiB ", 0x20u8),
+            ("64 MiB", 0x20u8),
+            ("\t64MiB", 0x09u8),
+            ("64MiB\n", 0x0Au8),
+        ] {
+            let err = parse_byte_size(raw)
+                .expect_err("ASCII-whitespace-carrying byte-size input must be rejected");
+            let via_primitive = crate::render::reject_whitespace::<LimitsError, _, _>(
+                raw,
+                |b| LimitsError::WhitespaceInByteSize {
+                    value: raw.into(),
+                    byte: b,
+                },
+                |ch| LimitsError::NonAsciiWhitespaceInByteSize {
+                    value: raw.into(),
+                    ch,
+                    codepoint: ch as u32,
+                },
+            )
+            .expect_err("primitive must reject the same ASCII-whitespace shape");
+            assert_eq!(
+                err, via_primitive,
+                "parse_byte_size drifted from crate::render::reject_whitespace \
+                 on ASCII-whitespace input {raw:?}"
+            );
+            assert!(
+                matches!(
+                    err,
+                    LimitsError::WhitespaceInByteSize { value: ref v, byte: b } if v == raw && b == byte
+                ),
+                "parse_byte_size must surface WhitespaceInByteSize {{ value: {raw:?}, byte: 0x{byte:02x} }}"
+            );
+        }
+        for (raw, expected_ch) in [
+            ("\u{00A0}64MiB", '\u{00A0}'),
+            ("64\u{2003}MiB", '\u{2003}'),
+            ("64MiB\u{2028}", '\u{2028}'),
+            ("\u{3000}64MiB", '\u{3000}'),
+        ] {
+            let err = parse_byte_size(raw)
+                .expect_err("non-ASCII-whitespace-carrying byte-size input must be rejected");
+            let via_primitive = crate::render::reject_whitespace::<LimitsError, _, _>(
+                raw,
+                |b| LimitsError::WhitespaceInByteSize {
+                    value: raw.into(),
+                    byte: b,
+                },
+                |ch| LimitsError::NonAsciiWhitespaceInByteSize {
+                    value: raw.into(),
+                    ch,
+                    codepoint: ch as u32,
+                },
+            )
+            .expect_err("primitive must reject the same non-ASCII-whitespace shape");
+            assert_eq!(
+                err, via_primitive,
+                "parse_byte_size drifted from crate::render::reject_whitespace \
+                 on non-ASCII-whitespace input {raw:?}"
+            );
+            assert!(
+                matches!(
+                    err,
+                    LimitsError::NonAsciiWhitespaceInByteSize { value: ref v, ch, codepoint }
+                        if v == raw && ch == expected_ch && codepoint == expected_ch as u32
+                ),
+                "parse_byte_size must surface NonAsciiWhitespaceInByteSize \
+                 {{ value: {raw:?}, ch: {expected_ch:?}, codepoint: {cp:#06X} }}",
+                cp = expected_ch as u32
             );
         }
     }
