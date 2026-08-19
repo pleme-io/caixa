@@ -2422,7 +2422,7 @@ impl Caixa {
     /// surface term (`:limits`) the field's own docstring already
     /// carries.
     #[must_use]
-    pub fn limits(&self) -> Option<&LimitsSpec> {
+    pub const fn limits(&self) -> Option<&LimitsSpec> {
         self.limits.as_ref()
     }
 
@@ -2560,7 +2560,7 @@ impl Caixa {
     /// surface term (`:behavior`) the field's own docstring already
     /// carries.
     #[must_use]
-    pub fn behavior(&self) -> Option<&crate::BehaviorSpec> {
+    pub const fn behavior(&self) -> Option<&crate::BehaviorSpec> {
         self.behavior.as_ref()
     }
 
@@ -2696,7 +2696,7 @@ impl Caixa {
     /// author-surface term (`:politicas`) the field's own docstring
     /// already carries.
     #[must_use]
-    pub fn politicas(&self) -> Option<&crate::aplicacao::MeshPolicy> {
+    pub const fn politicas(&self) -> Option<&crate::aplicacao::MeshPolicy> {
         self.politicas.as_ref()
     }
 
@@ -2841,7 +2841,7 @@ impl Caixa {
     /// author-surface term (`:placement`) the field's own docstring
     /// already carries.
     #[must_use]
-    pub fn placement(&self) -> Option<&crate::aplicacao::Placement> {
+    pub const fn placement(&self) -> Option<&crate::aplicacao::Placement> {
         self.placement.as_ref()
     }
 
@@ -2982,7 +2982,7 @@ impl Caixa {
     /// name verbatim and the tatara-lisp author-surface term
     /// (`:entrada`) the field's own docstring already carries.
     #[must_use]
-    pub fn entrada(&self) -> Option<&crate::aplicacao::Entrada> {
+    pub const fn entrada(&self) -> Option<&crate::aplicacao::Entrada> {
         self.entrada.as_ref()
     }
 
@@ -3002,7 +3002,7 @@ impl Caixa {
     /// the substrate primitive rather than an open-coded `self.ci.as_ref()`
     /// at every consumer.
     #[must_use]
-    pub fn ci(&self) -> Option<&canteiro_types::CiRun> {
+    pub const fn ci(&self) -> Option<&canteiro_types::CiRun> {
         self.ci.as_ref()
     }
 
@@ -6287,6 +6287,138 @@ mod tests {
         assert!(std::ptr::eq(
             children_via_const_fn(&c_full),
             c_full.children()
+        ));
+    }
+
+    #[test]
+    fn caixa_outer_option_composite_reference_return_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on the six outer-[`Caixa`]
+        // `Option<Composite> → Option<&Composite>` reference-return
+        // accessors — [`Caixa::limits`] / [`Caixa::behavior`] on the M2
+        // Servico-runtime typed-slot axis, [`Caixa::politicas`] /
+        // [`Caixa::placement`] / [`Caixa::entrada`] on the M3 mesh-slot
+        // axis, and [`Caixa::ci`] on the Acao-kind typed-CI-run axis.
+        // Each body is a bare `self.<field>.as_ref()` dispatch through
+        // [`Option::as_ref`] (const-stable since Rust 1.83, well within
+        // the workspace MSRV of 1.89). Any future accidental downgrade
+        // to non-`const` fails the corresponding `<name>_via_const_fn`
+        // wrapper at caixa-core build time with E0015 (`cannot call
+        // non-const method`), strictly stronger than a runtime `assert!`
+        // and strictly stronger than a module-scope `const _: () =
+        // assert!(…)` pin (which cannot be formed on a `&Caixa` fixture
+        // because the type's `String` / `Vec` / `Option<Composite>`
+        // carriers rule out `const`-context value construction; the
+        // `const fn` wrapper is the load-bearing shape that side-steps
+        // the destructor-in-const restriction on the value axis while
+        // still pinning the `const`-fn posture on the callee — mirror
+        // of the sibling
+        // [`caixa_outer_copy_return_accessor_pair_is_const_fn`] +
+        // [`caixa_outer_string_slice_return_accessor_family_is_const_fn`] +
+        // [`caixa_outer_composite_slice_return_accessor_family_is_const_fn`]
+        // pins' discipline verbatim on the peer outer-`Caixa` axes at
+        // the same struct).
+        //
+        // Closes the outer-`Caixa` `Option<&Composite>` composite-
+        // reference-return sub-family — the last unlifted altitude on
+        // the outer-`Caixa` accessor-family const-eval surface after
+        // the sibling `Copy`-return / universal-axis-`&str` /
+        // `Option<&str>` / `&[String]` / composite-`&[T]` pins already
+        // closed the sibling arms at 866d1d5 / 29c5d7e / 0650f64 /
+        // 231a968 (the last of these pins the `Vec<T> → &[T]`
+        // composite-slice arm the six accessors here close as their
+        // `Option<Composite> → Option<&Composite>` peer). Peer of the
+        // sibling inner-altitude nested-spec composite-reference-return
+        // pin family — [`crate::AplicacaoSpec::politicas`] /
+        // [`crate::AplicacaoSpec::placement`] /
+        // [`crate::AplicacaoSpec::entrada`] on the inner
+        // [`crate::AplicacaoSpec`] altitude (already `pub const fn`
+        // per 0b23e0f), and the outer-`Caixa` altitude here now carries
+        // the same shape so both altitudes of the reference-return
+        // discipline (per-`Caixa` outer-slot presence + per-
+        // `AplicacaoSpec` inner-slot presence) route through one typed
+        // const dispatch on the substrate primitive.
+        const fn limits_via_const_fn(c: &Caixa) -> Option<&LimitsSpec> {
+            c.limits()
+        }
+        const fn behavior_via_const_fn(c: &Caixa) -> Option<&crate::BehaviorSpec> {
+            c.behavior()
+        }
+        const fn politicas_via_const_fn(c: &Caixa) -> Option<&crate::aplicacao::MeshPolicy> {
+            c.politicas()
+        }
+        const fn placement_via_const_fn(c: &Caixa) -> Option<&crate::aplicacao::Placement> {
+            c.placement()
+        }
+        const fn entrada_via_const_fn(c: &Caixa) -> Option<&crate::aplicacao::Entrada> {
+            c.entrada()
+        }
+        const fn ci_via_const_fn(c: &Caixa) -> Option<&canteiro_types::CiRun> {
+            c.ci()
+        }
+        // Both-arm sweep on every accessor: the `None` author-omitted
+        // arm (template default — no M2/M3/CI slot declared) and the
+        // `Some(<composite>)` authored arm (mutated below via struct-
+        // literal seeds, side-stepping the parser-side `:kind`-gated
+        // cross-slot invariants irrelevant to the accessor dispatch
+        // under test). Both arms route through the `const fn` wrapper
+        // family so the two-arm `Option` partition is pinned through
+        // the same const dispatch as the runtime path.
+        let c_empty = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        assert!(limits_via_const_fn(&c_empty).is_none());
+        assert!(behavior_via_const_fn(&c_empty).is_none());
+        assert!(politicas_via_const_fn(&c_empty).is_none());
+        assert!(placement_via_const_fn(&c_empty).is_none());
+        assert!(entrada_via_const_fn(&c_empty).is_none());
+        assert!(ci_via_const_fn(&c_empty).is_none());
+        let mut c_full = Caixa::from_lisp(&Caixa::template("demo")).expect("template must parse");
+        c_full.limits = Some(LimitsSpec::default());
+        c_full.behavior = Some(crate::BehaviorSpec::default());
+        c_full.politicas = Some(crate::aplicacao::MeshPolicy::default());
+        c_full.placement = Some(crate::aplicacao::Placement::default());
+        c_full.entrada = Some(crate::aplicacao::Entrada {
+            host: "demo.quero.cloud".to_string(),
+            para: "demo".to_string(),
+            paths: Vec::new(),
+            port: crate::aplicacao::DEFAULT_SERVICO_PORT,
+        });
+        c_full.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![],
+        });
+        assert!(limits_via_const_fn(&c_full).is_some());
+        assert!(behavior_via_const_fn(&c_full).is_some());
+        assert!(politicas_via_const_fn(&c_full).is_some());
+        assert!(placement_via_const_fn(&c_full).is_some());
+        assert!(entrada_via_const_fn(&c_full).is_some());
+        assert!(ci_via_const_fn(&c_full).is_some());
+        // Alias-borrow check on every arm: the wrapper's inner-`Option`
+        // reference must alias the caller's borrow so any future accessor
+        // re-routing that skips the storage field surfaces through the
+        // assertion.
+        assert!(std::ptr::eq(
+            limits_via_const_fn(&c_full).unwrap(),
+            c_full.limits().unwrap()
+        ));
+        assert!(std::ptr::eq(
+            behavior_via_const_fn(&c_full).unwrap(),
+            c_full.behavior().unwrap()
+        ));
+        assert!(std::ptr::eq(
+            politicas_via_const_fn(&c_full).unwrap(),
+            c_full.politicas().unwrap()
+        ));
+        assert!(std::ptr::eq(
+            placement_via_const_fn(&c_full).unwrap(),
+            c_full.placement().unwrap()
+        ));
+        assert!(std::ptr::eq(
+            entrada_via_const_fn(&c_full).unwrap(),
+            c_full.entrada().unwrap()
+        ));
+        assert!(std::ptr::eq(
+            ci_via_const_fn(&c_full).unwrap(),
+            c_full.ci().unwrap()
         ));
     }
 
