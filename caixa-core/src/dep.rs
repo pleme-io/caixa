@@ -2711,8 +2711,32 @@ impl Dep {
     /// reference-return unchanged. Named `fonte()` to match the storage
     /// field's name verbatim and the tatara-lisp author-surface term
     /// (`:fonte`) the field's own docstring already carries.
+    ///
+    /// Declared `pub const fn` — the body projects through
+    /// `Option::<DepSource>::as_ref`, const-stable since Rust 1.83 and
+    /// well within the workspace MSRV, so every downstream `const`-
+    /// context consumer of the per-`Dep` `:fonte` composite-reference
+    /// accessor reaches through the same typed dispatch on the
+    /// substrate primitive at const-eval time as at runtime. The
+    /// paired [`dep_outer_accessor_family_is_const_fn`][pin] pin
+    /// (a `const fn <name>_via_const_fn(d: &Dep) -> …` wrapper family
+    /// that forwards through each lifted accessor) locks the posture
+    /// load-bearing at caixa-core build time — any future accidental
+    /// downgrade to non-`const` fails the wrapper with E0015
+    /// (`cannot call non-const method`), strictly stronger than a
+    /// runtime `assert!` and side-stepping the destructor-in-const
+    /// restriction the `Dep` fixture's `String` / `Option<DepSource>`
+    /// / `Vec<String>` carriers rule out. Peer of the sibling per-
+    /// `WitContract` pre-projection accessor family's `const`-eval-
+    /// surface pass (279823b) and of the outer-`Caixa` slice-return
+    /// accessor family's parallel pass (231a968) — same "one canonical
+    /// dispatch per axis, `const`-eval posture pinned at the substrate
+    /// primitive, thin projections at each consumer" discipline
+    /// extended onto the outer per-dep-list-entry [`Dep`] altitude.
+    ///
+    /// [pin]: tests::dep_outer_accessor_family_is_const_fn
     #[must_use]
-    pub fn fonte(&self) -> Option<&DepSource> {
+    pub const fn fonte(&self) -> Option<&DepSource> {
         self.fonte.as_ref()
     }
 
@@ -2817,8 +2841,21 @@ impl Dep {
     /// paths). Named `caracteristicas()` to match the storage field's
     /// name verbatim and the tatara-lisp author-surface term
     /// (`:caracteristicas`) the field's own docstring already carries.
+    ///
+    /// Declared `pub const fn` — the body projects through
+    /// `Vec::<String>::as_slice`, const-stable since Rust 1.83 and
+    /// well within the workspace MSRV, so every downstream `const`-
+    /// context consumer of the per-`Dep` `:caracteristicas` slice-
+    /// accessor reaches through the same typed dispatch on the
+    /// substrate primitive at const-eval time as at runtime. Pinned
+    /// load-bearing by the paired
+    /// [`dep_outer_accessor_family_is_const_fn`][pin] wrapper family
+    /// alongside its sibling [`Self::fonte`] — see [`Self::fonte`] for
+    /// the full pin-shape rationale.
+    ///
+    /// [pin]: tests::dep_outer_accessor_family_is_const_fn
     #[must_use]
-    pub fn caracteristicas(&self) -> &[String] {
+    pub const fn caracteristicas(&self) -> &[String] {
         self.caracteristicas.as_slice()
     }
 
@@ -4414,6 +4451,67 @@ mod tests {
             assert_eq!(d.nome(), nome);
             assert_eq!(d.versao_requirement(), versao);
         }
+    }
+
+    #[test]
+    fn dep_outer_accessor_family_is_const_fn() {
+        // Fail-before-pass-after pin on [`Dep::fonte`] +
+        // [`Dep::caracteristicas`]'s `const`-eval-surface posture.
+        // Each accessor projects the per-`:deps` / per-`:deps-dev`
+        // entry's composite / list storage through a `pub const fn`
+        // stdlib method (`Option::<DepSource>::as_ref` /
+        // `Vec::<String>::as_slice`, both const-stable since Rust
+        // 1.83, well within the workspace MSRV). Any future
+        // accidental downgrade to non-`const` fails the corresponding
+        // `<name>_via_const_fn` wrapper at caixa-core build time with
+        // E0015 (`cannot call non-const method`), strictly stronger
+        // than a runtime `assert!` and side-stepping the destructor-
+        // in-const restriction the `Dep` fixture's `String` /
+        // `Option<DepSource>` / `Vec<String>` carriers rule out on the
+        // direct-`const _: () = assert!(...)` residence.
+        //
+        // Peer of the sibling per-`Dep` scalar-accessor pair pin
+        // [`dep_string_scalar_accessor_pair_is_const_fn`] on the same
+        // outer per-dep-list-entry [`Dep`] altitude — this pin extends
+        // the `const`-eval-surface discipline onto the composite-
+        // reference and slice-return arms of the outer-`Dep` accessor
+        // family, closing the four-slot outer surface (`:nome` +
+        // `:versao` + `:fonte` + `:caracteristicas`) on the `const`-fn
+        // posture. The `:opcional` `bool` arm already carries the
+        // posture through [`Dep::opcional`]'s prior `pub const fn`
+        // declaration, so this pin lands the last two unlifted
+        // outer-`Dep` accessors and closes the family.
+        const fn fonte_via_const_fn(d: &Dep) -> Option<&DepSource> {
+            d.fonte()
+        }
+        const fn caracteristicas_via_const_fn(d: &Dep) -> &[String] {
+            d.caracteristicas()
+        }
+        // `Dep::simple` — no `:fonte`, empty `:caracteristicas`.
+        let empty = Dep::simple("caixa-teia", "^0.1");
+        assert!(fonte_via_const_fn(&empty).is_none());
+        assert_eq!(fonte_via_const_fn(&empty), empty.fonte());
+        assert!(caracteristicas_via_const_fn(&empty).is_empty());
+        assert_eq!(
+            caracteristicas_via_const_fn(&empty),
+            empty.caracteristicas()
+        );
+        // `Dep::git` — `:fonte` is `Some(Git{…})`, `:caracteristicas`
+        // still empty.
+        let git = Dep::git("caixa-teia", "^0.1", "github:pleme-io/caixa-teia", "v0.1.0");
+        assert!(fonte_via_const_fn(&git).is_some());
+        assert_eq!(fonte_via_const_fn(&git), git.fonte());
+        assert_eq!(caracteristicas_via_const_fn(&git), git.caracteristicas());
+        // Populated `:caracteristicas` — exercise the non-empty
+        // slice-view arm to pin the accessor's borrow shape against
+        // both a `Vec::new()` empty backing buffer and a populated one.
+        let mut with_features = Dep::simple("caixa-teia", "^0.1");
+        with_features.caracteristicas = vec!["feat-a".into(), "feat-b".into()];
+        assert_eq!(caracteristicas_via_const_fn(&with_features).len(), 2);
+        assert_eq!(
+            caracteristicas_via_const_fn(&with_features),
+            with_features.caracteristicas()
+        );
     }
 
     #[test]
