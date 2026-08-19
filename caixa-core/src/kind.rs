@@ -650,18 +650,23 @@ mod tests {
         // caixa-core build time rather than surfacing as a
         // downstream `const`-context regression far from the derive
         // declaration.
-        const IS_APLICACAO: bool = CaixaKind::Aplicacao.is_aplicacao();
-        const IS_BIBLIOTECA: bool = CaixaKind::Biblioteca.is_biblioteca();
-        const IS_SERVICO: bool = CaixaKind::Servico.is_servico();
-        const IS_SUPERVISOR: bool = CaixaKind::Supervisor.is_supervisor();
-        const IS_BINARIO: bool = CaixaKind::Binario.is_binario();
-        const IS_ACAO: bool = CaixaKind::Acao.is_acao();
-        assert!(IS_APLICACAO);
-        assert!(IS_BIBLIOTECA);
-        assert!(IS_SERVICO);
-        assert!(IS_SUPERVISOR);
-        assert!(IS_BINARIO);
-        assert!(IS_ACAO);
+        //
+        // The pin lives inside a `const { assert!(..) }` block so the
+        // compiler enforces both halves (arm predicate is `const`-
+        // callable AND returns `true` for the matching arm) at
+        // caixa-core compile time — a `#[test]` body without the
+        // `const { .. }` wrapper would enforce const-callability at
+        // compile time (through the named `const` binding) but the
+        // arm-value pin only at test-run time, splitting the
+        // enforcement axis into two windows.
+        const {
+            assert!(CaixaKind::Aplicacao.is_aplicacao());
+            assert!(CaixaKind::Biblioteca.is_biblioteca());
+            assert!(CaixaKind::Servico.is_servico());
+            assert!(CaixaKind::Supervisor.is_supervisor());
+            assert!(CaixaKind::Binario.is_binario());
+            assert!(CaixaKind::Acao.is_acao());
+        }
     }
 
     #[test]

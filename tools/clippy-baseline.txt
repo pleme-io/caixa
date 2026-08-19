@@ -21,7 +21,7 @@
 1	clippy::extend_with_drain	caixa-ast/src/parser.rs
 2	clippy::needless_raw_string_hashes	caixa-ast/src/parser.rs
 1	clippy::needless_lifetimes	caixa-ast/src/span.rs
-8	clippy::assertions_on_constants	caixa-core/src/aplicacao.rs
+1	clippy::assertions_on_constants	caixa-core/src/aplicacao.rs
 4	clippy::borrow_as_ptr	caixa-core/src/aplicacao.rs
 4	clippy::doc_lazy_continuation	caixa-core/src/aplicacao.rs
 17	clippy::doc_markdown	caixa-core/src/aplicacao.rs
@@ -30,7 +30,6 @@
 2	clippy::too_many_lines	caixa-core/src/aplicacao.rs
 2	clippy::type_complexity	caixa-core/src/behavior.rs
 2	clippy::ref_as_ptr	caixa-core/src/dep.rs
-6	clippy::assertions_on_constants	caixa-core/src/kind.rs
 7	clippy::doc_markdown	caixa-core/src/kind.rs
 1	clippy::doc_overindented_list_items	caixa-core/src/layout.rs
 1	clippy::too_many_lines	caixa-core/src/layout.rs
@@ -59,7 +58,6 @@
 1	clippy::must_use_candidate	caixa-core/src/supervisor.rs
 1	clippy::doc_lazy_continuation	caixa-core/src/upgrade.rs
 5	clippy::doc_markdown	caixa-core/src/version.rs
-1	clippy::assertions_on_constants	caixa-core/tests/dispatcher_registration.rs
 3	clippy::doc_markdown	caixa-core/tests/dispatcher_registration.rs
 1	clippy::bind_instead_of_map	caixa-crd/src/conversion.rs
 1	clippy::doc_markdown	caixa-crd/src/conversion.rs
