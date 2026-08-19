@@ -1406,7 +1406,35 @@ impl WitContract {
         // the Capability arm). Same trajectory as c4213a4 (WitContract
         // endpoint/subject/slot value-shape gates lifted into
         // `target()`) on the peer payload axes.
-        if let Err(reason) = crate::render::is_wit_world_ref(&self.wit) {
+        //
+        // Routed through the lifted [`WitContract::world_ref`] accessor
+        // rather than the raw `&self.wit` field access — the two
+        // production consumers of the per-`:contratos :wit` world-ref
+        // byte-string on the value-shape axis (this method's invalid-
+        // wit gate, the [`AplicacaoSpec::validate`] duplicate-
+        // `:contratos` [`ContratoIdentity`] dedup-key world-ref arm via
+        // [`WitContract::identity`]) now key off exactly one typed
+        // dispatch on the substrate primitive, so any future rebrand on
+        // the axis (an M4 promotion from `String` to a typed WIT
+        // world-ref enum once the WIT registry stabilizes in
+        // tatara-lisp, a per-CR canonicalization pass that lowercases
+        // the WIT world ref post-parse, a promoted `smol_str::SmolStr`
+        // inline-buffer swap on the storage arm) migrates as a single
+        // caixa-core edit rather than a coordinated rewrite of the two
+        // call sites — sibling of the peer [`WitContract::endpoint`] /
+        // [`WitContract::subject`] / [`WitContract::slot`] accessor-
+        // routed payload-carrier extractions above on the same
+        // [`WitContract::target`] body, completing the per-`:contratos`
+        // scalar-accessor-routing pass at the last unlifted raw-field-
+        // access site inside `impl WitContract`. Same "typed dispatch
+        // composes with typed dispatch, not with raw field access"
+        // discipline the sibling [`WitContract::edge_pair`] /
+        // [`WitContract::edge_triple`] / [`WitContract::identity`]
+        // composite-projection accessors and the
+        // [`WitContract::is_self_loop`] identity-space predicate
+        // already route through. Pinned by
+        // [`tests::wit_contract_target_wit_shape_gate_routes_through_world_ref_accessor`].
+        if let Err(reason) = crate::render::is_wit_world_ref(self.world_ref()) {
             let (de, para, wit) = edge();
             return Err(AplicacaoError::ContratoWitInvalid {
                 de,
@@ -22554,6 +22582,82 @@ mod tests {
             inter_edge.source() == inter_edge.destination(),
             "WitContract::is_self_loop must compose exactly \
              `source() == destination()` on the complement arm too",
+        );
+    }
+
+    #[test]
+    fn wit_contract_target_wit_shape_gate_routes_through_world_ref_accessor() {
+        // The composition pin: [`WitContract::target`]'s invalid-wit
+        // value-shape gate must feed the reason string through the
+        // lifted [`WitContract::world_ref`] scalar accessor — the same
+        // typed dispatch on the substrate primitive every peer
+        // per-`:contratos` payload-carrier extraction in the same
+        // method body already routes through
+        // ([`WitContract::endpoint`] on the HTTP-arm target extraction,
+        // [`WitContract::subject`] on the pub-sub-arm target extraction,
+        // [`WitContract::slot`] on the store-arm target extraction) and
+        // every peer composite-projection accessor
+        // ([`WitContract::edge_pair`], [`WitContract::edge_triple`],
+        // [`WitContract::identity`]) already composes from. Any future
+        // refactor that silently re-authored the gate to bypass the
+        // lifted accessor (an accidental `&self.wit` regression back to
+        // the raw field-access shape, an M4-typed-`WitWorld` `Display`
+        // re-canonicalization on `world_ref()` that didn't reach this
+        // gate, a per-CR lowercasing canonicalization pass the M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer applies
+        // per-tenant that lands on `world_ref()` without reaching this
+        // gate) would silently split the invalid-wit diagnostic reason
+        // from the substrate-primitive projection every downstream
+        // consumer routes through. Same "typed dispatch composes with
+        // typed dispatch, not with raw field access" discipline the
+        // sibling
+        // [`wit_contract_is_self_loop_routes_through_source_destination_accessors`]
+        // pin already carries on the endpoint-equality predicate axis,
+        // extended onto the invalid-wit value-shape gate axis inside
+        // the same [`WitContract::target`] body. Closes the last
+        // unlifted raw-field-access site inside `impl WitContract`.
+        //
+        // The fixture carries `:wit "WASI:HTTP/proxy"` — the canonical
+        // uppercase-typo footgun the pre-c4213a4 shape silently demoted
+        // to a capability-only edge; the value-shape gate rejects it
+        // through [`crate::render::is_wit_world_ref`] on the substrate
+        // primitive's ASCII-lowercase-only accept-set, with a
+        // parser-shaped reason string the test asserts round-trips
+        // byte-for-byte between the direct-dispatch call (through the
+        // predicate on the accessor's projection) and the
+        // [`WitContract::target`] gate's produced reason field.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "WASI:HTTP/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        let err = c.target().unwrap_err();
+        let AplicacaoError::ContratoWitInvalid {
+            ref de,
+            ref para,
+            ref wit,
+            ref reason,
+        } = err
+        else {
+            panic!("expected ContratoWitInvalid, got {err:?}");
+        };
+        assert_eq!(de, "cart");
+        assert_eq!(para, "catalog");
+        assert_eq!(wit, "WASI:HTTP/proxy");
+        let expected_reason = crate::render::is_wit_world_ref(c.world_ref()).unwrap_err();
+        assert_eq!(
+            *reason, expected_reason,
+            "WitContract::target's invalid-wit value-shape gate reason \
+             must compose exactly is_wit_world_ref(self.world_ref()) — \
+             a bypass here (e.g. a raw `&self.wit` field-access \
+             regression, or a divergent predicate on a different \
+             projection) would silently decouple the invalid-wit \
+             diagnostic's reason field from the substrate-primitive \
+             scalar accessor every peer per-`:contratos` extraction in \
+             the same method body already routes through",
         );
     }
 
