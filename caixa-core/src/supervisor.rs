@@ -2469,13 +2469,13 @@ pub mod duration_codec {
         if total_ms == 0 {
             return "0s".into();
         }
-        if total_ms % (3600 * 1000) == 0 {
+        if total_ms.is_multiple_of(3600 * 1000) {
             return format!("{}h", total_ms / (3600 * 1000));
         }
-        if total_ms % (60 * 1000) == 0 {
+        if total_ms.is_multiple_of(60 * 1000) {
             return format!("{}m", total_ms / (60 * 1000));
         }
-        if total_ms % 1000 == 0 {
+        if total_ms.is_multiple_of(1000) {
             return format!("{}s", total_ms / 1000);
         }
         format!("{total_ms}ms")
