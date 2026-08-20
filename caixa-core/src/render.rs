@@ -1360,6 +1360,144 @@ pub fn is_digit_only_magnitude(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
 }
 
+/// Typed outcome of dispatching a validated integer magnitude through the
+/// shared `{ms, s, "", m, h} → Duration` unit table.
+///
+/// Returned by [`duration_from_integer_magnitude_and_unit`] so each
+/// typed-duration codec (`limits::parse_duration` backing `:limits
+/// :wall-clock`, `supervisor::duration_codec::parse` backing the shared
+/// `:supervisor :restart-window` / `:politicas :timeout` /
+/// `:politicas :circuit-breaker :window` duration slots) maps the axis-
+/// agnostic outcome onto its own axis-specific error variant. The
+/// closed-set discriminants ([`Overflow`][DurationUnitError::Overflow] /
+/// [`UnknownUnit`][DurationUnitError::UnknownUnit]) partition the two
+/// diagnostic classes each caller distinguishes today:
+///
+///   - `Overflow { multiplier }` — the accepted unit's `num × multiplier`
+///     conversion overflows `u64::MAX`. `multiplier` is the same literal
+///     the pre-lift arm's diagnostic named verbatim (`60` for `"m"`,
+///     `3600` for `"h"`), so each caller reconstructs the exact
+///     pre-lift wording (`"…overflows u64 (magnitude × 60 > 2^64-1)"`)
+///     from the discriminant + its own magnitude/unit locals. The `"ms"`
+///     / `"s"` / `""` arms cannot overflow (every `u64` maps to a
+///     representable `Duration` via `from_millis` / `from_secs`) so no
+///     `multiplier` variant carries those units.
+///   - `UnknownUnit` — the trimmed unit suffix is not in the accepted
+///     set `{"ms", "s", "", "m", "h"}`. Each caller wraps the unit
+///     verbatim in its own `UnknownDurationUnit` /
+///     `"unknown duration unit"` diagnostic.
+///
+/// Lifted to a `pub` enum next to [`duration_from_integer_magnitude_and_unit`]
+/// so the accepted-unit set + the multiplier table + the overflow-
+/// arm partition live in exactly one place across every typed-duration
+/// codec in caixa-core. A future unit addition (a `"us"` microsecond
+/// suffix once high-resolution timing lands, a `"d"` day suffix once
+/// downstream K8s CR schemas grow multi-day windows) extends this
+/// enum + its associated match arm at one site rather than at each
+/// codec's inline dispatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DurationUnitError {
+    /// The `num × multiplier` seconds-conversion overflows `u64::MAX`.
+    /// `multiplier` names the exact literal each caller's pre-lift
+    /// diagnostic embedded (`60` for the minute arm, `3600` for the
+    /// hour arm), so callers reconstruct the wording losslessly.
+    Overflow {
+        /// The seconds-multiplier of the unit whose `num × multiplier`
+        /// overflowed. `60` for `"m"`, `3600` for `"h"`. The `"ms"` /
+        /// `"s"` / `""` arms cannot overflow so no `Overflow` variant
+        /// carries a `1000` / `1` / `1` multiplier.
+        multiplier: u64,
+    },
+    /// The trimmed unit suffix is not in the accepted set
+    /// `{"ms", "s", "", "m", "h"}`.
+    UnknownUnit,
+}
+
+/// Dispatch a validated integer magnitude through the shared
+/// `{"ms" | "s" | "" | "m" | "h"} → Duration` unit table — the
+/// canonical single-owner primitive every typed-duration codec in
+/// caixa-core routes its unit-arm dispatch through.
+///
+/// Until this primitive landed both typed-duration codecs in the crate
+/// — `limits::parse_duration` (backing `:limits :wall-clock`) and
+/// `supervisor::duration_codec::parse` (backing the shared
+/// `:supervisor :restart-window` / `:politicas :timeout` /
+/// `:politicas :circuit-breaker :window` duration slots) — carried
+/// byte-verbatim-identical unit-dispatch match arms:
+///
+/// ```text
+/// match unit_trim {
+///     "ms"       => Duration::from_millis(num),
+///     "s" | ""   => Duration::from_secs(num),
+///     "m"        => Duration::from_secs(num.checked_mul(60).ok_or_else(overflow)?),
+///     "h"        => Duration::from_secs(num.checked_mul(3600).ok_or_else(overflow)?),
+///     other      => return Err(unknown(other)),
+/// }
+/// ```
+///
+/// The two arms diverged only in how they wrapped the two failure
+/// classes into their own error type (`LimitsError::BadDurationMagnitude`
+/// / `LimitsError::UnknownDurationUnit` at `limits::parse_duration`,
+/// `String` at `supervisor::duration_codec::parse`). A future unit
+/// addition — a `"us"` microsecond suffix, a `"d"` day suffix once the
+/// downstream K8s CR schemas grow multi-day windows — would land at
+/// two sites otherwise, with no compile-time signal against the two
+/// dispatch tables drifting apart on the accepted-unit set or on the
+/// seconds-multiplier table. This helper collapses the dispatch onto
+/// one source of truth so a unit addition is one match-arm edit on
+/// this function + one match-arm edit on [`DurationUnitError`], and
+/// every caller picks up the extension by construction.
+///
+/// The `num` argument is the already-validated non-negative integer
+/// magnitude every caller carries at the call site (each codec passes
+/// the caller's `num_trim.parse::<u64>()` result through the paired
+/// digit-only-and-leading-zero-padded gates before reaching this
+/// dispatch), and `unit_trim` is the already-trimmed unit suffix
+/// (each caller has already run `.trim()` on the raw
+/// `s.split_at(alpha)` unit slice). This helper never re-validates
+/// either — validation is the callers' contract; this helper is only
+/// the arm-dispatch table.
+///
+/// Peer of [`reject_whitespace`] / [`is_digit_only_magnitude`] /
+/// [`is_leading_zero_padded_magnitude`] / [`serialize_option_via_str`] /
+/// [`deserialize_option_via_str`] on the same "typed-magnitude codec
+/// single-owner primitive" altitude — the six primitives together
+/// partition the substrate's typed-magnitude codec surface: three
+/// close the parser-side accepted-set drift classes (whitespace,
+/// leading-`+`/`-`/`.`, leading-zero padding), one closes the
+/// parser-side unit-dispatch drift class (this helper), and two close
+/// the serde-side `Option<T> <-> canonical-string` dispatch shape.
+///
+/// # Errors
+///
+/// - [`DurationUnitError::Overflow`] with `multiplier` = `60` when
+///   `unit_trim == "m"` and `num.checked_mul(60)` overflows.
+/// - [`DurationUnitError::Overflow`] with `multiplier` = `3600` when
+///   `unit_trim == "h"` and `num.checked_mul(3600)` overflows.
+/// - [`DurationUnitError::UnknownUnit`] when `unit_trim` is not in the
+///   accepted set `{"ms", "s", "", "m", "h"}`.
+///
+/// The `"ms"` / `"s"` / `""` arms never fail — every `u64` magnitude
+/// maps to a representable `Duration` via `from_millis` / `from_secs`.
+pub fn duration_from_integer_magnitude_and_unit(
+    num: u64,
+    unit_trim: &str,
+) -> Result<std::time::Duration, DurationUnitError> {
+    match unit_trim {
+        "ms" => Ok(std::time::Duration::from_millis(num)),
+        "s" | "" => Ok(std::time::Duration::from_secs(num)),
+        "m" => num
+            .checked_mul(60)
+            .map(std::time::Duration::from_secs)
+            .ok_or(DurationUnitError::Overflow { multiplier: 60 }),
+        "h" => num
+            .checked_mul(3600)
+            .map(std::time::Duration::from_secs)
+            .ok_or(DurationUnitError::Overflow { multiplier: 3600 }),
+        _ => Err(DurationUnitError::UnknownUnit),
+    }
+}
+
 /// K8s DNS-1123 label rule's max length, in bytes — the floor each
 /// apiserver-side schema enforces independently on every `metadata.name`
 /// / Service name / label value axis a validated identifier lands in.
@@ -59716,5 +59854,91 @@ spec:
              non-ASCII arm — preserving the pre-lift ordering every \
              routed codec relies on for stable diagnostic partitioning"
         );
+    }
+
+    #[test]
+    fn duration_from_integer_magnitude_and_unit_matches_pre_lift_unit_dispatch_table() {
+        // Structural pin on the shared unit-dispatch table lifted from
+        // `limits::parse_duration` and `supervisor::duration_codec::parse`.
+        // Every accepted `(num, unit)` pair the two pre-lift codec
+        // arms handled resolves through the shared helper to the same
+        // `Duration` value the pre-lift `match unit_trim { … }` arm
+        // produced — and every rejected `unit` reaches
+        // `DurationUnitError::UnknownUnit` verbatim. A future edit
+        // that widens the accepted-unit set (a `"us"` microsecond
+        // suffix, a `"d"` day suffix) or shifts the seconds-multiplier
+        // table (`60` → `61` on the minute arm, `3600` → `3601` on the
+        // hour arm) must trip this pin before it lands rather than
+        // silently drifting the two codecs' now-shared table.
+        for (num, unit, expected) in [
+            (0_u64, "ms", Duration::from_millis(0)),
+            (500, "ms", Duration::from_millis(500)),
+            (999, "ms", Duration::from_millis(999)),
+            (0, "s", Duration::from_secs(0)),
+            (30, "s", Duration::from_secs(30)),
+            (3600, "s", Duration::from_secs(3600)),
+            (0, "", Duration::from_secs(0)),
+            (30, "", Duration::from_secs(30)),
+            (0, "m", Duration::from_secs(0)),
+            (2, "m", Duration::from_secs(120)),
+            (60, "m", Duration::from_secs(3600)),
+            (0, "h", Duration::from_secs(0)),
+            (1, "h", Duration::from_secs(3600)),
+            (24, "h", Duration::from_secs(86_400)),
+        ] {
+            let got = duration_from_integer_magnitude_and_unit(num, unit)
+                .unwrap_or_else(|e| panic!("{num}{unit} accepted-set failed: {e:?}"));
+            assert_eq!(got, expected, "{num}{unit}");
+        }
+        // Overflow arm — each named multiplier surfaces verbatim so
+        // each caller reconstructs the pre-lift
+        // `"…overflows u64 (magnitude × 60 > 2^64-1)"` /
+        // `"…overflows u64 (magnitude × 3600 > 2^64-1)"` wording
+        // losslessly.
+        assert_eq!(
+            duration_from_integer_magnitude_and_unit(u64::MAX, "m"),
+            Err(DurationUnitError::Overflow { multiplier: 60 }),
+            "minute-arm overflow must surface the 60-multiplier discriminant"
+        );
+        assert_eq!(
+            duration_from_integer_magnitude_and_unit(u64::MAX, "h"),
+            Err(DurationUnitError::Overflow { multiplier: 3600 }),
+            "hour-arm overflow must surface the 3600-multiplier discriminant"
+        );
+        // Unknown-unit arm — every suffix outside the accepted set
+        // routes to a single discriminant each caller wraps in its
+        // own axis-specific diagnostic.
+        for unit in ["us", "ns", "d", "y", "sec", "min", "hr", " ", "M", "H"] {
+            assert_eq!(
+                duration_from_integer_magnitude_and_unit(30, unit),
+                Err(DurationUnitError::UnknownUnit),
+                "unit {unit:?} must land on UnknownUnit"
+            );
+        }
+        // Cross-codec equivalence — both routed codecs agree with the
+        // helper on every accepted `<num><unit>` string, closing the
+        // pre-lift drift class where the two codecs' verbatim-
+        // duplicated unit-dispatch tables could silently diverge.
+        for (num, unit) in [
+            (0_u64, "ms"),
+            (500, "ms"),
+            (0, "s"),
+            (30, "s"),
+            (0, ""),
+            (30, ""),
+            (0, "m"),
+            (2, "m"),
+            (0, "h"),
+            (1, "h"),
+        ] {
+            let literal = format!("{num}{unit}");
+            let via_helper = duration_from_integer_magnitude_and_unit(num, unit).unwrap();
+            let via_supervisor = crate::supervisor::duration_codec::parse(&literal).unwrap();
+            assert_eq!(
+                via_helper, via_supervisor,
+                "supervisor duration codec must agree with the shared \
+                 helper on {literal:?}"
+            );
+        }
     }
 }

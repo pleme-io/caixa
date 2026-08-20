@@ -1518,29 +1518,37 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
             "{num_trim} (digit-only magnitude overflows u64)"
         ))
     })?;
-    // Multiply on u64 with overflow detection — every unit conversion
-    // is integer-exact for an integer magnitude, so the codec drops
-    // `Duration::from_secs_f64` entirely. Overflow surfaces at parse
-    // time with a parser-shaped diagnostic naming the offending
-    // magnitude × unit pair (matches `parse_byte_size`'s overflow arm).
+    // Route the `{"ms" | "s" | "" | "m" | "h"} → Duration` unit-arm
+    // dispatch through the canonical
+    // [`crate::render::duration_from_integer_magnitude_and_unit`]
+    // primitive — the substrate-side single-owner unit-dispatch table
+    // every typed-duration codec in caixa-core routes through
+    // (peer: `supervisor::duration_codec::parse` backing the shared
+    // `:supervisor :restart-window` / `:politicas :timeout` /
+    // `:politicas :circuit-breaker :window` slots). Every unit
+    // conversion is integer-exact for an integer magnitude; overflow
+    // surfaces via the typed `DurationUnitError::Overflow { multiplier }`
+    // discriminant so this arm reconstructs the pre-lift
+    // `"…overflows u64 (magnitude × 60 > 2^64-1)"` /
+    // `"…overflows u64 (magnitude × 3600 > 2^64-1)"` wording verbatim
+    // from `num_trim` / `unit_trim` / the returned `multiplier`, and
+    // the unknown-unit arm reconstructs the pre-lift
+    // `LimitsError::UnknownDurationUnit { unit }` variant from the
+    // caller-scoped `unit_trim`. Load-bearing pinned by
+    // `crate::render::tests::duration_from_integer_magnitude_and_unit_matches_pre_lift_unit_dispatch_table`.
     let unit_trim = unit.trim();
-    let dur = match unit_trim {
-        "ms" => Duration::from_millis(num),
-        "s" | "" => Duration::from_secs(num),
-        "m" => Duration::from_secs(num.checked_mul(60).ok_or_else(|| {
-            LimitsError::BadDurationMagnitude(format!(
-                "{num_trim}{unit_trim} overflows u64 (magnitude × 60 > 2^64-1)"
-            ))
-        })?),
-        "h" => Duration::from_secs(num.checked_mul(3600).ok_or_else(|| {
-            LimitsError::BadDurationMagnitude(format!(
-                "{num_trim}{unit_trim} overflows u64 (magnitude × 3600 > 2^64-1)"
-            ))
-        })?),
-        other => {
-            return Err(LimitsError::UnknownDurationUnit { unit: other.into() });
-        }
-    };
+    let dur = crate::render::duration_from_integer_magnitude_and_unit(num, unit_trim).map_err(
+        |e| match e {
+            crate::render::DurationUnitError::Overflow { multiplier } => {
+                LimitsError::BadDurationMagnitude(format!(
+                    "{num_trim}{unit_trim} overflows u64 (magnitude × {multiplier} > 2^64-1)"
+                ))
+            }
+            crate::render::DurationUnitError::UnknownUnit => LimitsError::UnknownDurationUnit {
+                unit: unit_trim.into(),
+            },
+        },
+    )?;
     Ok(dur)
 }
 
