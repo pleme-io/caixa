@@ -157,11 +157,11 @@ pub use render::{
     pleme_program_selector, reject_whitespace, require_acao_view, require_aplicacao_view,
     require_ci, require_kind, require_positive_bounded, require_positive_bounded_u32,
     require_positive_bounded_u64, require_positive_canonical_bounded_duration,
-    require_single_servico, require_v0_servico_shape, require_valid_dns_1123_label,
-    require_valid_versao, require_valid_versao_requirement, sequence_str_values,
-    serialize_option_via_str, servico_m2_overlay, servico_spec_and_m2_overlay_entries,
-    single_field_overlay, singleton_mapping_sequence, split_magnitude_and_alpha_unit,
-    string_keyed_entries, upsert_named_entry, yaml_string_mapping,
+    require_single_servico, require_supervisor_view, require_v0_servico_shape,
+    require_valid_dns_1123_label, require_valid_versao, require_valid_versao_requirement,
+    sequence_str_values, serialize_option_via_str, servico_m2_overlay,
+    servico_spec_and_m2_overlay_entries, single_field_overlay, singleton_mapping_sequence,
+    split_magnitude_and_alpha_unit, string_keyed_entries, upsert_named_entry, yaml_string_mapping,
 };
 pub use supervisor::{
     ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_CHILD_RESTART_DEFAULT,

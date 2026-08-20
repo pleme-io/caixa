@@ -769,6 +769,162 @@ where
     Ok(spec)
 }
 
+/// Compound per-Supervisor entry gate: the canonical four-arm
+/// `require_kind(caixa, CaixaKind::Supervisor)? +
+/// caixa.validate_restart_window()? + caixa.supervisor_view().expect(…) +
+/// spec.validate()? + validate_no_self_supervision(spec.children(),
+/// caixa.nome())?` cascade — the byte-for-byte
+/// [`crate::layout::StandardLayout::verify`] `feira build` author-time
+/// gate on the supervision-tree kind arm — collapsed onto one call the
+/// caller reads as intent ("gate the input on the V0 Supervisor shape
+/// and hand back a validated [`crate::supervisor::SupervisorSpec`]")
+/// rather than four hand-spelled steps.
+///
+/// This is the fourth and final per-kind compound entry gate: it closes
+/// the asymmetry the sibling per-Servico [`require_v0_servico_shape`],
+/// per-Aplicacao [`require_aplicacao_view`], and per-`Acao`
+/// [`require_acao_view`] gates left open — Supervisor was the only
+/// typed-name-graph kind whose four-arm V0-shape cascade lived *only*
+/// open-coded in the layout pipeline, with no substrate primitive a
+/// per-Supervisor renderer could route through to inherit it. Every
+/// per-kind renderer's entry-gate cascade now lives in exactly one
+/// substrate primitive.
+///
+/// The cascade names one contract with four axes: `:kind` is
+/// `Supervisor` (this is a per-Supervisor consumer's input, not a
+/// `Biblioteca` / `Binario` / `Servico` / `Aplicacao` / `Acao`
+/// mis-hand-off); the raw `:restart-window` string parses through the
+/// shared [`crate::supervisor::duration_codec`]
+/// ([`crate::manifest::Caixa::validate_restart_window`]) — this arm
+/// fires *before* the typed view is folded because
+/// [`crate::manifest::Caixa::supervisor_view`] soft-swallows a malformed
+/// `:restart-window` to `restart_window: None` (the canonical "never
+/// reset" sentinel), so a value like `":restart-window \"1.5s\""` that
+/// bypassed this gate would launder into a never-reset supervisor far
+/// from the source `caixa.lisp` rather than fire the parse diagnostic;
+/// the folded [`crate::supervisor::SupervisorSpec`] passes its own typed
+/// shape validation ([`crate::supervisor::SupervisorSpec::validate`]:
+/// the OTP `MaxIntensity`/`Period` restart-intensity invariant,
+/// per-child DNS-1123 `:caixa` names, semver-valid `:versao`
+/// constraints, `SimpleOneForOne`-carries-zero-static-children, the
+/// set-not-multiset duplicate-child gate, and so on across every
+/// supervisor-tree slot); *and* no `:children :caixa` entry names the
+/// supervisor's own `:nome`
+/// ([`crate::supervisor::validate_no_self_supervision`], the cross-slot
+/// self-edge gate the typed view cannot run because it carries the
+/// children but not the parent `:nome` — a one-node supervision-tree
+/// cycle the wasm-operator's hierarchical reconciler would otherwise be
+/// handed as a node that is its own parent). All four axes must hold
+/// together — every per-Supervisor consumer's entry-point sees the same
+/// V0 Supervisor-shape contract the `feira build` author-time gate
+/// enforces, so a renderer routing through this compound gate admits
+/// exactly the set of Supervisors the author-time gate admits.
+///
+/// No per-Supervisor renderer exists yet (Supervisor "runs nothing —
+/// supervises children"; it renders to hierarchical reconciliation, not
+/// a per-Servico Helm chart or per-Aplicacao mesh fan-out). This gate
+/// exists so the deferred per-Supervisor consumers named across the
+/// supervisor-slot doc surface — the wasm-operator's hierarchical
+/// reconciliation scheduler, the M4 `mesh.pleme.io/v1alpha1/Supervisor`
+/// CR materializer's per-CR admission webhook, a future `feira validate
+/// --supervisor` per-caixa admission verb — inherit the compound gate by
+/// construction with one call, instead of re-inlining the four-arm
+/// cascade (which is exactly the drift the sibling gates were lifted to
+/// close: a renderer that folds `supervisor_view` and validates it still
+/// admits a malformed-`:restart-window` or self-supervising Supervisor
+/// unless it also open-codes the two cross-slot arms). Precedent for
+/// lifting a compound gate ahead of its second consumer is the sibling
+/// [`require_valid_versao`] gate, which the docstring notes collapses "a
+/// single existing production call site" onto the primitive.
+///
+/// The generic error type `E` accepts every future per-Supervisor
+/// consumer's local [`thiserror`] `Error` enum that carries
+/// [`KindMismatch`], [`crate::manifest::ManifestError`], and
+/// [`crate::supervisor::SupervisorError`] via `#[from]`. Type inference
+/// at the call site resolves `E` from the caller's `?` return type,
+/// though a caller that assigns the result directly to a
+/// `Result<SupervisorSpec, Error>` binding may need a turbofish
+/// (`::<Error>`) — matching the sibling
+/// `require_aplicacao_view::<Error>` / `require_v0_servico_shape::<Error>`
+/// turbofish convention the peer per-kind call sites already read.
+///
+/// # Errors
+///
+/// Returns the caller's `E` wrapping a [`KindMismatch`] when
+/// `caixa.kind != CaixaKind::Supervisor`, a
+/// [`crate::manifest::ManifestError`] when the raw `:restart-window`
+/// string fails the shared duration codec
+/// ([`crate::manifest::Caixa::validate_restart_window`]), or a
+/// [`crate::supervisor::SupervisorError`] when the folded
+/// [`crate::supervisor::SupervisorSpec`] fails its typed-shape
+/// validation ([`crate::supervisor::SupervisorSpec::validate`]) or names
+/// itself as a `:children` entry
+/// ([`crate::supervisor::SupervisorError::ChildSupervisesSelf`], the
+/// cross-slot self-edge gate the typed view cannot run because it
+/// carries the children but not the parent `:nome`). Order matches the
+/// layout pipeline this compound gate mirrors: the kind gate fires
+/// first (a `:kind Servico` caixa with supervisor slots surfaces the
+/// kind mismatch — the more actionable diagnostic), the raw-string
+/// parse gate fires next (so a malformed `:restart-window` surfaces its
+/// self-locating raw-value diagnostic rather than the laundered-to-`None`
+/// soft-pass the typed view would let through), then the typed-shape
+/// gate, then the self-supervision gate last (a malformed
+/// self-referential child surfaces its narrower per-child shape
+/// diagnostic before the self-edge refusal).
+///
+/// # Panics
+///
+/// Never in practice — the internal
+/// [`crate::manifest::Caixa::supervisor_view`] unwrap is guarded by the
+/// preceding [`require_kind`]-on-`Supervisor` gate, and
+/// [`crate::manifest::Caixa::supervisor_view`]'s own doc pin guarantees
+/// `Some`-return iff `caixa.kind().is_supervisor()`. A future
+/// `supervisor_view` refactor that decouples `Some`-return from
+/// `caixa.kind().is_supervisor()` would trip this panic at the first
+/// per-Supervisor consumer call site, not silently return `Err(E)` at
+/// every one — the panic message names the substrate invariant so the
+/// offending edit is obvious.
+pub fn require_supervisor_view<E>(caixa: &Caixa) -> Result<crate::supervisor::SupervisorSpec, E>
+where
+    E: From<KindMismatch>
+        + From<crate::manifest::ManifestError>
+        + From<crate::supervisor::SupervisorError>,
+{
+    require_kind(caixa, CaixaKind::Supervisor)?;
+    // Raw `:restart-window` parse gate on the flat
+    // `Caixa::restart_window: Option<String>` axis — runs *before* the
+    // typed view is folded because [`Caixa::supervisor_view`] soft-
+    // swallows a malformed `:restart-window` to `restart_window: None`
+    // (the canonical "never reset" sentinel), so a value that bypassed
+    // this gate would launder into a never-reset supervisor rather than
+    // fire the parse diagnostic. Mirrors the layout pipeline's ordering
+    // (the `validate_restart_window()? → view.validate()?` sequence
+    // `StandardLayout::verify` runs on the Supervisor kind arm).
+    caixa.validate_restart_window()?;
+    let spec = caixa
+        .supervisor_view()
+        .expect("require_kind(Supervisor) guarantees Caixa::supervisor_view returns Some");
+    spec.validate()?;
+    // Cross-slot self-edge gate: `:children :caixa` must not name the
+    // supervisor's own `:nome`. Lives outside
+    // [`crate::supervisor::SupervisorSpec::validate`] because the typed
+    // view carries the children but not the parent `:nome` — so a
+    // consumer that folds the view and validates it still admits a
+    // self-supervising Supervisor (a one-node supervision-tree cycle,
+    // [`crate::supervisor::SupervisorError::ChildSupervisesSelf`]).
+    // Folding the gate here promotes self-supervision refusal from a
+    // per-caller layout-pipeline convention to a structural property of
+    // every `SupervisorSpec` past this compound entry gate — the same
+    // posture the peer per-Aplicacao [`require_aplicacao_view`] compound
+    // gate takes with `validate_no_self_membership` on its sibling
+    // mesh-graph axis. Runs after `spec.validate()` so the per-child
+    // shape + duplicate diagnostics surface first, matching the
+    // `validate() → validate_no_self_supervision` ordering the layout
+    // pipeline already uses.
+    crate::supervisor::validate_no_self_supervision(spec.children(), caixa.nome())?;
+    Ok(spec)
+}
+
 /// Compound per-`Acao` entry gate: the canonical three-line
 /// `require_kind(caixa, CaixaKind::Acao)? + require_ci(caixa)? +
 /// decompose_ci(caixa, ci)?` prelude every per-`Acao` `caixa-<target>`
@@ -36911,6 +37067,307 @@ mod tests {
                     serde_yaml::to_string(&compound_spec)
                         .expect("compound AplicacaoSpec serializes"),
                     "compound helper's Ok arm must return byte-equal AplicacaoSpec to cascade"
+                );
+            }
+        }
+    }
+
+    // ── require_supervisor_view — compound per-Supervisor entry gate ─
+
+    /// Local `thiserror`-shaped consumer-error stand-in that mirrors
+    /// the three-`#[from]`-arm shape every future per-Supervisor
+    /// consumer's local `Error` enum will carry — [`KindMismatch`] on
+    /// the kind axis, [`crate::manifest::ManifestError`] on the raw
+    /// `:restart-window` parse axis, and
+    /// [`crate::supervisor::SupervisorError`] on the typed-shape +
+    /// self-supervision axes. Same discipline as the sibling
+    /// [`RendererStandIn`] / [`AplicacaoRendererStandIn`] /
+    /// [`AcaoRendererStandIn`] stand-ins on the peer per-Servico
+    /// [`require_v0_servico_shape`], per-Aplicacao
+    /// [`require_aplicacao_view`], and per-`Acao` [`require_acao_view`]
+    /// compound gates: pins the compound helper's type-inference
+    /// contract inside caixa-core without a workspace-crate dependency
+    /// (which would bloat the build graph).
+    #[derive(Debug, thiserror::Error)]
+    enum SupervisorConsumerStandIn {
+        #[error("{0}")]
+        NotASupervisor(#[from] KindMismatch),
+        #[error("{0}")]
+        RestartWindowMalformed(#[from] crate::manifest::ManifestError),
+        #[error("{0}")]
+        InvalidSupervisor(#[from] crate::supervisor::SupervisorError),
+    }
+
+    fn bare_supervisor() -> Caixa {
+        let mut c = bare_servico();
+        c.nome = "orquestra".into();
+        c.kind = CaixaKind::Supervisor;
+        c.servicos = vec![];
+        c.estrategia = Some(crate::supervisor::RestartStrategy::OneForOne);
+        c.children = vec![
+            crate::supervisor::ChildSpec {
+                caixa: "cart".into(),
+                versao: "^0.1".into(),
+                restart: crate::supervisor::RestartPolicy::Permanent,
+            },
+            crate::supervisor::ChildSpec {
+                caixa: "catalog".into(),
+                versao: "^0.1".into(),
+                restart: crate::supervisor::RestartPolicy::Permanent,
+            },
+        ];
+        c
+    }
+
+    #[test]
+    fn require_supervisor_view_accepts_valid_supervisor() {
+        // Happy path: a `:kind Supervisor` caixa with a well-formed
+        // `:children` stanza — the canonical V0 shape every future
+        // per-Supervisor consumer's entry-point sees — passes the
+        // compound four-arm gate and returns a validated
+        // [`crate::supervisor::SupervisorSpec`]. Same outcome as the
+        // four-line cascade the compound helper replaces:
+        // [`require_kind`] passes,
+        // [`crate::manifest::Caixa::validate_restart_window`] passes,
+        // [`crate::manifest::Caixa::supervisor_view`] returns
+        // `Some(spec)`, [`crate::supervisor::SupervisorSpec::validate`]
+        // passes, and [`crate::supervisor::validate_no_self_supervision`]
+        // passes. Peer to `require_aplicacao_view_accepts_valid_aplicacao`
+        // and `require_v0_servico_shape_accepts_v0_servico` on the
+        // sibling per-Aplicacao / per-Servico compound gates.
+        let c = bare_supervisor();
+        let spec = require_supervisor_view::<SupervisorConsumerStandIn>(&c)
+            .expect("valid supervisor shape accepted");
+        assert_eq!(spec.children().len(), 2);
+        assert_eq!(spec.children()[0].nome(), "cart");
+        assert_eq!(spec.children()[1].nome(), "catalog");
+    }
+
+    #[test]
+    fn require_supervisor_view_kind_gate_fires_on_wrong_kind() {
+        // Kind gate arm: a `:kind Servico` caixa surfaces the compound
+        // helper's [`KindMismatch`] `#[from]` arm rather than the
+        // downstream typed-view + self-supervision arms. Mirrors the
+        // sibling per-Aplicacao gate's kind-arm pin.
+        let mut c = bare_supervisor();
+        c.kind = CaixaKind::Servico;
+        c.servicos = vec!["servicos/hello.computeunit.yaml".into()];
+        c.children = vec![];
+        c.estrategia = None;
+        let err: SupervisorConsumerStandIn = require_supervisor_view(&c).unwrap_err();
+        match err {
+            SupervisorConsumerStandIn::NotASupervisor(k) => {
+                assert_eq!(k.expected, CaixaKind::Supervisor);
+                assert_eq!(k.actual, CaixaKind::Servico);
+                assert_eq!(k.nome, "orquestra");
+            }
+            SupervisorConsumerStandIn::RestartWindowMalformed(e) => {
+                panic!("expected NotASupervisor kind gate, got RestartWindowMalformed: {e:?}");
+            }
+            SupervisorConsumerStandIn::InvalidSupervisor(e) => {
+                panic!("expected NotASupervisor kind gate, got InvalidSupervisor: {e:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn require_supervisor_view_restart_window_gate_fires_before_typed_view() {
+        // Raw `:restart-window` parse arm: a malformed window like
+        // `"1.5s"` — the fractional-second shape the shared
+        // [`crate::supervisor::duration_codec`]'s integer-magnitude
+        // discipline rejects — surfaces the
+        // [`crate::manifest::ManifestError::RestartWindowMalformed`]
+        // arm *before* [`crate::manifest::Caixa::supervisor_view`]
+        // launders it to `restart_window: None` (the canonical "never
+        // reset" sentinel). Pre-lift a consumer that folded
+        // `supervisor_view` and validated it would silently accept a
+        // never-reset supervisor far from the source `caixa.lisp`
+        // rather than fire the self-locating parse diagnostic — this
+        // pin guarantees the compound gate surfaces the raw-string
+        // shape at the compound entry-point, matching the
+        // [`crate::layout::StandardLayout::verify`] Supervisor-kind arm
+        // ordering byte-for-byte.
+        let mut c = bare_supervisor();
+        c.restart_window = Some("1.5s".into());
+        let err: SupervisorConsumerStandIn = require_supervisor_view(&c).unwrap_err();
+        match err {
+            SupervisorConsumerStandIn::RestartWindowMalformed(
+                crate::manifest::ManifestError::RestartWindowMalformed { restart_window, .. },
+            ) => {
+                assert_eq!(
+                    restart_window, "1.5s",
+                    "diagnostic must name the offending raw string verbatim"
+                );
+            }
+            SupervisorConsumerStandIn::RestartWindowMalformed(other) => {
+                panic!("expected RestartWindowMalformed, got {other:?}");
+            }
+            SupervisorConsumerStandIn::NotASupervisor(_) => {
+                panic!("kind gate should have passed on a valid Supervisor");
+            }
+            SupervisorConsumerStandIn::InvalidSupervisor(e) => {
+                panic!("expected RestartWindowMalformed, got InvalidSupervisor: {e:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn require_supervisor_view_spec_validate_fires_on_no_children() {
+        // Typed-shape arm: a non-`SimpleOneForOne` supervisor with an
+        // empty `:children` slot surfaces the compound helper's
+        // [`crate::supervisor::SupervisorError::NoChildren`] arm — the
+        // Erlang/OTP invariant that every non-`SimpleOneForOne`
+        // supervisor must declare at least one static child, otherwise
+        // the supervision tree has no leaves to reconcile. Pin on the
+        // spec-validate axis: past the kind gate + restart-window
+        // parse, the typed-view fold succeeds but its `.validate()`
+        // refuses the empty children set.
+        let mut c = bare_supervisor();
+        c.children = vec![];
+        let err: SupervisorConsumerStandIn = require_supervisor_view(&c).unwrap_err();
+        match err {
+            SupervisorConsumerStandIn::InvalidSupervisor(
+                crate::supervisor::SupervisorError::NoChildren { .. },
+            ) => {}
+            SupervisorConsumerStandIn::InvalidSupervisor(other) => {
+                panic!("expected NoChildren, got {other:?}");
+            }
+            SupervisorConsumerStandIn::NotASupervisor(_) => {
+                panic!("kind gate should have passed on a valid Supervisor");
+            }
+            SupervisorConsumerStandIn::RestartWindowMalformed(_) => {
+                panic!("restart-window gate should have passed on an omitted slot");
+            }
+        }
+    }
+
+    #[test]
+    fn require_supervisor_view_self_supervision_gate_fires_last() {
+        // Cross-slot self-edge arm: a `:children` entry naming the
+        // supervisor's own `:nome` ("orquestra") — the one-node
+        // supervision-tree cycle the wasm-operator's hierarchical
+        // reconciler would otherwise be handed as a node that is its
+        // own parent — surfaces the compound helper's
+        // [`crate::supervisor::SupervisorError::ChildSupervisesSelf`]
+        // arm, folded past the two upstream arms. Peer to the sibling
+        // per-Aplicacao self-membership gate's pin — the compound
+        // gate's promise across every typed-name-graph kind is the
+        // same: no per-caller layout-pipeline convention is needed;
+        // every `SupervisorSpec` past this compound entry gate is
+        // structurally free of the self-supervision cycle.
+        let mut c = bare_supervisor();
+        c.children.push(crate::supervisor::ChildSpec {
+            caixa: "orquestra".into(),
+            versao: "^0.1".into(),
+            restart: crate::supervisor::RestartPolicy::Permanent,
+        });
+        let err: SupervisorConsumerStandIn = require_supervisor_view(&c).unwrap_err();
+        match err {
+            SupervisorConsumerStandIn::InvalidSupervisor(
+                crate::supervisor::SupervisorError::ChildSupervisesSelf { caixa },
+            ) => {
+                assert_eq!(
+                    caixa, "orquestra",
+                    "diagnostic must name the parent supervisor whose child self-supervises"
+                );
+            }
+            SupervisorConsumerStandIn::InvalidSupervisor(other) => {
+                panic!("expected ChildSupervisesSelf, got {other:?}");
+            }
+            SupervisorConsumerStandIn::NotASupervisor(_) => {
+                panic!("kind gate should have passed on a valid Supervisor");
+            }
+            SupervisorConsumerStandIn::RestartWindowMalformed(_) => {
+                panic!("restart-window gate should have passed on an omitted slot");
+            }
+        }
+    }
+
+    #[test]
+    fn require_supervisor_view_matches_layout_cascade_semantic() {
+        // Equivalence pin: on every input, the compound helper's
+        // Ok/Err discrimination matches the four-arm layout-pipeline
+        // cascade (`require_kind` → `validate_restart_window` →
+        // `supervisor_view` → `validate` → `validate_no_self_supervision`)
+        // verbatim — the compound gate is the exact per-Supervisor
+        // V0-shape contract [`crate::layout::StandardLayout::verify`]
+        // enforces at `feira build`, so a consumer routing through it
+        // admits exactly the set of Supervisors the author-time gate
+        // admits. Peer to the sibling
+        // `require_aplicacao_view_matches_layout_cascade_semantic` and
+        // `require_v0_servico_shape_matches_two_line_pair_semantic`
+        // equivalence pins on the per-Aplicacao / per-Servico compound
+        // gates — every per-kind renderer's compound entry gate now
+        // carries the same author-time equivalence contract.
+        //
+        // Five axes covered: happy Supervisor (Ok/Ok), kind gate fires
+        // (Err/Ok on cascade short-circuit at the kind gate),
+        // restart-window parse fires ahead of the typed view, spec
+        // validate fires on empty children, self-supervision fires
+        // last on a self-referential child.
+        let cases: Vec<(CaixaKind, Option<String>, Vec<crate::supervisor::ChildSpec>)> = vec![
+            (
+                CaixaKind::Supervisor,
+                None,
+                vec![crate::supervisor::ChildSpec {
+                    caixa: "cart".into(),
+                    versao: "^0.1".into(),
+                    restart: crate::supervisor::RestartPolicy::Permanent,
+                }],
+            ),
+            (CaixaKind::Servico, None, vec![]),
+            (CaixaKind::Supervisor, Some("1.5s".into()), vec![]),
+            (CaixaKind::Supervisor, None, vec![]),
+            (
+                CaixaKind::Supervisor,
+                None,
+                vec![crate::supervisor::ChildSpec {
+                    caixa: "orquestra".into(),
+                    versao: "^0.1".into(),
+                    restart: crate::supervisor::RestartPolicy::Permanent,
+                }],
+            ),
+        ];
+        for (kind, restart_window, children) in cases {
+            let mut c = bare_supervisor();
+            c.kind = kind;
+            c.restart_window = restart_window.clone();
+            c.children = children.clone();
+            if kind == CaixaKind::Servico {
+                c.servicos = vec!["servicos/hello.computeunit.yaml".into()];
+                c.estrategia = None;
+            } else {
+                c.servicos = vec![];
+            }
+            let cascade: Result<crate::supervisor::SupervisorSpec, SupervisorConsumerStandIn> =
+                (|| {
+                    require_kind(&c, CaixaKind::Supervisor)?;
+                    c.validate_restart_window()?;
+                    let spec = c
+                        .supervisor_view()
+                        .expect("require_kind(Supervisor) guarantees supervisor_view returns Some");
+                    spec.validate()?;
+                    crate::supervisor::validate_no_self_supervision(spec.children(), c.nome())?;
+                    Ok(spec)
+                })();
+            let compound: Result<crate::supervisor::SupervisorSpec, SupervisorConsumerStandIn> =
+                require_supervisor_view(&c);
+            assert_eq!(
+                cascade.is_ok(),
+                compound.is_ok(),
+                "compound helper must match four-line cascade on kind={kind:?} \
+                 restart_window={restart_window:?} children.len()={}",
+                children.len(),
+            );
+            // Compound helper's Ok-arm return matches cascade's Ok-arm
+            // return byte-for-byte (via serde YAML round-trip).
+            if let (Ok(cascade_spec), Ok(compound_spec)) = (cascade, compound) {
+                assert_eq!(
+                    serde_yaml::to_string(&cascade_spec)
+                        .expect("cascade SupervisorSpec serializes"),
+                    serde_yaml::to_string(&compound_spec)
+                        .expect("compound SupervisorSpec serializes"),
+                    "compound helper's Ok arm must return byte-equal SupervisorSpec to cascade"
                 );
             }
         }
