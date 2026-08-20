@@ -41974,14 +41974,16 @@ mod tests {
         // DNS-1123 label promotion widening the per-label cap) that
         // inverted the two would fail this pin at build time rather than
         // silently rendering the per-label arm unreachable.
-        assert!(
-            GATEWAY_API_HOSTNAME_MAX_LEN > DNS_1123_LABEL_MAX_LEN,
-            "GATEWAY_API_HOSTNAME_MAX_LEN ({GATEWAY_API_HOSTNAME_MAX_LEN}) must strictly \
-             exceed DNS_1123_LABEL_MAX_LEN ({DNS_1123_LABEL_MAX_LEN}) — every \
-             `.`-separated label in a Gateway API v1 Hostname is itself a DNS-1123 \
-             label under the apiserver's OpenAPI regex, so the total-length cap \
-             must be able to accommodate at least one per-label-max label",
-        );
+        const {
+            assert!(
+                GATEWAY_API_HOSTNAME_MAX_LEN > DNS_1123_LABEL_MAX_LEN,
+                "GATEWAY_API_HOSTNAME_MAX_LEN must strictly exceed \
+                 DNS_1123_LABEL_MAX_LEN — every `.`-separated label in a \
+                 Gateway API v1 Hostname is itself a DNS-1123 label under the \
+                 apiserver's OpenAPI regex, so the total-length cap must be \
+                 able to accommodate at least one per-label-max label",
+            );
+        }
     }
 
     #[test]

@@ -19,7 +19,6 @@
 1	clippy::extend_with_drain	caixa-ast/src/parser.rs
 2	clippy::needless_raw_string_hashes	caixa-ast/src/parser.rs
 1	clippy::needless_lifetimes	caixa-ast/src/span.rs
-1	clippy::assertions_on_constants	caixa-core/src/aplicacao.rs
 4	clippy::borrow_as_ptr	caixa-core/src/aplicacao.rs
 4	clippy::doc_lazy_continuation	caixa-core/src/aplicacao.rs
 17	clippy::doc_markdown	caixa-core/src/aplicacao.rs
@@ -38,7 +37,6 @@
 9	clippy::doc_lazy_continuation	caixa-core/src/manifest.rs
 16	clippy::doc_markdown	caixa-core/src/manifest.rs
 1	clippy::single_element_loop	caixa-core/src/manifest.rs
-1	clippy::assertions_on_constants	caixa-core/src/render.rs
 1	clippy::case_sensitive_file_extension_comparisons	caixa-core/src/render.rs
 70	clippy::doc_lazy_continuation	caixa-core/src/render.rs
 167	clippy::doc_markdown	caixa-core/src/render.rs
