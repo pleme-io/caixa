@@ -26146,22 +26146,79 @@ pub fn servico_spec_and_m2_overlay_entries(
     Ok(out)
 }
 
-/// Bracket a typed `u32` axis with the "zero-floor + upper-cap" gate
-/// pair every capped-`u32` `:politicas` / `:supervisor` / `:limits`
-/// axis carries. Returns `on_zero()` when `value == 0`,
-/// `on_cap_exceeded(value)` when `value > cap`, `Ok(())` otherwise.
+/// Sealed marker for the closed-set typed-integer axes
+/// [`require_positive_bounded`] brackets: `u32` (six existing call
+/// sites: `MeshPolicy::retries`, `CircuitBreaker::max_failures`,
+/// `RateLimit::rate`, `SupervisorSpec::max_restarts`, `LimitsSpec::cpu`)
+/// and `u64` (one existing call site: `LimitsSpec::fuel`). Sealed via
+/// a private supertrait so a future `impl` from downstream crates is
+/// structurally impossible — the closed-set posture the peer
+/// [`crate::CaixaKind`] / [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`crate::RateLimitUnit`]
+/// closed-set typed enums carry, extended onto the typed-integer
+/// primitive-axis surface. A future primitive-integer axis (a
+/// hypothetical `u16` port-cap axis for `:entrada :port`, a
+/// hypothetical `usize` per-Aplicacao membership-cap axis, the M4
+/// admission webhook's per-request-count bounded axis) adds one
+/// [`sealed_bounded_integer::Sealed`] `impl` + one
+/// [`BoundedInteger::ZERO`] `impl` and picks up the shared three-arm
+/// gate by construction — the alternative is a per-primitive-type
+/// hand-authored `require_positive_bounded_<T>` sibling every future
+/// axis re-derives.
 ///
-/// The zero-floor arm strictly precedes the cap arm so a literal `0`
-/// value surfaces the self-locating zero diagnostic (which every
-/// per-axis error variant already documents an "omit the axis to
-/// express no-bound" remediation for) rather than the misleading
+/// Carries a single associated `const ZERO: Self` the shared helper
+/// dispatches through on its zero-floor arm — routed through a
+/// primitive-level `const` rather than the free
+/// [`Default::default()`] projection, since `Default::default() == 0`
+/// is a semantic accident of the integer primitives (nothing in the
+/// [`Default`] trait promises it) that a future non-integer
+/// [`BoundedInteger`] `impl` would silently break.
+pub trait BoundedInteger: sealed_bounded_integer::Sealed + Copy + PartialOrd {
+    /// The additive identity for this axis — the zero-floor arm on
+    /// [`require_positive_bounded`] compares `value == Self::ZERO`.
+    const ZERO: Self;
+}
+
+mod sealed_bounded_integer {
+    pub trait Sealed {}
+    impl Sealed for u32 {}
+    impl Sealed for u64 {}
+}
+
+impl BoundedInteger for u32 {
+    const ZERO: Self = 0;
+}
+
+impl BoundedInteger for u64 {
+    const ZERO: Self = 0;
+}
+
+/// Bracket a typed integer axis with the "zero-floor + upper-cap"
+/// gate pair every capped-integer `:politicas` / `:supervisor` /
+/// `:limits` axis carries. Returns `on_zero()` when
+/// `value == T::ZERO`, `on_cap_exceeded(value)` when `value > cap`,
+/// `Ok(())` otherwise. Generic over the caller's error enum so the
+/// same helper reaches every crate-level [`thiserror`] surface, and
+/// over the axis's primitive-integer type `T` via the sealed
+/// [`BoundedInteger`] trait so the two typed-integer widths in the
+/// crate (`u32` and `u64`) share one canonical dispatch — the seven
+/// per-axis error variants remain the source of truth for each
+/// axis's remediation prose; the helper only sequences the two gate
+/// arms in canonical order and threads the value into the cap arm's
+/// discriminator field.
+///
+/// The zero-floor arm strictly precedes the cap arm so a literal
+/// `T::ZERO` value surfaces the self-locating zero diagnostic (which
+/// every per-axis error variant already documents an "omit the axis
+/// to express no-bound" remediation for) rather than the misleading
 /// `0 > cap` false-negative on the cap arm. Same ordering discipline
 /// every existing per-axis inline `if value == 0 { … } if value > CAP
-/// { … }` block already applies — this lift makes the ordering a
-/// property of the helper, not a per-call-site convention six sites
-/// re-derive.
+/// { … }` block already applied — this lift makes the ordering a
+/// property of the helper, not a per-call-site convention seven
+/// sites re-derive.
 ///
-/// Six identical-shape call sites collapse onto this helper:
+/// Seven identical-shape call sites collapse onto this helper —
+/// six on the `T = u32` axis:
 ///
 ///   * [`crate::AplicacaoSpec::validate_politicas`] on
 ///     `MeshPolicy::retries` (zero →
@@ -26183,15 +26240,61 @@ pub fn servico_spec_and_m2_overlay_entries(
 ///   * [`crate::LimitsSpec::validate`] on `cpu`
 ///     (zero → [`crate::LimitsError::CpuZero`], cap →
 ///     [`crate::LimitsError::CpuExceedsCap`],
-///     cap = [`crate::LIMITS_CPU_MILLICORES_MAX`]).
+///     cap = [`crate::LIMITS_CPU_MILLICORES_MAX`]);
 ///
-/// Peer to [`require_positive_bounded_u64`] on the `u64`-typed axes
-/// ([`crate::LimitsSpec::fuel`]). Generic over the caller's error enum
-/// so the same helper reaches every crate-level [`thiserror`] surface
-/// — the six per-axis error variants remain the source of truth for
-/// each axis's remediation prose; the helper only sequences the two
-/// gate arms in canonical order and threads the value into the cap
-/// arm's discriminator field.
+/// and one on the `T = u64` axis:
+///
+///   * [`crate::LimitsSpec::validate`] on `fuel`
+///     (zero → [`crate::LimitsError::FuelZero`], cap →
+///     [`crate::LimitsError::FuelExceedsCap`],
+///     cap = [`crate::LIMITS_FUEL_MAX`]).
+///
+/// The two named `u32` / `u64` sibling helpers
+/// ([`require_positive_bounded_u32`], [`require_positive_bounded_u64`])
+/// are one-line delegates onto this generic entry-point so the seven
+/// existing call sites route through one function body — a future
+/// tightening of the two-arm discipline (an audit-log hook, an
+/// instrumentation counter, the M4 CR materializer's admission-webhook
+/// per-axis floor) reaches every consumer by one edit at this helper,
+/// not a coordinated rewrite across two type-specific bodies. Peer to
+/// the ternary [`require_positive_canonical_bounded_duration`]
+/// (typed-`Duration` axes) and the quaternary
+/// [`require_positive_quantum_multiple_bounded_u64`] (byte-quantized
+/// `:memory` axis) on the same closure-based caller-error-variant
+/// discipline.
+///
+/// # Errors
+///
+/// Returns `on_zero()` for `value == T::ZERO`; returns
+/// `on_cap_exceeded(value)` for `value > cap`; returns `Ok(())`
+/// otherwise.
+pub fn require_positive_bounded<T, E>(
+    value: T,
+    cap: T,
+    on_zero: impl FnOnce() -> E,
+    on_cap_exceeded: impl FnOnce(T) -> E,
+) -> Result<(), E>
+where
+    T: BoundedInteger,
+{
+    if value == T::ZERO {
+        return Err(on_zero());
+    }
+    if value > cap {
+        return Err(on_cap_exceeded(value));
+    }
+    Ok(())
+}
+
+/// Named `u32` delegate onto the generic
+/// [`require_positive_bounded`] entry-point — preserved so the six
+/// pre-lift `u32` call sites continue to compile at their original
+/// site-shape and the diagnostic on a mis-typed cap argument still
+/// names `u32` explicitly (`expected u32, found u64`) rather than the
+/// generic entry-point's less-directed "type annotations needed for
+/// `BoundedInteger`" diagnostic. Delegates verbatim; no arm-ordering
+/// or gate-shape divergence between this named sibling and the
+/// generic body.
 ///
 /// # Errors
 ///
@@ -26203,30 +26306,17 @@ pub fn require_positive_bounded_u32<E>(
     on_zero: impl FnOnce() -> E,
     on_cap_exceeded: impl FnOnce(u32) -> E,
 ) -> Result<(), E> {
-    if value == 0 {
-        return Err(on_zero());
-    }
-    if value > cap {
-        return Err(on_cap_exceeded(value));
-    }
-    Ok(())
+    require_positive_bounded::<u32, E>(value, cap, on_zero, on_cap_exceeded)
 }
 
-/// Peer of [`require_positive_bounded_u32`] on the `u64`-typed axes.
-/// Returns `on_zero()` when `value == 0`, `on_cap_exceeded(value)`
-/// when `value > cap`, `Ok(())` otherwise. See
-/// [`require_positive_bounded_u32`] for the ordering / lift rationale
-/// (same "zero-floor arm strictly precedes cap arm so `0` surfaces
-/// the self-locating diagnostic" discipline the peer helper documents).
-///
-/// The single existing call site is [`crate::LimitsSpec::validate`] on
-/// `fuel` (zero → [`crate::LimitsError::FuelZero`], cap →
-/// [`crate::LimitsError::FuelExceedsCap`], cap =
-/// [`crate::LIMITS_FUEL_MAX`]). Lifted alongside its `u32` peer so
-/// the two integer-typed axes on this discipline share one canonical
-/// entry-point — a future `u64`-typed axis (a hypothetical
-/// per-Aplicacao byte-budget cap, the M4 per-edge policy resolver's
-/// byte-throughput axis) reaches for the same helper by construction.
+/// Named `u64` delegate onto the generic
+/// [`require_positive_bounded`] entry-point — preserved so the single
+/// pre-lift `u64` call site (`LimitsSpec::fuel`) continues to compile
+/// at its original site-shape. Delegates verbatim; no arm-ordering or
+/// gate-shape divergence between this named sibling and the generic
+/// body. See [`require_positive_bounded_u32`] for the naming
+/// rationale (same "preserve the type-specific diagnostic on a
+/// mis-typed cap argument" posture).
 ///
 /// # Errors
 ///
@@ -26238,13 +26328,7 @@ pub fn require_positive_bounded_u64<E>(
     on_zero: impl FnOnce() -> E,
     on_cap_exceeded: impl FnOnce(u64) -> E,
 ) -> Result<(), E> {
-    if value == 0 {
-        return Err(on_zero());
-    }
-    if value > cap {
-        return Err(on_cap_exceeded(value));
-    }
-    Ok(())
+    require_positive_bounded::<u64, E>(value, cap, on_zero, on_cap_exceeded)
 }
 
 /// Bracket a typed `u64` axis carrying a quantized value with the
@@ -41302,6 +41386,114 @@ mod tests {
             require_positive_bounded_u64::<TestErr>(u64::MAX, 10, || TestErr::Zero, TestErr::Cap),
             Err(TestErr::Cap(u64::MAX))
         );
+    }
+
+    // ── require_positive_bounded (generic) ─────────────────────────────
+
+    #[test]
+    fn require_positive_bounded_generic_u32_matches_named_delegate_across_all_arms() {
+        // Byte-parity witness on the `T = u32` axis: every input the
+        // named `require_positive_bounded_u32` delegate accepts /
+        // rejects, the generic `require_positive_bounded::<u32, _>`
+        // entry-point accepts / rejects with the identical `Result`
+        // — no arm-ordering or gate-shape divergence between the
+        // pre-lift named body and the post-lift generic body. Pins
+        // the delegate's "verbatim onto the generic" contract at the
+        // three-arm probe set (in-range, zero, above-cap) the peer
+        // per-arm tests already cover for the named siblings.
+        for (value, cap, expected) in [
+            (1u32, 10u32, Ok(())),
+            (10, 10, Ok(())),
+            (5, 10, Ok(())),
+            (0, 10, Err(TestErr::Zero)),
+            (0, 0, Err(TestErr::Zero)),
+            (11, 10, Err(TestErr::Cap(11))),
+            (u32::MAX, 10, Err(TestErr::Cap(u64::from(u32::MAX)))),
+        ] {
+            let via_named = require_positive_bounded_u32::<TestErr>(
+                value,
+                cap,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v)),
+            );
+            let via_generic = require_positive_bounded::<u32, TestErr>(
+                value,
+                cap,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v)),
+            );
+            assert_eq!(
+                via_named, expected,
+                "require_positive_bounded_u32(value={value}, cap={cap}) diverged \
+                 from the expected `Result` — the named delegate is the pre-lift \
+                 byte-parity anchor for the post-lift generic"
+            );
+            assert_eq!(
+                via_generic, expected,
+                "require_positive_bounded::<u32, _>(value={value}, cap={cap}) \
+                 diverged from the expected `Result` — the generic entry-point \
+                 must byte-match the named delegate on every arm"
+            );
+        }
+    }
+
+    #[test]
+    fn require_positive_bounded_generic_u64_matches_named_delegate_across_all_arms() {
+        // Peer to the `u32`-axis byte-parity witness above — same
+        // three-arm probe set on the `T = u64` axis. Pins the
+        // `require_positive_bounded_u64` delegate's "verbatim onto
+        // the generic" contract; a future divergence between the
+        // named `u64` body and the generic body would surface here
+        // as a `Result` mismatch rather than a silent drift the
+        // named-per-axis tests would not catch (they exercise only
+        // the named delegate, not the generic).
+        for (value, cap, expected) in [
+            (1u64, 10u64, Ok(())),
+            (10, 10, Ok(())),
+            (0, 10, Err(TestErr::Zero)),
+            (11, 10, Err(TestErr::Cap(11))),
+            (u64::MAX, 10, Err(TestErr::Cap(u64::MAX))),
+        ] {
+            let via_named =
+                require_positive_bounded_u64::<TestErr>(value, cap, || TestErr::Zero, TestErr::Cap);
+            let via_generic = require_positive_bounded::<u64, TestErr>(
+                value,
+                cap,
+                || TestErr::Zero,
+                TestErr::Cap,
+            );
+            assert_eq!(
+                via_named, expected,
+                "require_positive_bounded_u64(value={value}, cap={cap}) diverged \
+                 from the expected `Result` — the named delegate is the pre-lift \
+                 byte-parity anchor for the post-lift generic"
+            );
+            assert_eq!(
+                via_generic, expected,
+                "require_positive_bounded::<u64, _>(value={value}, cap={cap}) \
+                 diverged from the expected `Result` — the generic entry-point \
+                 must byte-match the named delegate on every arm"
+            );
+        }
+    }
+
+    #[test]
+    fn bounded_integer_zero_const_matches_primitive_additive_identity() {
+        // The `BoundedInteger::ZERO` associated `const` is the
+        // zero-floor arm's discriminator on `require_positive_bounded`
+        // — a drift between `<T as BoundedInteger>::ZERO` and the
+        // primitive integer's additive identity (`0u32` / `0u64`)
+        // would silently move the zero-floor arm off `0`, admitting
+        // `0` values every per-axis error variant is written to
+        // reject. Pin the two closed-set arms against their primitive
+        // additive identity so any future `impl BoundedInteger` (a
+        // hypothetical `u16` port-cap axis, the M4 admission
+        // webhook's `usize` per-request-count axis) surfaces its
+        // `Self::ZERO` drift as a compile-time / test-time break at
+        // this pin rather than a silent zero-floor arm miss at every
+        // downstream call site.
+        assert_eq!(<u32 as BoundedInteger>::ZERO, 0u32);
+        assert_eq!(<u64 as BoundedInteger>::ZERO, 0u64);
     }
 
     // ── require_positive_quantum_multiple_bounded_u64 ────────────────────
