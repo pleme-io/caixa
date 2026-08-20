@@ -1208,8 +1208,16 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     if s.is_empty() {
         return Err(LimitsError::EmptyByteSize(s.into()));
     }
-    let split_at = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
-    let (num_part, unit) = s.split_at(split_at);
+    // Route the `<integer><ASCII-alphabetic-unit>` split through the
+    // lifted [`crate::render::split_magnitude_and_alpha_unit`] primitive
+    // — the substrate-side single-owner split every ASCII-alphabetic-unit
+    // typed-magnitude codec in caixa-core (`parse_byte_size` /
+    // `parse_duration` / `supervisor::duration_codec::parse`) shares.
+    // Drift between any two codec sites' magnitude/unit split rule
+    // becomes a single-edit fix at the composed helper rather than three
+    // independent `s.find(|c: char| c.is_ascii_alphabetic())` re-inlines
+    // diverging over time.
+    let (num_part, unit) = crate::render::split_magnitude_and_alpha_unit(s);
     let num_trim = num_part.trim();
     // The canonical authoring form for `:limits :memory` is
     // `<integer><unit>` — every magnitude `render_byte_size` emits is a
@@ -1433,8 +1441,12 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     if s.is_empty() {
         return Err(LimitsError::EmptyDuration(s.into()));
     }
-    let split_at = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
-    let (num_part, unit) = s.split_at(split_at);
+    // Routed through the lifted
+    // [`crate::render::split_magnitude_and_alpha_unit`] primitive — the
+    // single-owner split every ASCII-alphabetic-unit typed-magnitude
+    // codec in caixa-core shares. See its docstring for the full
+    // sibling roster on the same primitive altitude.
+    let (num_part, unit) = crate::render::split_magnitude_and_alpha_unit(s);
     let num_trim = num_part.trim();
     // The canonical authoring form for `:limits :wall-clock` is
     // `<integer><unit>` — every magnitude `render_duration` emits is a
