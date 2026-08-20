@@ -34,12 +34,11 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
-    FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
-    GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
-    M3_KEY_PLACEMENT, MappingExt, SequenceExt, WitContract, aplicacao::AplicacaoSpec,
-    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, single_field_overlay,
+    Caixa, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME, FLEET_PROGRAMS_KEY_VERSAO,
+    GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT,
+    GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, MappingExt,
+    SequenceExt, WitContract, aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 

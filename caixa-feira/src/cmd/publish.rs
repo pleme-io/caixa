@@ -155,7 +155,7 @@ fn run_git<'a, I: IntoIterator<Item = &'a str>>(cwd: &std::path::Path, args: I) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::{Args as _, FromArgMatches};
+    use clap::FromArgMatches;
 
     #[test]
     fn publish_prefix_default_pins_lifted_caixa_core_constant() {
