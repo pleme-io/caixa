@@ -168,7 +168,7 @@ fn check_enum_pascal(node: &Node, diags: &mut Vec<Diagnostic>) {
                             v.span,
                             format!(":{k} expects a bare symbol, not a quoted string"),
                         )
-                        .with_hint(format!("write `{}` without quotes", s)),
+                        .with_hint(format!("write `{s}` without quotes")),
                     );
                 }
                 NodeKind::Symbol(s) if !is_pascal(s) => {
@@ -698,8 +698,7 @@ mod tests {
         let d = lint(src);
         assert!(
             d.iter().any(|d| d.rule_id == "enum-variant-pascal-case"),
-            "diags: {:?}",
-            d
+            "diags: {d:?}"
         );
     }
 

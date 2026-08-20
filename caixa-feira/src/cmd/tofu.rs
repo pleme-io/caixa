@@ -191,7 +191,7 @@ fn run_subcmd(sub: &str, opts: &RunOpts) -> Result<()> {
             .status();
         match init {
             Ok(s) if s.success() => {}
-            Ok(s) => bail!("{} init exited with {}", bin, s),
+            Ok(s) => bail!("{bin} init exited with {s}"),
             Err(e) => {
                 if opts.bin.is_none() {
                     eprintln!(
@@ -200,7 +200,7 @@ fn run_subcmd(sub: &str, opts: &RunOpts) -> Result<()> {
                     );
                     return retry_with_terraform(sub, opts, &out_dir);
                 }
-                bail!("invoking {}: {e}", bin);
+                bail!("invoking {bin}: {e}");
             }
         }
     }
@@ -213,7 +213,7 @@ fn run_subcmd(sub: &str, opts: &RunOpts) -> Result<()> {
         .status()
         .with_context(|| format!("invoking {bin} {}", args.join(" ")))?;
     if !status.success() {
-        bail!("{} {} exited with {status}", bin, sub);
+        bail!("{bin} {sub} exited with {status}");
     }
     Ok(())
 }

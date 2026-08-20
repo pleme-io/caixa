@@ -292,7 +292,7 @@ impl ListArgs {
                     .creation_timestamp
                     .as_ref()
                     .map_or_else(|| "?".into(), |t| short_age(t.0));
-                println!("{:<40} {:<14} {:<10} {}", name, phase, lifetime, age);
+                println!("{name:<40} {phase:<14} {lifetime:<10} {age}");
             }
             Ok::<_, anyhow::Error>(())
         })
