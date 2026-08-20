@@ -62,7 +62,6 @@
 1	clippy::cast_sign_loss	caixa-feira/src/cmd/ephemeral.rs
 2	clippy::doc_markdown	caixa-feira/src/cmd/ephemeral.rs
 1	clippy::print_literal	caixa-feira/src/cmd/ephemeral.rs
-1	clippy::uninlined_format_args	caixa-feira/src/cmd/ephemeral.rs
 1	dead_code	caixa-feira/src/cmd/ephemeral_runtime.rs
 1	clippy::unnecessary_wraps	caixa-feira/src/cmd/fmt.rs
 1	clippy::struct_excessive_bools	caixa-feira/src/cmd/lint.rs
@@ -74,7 +73,6 @@
 1	clippy::if_not_else	caixa-feira/src/cmd/publish.rs
 1	unused_imports	caixa-feira/src/cmd/publish.rs
 1	clippy::assigning_clones	caixa-feira/src/cmd/resolve.rs
-3	clippy::uninlined_format_args	caixa-feira/src/cmd/tofu.rs
 2	clippy::items_after_statements	caixa-feira/tests/feira_e2e.rs
 1	clippy::doc_markdown	caixa-flake/src/flake.rs
 31	clippy::doc_lazy_continuation	caixa-flux/src/lib.rs
@@ -87,7 +85,6 @@
 1	clippy::unreadable_literal	caixa-fmt/tests/float_roundtrip.rs
 1	clippy::if_same_then_else	caixa-lacre/src/lock.rs
 2	clippy::string_extend_chars	caixa-lint/src/rules.rs
-2	clippy::uninlined_format_args	caixa-lint/src/rules.rs
 1	clippy::unnested_or_patterns	caixa-lint/src/rules.rs
 122	clippy::doc_lazy_continuation	caixa-mesh/src/lib.rs
 1	unused_imports	caixa-mesh/src/lib.rs
