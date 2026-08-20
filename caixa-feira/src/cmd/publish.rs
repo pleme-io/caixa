@@ -108,9 +108,7 @@ impl Publish {
 /// surface — the two writer-side emit sites (`tag`, `-m <message>`)
 /// share one accessor rather than two raw field-accesses in lockstep.
 pub(crate) fn publish_effective_versao(cli_versao: Option<&str>, caixa: &Caixa) -> String {
-    cli_versao
-        .map(str::to_string)
-        .unwrap_or_else(|| caixa.versao().to_string())
+    cli_versao.map_or_else(|| caixa.versao().to_string(), str::to_string)
 }
 
 /// Compose the `git tag -a -m <message>` annotation body `feira publish`

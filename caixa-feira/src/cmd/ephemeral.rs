@@ -281,8 +281,7 @@ impl ListArgs {
                 let phase = p
                     .status
                     .as_ref()
-                    .map(|s| format!("{:?}", s.phase))
-                    .unwrap_or_else(|| "Pending".into());
+                    .map_or_else(|| "Pending".into(), |s| format!("{:?}", s.phase));
                 let lifetime = if p.spec.lifetime.is_ephemeral() {
                     "ephemeral"
                 } else {
@@ -292,8 +291,7 @@ impl ListArgs {
                     .metadata
                     .creation_timestamp
                     .as_ref()
-                    .map(|t| short_age(t.0))
-                    .unwrap_or_else(|| "?".into());
+                    .map_or_else(|| "?".into(), |t| short_age(t.0));
                 println!("{:<40} {:<14} {:<10} {}", name, phase, lifetime, age);
             }
             Ok::<_, anyhow::Error>(())
@@ -332,9 +330,7 @@ fn print_status_summary(p: &Process) {
     let ns = p.metadata.namespace.as_deref().unwrap_or("?");
     let name = p.metadata.name.as_deref().unwrap_or("?");
     let status = p.status.as_ref();
-    let phase = status
-        .map(|s| format!("{:?}", s.phase))
-        .unwrap_or_else(|| "Pending".into());
+    let phase = status.map_or_else(|| "Pending".into(), |s| format!("{:?}", s.phase));
     let pid = status
         .and_then(|s| s.pid.clone())
         .unwrap_or_else(|| "(unassigned)".into());

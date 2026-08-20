@@ -39,8 +39,7 @@ impl Nix {
 fn render_flake(c: &Caixa) -> String {
     let description = c
         .descricao()
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("caixa {}", c.nome()));
+        .map_or_else(|| format!("caixa {}", c.nome()), str::to_owned);
     let kind_comment = match c.kind() {
         CaixaKind::Biblioteca => "library (loaded via tatara-lisp importar)",
         CaixaKind::Binario => "binary (exe/ entries)",
