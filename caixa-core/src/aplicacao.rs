@@ -2685,6 +2685,96 @@ impl MeshPolicy {
         }
     }
 
+    /// Substrate-canonical cross-axis coherence predicate on the
+    /// `:politicas` slot: can the token-bucket rate declared by
+    /// `:rate-limit` dispatch enough calls inside `:circuit-breaker
+    /// :window` to reach `:max-failures`?
+    ///
+    /// The second cross-axis invariant on the `:politicas` surface —
+    /// sibling to [`MeshPolicy::breaker_window_observes_timeout`] on
+    /// the `(:timeout, :circuit-breaker :window)` pair, extended onto
+    /// the `(:rate-limit, :circuit-breaker)` pair. Each axis in the
+    /// pair is validated in isolation by the per-axis brackets in
+    /// [`AplicacaoSpec::validate_politicas`] (rate zero-floor + cap,
+    /// max-failures zero-floor + cap, both windows zero-floor +
+    /// integer-millisecond + cap, rate-limit window canonical-form),
+    /// so a `MeshPolicy` whose axes are each individually well-formed
+    /// can still name a structurally inert pair. The pair
+    /// `{ rate-limit: "1/h", circuit-breaker: (:max-failures 5 :window
+    /// "10s") }` passes every per-axis bracket and is nonetheless a
+    /// breaker that cannot trip on the failure mode it exists to
+    /// catch: the token bucket admits `rate × (cb.window / rl.window)`
+    /// = `1 × (10s / 3600s)` ≈ 0 calls per rolling breaker window, so
+    /// no window can accumulate five failures however catastrophically
+    /// the upstream is failing. Envoy's
+    /// `outlier_detection.consecutive_5xx` paired against
+    /// `local_rate_limit.token_bucket.max_tokens` /
+    /// `fill_interval` carries the identical relation; every
+    /// production playbook that pairs the two axes (Envoy, Istio, AWS
+    /// App Mesh, Kong) recommends sizing the rate at or above the
+    /// breaker's minimum-request-volume threshold for exactly this
+    /// reason.
+    ///
+    /// The typed test is the integer inequality
+    /// `rate × cb.window.as_nanos() >= max_failures × rl.window.as_nanos()`
+    /// (rearranged from `rate × cb.window / rl.window >= max_failures`
+    /// so no floating-point division mediates the comparison and so
+    /// the sub-second `rl.window` arms — `"n/s"` = 1s — are treated
+    /// exactly). Both multiplicands are `saturating_mul`'d into
+    /// [`u128`] so a struct-literal `MeshPolicy` whose per-axis fields
+    /// have not yet passed [`AplicacaoSpec::validate_politicas`]
+    /// (e.g. `rate: u32::MAX, cb_window: Duration::MAX`) does not
+    /// panic the predicate; a saturated pair collapses to the
+    /// "vacuously coherent" branch the peer per-axis brackets reject
+    /// via their own zero-floor / cap arms first.
+    ///
+    /// Vacuously `true` when either axis is absent — a `:politicas`
+    /// that names only one of the pair declares no relation for the
+    /// substrate to hold it to (`:rate-limit` alone is a per-edge
+    /// token-bucket declaration with no failure counter to starve;
+    /// `:circuit-breaker` alone is a rolling-window failure counter
+    /// whose call rate is unconstrained by the substrate, so no
+    /// bucket-derived upper bound on calls-per-window is knowable at
+    /// author time). Same "unset means the cluster default applies,
+    /// not zero" partition [`MeshPolicy::is_empty`] and the sibling
+    /// [`MeshPolicy::breaker_window_observes_timeout`] predicate
+    /// carry.
+    ///
+    /// Lifted as a typed predicate on the substrate primitive rather
+    /// than open-coded at the validate gate so every downstream
+    /// consumer of the pair reaches the invariant through one
+    /// dispatch: the [`AplicacaoSpec::validate_politicas`] gate
+    /// below, the future `CiliumClusterwideEnvoyConfig`
+    /// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) that
+    /// must emit `local_rate_limit.token_bucket.{max_tokens,
+    /// fill_interval}` alongside `outlier_detection.consecutive_5xx`
+    /// / `outlier_detection.interval` as one coherent Envoy block,
+    /// the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's admission webhook, and the future
+    /// per-`:contratos`-edge `:politicas` override the same roadmap
+    /// acknowledges — which resolves an *effective* pair per edge
+    /// (edge-level `:rate-limit` against the Aplicacao-level
+    /// `:circuit-breaker`, or vice versa) and so must re-check the
+    /// relation on a pair neither axis's declaration site can see
+    /// whole. Naming the invariant once means that resolver folds
+    /// this predicate over its resolved pair instead of re-deriving
+    /// the comparison, exactly as the sibling cross-axis
+    /// [`MeshPolicy::breaker_window_observes_timeout`] predicate
+    /// names the `(:timeout, :window)` relation for its own consumers.
+    #[must_use]
+    pub const fn breaker_can_trip_under_rate_limit(&self) -> bool {
+        match (self.rate_limit(), self.circuit_breaker()) {
+            (Some(rl), Some(cb)) => {
+                let calls_per_cb_window =
+                    (rl.rate() as u128).saturating_mul(cb.window().as_nanos());
+                let trip_threshold_per_cb_window =
+                    (cb.max_failures() as u128).saturating_mul(rl.window().as_nanos());
+                calls_per_cb_window >= trip_threshold_per_cb_window
+            }
+            _ => true,
+        }
+    }
+
     /// Substrate-canonical per-`:politicas` `:timeout` Gateway-API-mesh
     /// per-call-deadline scalar accessor every consumer of the
     /// Aplicacao's Gateway API v1.x per-rule request-timeout keys off —
@@ -8104,6 +8194,59 @@ impl AplicacaoSpec {
                     .expect("cross-axis gate fires only when :timeout is present"),
             });
         }
+        // Cross-axis coherence gate on the `(:rate-limit,
+        // :circuit-breaker)` pair — routed through the substrate
+        // primitive [`MeshPolicy::breaker_can_trip_under_rate_limit`],
+        // which names the invariant for the future consumers that
+        // must resolve the pair without seeing either declaration
+        // site whole (the per-`:contratos`-edge `:politicas` override
+        // MESH-COMPOSITION §III.2 #3 acknowledges).
+        //
+        // Runs strictly *after* every per-axis bracket (so a rate
+        // that is zero-floor-violating and simultaneously below the
+        // trip threshold surfaces `PolicyRateLimitZero` first) and
+        // strictly *after* the sibling
+        // [`MeshPolicy::breaker_window_observes_timeout`] cross-axis
+        // arm (so a pair that is both structurally-inert against the
+        // timeout and starving the breaker surfaces
+        // `PolicyBreakerWindowBelowTimeout` first — the timeout
+        // relation is the per-call-deadline invariant every
+        // synchronous edge carries whether or not `:rate-limit` is
+        // declared, and its diagnostic is more self-locating). Same
+        // ordering discipline every per-axis bracket carries
+        // internally (zero-floor before canonical-form before cap).
+        //
+        // Until this gate landed the `:politicas` surface accepted
+        // the pair `{ rate-limit: "1/h", circuit-breaker (:max-failures
+        // 5 :window "10s") }` — each axis individually well-formed and
+        // inside its cap — and landed it at the emit boundary as a
+        // breaker whose token-bucket-declared call rate cannot
+        // structurally reach `:max-failures` within `:window` however
+        // catastrophic the upstream failure rate: the bucket admits
+        // `rate × cb.window / rl.window` calls per rolling breaker
+        // window, and if that scalar is below `max_failures` the
+        // failure counter cannot roll over. That is the same
+        // declared-but-structurally-inert footgun the sibling per-axis
+        // cap arms ([`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`],
+        // [`AplicacaoError::PolicyRateLimitExceedsCap`]) close on the
+        // single-axis surface and the sibling cross-axis
+        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] arm
+        // closes on the `(:timeout, :window)` pair, here on the
+        // `(:rate-limit, :circuit-breaker)` cross-axis one.
+        if !p.breaker_can_trip_under_rate_limit() {
+            let cb = p
+                .circuit_breaker()
+                .expect("cross-axis gate fires only when :circuit-breaker is present");
+            let rl = p
+                .rate_limit()
+                .expect("cross-axis gate fires only when :rate-limit is present");
+            return Err(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                rate: rl.rate(),
+                rl_window: rl.window(),
+                max_failures: cb.max_failures(),
+                cb_window: cb.window(),
+            });
+        }
         Ok(())
     }
 
@@ -8824,6 +8967,25 @@ pub enum AplicacaoError {
          same shape), lower :timeout, or omit one of the two axes"
     )]
     PolicyBreakerWindowBelowTimeout { window: Duration, timeout: Duration },
+    #[error(
+        ":politicas :rate-limit ({rate} per {rl_window:?}) starves :politicas \
+         :circuit-breaker so :max-failures ({max_failures}) cannot be reached inside \
+         :window ({cb_window:?}) — the token-bucket dispatches at most \
+         `rate × cb_window / rl_window` calls per rolling breaker window, which is \
+         structurally below the trip threshold, so the breaker cannot trip even under \
+         100% failure and every typed-slot consumer (the future \
+         CiliumClusterwideEnvoyConfig per-:politicas overlay, Envoy's \
+         outlier_detection.consecutive_5xx paired against \
+         local_rate_limit.token_bucket.max_tokens) emits a protection that is \
+         structurally never enforced. Raise :rate, shorten :rate-limit :window, lower \
+         :max-failures, lengthen :circuit-breaker :window, or omit one of the two axes"
+    )]
+    PolicyBreakerCannotTripUnderRateLimit {
+        rate: u32,
+        rl_window: Duration,
+        max_failures: u32,
+        cb_window: Duration,
+    },
 }
 
 #[cfg(test)]
@@ -19554,6 +19716,327 @@ mod tests {
                 predicate, gate_ok,
                 "predicate must agree with validate arm on pair \
                  (timeout={timeout:?}, window={window:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_rate_limit_starves_circuit_breaker() {
+        // The fail-before-pass-after pin on the cross-axis
+        // `(:rate-limit, :circuit-breaker)` invariant. Each axis is
+        // individually well-formed under its own per-axis bracket
+        // (both above the zero floor, both below the cap, rate-limit
+        // window canonical), but the pair is a structurally-inert
+        // breaker: the token bucket admits `1 × 10s / 3600s` ≈ 0
+        // calls per rolling breaker window, so no window can
+        // accumulate five failures however catastrophic the upstream
+        // failure rate.
+        //
+        // Envoy's `outlier_detection.consecutive_5xx` paired against
+        // `local_rate_limit.token_bucket.max_tokens` /
+        // `fill_interval` carries the identical relation; every
+        // production playbook that pairs the two axes (Envoy, Istio,
+        // AWS App Mesh, Kong) sizes the rate at or above the
+        // breaker's minimum-request-volume threshold for exactly this
+        // reason.
+        //
+        // Pin both the diagnostic arm and the payload values so a
+        // future re-shape of the arm surfaces here as a deliberate
+        // test edit. Clears `:timeout` so the sibling
+        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] gate
+        // does not fire first on the ordering-precedent it holds
+        // over this arm.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(3600),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                rate: 1,
+                rl_window: Duration::from_secs(3600),
+                max_failures: 5,
+                cb_window: Duration::from_secs(10),
+            }
+        );
+    }
+
+    #[test]
+    fn accepts_rate_limit_can_trip_circuit_breaker() {
+        // Positive-control sweep across the production-playbook band
+        // — every pair a real playbook recommends where the rate
+        // clearly admits enough calls per breaker window to reach
+        // `:max-failures` must validate. Envoy default 5 failures
+        // in 10s with 100/s (1000 calls / window, 200× the threshold),
+        // Istio 5 in 30s with 50/s (1500 calls, 300×), Hystrix 20 in
+        // 10s with 1000/s (10000 calls, 500×), AWS App Mesh 5 in
+        // 300s with 10/s (3000 calls, 600×). Clears `:timeout` so
+        // the sibling cross-axis arm is vacuous on this sweep.
+        for (rate, rl_window, max_failures, cb_window) in [
+            (
+                100u32,
+                Duration::from_secs(1),
+                5u32,
+                Duration::from_secs(10),
+            ),
+            (50, Duration::from_secs(1), 5, Duration::from_secs(30)),
+            (1000, Duration::from_secs(1), 20, Duration::from_secs(10)),
+            (10, Duration::from_secs(1), 5, Duration::from_secs(300)),
+            (5000, Duration::from_secs(60), 50, Duration::from_secs(60)),
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.timeout = None;
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures,
+                window: cb_window,
+            });
+            s.politicas.rate_limit = Some(RateLimit {
+                rate,
+                window: rl_window,
+            });
+            s.validate().unwrap_or_else(|e| {
+                panic!(
+                    "production-playbook pair rate={rate}/{rl_window:?} \
+                     max_failures={max_failures}/{cb_window:?} must validate; got {e:?}"
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn accepts_rate_limit_exactly_at_trip_threshold_per_cb_window() {
+        // Boundary pin: `rate × cb_window == max_failures × rl_window`
+        // is the smallest bucket capacity that structurally admits
+        // exactly `max_failures` calls per rolling breaker window
+        // (the invariant is `≥`, not strict inequality). Catches a
+        // future off-by-one tightening to strict inequality that
+        // would drift the accept set away from the codified
+        // [`MeshPolicy::breaker_can_trip_under_rate_limit`] predicate.
+        // 5 calls/s over a 1s breaker window == 5 max_failures.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(1),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 5,
+            window: Duration::from_secs(1),
+        });
+        s.validate()
+            .expect("rate × cb_window == max_failures × rl_window is the boundary accept case");
+    }
+
+    #[test]
+    fn rejects_rate_limit_one_call_short_per_cb_window() {
+        // Off-by-one boundary pin: exactly one call short of the trip
+        // threshold per breaker window is still structurally inert
+        // (the invariant is `≥`, so `<` refuses even a one-call
+        // shortfall). 4 calls/s over a 1s window == 4 admissible
+        // failures, one shy of the 5-`max_failures` threshold.
+        // Catches a future strict-inequality relaxation that would
+        // silently drift the accept boundary.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(1),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 4,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                rate: 4,
+                rl_window: Duration::from_secs(1),
+                max_failures: 5,
+                cb_window: Duration::from_secs(1),
+            }
+        );
+    }
+
+    #[test]
+    fn cross_axis_starve_gate_vacuous_when_rate_limit_absent() {
+        // The predicate is vacuously `true` when `:rate-limit` is
+        // None — a `:circuit-breaker` alone declares no relation to
+        // a substrate-imposed call rate (the failure signal reaches
+        // the breaker from the transport's own error surface, at
+        // whatever rate upstream callers push traffic). Pin so a
+        // future tightening that made the gate opinionated on
+        // half-declared pairs surfaces here.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 1000,
+            window: Duration::from_millis(1),
+        });
+        s.politicas.rate_limit = None;
+        s.validate().expect(
+            "cross-axis starve gate must be vacuous when :rate-limit is None, \
+             however high :max-failures and however small :window are",
+        );
+    }
+
+    #[test]
+    fn cross_axis_starve_gate_vacuous_when_circuit_breaker_absent() {
+        // Peer of the sibling `:rate-limit`-absent case: a
+        // `:rate-limit` without a `:circuit-breaker` declares a
+        // per-edge token-bucket rate without any failure counter to
+        // starve, so the pair is undeclared and the cross-axis gate
+        // has nothing to check.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(3600),
+        });
+        s.validate().expect(
+            "cross-axis starve gate must be vacuous when :circuit-breaker is None, \
+             however low :rate is",
+        );
+    }
+
+    #[test]
+    fn cross_axis_starve_gate_runs_after_per_axis_brackets() {
+        // Ordering pin: a pair whose rate is *both* zero-floor-
+        // violating and structurally below the trip threshold must
+        // surface the per-axis zero-floor arm first — the zero-floor
+        // diagnostic is more self-locating (its omit-axis remediation
+        // is directly named), where the cross-axis arm would send the
+        // author to reconcile four values one of which is not a
+        // meaningful rate at all. Same ordering discipline every
+        // per-axis bracket carries internally (zero-floor before
+        // canonical-form before cap), and the sibling cross-axis
+        // `PolicyBreakerZeroWindow`-before-`PolicyBreakerWindowBelowTimeout`
+        // ordering pins on the `(:timeout, :window)` pair.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 0,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitZero,
+            "per-axis rate zero-floor arm must fire before the cross-axis starve gate"
+        );
+    }
+
+    #[test]
+    fn cross_axis_starve_gate_runs_after_sibling_window_below_timeout_gate() {
+        // Cross-axis ordering pin: a `:politicas` whose axes trip
+        // BOTH cross-axis arms — `:window < :timeout` (the sibling
+        // `PolicyBreakerWindowBelowTimeout` invariant) AND
+        // `:rate-limit` starves the breaker within `:window` (this
+        // arm) — must surface the timeout-relation diagnostic first.
+        // The timeout arm is the per-call-deadline invariant every
+        // synchronous edge carries whether or not `:rate-limit` is
+        // declared, so its diagnostic is more self-locating; the
+        // starve arm needs the reader to reason across three axes,
+        // where the timeout arm names only two.
+        //
+        // A `{ timeout: 30s, window: 10s, rate: 1/h, max_failures: 5 }`
+        // pair trips both: the window is below the timeout, and the
+        // rate (1 call/hour) admits far fewer than 5 calls per 10s
+        // breaker window.
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::from_secs(30));
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(3600),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                window: Duration::from_secs(10),
+                timeout: Duration::from_secs(30),
+            },
+            "sibling :window<:timeout cross-axis arm must fire before the \
+             starve arm when both apply"
+        );
+    }
+
+    #[test]
+    fn breaker_can_trip_under_rate_limit_predicate_matches_gate_semantic() {
+        // Equivalence pin: the substrate-canonical
+        // [`MeshPolicy::breaker_can_trip_under_rate_limit`] predicate
+        // and the [`AplicacaoSpec::validate_politicas`] cross-axis
+        // arm must discriminate the same set on every pair covered
+        // by their shared invariant. A future refactor of either
+        // side that breaks the equivalence trips here rather than as
+        // a divergence between the predicate's Boolean answer and
+        // the validate gate's Ok/Err arm — the same
+        // predicate-vs-gate coherence discipline the sibling
+        // [`MeshPolicy::breaker_window_observes_timeout`] predicate
+        // carries against `AplicacaoSpec::validate_politicas`. The
+        // sweep covers both arms of the invariant (strictly below,
+        // exactly at, strictly above) and both vacuous arms (None
+        // `:rate-limit`, None `:circuit-breaker`), so the
+        // equivalence holds exhaustively over the axis-covered
+        // accept and reject sets. Clears `:timeout` throughout so
+        // the sibling `:window<:timeout` gate is vacuous on every
+        // input.
+        let rl = |rate: u32, secs: u64| {
+            Some(RateLimit {
+                rate,
+                window: Duration::from_secs(secs),
+            })
+        };
+        let cb = |max_failures: u32, secs: u64| {
+            Some(CircuitBreaker {
+                max_failures,
+                window: Duration::from_secs(secs),
+            })
+        };
+        let cases: &[(Option<RateLimit>, Option<CircuitBreaker>)] = &[
+            // starving pairs (predicate = false, gate = Err)
+            (rl(1, 3600), cb(5, 10)),
+            (rl(4, 1), cb(5, 1)),
+            // boundary + coherent pairs (predicate = true, gate = Ok)
+            (rl(5, 1), cb(5, 1)),
+            (rl(100, 1), cb(5, 10)),
+            // vacuous arms
+            (None, cb(5, 10)),
+            (rl(1, 3600), None),
+            (None, None),
+        ];
+        for (rate_limit, circuit_breaker) in cases.iter().copied() {
+            let politicas = MeshPolicy {
+                circuit_breaker,
+                rate_limit,
+                ..Default::default()
+            };
+            let predicate = politicas.breaker_can_trip_under_rate_limit();
+
+            let mut s = three_member_spec();
+            s.politicas = politicas.clone();
+            s.politicas.timeout = None;
+            let gate_ok = !matches!(
+                s.validate(),
+                Err(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit { .. })
+            );
+
+            assert_eq!(
+                predicate, gate_ok,
+                "predicate must agree with validate arm on pair \
+                 (rate_limit={rate_limit:?}, circuit_breaker={circuit_breaker:?})"
             );
         }
     }
