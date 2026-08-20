@@ -699,13 +699,20 @@ where
 /// Returns the caller's `E` wrapping a [`KindMismatch`] when
 /// `caixa.kind != CaixaKind::Aplicacao`, or a
 /// [`crate::aplicacao::AplicacaoError`] when the folded
-/// [`crate::aplicacao::AplicacaoSpec`] fails its typed-shape
-/// validation. Order matches the three-line cascade this replaces: the
-/// kind gate fires first, so a `:kind Servico` caixa with a
-/// well-formed `:membros` stanza surfaces the kind mismatch (the more
-/// actionable diagnostic — the author has the wrong `:kind`) rather
-/// than the `AplicacaoError` (which the [`Caixa::aplicacao_view`]
-/// fold-in never even reaches on a non-`Aplicacao` kind).
+/// [`crate::aplicacao::AplicacaoSpec`] fails its typed-shape validation
+/// ([`crate::aplicacao::AplicacaoSpec::validate`]) or names itself as a
+/// `:membros` entry
+/// ([`crate::aplicacao::AplicacaoError::MembroIsSelfAplicacao`], the
+/// cross-slot self-edge gate the typed view cannot run because it
+/// carries the membros but not the parent `:nome`). Order matches the
+/// layout pipeline this compound gate mirrors: the kind gate fires
+/// first, so a `:kind Servico` caixa with a well-formed `:membros`
+/// stanza surfaces the kind mismatch (the more actionable diagnostic —
+/// the author has the wrong `:kind`) rather than the `AplicacaoError`
+/// (which the [`Caixa::aplicacao_view`] fold-in never even reaches on a
+/// non-`Aplicacao` kind); the self-membership gate fires last, so a
+/// malformed self-referential member surfaces its narrower per-member
+/// shape diagnostic before the self-edge refusal.
 ///
 /// # Panics
 ///
@@ -727,6 +734,38 @@ where
         .aplicacao_view()
         .expect("require_kind(Aplicacao) guarantees Caixa::aplicacao_view returns Some");
     spec.validate()?;
+    // Cross-slot self-edge gate: `:membros :caixa` must not name the
+    // Aplicacao's own `:nome`. Lives outside
+    // [`crate::aplicacao::AplicacaoSpec::validate`] because the typed
+    // view carries the membros but not the parent `:nome` — so a
+    // renderer that folds the view and validates it still admits a
+    // self-referential Aplicacao (a one-node lacre-closure recursion,
+    // [`crate::aplicacao::AplicacaoError::MembroIsSelfAplicacao`]).
+    // Until this fold landed, the layout pipeline
+    // ([`crate::layout::StandardLayout::verify`], the `feira build`
+    // author-time gate) ran `validate_no_self_membership` after
+    // `view.validate()`, but every per-Aplicacao *renderer* routing
+    // through this compound gate (caixa-mesh's `typed_view` feeding
+    // `programs_for_aplicacao` / `cilium_network_policies` /
+    // `gateway_routes`, caixa-tatara's `process_for_aplicacao`) skipped
+    // it — so a caixa built by a path that bypassed `feira build` (a
+    // struct-literal `Caixa`, a fixture mutating the public `membros`
+    // field past `Caixa::from_lisp`, the deferred M4 admission webhook
+    // running its own compound gate) rendered a self-edge the layout
+    // gate would have refused: a programs.yaml entry / CiliumNetworkPolicy
+    // whose graph node is its own member, far from the source
+    // `caixa.lisp`. Folding the gate here promotes self-membership
+    // refusal from a per-caller layout-pipeline convention to a
+    // structural property of every `AplicacaoSpec` past this compound
+    // entry gate — the same posture the peer per-Servico
+    // [`require_v0_servico_shape`] and per-Caixa [`require_valid_versao`]
+    // compound gates take on their axes. Runs after `spec.validate()`
+    // so the per-member shape + duplicate diagnostics surface first (a
+    // self-referential member whose `:caixa` is malformed lands the
+    // narrower per-member diagnostic before the self-edge gate sees it),
+    // matching the `validate() → validate_no_self_membership` ordering
+    // the layout pipeline already uses.
+    crate::aplicacao::validate_no_self_membership(spec.membros(), caixa.nome())?;
     Ok(spec)
 }
 
@@ -36724,20 +36763,77 @@ mod tests {
     }
 
     #[test]
-    fn require_aplicacao_view_matches_three_line_cascade_semantic() {
+    fn require_aplicacao_view_forwards_self_membership_arm() {
+        // Cross-slot self-edge gate:
+        // [`crate::aplicacao::validate_no_self_membership`] lives
+        // outside [`crate::aplicacao::AplicacaoSpec::validate`] because
+        // the typed view carries `:membros` but not the parent `:nome`.
+        // Prior to the fold, a `:kind Aplicacao` caixa naming its own
+        // `:nome` in `:membros` was spec-valid at
+        // [`AplicacaoSpec::validate`] (well-shaped `:caixa`/`:versao`,
+        // no duplicates, all `:contratos` resolve) yet refused by the
+        // layout pipeline's post-validate
+        // `validate_no_self_membership` step (`feira build`) — every
+        // per-Aplicacao renderer that routed through this compound
+        // gate (caixa-mesh's `typed_view` feeding
+        // `programs_for_aplicacao` / `cilium_network_policies` /
+        // `gateway_routes`, caixa-tatara's `process_for_aplicacao`)
+        // silently rendered the self-edge on the bypass path (struct-
+        // literal caixa, mutated fixture past `Caixa::from_lisp`, M4
+        // admission-webhook running its own compound gate). Post-fold,
+        // the compound gate refuses it in lockstep with the layout
+        // pipeline. Fail-before-pass-after: the assertion depends on
+        // the self-membership fold added at
+        // `require_aplicacao_view`'s tail. Peer to the sibling
+        // `require_aplicacao_view_forwards_aplicacao_error_on_kind_match`
+        // arm-forwarding pin on the `AplicacaoSpec::validate` axis.
+        let mut c = bare_aplicacao();
+        c.membros = vec![crate::aplicacao::Membro {
+            caixa: c.nome.clone(),
+            versao: "^0.1".into(),
+        }];
+        let err: AplicacaoRendererStandIn = require_aplicacao_view(&c).unwrap_err();
+        match err {
+            AplicacaoRendererStandIn::InvalidAplicacao(
+                crate::aplicacao::AplicacaoError::MembroIsSelfAplicacao { caixa },
+            ) => {
+                assert_eq!(
+                    caixa,
+                    c.nome(),
+                    "MembroIsSelfAplicacao must carry the parent Aplicacao's :nome verbatim",
+                );
+            }
+            AplicacaoRendererStandIn::InvalidAplicacao(other) => {
+                panic!("expected MembroIsSelfAplicacao arm, got {other:?}")
+            }
+            AplicacaoRendererStandIn::NotAnAplicacao(_) => {
+                panic!("kind gate must not fire on a :kind Aplicacao caixa")
+            }
+        }
+    }
+
+    #[test]
+    fn require_aplicacao_view_matches_layout_cascade_semantic() {
         // Equivalence pin: on every input, the compound helper's
-        // Ok/Err discrimination matches the three-line cascade
-        // verbatim — the lift is a behavioral no-op at the caller
-        // boundary. Peer to the sibling
+        // Ok/Err discrimination matches the four-step layout-pipeline
+        // cascade (`require_kind` → `aplicacao_view` → `validate` →
+        // `validate_no_self_membership`) verbatim — the compound gate
+        // is the exact per-Aplicacao V0-shape contract
+        // [`crate::layout::StandardLayout::verify`] enforces at
+        // `feira build`, so a renderer routing through it admits
+        // exactly the set of Aplicacaos the author-time gate admits.
+        // Peer to the sibling
         // `require_v0_servico_shape_matches_two_line_pair_semantic`
         // equivalence pin on the per-Servico compound gate.
         //
-        // Four axes covered: Aplicacao shape (Ok/Ok), kind gate fires
+        // Five axes covered: Aplicacao shape (Ok/Ok), kind gate fires
         // (Err/Ok on the cascade — cascade short-circuits at the kind
         // gate), spec-validate arm fires (Ok/Err on the cascade —
-        // cascade reaches [`AplicacaoSpec::validate`]), and a
-        // mis-kinded caixa with a spec-invalid `:membros` stanza (both
-        // invariants violated — the kind gate must still fire first).
+        // cascade reaches [`AplicacaoSpec::validate`]), a mis-kinded
+        // caixa with a spec-invalid `:membros` stanza (both invariants
+        // violated — the kind gate must still fire first), and a
+        // self-referential Aplicacao (spec-valid but naming its own
+        // `:nome` in `:membros` — the self-edge gate fires last).
         let cases: Vec<(CaixaKind, Vec<crate::aplicacao::Membro>)> = vec![
             (
                 CaixaKind::Aplicacao,
@@ -36761,6 +36857,21 @@ mod tests {
                     versao: "^0.1".into(),
                 }],
             ),
+            // Self-membership arm: `bare_aplicacao`'s `:nome` is
+            // "checkout", so a `:membros` entry with the same `:caixa`
+            // is a self-edge. Passes `AplicacaoSpec::validate` (a
+            // spec-valid entry with a well-shaped `:caixa`/`:versao`)
+            // but the layout pipeline's post-validate
+            // `validate_no_self_membership` gate refuses it — the
+            // compound helper must refuse it in lockstep now that the
+            // self-edge fold landed.
+            (
+                CaixaKind::Aplicacao,
+                vec![crate::aplicacao::Membro {
+                    caixa: "checkout".into(),
+                    versao: "^0.1".into(),
+                }],
+            ),
         ];
         for (kind, membros) in cases {
             let mut c = bare_aplicacao();
@@ -36778,6 +36889,7 @@ mod tests {
                         "require_kind(Aplicacao) guarantees Caixa::aplicacao_view returns Some",
                     );
                     spec.validate()?;
+                    crate::aplicacao::validate_no_self_membership(spec.membros(), c.nome())?;
                     Ok(spec)
                 })();
             let compound: Result<crate::aplicacao::AplicacaoSpec, AplicacaoRendererStandIn> =
