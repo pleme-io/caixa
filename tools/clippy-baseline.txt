@@ -10,8 +10,6 @@
 # warnings, never by relaxing a lint level to make it fit. Rows that drop to
 # zero are reported by the gate and must be removed with --update-baseline,
 # so the ratchet cannot silently re-permit fixed debt.
-1	clippy::type_complexity	caixa-actions/src/lib.rs
-1	unused_imports	caixa-actions/src/lib.rs
 1	clippy::single_match_else	caixa-ast/src/lexer.rs
 1	clippy::bool_to_int_with_if	caixa-ast/src/node.rs
 1	clippy::doc_markdown	caixa-ast/src/parser.rs

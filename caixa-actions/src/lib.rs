@@ -29,7 +29,7 @@
 //! [`caixa_flux`]/[`caixa_helm`]'s `render_*` functions), tracked but
 //! **not built** in this pass.
 
-use caixa_core::{Caixa, CaixaKind, CiDecomposeFailure};
+use caixa_core::{Caixa, CiDecomposeFailure};
 use thiserror::Error;
 
 /// Errors `caixa-actions` can raise.
@@ -168,7 +168,25 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use caixa_core::CaixaKind;
     use canteiro_types::{ActionRef, CiNode, CiRun, DecomposeError, EnvClass};
+
+    /// Per-fixture triple every table-driven CI-shape test in this
+    /// module keys off — `(label, builder, expected-node-count)`. Names
+    /// the shape once so per-test callers read as intent (`fixtures:
+    /// [ValidateAcaoFixture; N]`) rather than the four-token positional
+    /// declaration (`fn() -> CiRun` inside a tuple inside an array),
+    /// and closes the sole `clippy::type_complexity` warning on this
+    /// file — the last unlifted per-fixture-shape row on the caixa-
+    /// actions test surface. The `fn() -> CiRun` builder-arm shape (not
+    /// a `&'static CiRun` reference, not a boxed `Box<dyn Fn(…)>`)
+    /// preserves the "two independent instances per fixture — one
+    /// moved into `acao_caixa`, one borrowed by `decompose_ci`" pin
+    /// documented on the sole call site, which pins that the fixture
+    /// carries no assumption about `CiRun: Clone`. Named
+    /// `ValidateAcaoFixture` to match the observable it drives
+    /// ([`validate`], the crate's sole public entry point).
+    type ValidateAcaoFixture = (&'static str, fn() -> CiRun, usize);
 
     fn action(name: &str) -> ActionRef {
         ActionRef {
@@ -272,7 +290,7 @@ mod tests {
         // axis trips this test on the singleton fixture the moment the
         // decompose gate's contract is misread as fallible, before the
         // drift reaches any downstream per-`Acao` consumer.
-        let fixtures: [(&'static str, fn() -> CiRun, usize); 3] = [
+        let fixtures: [ValidateAcaoFixture; 3] = [
             (
                 "singleton",
                 || CiRun {
