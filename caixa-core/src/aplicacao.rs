@@ -2775,6 +2775,91 @@ impl MeshPolicy {
         }
     }
 
+    /// Substrate-canonical cross-axis coherence predicate on the
+    /// `:politicas` slot: can one client's declared `:retries` all
+    /// complete before `:circuit-breaker :max-failures` trips the
+    /// breaker mid-retry?
+    ///
+    /// The third cross-axis invariant on the `:politicas` surface —
+    /// sibling to [`MeshPolicy::breaker_window_observes_timeout`] on
+    /// the `(:timeout, :circuit-breaker :window)` pair and
+    /// [`MeshPolicy::breaker_can_trip_under_rate_limit`] on the
+    /// `(:rate-limit, :circuit-breaker)` pair, extended onto the
+    /// `(:retries, :circuit-breaker :max-failures)` pair. Each axis in
+    /// the pair is validated in isolation by the per-axis brackets in
+    /// [`AplicacaoSpec::validate_politicas`] (retries zero-floor + cap,
+    /// max-failures zero-floor + cap), so a `MeshPolicy` whose axes
+    /// are each individually well-formed can still name a
+    /// structurally-inert retry policy. The pair
+    /// `{ :retries 3, :circuit-breaker (:max-failures 3 :window "1s") }`
+    /// passes every per-axis bracket and is nonetheless a retry
+    /// policy the substrate cannot honor: one client's initial attempt
+    /// plus three retries is four attempts, but the breaker trips on
+    /// the third failure — the fourth attempt (the last declared
+    /// retry) is blocked by the open breaker, so the substrate
+    /// declared four attempts and structurally allows three.
+    ///
+    /// The typed test is the integer inequality
+    /// `cb.max_failures() > retries` — the retries count is the
+    /// *number of retry attempts beyond the initial* (Envoy's
+    /// `retry_policy.num_retries` semantics), so a client makes at
+    /// most `retries + 1` attempts per client call, each of which may
+    /// fail. For the breaker to *admit* the retry policy through
+    /// completion, its trip threshold must not be reached by one
+    /// client's failures alone: `retries + 1 <= max_failures`,
+    /// equivalently `retries < max_failures`, equivalently
+    /// `max_failures > retries`. The boundary case
+    /// `max_failures == retries + 1` accepts (the R+1th failure — the
+    /// last retry — trips the breaker exactly as it completes; retries
+    /// are fully executed). The strict-below case
+    /// `max_failures <= retries` rejects (the breaker trips before
+    /// retries exhaust, silently truncating the declared retry policy
+    /// mid-run — the same declared-but-structurally-inert footgun the
+    /// sibling per-axis cap arms close on the single-axis surfaces).
+    ///
+    /// Vacuously `true` when either axis is absent — a `:politicas`
+    /// that names only one of the pair declares no relation for the
+    /// substrate to hold it to (`:retries` alone is a client-retry
+    /// policy with no failure counter to trip; `:circuit-breaker`
+    /// alone is a failure counter whose per-client attempt count is
+    /// unconstrained by the substrate, so no per-client saturation
+    /// bound on failures-per-client-call is knowable at author time).
+    /// Same "unset means the cluster default applies, not zero"
+    /// partition [`MeshPolicy::is_empty`] and the sibling
+    /// [`MeshPolicy::breaker_window_observes_timeout`] /
+    /// [`MeshPolicy::breaker_can_trip_under_rate_limit`] predicates
+    /// carry.
+    ///
+    /// Lifted as a typed predicate on the substrate primitive rather
+    /// than open-coded at the validate gate so every downstream
+    /// consumer of the pair reaches the invariant through one
+    /// dispatch: the [`AplicacaoSpec::validate_politicas`] gate
+    /// below, the future `CiliumClusterwideEnvoyConfig`
+    /// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) that
+    /// must emit `retry_policy.num_retries` alongside
+    /// `outlier_detection.consecutive_5xx` as one coherent Envoy
+    /// block, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's admission webhook, and the future
+    /// per-`:contratos`-edge `:politicas` override the same roadmap
+    /// acknowledges — which resolves an *effective* pair per edge
+    /// (edge-level `:retries` against the Aplicacao-level
+    /// `:circuit-breaker`, or vice versa) and so must re-check the
+    /// relation on a pair neither axis's declaration site can see
+    /// whole. Naming the invariant once means that resolver folds
+    /// this predicate over its resolved pair instead of re-deriving
+    /// the comparison, exactly as the sibling cross-axis
+    /// [`MeshPolicy::breaker_window_observes_timeout`] and
+    /// [`MeshPolicy::breaker_can_trip_under_rate_limit`] predicates
+    /// name the `(:timeout, :window)` and `(:rate-limit,
+    /// :circuit-breaker)` relations for their own consumers.
+    #[must_use]
+    pub const fn retries_fit_under_breaker_trip_threshold(&self) -> bool {
+        match (self.retries(), self.circuit_breaker()) {
+            (Some(retries), Some(cb)) => cb.max_failures() > retries,
+            _ => true,
+        }
+    }
+
     /// Substrate-canonical per-`:politicas` `:timeout` Gateway-API-mesh
     /// per-call-deadline scalar accessor every consumer of the
     /// Aplicacao's Gateway API v1.x per-rule request-timeout keys off —
@@ -8247,6 +8332,59 @@ impl AplicacaoSpec {
                 cb_window: cb.window(),
             });
         }
+        // Cross-axis coherence gate on the `(:retries, :circuit-breaker
+        // :max-failures)` pair — routed through the substrate primitive
+        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`],
+        // which names the invariant for the future consumers that must
+        // resolve the pair without seeing either declaration site whole
+        // (the per-`:contratos`-edge `:politicas` override
+        // MESH-COMPOSITION §III.2 #3 acknowledges).
+        //
+        // Runs strictly *after* every per-axis bracket (so a
+        // simultaneously zero-floor-violating retries and saturating
+        // pair surfaces `PolicyRetriesZero` first) and strictly *after*
+        // both sibling cross-axis arms
+        // ([`MeshPolicy::breaker_window_observes_timeout`],
+        // [`MeshPolicy::breaker_can_trip_under_rate_limit`]) — the
+        // timeout relation is the per-call-deadline invariant every
+        // synchronous edge carries and the rate-limit relation is the
+        // token-bucket admission invariant every rate-limited edge
+        // carries, both of which reason across axes the retry-policy
+        // arm does not touch. Same "more foundational cross-axis first"
+        // ordering the peer per-axis brackets carry internally
+        // (zero-floor before canonical-form before cap).
+        //
+        // Until this gate landed the `:politicas` surface accepted the
+        // pair `{ :retries 3, :circuit-breaker (:max-failures 3
+        // :window "1s") }` — each axis individually well-formed and
+        // inside its cap — and landed it at the emit boundary as a
+        // retry policy the substrate cannot honor through completion:
+        // one client's `retries + 1 = 4` failing attempts hit the trip
+        // threshold on the third attempt, the breaker opens, and the
+        // fourth attempt (the last declared retry) is blocked. The
+        // declared retry policy is silently truncated mid-run — the
+        // same declared-but-structurally-inert footgun the sibling
+        // per-axis cap arms
+        // ([`AplicacaoError::PolicyRetriesExceedsCap`],
+        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`]) close
+        // on the single-axis surfaces and the sibling cross-axis
+        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] /
+        // [`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`]
+        // arms close on the `(:timeout, :window)` and `(:rate-limit,
+        // :circuit-breaker)` pairs, here on the `(:retries,
+        // :max-failures)` cross-axis one.
+        if !p.retries_fit_under_breaker_trip_threshold() {
+            let retries = p
+                .retries()
+                .expect("cross-axis gate fires only when :retries is present");
+            let cb = p
+                .circuit_breaker()
+                .expect("cross-axis gate fires only when :circuit-breaker is present");
+            return Err(AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                retries,
+                max_failures: cb.max_failures(),
+            });
+        }
         Ok(())
     }
 
@@ -8986,6 +9124,21 @@ pub enum AplicacaoError {
         max_failures: u32,
         cb_window: Duration,
     },
+    #[error(
+        ":politicas :retries ({retries}) plus the initial attempt saturates :politicas \
+         :circuit-breaker :max-failures ({max_failures}) mid-retry — one client's failing \
+         attempts alone accumulate {retries}+1 failures, which reaches the trip threshold \
+         at or before the last retry, so the breaker opens with declared retries still \
+         unused and every typed-slot consumer (the future CiliumClusterwideEnvoyConfig \
+         per-:politicas overlay, Envoy's retry_policy.num_retries paired against \
+         outlier_detection.consecutive_5xx) emits a retry policy the substrate \
+         structurally truncates. Pin :max-failures strictly above :retries (Hystrix / \
+         Envoy / resilience4j production playbooks recommend the breaker's trip \
+         threshold be observably larger than any single client's retry budget so the \
+         breaker distinguishes one persistently-failing client from sustained \
+         multi-client failure), lower :retries, or omit one of the two axes"
+    )]
+    PolicyBreakerTripsBeforeRetriesExhausted { retries: u32, max_failures: u32 },
 }
 
 #[cfg(test)]
@@ -17384,8 +17537,21 @@ mod tests {
         // through the hyperscale band (100, 500, 1000) the cap
         // accepts. Pin the inclusive validated set explicitly so a
         // future tightening of the ceiling surfaces here.
+        //
+        // Clears the fixture's `:retries` (which is `Some(3)`) so this
+        // per-axis sweep is pure: the sibling cross-axis
+        // [`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
+        // gate rejects any `max_failures <= retries` pair, so the
+        // `max_failures = 1` boundary at the head of the sweep would
+        // otherwise trip on the fixture-inherited retry policy rather
+        // than the per-axis boundary this test names. Same discipline
+        // the sibling per-axis `accepts_circuit_breaker_window_*`
+        // sweeps take against the fixture's `:timeout` for the
+        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`]
+        // cross-axis arm.
         for n in [1u32, 5, 10, 20, 50, 100, 500, 1000] {
             let mut s = three_member_spec();
+            s.politicas.retries = None;
             s.politicas.circuit_breaker = Some(CircuitBreaker {
                 max_failures: n,
                 window: Duration::from_secs(60),
@@ -20037,6 +20203,317 @@ mod tests {
                 predicate, gate_ok,
                 "predicate must agree with validate arm on pair \
                  (rate_limit={rate_limit:?}, circuit_breaker={circuit_breaker:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_retries_saturate_breaker_trip_threshold() {
+        // The fail-before-pass-after pin on the cross-axis
+        // `(:retries, :circuit-breaker :max-failures)` invariant. Each
+        // axis is individually well-formed under its own per-axis
+        // bracket (both above the zero floor, both below the cap), but
+        // the pair is a structurally-truncated retry policy: one
+        // client's `retries + 1 = 4` failing attempts hit the trip
+        // threshold on the third attempt, the breaker opens, and the
+        // fourth attempt (the last declared retry) is blocked by the
+        // open breaker — the substrate declared four attempts and
+        // structurally allows three.
+        //
+        // Envoy's `retry_policy.num_retries` paired against
+        // `outlier_detection.consecutive_5xx` carries the identical
+        // relation; every production playbook that pairs the two axes
+        // (Envoy, Istio, resilience4j, Hystrix) sizes the breaker's
+        // trip threshold strictly above any single client's retry
+        // budget so the breaker distinguishes one persistently-failing
+        // client from sustained multi-client failure.
+        //
+        // Pin both the diagnostic arm and the payload values so a
+        // future re-shape of the arm surfaces here as a deliberate
+        // test edit. Clears `:timeout` and `:rate-limit` so the
+        // sibling cross-axis
+        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] /
+        // [`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`]
+        // arms do not fire first on the ordering-precedent they hold
+        // over this arm.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(3);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 3,
+            window: Duration::from_secs(1),
+        });
+        s.politicas.rate_limit = None;
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                retries: 3,
+                max_failures: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn accepts_retries_below_breaker_trip_threshold() {
+        // Positive-control sweep across the production-playbook band
+        // — every pair a real playbook recommends where the breaker's
+        // trip threshold is strictly above the client's retry budget
+        // must validate. Envoy default `num_retries: 3` with
+        // `consecutive_5xx: 5` (breaker admits one client's 4 attempts,
+        // opens on multi-client failures beyond that); Istio
+        // `attempts: 3` with `consecutive5xxErrors: 5`; Hystrix
+        // `execution.isolation.thread.timeoutInMilliseconds` + 3
+        // retries with `requestVolumeThreshold: 20`; AWS App Mesh
+        // `maxRetries: 5` with a `maxEjectionPercent`-derived threshold
+        // of 10; resilience4j 2 retries with `slidingWindowSize: 10`.
+        // Clears `:timeout` and `:rate-limit` so the sibling cross-axis
+        // arms are vacuous on this sweep.
+        for (retries, max_failures) in [(1u32, 5u32), (3, 5), (3, 20), (5, 10), (2, 10), (10, 1000)]
+        {
+            let mut s = three_member_spec();
+            s.politicas.timeout = None;
+            s.politicas.retries = Some(retries);
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures,
+                window: Duration::from_secs(60),
+            });
+            s.politicas.rate_limit = None;
+            s.validate().unwrap_or_else(|e| {
+                panic!(
+                    "production-playbook pair retries={retries} \
+                     max_failures={max_failures} must validate; got {e:?}"
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn accepts_retries_exactly_at_boundary_below_trip_threshold() {
+        // Boundary pin: `max_failures == retries + 1` is the smallest
+        // trip threshold that admits one client's exhausted retries
+        // through completion (the R+1th failure — the last declared
+        // retry — trips the breaker exactly as it completes, so
+        // retries fully executed). The invariant is `>`, not `>=`,
+        // stated in the coherent direction `max_failures > retries`.
+        // Catches a future off-by-one tightening to
+        // `max_failures > retries + 1` that would drift the accept set
+        // away from the codified
+        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`]
+        // predicate.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(3);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 4,
+            window: Duration::from_secs(60),
+        });
+        s.politicas.rate_limit = None;
+        s.validate()
+            .expect("max_failures == retries + 1 is the boundary accept case");
+    }
+
+    #[test]
+    fn rejects_retries_equal_to_breaker_trip_threshold() {
+        // Off-by-one boundary pin: exactly at the trip threshold is
+        // still structurally truncating (the invariant is `>`, so `<=`
+        // refuses even the tight boundary). `retries = 3` with
+        // `max_failures = 3` means the breaker trips on the third
+        // failure — the last declared retry attempt is blocked.
+        // Catches a future relaxation to `>=` that would silently
+        // drift the accept boundary.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(3);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 3,
+            window: Duration::from_secs(60),
+        });
+        s.politicas.rate_limit = None;
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                retries: 3,
+                max_failures: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn cross_axis_retries_gate_vacuous_when_retries_absent() {
+        // The predicate is vacuously `true` when `:retries` is None —
+        // a `:circuit-breaker` alone declares a failure counter whose
+        // per-client attempt count is unconstrained by the substrate,
+        // so no per-client saturation bound on failures-per-client-call
+        // is knowable at author time. The substrate takes no position
+        // on whether an omitted `:retries` axis means zero retries or
+        // "the client picks its own retry policy" — either way, the
+        // pair is undeclared and the cross-axis gate has nothing to
+        // check. Pin so a future tightening that made the gate
+        // opinionated on half-declared pairs surfaces here.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 1,
+            window: Duration::from_secs(60),
+        });
+        s.politicas.rate_limit = None;
+        s.validate().expect(
+            "cross-axis retries gate must be vacuous when :retries is None, \
+             however low :max-failures is",
+        );
+    }
+
+    #[test]
+    fn cross_axis_retries_gate_vacuous_when_circuit_breaker_absent() {
+        // Peer of the sibling `:retries`-absent case: a `:retries`
+        // without a `:circuit-breaker` declares a client-retry policy
+        // with no failure counter to trip, so the pair is undeclared
+        // and the cross-axis gate has nothing to check.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(POLICY_RETRIES_MAX);
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = None;
+        s.validate().expect(
+            "cross-axis retries gate must be vacuous when :circuit-breaker is None, \
+             however high :retries is",
+        );
+    }
+
+    #[test]
+    fn cross_axis_retries_gate_runs_after_per_axis_brackets() {
+        // Ordering pin: a pair whose retries is *both* zero-floor-
+        // violating and structurally at-or-below the trip threshold
+        // must surface the per-axis zero-floor arm first — the
+        // zero-floor diagnostic is more self-locating (its omit-axis
+        // remediation is directly named), where the cross-axis arm
+        // would send the author to reconcile two values one of which
+        // is not a meaningful retry count at all. Same ordering
+        // discipline every per-axis bracket carries internally
+        // (zero-floor before canonical-form before cap), and the
+        // sibling cross-axis
+        // `PolicyRateLimitZero`-before-`PolicyBreakerCannotTripUnderRateLimit`
+        // ordering pins on the `(:rate-limit, :circuit-breaker)` pair.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(0);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 3,
+            window: Duration::from_secs(60),
+        });
+        s.politicas.rate_limit = None;
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRetriesZero,
+            "per-axis retries zero-floor arm must fire before the cross-axis retries gate"
+        );
+    }
+
+    #[test]
+    fn cross_axis_retries_gate_runs_after_sibling_starve_gate() {
+        // Cross-axis ordering pin: a `:politicas` whose axes trip
+        // BOTH cross-axis arms — `:rate-limit` starves the breaker
+        // within `:window` (the sibling
+        // `PolicyBreakerCannotTripUnderRateLimit` invariant) AND
+        // `:retries + 1` saturates `:max-failures` (this arm) — must
+        // surface the rate-limit-starve diagnostic first. The
+        // rate-limit-starve arm reasons across the token-bucket
+        // admission axis every rate-limited edge carries whether or
+        // not `:retries` is declared, so its diagnostic is more
+        // self-locating; the retries-saturate arm reasons across a
+        // per-client retry-policy budget the starve arm does not
+        // touch.
+        //
+        // A `{ retries: 5, rate: 1/h, max_failures: 5, cb_window: 10s }`
+        // pair trips both: the rate structurally cannot deliver 5
+        // failures per 10s breaker window, and simultaneously
+        // one client's `retries + 1 = 6` attempts alone would
+        // saturate the 5-`max_failures` threshold.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(5);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(3600),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                rate: 1,
+                rl_window: Duration::from_secs(3600),
+                max_failures: 5,
+                cb_window: Duration::from_secs(10),
+            },
+            "sibling :rate-limit-starve cross-axis arm must fire before the \
+             retries-saturate arm when both apply"
+        );
+    }
+
+    #[test]
+    fn retries_fit_under_breaker_trip_threshold_predicate_matches_gate_semantic() {
+        // Equivalence pin: the substrate-canonical
+        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`]
+        // predicate and the [`AplicacaoSpec::validate_politicas`]
+        // cross-axis arm must discriminate the same set on every pair
+        // covered by their shared invariant. A future refactor of
+        // either side that breaks the equivalence trips here rather
+        // than as a divergence between the predicate's Boolean answer
+        // and the validate gate's Ok/Err arm — the same
+        // predicate-vs-gate coherence discipline the sibling
+        // [`MeshPolicy::breaker_window_observes_timeout`] and
+        // [`MeshPolicy::breaker_can_trip_under_rate_limit`] predicates
+        // carry against `AplicacaoSpec::validate_politicas`. The
+        // sweep covers both arms of the invariant (strictly below,
+        // exactly at the boundary, strictly above) and both vacuous
+        // arms (None `:retries`, None `:circuit-breaker`), so the
+        // equivalence holds exhaustively over the axis-covered accept
+        // and reject sets. Clears `:timeout` and `:rate-limit`
+        // throughout so the sibling cross-axis arms are vacuous on
+        // every input.
+        let cb = |max_failures: u32| {
+            Some(CircuitBreaker {
+                max_failures,
+                window: Duration::from_secs(60),
+            })
+        };
+        let cases: &[(Option<u32>, Option<CircuitBreaker>)] = &[
+            // saturating pairs (predicate = false, gate = Err)
+            (Some(3), cb(3)),
+            (Some(3), cb(1)),
+            (Some(10), cb(5)),
+            // boundary + coherent pairs (predicate = true, gate = Ok)
+            (Some(3), cb(4)),
+            (Some(1), cb(5)),
+            (Some(3), cb(20)),
+            // vacuous arms
+            (None, cb(1)),
+            (Some(10), None),
+            (None, None),
+        ];
+        for (retries, circuit_breaker) in cases.iter().copied() {
+            let politicas = MeshPolicy {
+                retries,
+                circuit_breaker,
+                ..Default::default()
+            };
+            let predicate = politicas.retries_fit_under_breaker_trip_threshold();
+
+            let mut s = three_member_spec();
+            s.politicas = politicas.clone();
+            let gate_ok = !matches!(
+                s.validate(),
+                Err(AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted { .. })
+            );
+
+            assert_eq!(
+                predicate, gate_ok,
+                "predicate must agree with validate arm on pair \
+                 (retries={retries:?}, circuit_breaker={circuit_breaker:?})"
             );
         }
     }
