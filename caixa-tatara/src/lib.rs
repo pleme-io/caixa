@@ -144,9 +144,34 @@ pub enum Error {
     /// [`caixa_core::require_kind`] entry gate.
     #[error("{0}")]
     NotAnAplicacao(#[from] caixa_core::KindMismatch),
-    /// The caixa is missing its `:versao` — required to materialize a chart ref.
-    #[error("caixa is missing :versao — required to materialize chart_ref")]
-    MissingVersao,
+    /// The caixa's `:versao` slot failed the substrate's
+    /// [`caixa_core::manifest::Caixa::validate_versao`] two-arm cascade —
+    /// either empty ([`caixa_core::ManifestError::VersaoEmpty`], the
+    /// canonical "author omitted or blanked out the slot" arm) or not a
+    /// valid SemVer-2 version
+    /// ([`caixa_core::ManifestError::VersaoInvalid`], the canonical
+    /// "author supplied a git-tag-shape / docker-tag-shape / requirement-
+    /// shape / four-part-shape byte-string" arm). Wraps
+    /// [`caixa_core::ManifestError`] via `#[from]` so the diagnostic
+    /// naming the offending byte-string + a parser-shaped reason (in the
+    /// invalid arm) shares one typed view with every peer per-`Caixa`
+    /// consumer that routes through
+    /// [`caixa_core::require_valid_versao`], matching the peer
+    /// [`Self::NotAnAplicacao`] `#[from]` shape on the
+    /// [`caixa_core::KindMismatch`] view above. Pre-lift this crate
+    /// carried an inline `if caixa.versao().is_empty() { return
+    /// Err(Error::MissingVersao); }` gate that (a) checked only the
+    /// empty arm, silently accepting a SemVer-2-invalid byte-string past
+    /// the gate that then landed at the `AplicacaoIntent.version`
+    /// carrier and surfaced as a Helm chart-install rejection far from
+    /// the source `caixa.lisp`, and (b) surfaced a context-free
+    /// `"caixa is missing :versao — required to materialize chart_ref"`
+    /// diagnostic with no field naming the offending value — both
+    /// closed by routing through the substrate-canonical
+    /// [`caixa_core::require_valid_versao`] compound gate + the shared
+    /// [`caixa_core::ManifestError`] typed view.
+    #[error("{0}")]
+    InvalidVersao(#[from] caixa_core::ManifestError),
     /// Serialization to YAML/JSON failed.
     #[error("serialization: {0}")]
     Serialize(String),
@@ -229,23 +254,38 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
     // mandate names) — this lift closes that last per-renderer drift
     // surface on the shared kind-gate axis.
     caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
-    // Route the `:versao` presence + carry-through both through the typed
-    // [`caixa_core::Caixa::versao`] `&str`-return accessor rather than the
-    // raw `.versao` field access — closes the last unlifted per-`Caixa`
-    // `.versao.is_empty()` / `.versao.clone()` raw-field-access sites in
-    // this crate on the same universal-axis surface every peer per-`Caixa`
-    // renderer (caixa-helm eb912de / 05a7701, caixa-flux 2fc5f81,
-    // caixa-crd 41ab9a3) already routes the `:versao` scalar through.
-    // Byte-equal today (`Caixa::versao` is `&self.versao`); an accessor
-    // extension (SemVer-2 build-metadata canonicalization the
-    // CAIXA-SDLC §I SemVer-2 pin acknowledges, an OCI-tag normalization
-    // the M4 registry-alignment slot lands) reaches both the presence
-    // gate and the `AplicacaoIntent.version` carrier through one
-    // dispatch rather than two raw field-accesses in lockstep.
-    if caixa.versao().is_empty() {
-        return Err(Error::MissingVersao);
-    }
-    let versao = caixa.versao().to_owned();
+    // Route the `:versao` presence + carry-through both through the
+    // substrate-canonical [`caixa_core::require_valid_versao`] compound
+    // gate — one substrate helper folds the two-arm
+    // [`caixa_core::manifest::Caixa::validate_versao`] cascade
+    // (empty-first → [`caixa_core::ManifestError::VersaoEmpty`],
+    // SemVer-2-shape-invalid →
+    // [`caixa_core::ManifestError::VersaoInvalid { versao, reason }`])
+    // and hands back the validated `&str` for the downstream
+    // [`AplicacaoIntent::version`] carrier the tatara reconciler passes
+    // to Helm's SemVer-2-strict `Chart.yaml::version` field. Pre-lift
+    // this site carried an inline `if caixa.versao().is_empty()` gate
+    // that checked only the empty arm; a struct-literal
+    // `Caixa { versao: "0.1".into(), .. }` through the public field or
+    // a fixture that mutates `caixa.versao` past
+    // [`caixa_core::Caixa::from_lisp`] silently landed a
+    // SemVer-2-invalid byte-string at the emit boundary and surfaced
+    // far from the source `caixa.lisp` as a Helm chart-install
+    // rejection with no field naming the offending `:versao`. The
+    // compound gate closes both drift arms structurally — every
+    // `:versao` past this call site is guaranteed-round-trippable
+    // through `semver::Version::parse`, so the future substrate
+    // consumers the compound-gate docstring names
+    // (`sui-supercacheci::canteiro::emit_gha`,
+    // the M4 admission webhook, `feira publish`'s `v<versao>` git-tag
+    // materializer) can rely on the value's shape without re-validating
+    // at the renderer layer. Same trajectory as the peer per-Servico
+    // [`caixa_core::require_v0_servico_shape`] compound entry gate
+    // (`caixa-helm`, `caixa-flux`) and the peer per-Aplicacao
+    // [`caixa_core::require_aplicacao_view`] compound entry gate
+    // (`caixa-mesh`) already carry — one substrate helper per compound
+    // gate, one `#[from]` arm on the shared typed view.
+    let versao = caixa_core::require_valid_versao::<Error>(caixa)?.to_owned();
 
     let chart_ref = derive_chart_ref(caixa, &inputs.registry);
     // Route the `AplicacaoIntent.release_name` `lareira-<nome>` chart-
@@ -1043,37 +1083,141 @@ mod tests {
     }
 
     #[test]
-    fn missing_versao_gate_routes_through_caixa_versao_accessor() {
-        // Peer-arm pin on the `:versao` presence gate in
-        // `process_for_aplicacao`. Before this converge the gate read
-        // through the raw `caixa.versao.is_empty()` field-access; now
-        // it routes through `caixa.versao().is_empty()` — same
-        // universal-axis accessor the sibling `AplicacaoIntent.version`
-        // carry-through consults. Pin the gate's behavior against the
-        // accessor's return value so a regression that re-inlines the
-        // raw field on either side (the presence gate or the carry-
-        // through) surfaces at build time.
+    fn versao_gate_routes_through_require_valid_versao() {
+        // Peer-arm pin on the `:versao` gate in
+        // `process_for_aplicacao`. Pre-lift the gate carried an inline
+        // `if caixa.versao().is_empty() { return
+        // Err(Error::MissingVersao); }` two-liner that (a) checked only
+        // the empty arm — a SemVer-2-invalid `:versao` past
+        // [`caixa_core::manifest::Caixa::from_lisp`] (a fixture that
+        // mutates the public `versao` field, a struct-literal caller
+        // that bypasses [`Caixa::from_lisp`]) silently passed through
+        // to the `AplicacaoIntent.version` carrier the tatara
+        // reconciler hands to Helm's SemVer-2-strict `Chart.yaml::
+        // version` field — and (b) surfaced a context-free
+        // `Error::MissingVersao` diagnostic with no field naming the
+        // offending byte-string.
         //
-        // A `:versao ""` shape is rejected at `Caixa::from_lisp` parse
-        // time by the `caixa-core` `validate_versao` cascade (the
-        // per-`Caixa` universal-axis gate at
-        // caixa-core/src/manifest.rs:646), so this test doesn't
-        // exercise the runtime `MissingVersao` arm through a parse-
-        // valid fixture — instead it structurally pins the fact that
-        // `Caixa::versao()` returns `&str` (the same shape
-        // `String::is_empty()` had before the converge, so the gate's
-        // boolean semantics are preserved byte-for-byte).
+        // Post-lift the gate routes through the substrate-canonical
+        // [`caixa_core::require_valid_versao`] compound helper —
+        // structural mirror of the sibling per-Servico
+        // [`caixa_core::require_v0_servico_shape`] and per-Aplicacao
+        // [`caixa_core::require_aplicacao_view`] compound entry gates —
+        // which folds the two-arm
+        // [`caixa_core::manifest::Caixa::validate_versao`] cascade
+        // (empty-first → [`caixa_core::ManifestError::VersaoEmpty`],
+        // SemVer-2-shape-invalid →
+        // [`caixa_core::ManifestError::VersaoInvalid { versao, reason }`])
+        // and hands back the validated `&str`. Sample fixture holds a
+        // non-empty, SemVer-2-valid `:versao` so this pin exercises
+        // the happy-path arm — the empty + invalid arms are pinned
+        // separately on the sibling
+        // `versao_gate_rejects_empty_versao_through_manifest_error`
+        // / `versao_gate_rejects_semver_invalid_versao_through_manifest_error`
+        // pin pair.
         let caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
         assert!(
             !caixa.versao().is_empty(),
             "sample fixture's :versao must be non-empty for the emit path \
              to reach the AplicacaoIntent compose site (rules out a false-\
-             positive on the presence gate's carry-through pin)"
+             positive on the versao gate's carry-through pin)"
         );
-        // Non-`&str`-return regression sentinel: `Caixa::versao()` must
-        // return a `&str` so the `.is_empty()` boolean projection the
-        // gate performs on the accessor's return value binds to
-        // `str::is_empty` (identical semantics to `String::is_empty`).
+        // The happy path emits a `Process` — no gate rejection past
+        // the substrate's `validate_versao` cascade.
+        process_for_aplicacao(&caixa, &sample_inputs()).expect("valid caixa emits");
+        // Non-`&str`-return regression sentinel: `Caixa::versao()`
+        // must return a `&str` so the substrate-side
+        // `caixa_core::require_valid_versao` helper's `Ok(&str)`
+        // return-type binds to the caller's `.to_owned()` `&str →
+        // String` promotion at the emit site.
         let _: &str = caixa.versao();
+    }
+
+    #[test]
+    fn versao_gate_rejects_empty_versao_through_manifest_error() {
+        // Fail-before-pass-after pin on the empty arm of the compound
+        // [`caixa_core::require_valid_versao`] gate this crate's
+        // `process_for_aplicacao` routes `:versao` through. Pre-lift
+        // the inline `if caixa.versao().is_empty()` gate surfaced a
+        // context-free `Error::MissingVersao` diagnostic with no
+        // field naming the offending caixa or its (empty) `:versao`
+        // byte-string. Post-lift the gate routes through the
+        // substrate-canonical
+        // [`caixa_core::manifest::Caixa::validate_versao`] two-arm
+        // cascade, so the empty arm surfaces the substrate's own
+        // self-locating [`caixa_core::ManifestError::VersaoEmpty`]
+        // diagnostic (whose Display body names the load-bearing
+        // downstream consumers the empty `:versao` breaks — the
+        // `lareira-<nome>` Helm chart's `Chart.yaml` version +
+        // appVersion, the `feira publish` `v<versao>` git tag, the
+        // OCI image's `:v<versao>` / `:latest` tags, the lacre
+        // closure's `concrete_versao`, and the `:upgrade-from :from`
+        // peers). [`caixa_core::Caixa::from_lisp`] does not gate the
+        // top-level `:versao` value-shape at parse time (that gate
+        // lives in [`caixa_core::manifest::Caixa::validate_versao`],
+        // called by the `feira build` cascade), so the fixture
+        // constructs a parse-valid caixa and clears its `:versao`
+        // through the public `versao` field — the same shape a
+        // caller that bypasses the `feira build` gate (a struct-
+        // literal, a fixture that mutates past `from_lisp`, the
+        // deferred M4 admission webhook running its own compound
+        // gate) would reach.
+        let mut caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        caixa.versao.clear();
+        let err = process_for_aplicacao(&caixa, &sample_inputs()).unwrap_err();
+        match err {
+            Error::InvalidVersao(caixa_core::ManifestError::VersaoEmpty) => {}
+            other => panic!(
+                "expected Error::InvalidVersao(ManifestError::VersaoEmpty) on an empty :versao, \
+                 got {other:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn versao_gate_rejects_semver_invalid_versao_through_manifest_error() {
+        // Fail-before-pass-after pin on the SemVer-2-shape-invalid
+        // arm of the compound [`caixa_core::require_valid_versao`]
+        // gate this crate's `process_for_aplicacao` routes `:versao`
+        // through. This arm is the load-bearing widening: pre-lift
+        // the inline `if caixa.versao().is_empty()` gate accepted
+        // every non-empty byte-string — including canonical
+        // paste-from-doc footguns the substrate's
+        // [`caixa_core::manifest::Caixa::validate_versao`] cascade
+        // documents (`"0.1"` — the two-part-shape drift missing the
+        // patch component; `"v0.1.0"` — the git-tag-shape leaking
+        // into the manifest slot; `"latest"` — the docker-tag-shape
+        // leaking; `"^0.1"` — the requirement-shape leaking; a
+        // four-part `"0.1.0.0"`) — and the `AplicacaoIntent.version`
+        // carrier the tatara reconciler hands to Helm's SemVer-2-
+        // strict `Chart.yaml::version` field surfaced the failure
+        // far from the source caixa.lisp, with no field naming the
+        // offending byte-string. Post-lift the gate routes through
+        // the substrate cascade so every invalid arm surfaces the
+        // substrate's own self-locating
+        // [`caixa_core::ManifestError::VersaoInvalid`] diagnostic
+        // carrying the offending value + a parser-shaped reason
+        // — the author can grep their `caixa.lisp` for
+        // `:versao "<value>"` and fix it in one edit.
+        let mut caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        caixa.versao = "0.1".to_string();
+        let err = process_for_aplicacao(&caixa, &sample_inputs()).unwrap_err();
+        match err {
+            Error::InvalidVersao(caixa_core::ManifestError::VersaoInvalid { versao, reason }) => {
+                assert_eq!(
+                    versao, "0.1",
+                    "VersaoInvalid must carry the offending byte-string verbatim"
+                );
+                assert!(
+                    !reason.is_empty(),
+                    "VersaoInvalid must thread the parser's non-empty `reason` for the author's \
+                     remediation prose"
+                );
+            }
+            other => panic!(
+                "expected Error::InvalidVersao(ManifestError::VersaoInvalid {{ .. }}) on a \
+                 SemVer-2-shape-invalid :versao, got {other:?}"
+            ),
+        }
     }
 }
