@@ -772,14 +772,14 @@ fn classify(items: &[Node], delims: Delims, keep_comments: bool) -> FormShape {
     // A special form's header shares the opening line. Checked before the
     // plist test for the same reason as `Command`: `(if :ok a :no b)` would
     // otherwise fold as kwargs and hide the test.
-    if delims.open == '(' {
-        if let Some(distinguished) = special_head_arity(items) {
-            // Only if the header operands actually exist — `(if)` alone is
-            // a degenerate form and falls through to the ordinary shapes
-            // rather than indexing past the end.
-            if items.len() > distinguished {
-                return FormShape::Special { distinguished };
-            }
+    if delims.open == '('
+        && let Some(distinguished) = special_head_arity(items)
+    {
+        // Only if the header operands actually exist — `(if)` alone is
+        // a degenerate form and falls through to the ordinary shapes
+        // rather than indexing past the end.
+        if items.len() > distinguished {
+            return FormShape::Special { distinguished };
         }
     }
 

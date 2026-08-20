@@ -345,14 +345,14 @@ fn print_status_summary(p: &Process) {
         println!("  attestation generation: {}", att.generation);
         println!("  composed_root: {}", att.composed_root);
     }
-    if let Some(s) = status {
-        if !s.boundary.postconditions.is_empty() {
-            println!("  postconditions:");
-            for c in &s.boundary.postconditions {
-                let mark = if c.satisfied { "✓" } else { "✗" };
-                let msg = c.message.as_deref().unwrap_or("");
-                println!("    {mark} {:?}  {msg}", c.condition.kind);
-            }
+    if let Some(s) = status
+        && !s.boundary.postconditions.is_empty()
+    {
+        println!("  postconditions:");
+        for c in &s.boundary.postconditions {
+            let mark = if c.satisfied { "✓" } else { "✗" };
+            let msg = c.message.as_deref().unwrap_or("");
+            println!("    {mark} {:?}  {msg}", c.condition.kind);
         }
     }
 }
