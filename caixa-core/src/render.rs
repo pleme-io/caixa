@@ -26594,6 +26594,80 @@ pub fn require_valid_versao_requirement<E>(
     Ok(())
 }
 
+/// Compound per-Caixa `:versao`-slot entry gate: routes a `&Caixa`'s
+/// top-level manifest-version scalar through the canonical
+/// [`crate::manifest::Caixa::validate_versao`] two-arm cascade
+/// (empty-first → [`crate::ManifestError::VersaoEmpty`],
+/// SemVer-2-shape-invalid → [`crate::ManifestError::VersaoInvalid { versao, reason }`])
+/// and hands back the validated `&str` on success, so a downstream
+/// renderer that consumes the manifest's `:versao` operationally can
+/// read the compound "gate + borrow" step as one call site rather
+/// than a hand-spelled `caixa.validate_versao()?; let v =
+/// caixa.versao();` two-step.
+///
+/// The single existing production call site collapses onto this
+/// helper — [`caixa_tatara::process_for_aplicacao`]'s per-Aplicacao
+/// `:versao` presence gate (pre-lift: an inline
+/// `if caixa.versao().is_empty() { return Err(Error::MissingVersao); }`
+/// checked only the empty arm; the SemVer-2-shape-invalid arm was a
+/// runtime, not build-time, contract on every author who bypassed
+/// [`crate::manifest::Caixa::validate_versao`] at the `feira build`
+/// gate — a struct-literal `Caixa { versao: "0.1".into(), .. }`
+/// through the public field, a fixture that mutates `caixa.versao`
+/// after [`crate::manifest::Caixa::from_lisp`], the deferred
+/// [`AplicacaoIntent::version`][ai-v] carrier the tatara reconciler
+/// hands to Helm's SemVer-2-strict `Chart.yaml::version` field —
+/// silently landed a semver-malformed byte-string at the emit
+/// boundary and surfaced far from the source caixa.lisp as a Helm
+/// chart-install rejection with no field naming the offending
+/// `:versao`).
+///
+/// The compound-gate posture matches the peer per-Servico
+/// [`require_v0_servico_shape`] compound entry gate and the peer
+/// per-Aplicacao [`require_aplicacao_view`] / per-`Acao`
+/// [`require_acao_view`] compound entry gates: each collapses a
+/// hand-spelled prelude (typed kind gate → typed-slot presence gate
+/// → typed-view validation) onto one substrate helper the caller
+/// reads as intent. Every future per-Caixa renderer that consumes
+/// `:versao` operationally (a `sui-supercacheci::canteiro::emit_gha`
+/// per-`Acao` workflow renderer stamping the run with the caixa's
+/// version, the deferred per-Caixa CR materializer's admission
+/// webhook, a future `feira publish` verb that materializes a
+/// `v<versao>` git tag from the typed slot) gets the two-arm cascade
+/// paired with the validated-`:versao` return contract for free with
+/// one call, instead of re-inlining a subset of the substrate's own
+/// gate cascade.
+///
+/// The generic error type `E` accepts every renderer's local
+/// [`thiserror`] `Error` enum that carries [`crate::ManifestError`]
+/// via `#[from]` (`caixa_tatara::Error`, and every future per-Caixa
+/// renderer that wires the `#[from]` arm as the substrate-canonical
+/// versao-view carrier). Type inference at the call site resolves
+/// `E` from the caller's `?` return type, matching the sibling
+/// [`require_v0_servico_shape`] / [`require_aplicacao_view`] /
+/// [`require_acao_view`] convention.
+///
+/// [ai-v]: https://docs.rs/tatara-process
+///
+/// # Errors
+///
+/// Returns the caller's `E` wrapping a [`crate::ManifestError`] when
+/// [`crate::manifest::Caixa::validate_versao`] rejects the caixa's
+/// `:versao` — [`crate::ManifestError::VersaoEmpty`] on the empty
+/// arm, [`crate::ManifestError::VersaoInvalid { versao, reason }`]
+/// on the SemVer-2-shape-invalid arm. Order matches the underlying
+/// [`crate::manifest::Caixa::validate_versao`] cascade: the empty
+/// arm fires first so a literal `""` surfaces the narrower
+/// self-locating diagnostic rather than the misleading SemVer-parser
+/// output for the empty string.
+pub fn require_valid_versao<E>(caixa: &crate::manifest::Caixa) -> Result<&str, E>
+where
+    E: From<crate::ManifestError>,
+{
+    caixa.validate_versao()?;
+    Ok(caixa.versao())
+}
+
 /// Bracket a K8s DNS-1123-label-shaped axis with the shared
 /// "empty-first, then [`is_dns_1123_label`]" gate pair every Servico-
 /// name reference slot carries. Returns `on_empty()` when
@@ -41854,6 +41928,110 @@ mod tests {
                     );
                 }
                 other => panic!("expected Invalid for {bad:?}, got {other:?}"),
+            }
+        }
+    }
+
+    // ── require_valid_versao ────────────────────────────────────────────
+
+    #[derive(Debug, PartialEq, Eq, thiserror::Error)]
+    enum VersaoManifestTestErr {
+        #[error("{0}")]
+        Manifest(#[from] crate::ManifestError),
+    }
+
+    fn parse_valid_aplicacao_fixture() -> crate::manifest::Caixa {
+        crate::manifest::Caixa::from_lisp(
+            r#"(defcaixa
+                  :nome "hello-tatara"
+                  :versao "0.1.0"
+                  :kind Aplicacao
+                  :membros ())"#,
+        )
+        .expect("parse fixture caixa")
+    }
+
+    #[test]
+    fn require_valid_versao_accepts_semver_2_valid_versao_and_returns_borrowed_str() {
+        // Happy-path pin: a caixa carrying a SemVer-2-valid `:versao`
+        // must round-trip cleanly through the compound gate, and the
+        // returned `&str` must borrow into the caixa's own storage —
+        // no extra allocation, no substitute value. Mirrors the
+        // sibling per-axis happy-path pins on
+        // [`require_valid_versao_requirement`] /
+        // [`require_valid_dns_1123_label`].
+        let caixa = parse_valid_aplicacao_fixture();
+        let out =
+            require_valid_versao::<VersaoManifestTestErr>(&caixa).expect("valid :versao passes");
+        assert_eq!(
+            out, "0.1.0",
+            "helper must hand back the caixa's :versao verbatim"
+        );
+        assert_eq!(
+            out.as_ptr(),
+            caixa.versao().as_ptr(),
+            "helper must borrow into the caixa's :versao storage rather than allocating a copy"
+        );
+    }
+
+    #[test]
+    fn require_valid_versao_rejects_empty_through_manifest_error_versao_empty() {
+        // Fail-before-pass-after pin on the empty arm. The substrate's
+        // [`crate::manifest::Caixa::from_lisp`] does not gate the
+        // top-level `:versao` value-shape at parse time (that gate
+        // lives in [`crate::manifest::Caixa::validate_versao`]); the
+        // fixture parses a valid caixa and clears its `:versao`
+        // through the public `versao` field — the same shape a caller
+        // that bypasses the `feira build` gate (a struct-literal, the
+        // deferred M4 admission webhook, a fixture that mutates past
+        // `from_lisp`) reaches. The helper's empty arm surfaces the
+        // substrate-canonical [`crate::ManifestError::VersaoEmpty`]
+        // variant verbatim through the `#[from]` conversion on the
+        // caller's local error enum.
+        let mut caixa = parse_valid_aplicacao_fixture();
+        caixa.versao.clear();
+        let err = require_valid_versao::<VersaoManifestTestErr>(&caixa).unwrap_err();
+        assert_eq!(
+            err,
+            VersaoManifestTestErr::Manifest(crate::ManifestError::VersaoEmpty),
+            "empty :versao must surface ManifestError::VersaoEmpty via the caller's #[from] arm"
+        );
+    }
+
+    #[test]
+    fn require_valid_versao_rejects_semver_2_invalid_with_offending_value_and_reason_threaded() {
+        // Fail-before-pass-after pin on the invalid arm. The canonical
+        // SemVer-2-invalid shape set (the same the substrate's own
+        // [`crate::manifest::Caixa::validate_versao`] tests enumerate:
+        // `"0.1"` — two-part-shape missing patch; `"v0.1.0"` — git-tag-
+        // shape leak; `"latest"` — docker-tag-shape leak; `"^0.1"` —
+        // requirement-shape leak; `"0.1.0.0"` — four-part-shape drift)
+        // each surface the substrate-canonical
+        // [`crate::ManifestError::VersaoInvalid`] variant carrying the
+        // offending value verbatim + a parser-shaped reason for the
+        // author's remediation prose.
+        for bad in ["0.1", "v0.1.0", "latest", "^0.1", "0.1.0.0"] {
+            let mut caixa = parse_valid_aplicacao_fixture();
+            caixa.versao = bad.to_string();
+            let err = require_valid_versao::<VersaoManifestTestErr>(&caixa).unwrap_err();
+            match err {
+                VersaoManifestTestErr::Manifest(crate::ManifestError::VersaoInvalid {
+                    versao,
+                    reason,
+                }) => {
+                    assert_eq!(
+                        versao, bad,
+                        "VersaoInvalid must carry the offending :versao byte-string verbatim for \
+                         {bad:?}"
+                    );
+                    assert!(
+                        !reason.is_empty(),
+                        "VersaoInvalid must thread a non-empty parser-shaped `reason` for {bad:?}"
+                    );
+                }
+                other @ VersaoManifestTestErr::Manifest(_) => {
+                    panic!("expected Manifest(VersaoInvalid) for {bad:?}, got {other:?}")
+                }
             }
         }
     }
