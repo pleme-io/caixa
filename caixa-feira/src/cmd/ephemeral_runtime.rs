@@ -118,8 +118,7 @@ pub async fn wait_for_phase(
         let phase = current
             .status
             .as_ref()
-            .map(|s| s.phase)
-            .unwrap_or(ProcessPhase::Pending);
+            .map_or(ProcessPhase::Pending, |s| s.phase);
 
         if phase == target {
             return Ok(current);

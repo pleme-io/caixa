@@ -170,14 +170,12 @@ impl ListArgs {
                 let phase = a
                     .status
                     .as_ref()
-                    .map(|s| format!("{:?}", s.phase))
-                    .unwrap_or_else(|| "Pending".into());
+                    .map_or_else(|| "Pending".into(), |s| format!("{:?}", s.phase));
                 let pool = a
                     .status
                     .as_ref()
                     .and_then(|s| s.bound_pool.as_ref())
-                    .map(|p| p.name.as_str())
-                    .unwrap_or("-");
+                    .map_or("-", |p| p.name.as_str());
                 let kind = a.spec.requestor.kind.as_str();
                 let actor = a
                     .spec
