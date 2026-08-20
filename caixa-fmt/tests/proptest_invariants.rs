@@ -34,10 +34,10 @@ const CORPUS: &[&str] = &[
   :nome main
   :atributos (:cidr-block "10.0.0.0/16"
               :tags (:name "main")))"#,
-    r#"(defteia :tipo aws/igw :nome main :atributos (:vpc-id (ref aws/vpc main id)))"#,
+    r"(defteia :tipo aws/igw :nome main :atributos (:vpc-id (ref aws/vpc main id)))",
     r#"(deflacre :versao-lacre "0.1.0" :raiz "blake3:abc" :entradas ())"#,
-    r#";; a leading comment
-(a b c)"#,
+    r";; a leading comment
+(a b c)",
     "(nested (deep (call (chain :k v))))",
 ];
 

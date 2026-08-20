@@ -715,7 +715,7 @@ mod tests {
         // Regression: `(enum :A :B :C :D :E)` is a positional list of
         // keyword tag values, NOT a kwargs cluster. Earlier the
         // paired-kwargs heuristic mis-fired on every odd-arity enum.
-        let src = r#"(defschema P :framework (enum :NIST-800-53 :OSCAL :FedRAMP :CIS :Armo))"#;
+        let src = r"(defschema P :framework (enum :NIST-800-53 :OSCAL :FedRAMP :CIS :Armo))";
         let d = lint(src);
         assert!(
             d.iter().all(|d| d.rule_id != "paired-kwargs"),
@@ -727,7 +727,7 @@ mod tests {
     fn case_with_keyword_dispatch_is_not_flagged_as_kwargs() {
         // `(case x :a 1 :b 2 :c)` — the trailing :c is a fall-through
         // tag, not a dangling kwarg. Skip via POSITIONAL_KW_HEADS.
-        let src = r#"(defn f (x) (case x :a 1 :b 2 :c))"#;
+        let src = r"(defn f (x) (case x :a 1 :b 2 :c))";
         let d = lint(src);
         assert!(
             d.iter().all(|d| d.rule_id != "paired-kwargs"),
@@ -739,7 +739,7 @@ mod tests {
     fn real_dangling_kwarg_still_flagged() {
         // Confirm the rule still fires on legitimate dangling kwargs
         // — `(make :a 1 :b 2 :c)` has 5 post-head with :c trailing.
-        let src = r#"(make-thing :a 1 :b 2 :c)"#;
+        let src = r"(make-thing :a 1 :b 2 :c)";
         let d = lint(src);
         assert!(
             d.iter().any(|d| d.rule_id == "paired-kwargs"),

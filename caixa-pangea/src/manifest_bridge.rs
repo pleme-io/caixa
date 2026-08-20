@@ -114,8 +114,7 @@ mod tests {
 
     #[test]
     fn lowers_ref_as_interpolation() {
-        let src =
-            r#"(defteia :tipo aws/igw :nome main :atributos (:vpc-id (ref aws/vpc main id)))"#;
+        let src = r"(defteia :tipo aws/igw :nome main :atributos (:vpc-id (ref aws/vpc main id)))";
         let m = parse_teia_source(src).unwrap();
         let (_, _, block) = InstanceToHcl.mutate(&m.instances[0]);
         assert_eq!(block.get("vpc_id").unwrap(), "${aws_vpc.main.id}");

@@ -1431,7 +1431,7 @@ mod tests {
 
     #[test]
     fn map_and_vector_round_trip_semantics() {
-        let src = r#"(defcaixa d :package { :a 1 :b [ 2 3 ] } :v [ { :c 4 } ])"#;
+        let src = r"(defcaixa d :package { :a 1 :b [ 2 3 ] } :v [ { :c 4 } ])";
         let a = parse(src).unwrap();
         let out = format_nodes(&a, &FmtConfig::default());
         let b = parse(&out).unwrap();

@@ -21,10 +21,10 @@ fn shapes() {
             "data table",
             r#"[("us-east-1" 3 "healthy") ("us-west-2" 12 "degraded") ("eu-west-1" 1 "healthy")]"#,
         ),
-        ("matrix", r#"[[1 22 333] [4444 5 66] [7 888 9]]"#),
+        ("matrix", r"[[1 22 333] [4444 5 66] [7 888 9]]"),
         ("floats", r#"[("cpu" 0.5) ("mem" 12.25) ("disk" 100.0)]"#),
-        ("ragged -> falls back", r#"[(1 2 3) (4 5) (6 7 8)]"#),
-        ("nested cell -> falls back", r#"[(1 (a b)) (2 (c d))]"#),
+        ("ragged -> falls back", r"[(1 2 3) (4 5) (6 7 8)]"),
+        ("nested cell -> falls back", r"[(1 (a b)) (2 (c d))]"),
     ] {
         println!("--- {label} ---\n{}", fmt(src));
     }
@@ -40,6 +40,6 @@ fn numbers_right_align_so_outliers_are_visible() {
 #[test]
 fn a_ragged_table_is_not_a_grid() {
     // Different arity => no columns exist => must not pretend.
-    let out = fmt(r#"[(1 2 3) (4 5) (6 7 8)]"#);
+    let out = fmt(r"[(1 2 3) (4 5) (6 7 8)]");
     assert!(!out.contains("(4 5 )"), "padded a ragged row:\n{out}");
 }

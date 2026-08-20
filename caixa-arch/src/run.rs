@@ -86,9 +86,9 @@ mod tests {
 
     #[test]
     fn unresolved_ref_is_rejected() {
-        let src = r#"
+        let src = r"
 (defteia :tipo aws/igw :nome main :atributos (:vpc-id (ref aws/vpc missing id)))
-"#;
+";
         let m = parse_teia_source(src).unwrap();
         let r = check_manifest(&m, &[]);
         assert_eq!(r.verdict, ArchVerdict::Rejected);
