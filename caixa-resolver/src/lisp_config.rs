@@ -88,20 +88,18 @@ impl ResolverConfig {
         };
         let dir = base.join("caixa");
         let lisp = dir.join("config.lisp");
-        if lisp.exists() {
-            if let Ok(src) = std::fs::read_to_string(&lisp) {
-                if let Ok(parsed) = ResolverConfigLisp::from_lisp(&src) {
-                    return parsed.into_runtime();
-                }
-            }
+        if lisp.exists()
+            && let Ok(src) = std::fs::read_to_string(&lisp)
+            && let Ok(parsed) = ResolverConfigLisp::from_lisp(&src)
+        {
+            return parsed.into_runtime();
         }
         let yaml = dir.join("config.yaml");
-        if yaml.exists() {
-            if let Ok(src) = std::fs::read_to_string(&yaml) {
-                if let Ok(cfg) = serde_yaml::from_str::<Self>(&src) {
-                    return cfg;
-                }
-            }
+        if yaml.exists()
+            && let Ok(src) = std::fs::read_to_string(&yaml)
+            && let Ok(cfg) = serde_yaml::from_str::<Self>(&src)
+        {
+            return cfg;
         }
         Self::default()
     }
