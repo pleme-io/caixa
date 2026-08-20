@@ -20929,14 +20929,17 @@ mod tests {
         // (27f9b34) cross-const invariant pin discipline on the peer
         // canonical-Helm-per-values-block child-chart-enablement-toggle
         // axis pair.
-        assert!(
-            SERVICO_PORT_MIN <= DEFAULT_SERVICO_PORT,
-            "the substrate's canonical default port ({DEFAULT_SERVICO_PORT}) must \
-             satisfy its own accept-set floor (SERVICO_PORT_MIN = {SERVICO_PORT_MIN}) — \
-             every default-carrying `(:entrada (:host … :para …))` slot without an \
-             explicit `:port` inherits `DEFAULT_SERVICO_PORT` through the serde default \
-             hook and must pass the `AplicacaoSpec::validate` floor gate by construction"
-        );
+        const {
+            assert!(
+                SERVICO_PORT_MIN <= DEFAULT_SERVICO_PORT,
+                "the substrate's canonical default port DEFAULT_SERVICO_PORT \
+                 must satisfy its own accept-set floor SERVICO_PORT_MIN — \
+                 every default-carrying `(:entrada (:host … :para …))` slot \
+                 without an explicit `:port` inherits `DEFAULT_SERVICO_PORT` \
+                 through the serde default hook and must pass the \
+                 `AplicacaoSpec::validate` floor gate by construction",
+            );
+        }
     }
 
     #[test]
