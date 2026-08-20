@@ -22,36 +22,26 @@ fn line_is_unbreakable(line: &str) -> bool {
     let mut longest = 0usize;
     let (mut cur, mut in_str, mut esc) = (0usize, false, false);
     for c in t.chars() {
-        match () {
-            _ if esc => {
-                esc = false;
-                cur += 1;
-            }
-            _ if in_str && c == '\\' => {
-                esc = true;
-                cur += 1;
-            }
-            _ if c == '"' => {
-                in_str = !in_str;
-                cur += 1;
-                if !in_str {
-                    longest = longest.max(cur);
-                    cur = 0;
-                }
-            }
-            _ if in_str => cur += 1,
-            _ if c.is_whitespace()
-                || c == '('
-                || c == ')'
-                || c == '['
-                || c == ']'
-                || c == '{'
-                || c == '}' =>
-            {
+        if esc {
+            esc = false;
+            cur += 1;
+        } else if in_str && c == '\\' {
+            esc = true;
+            cur += 1;
+        } else if c == '"' {
+            in_str = !in_str;
+            cur += 1;
+            if !in_str {
                 longest = longest.max(cur);
                 cur = 0;
             }
-            _ => cur += 1,
+        } else if in_str {
+            cur += 1;
+        } else if c.is_whitespace() || matches!(c, '(' | ')' | '[' | ']' | '{' | '}') {
+            longest = longest.max(cur);
+            cur = 0;
+        } else {
+            cur += 1;
         }
     }
     longest = longest.max(cur);
@@ -81,9 +71,9 @@ fn line_is_unbreakable(line: &str) -> bool {
 
 #[test]
 fn fleet_corpus_respects_the_invariants() {
-    let list = match std::fs::read_to_string("/tmp/tl.txt") {
-        Ok(s) => s,
-        Err(_) => return, // corpus list absent — nothing to sweep
+    // corpus list absent — nothing to sweep
+    let Ok(list) = std::fs::read_to_string("/tmp/tl.txt") else {
+        return;
     };
     let (mut ok, mut parse_skip, mut over) = (0usize, 0usize, Vec::new());
     for rel in list.lines() {
