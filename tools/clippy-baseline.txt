@@ -130,7 +130,6 @@
 1	clippy::format_push_string	caixa-provedor/src/imports.rs
 1	clippy::doc_markdown	caixa-provedor/src/lib.rs
 1	clippy::must_use_candidate	caixa-resolver/src/config.rs
-4	clippy::collapsible_if	caixa-resolver/src/lisp_config.rs
 1	clippy::doc_markdown	caixa-resolver/src/lisp_config.rs
 1	clippy::must_use_candidate	caixa-resolver/src/lisp_config.rs
 1	clippy::match_wildcard_for_single_variants	caixa-resolver/src/resolve.rs
