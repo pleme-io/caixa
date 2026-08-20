@@ -33,7 +33,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE};
+use caixa_core::{Caixa, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE};
 
 /// Canonical OCI URL scheme prefix — the `"oci://"` byte-string every
 /// substrate-side renderer that composes an OCI artifact reference
@@ -172,6 +172,55 @@ pub enum Error {
     /// [`caixa_core::ManifestError`] typed view.
     #[error("{0}")]
     InvalidVersao(#[from] caixa_core::ManifestError),
+    /// The caixa's `:kind Aplicacao` typed view failed the substrate's
+    /// [`caixa_core::AplicacaoSpec::validate`] cascade or the paired
+    /// cross-slot [`caixa_core::aplicacao::validate_no_self_membership`]
+    /// self-edge gate — i.e. empty `:membros`, malformed / duplicate
+    /// per-`:membros` entry, `:contratos` naming an unknown member or
+    /// forming a synchronous cycle, `:placement` missing `:clusters` or
+    /// duplicating a cluster entry, `:entrada :para` naming an unknown
+    /// member, `:politicas` carrying an operationally-meaningless value
+    /// (zero timeout, zero retries, zero breaker thresholds, zero rate
+    /// limit — MESH-COMPOSITION §V), or a self-referential Aplicacao
+    /// that lists its own `:nome` as a `:membros` entry
+    /// ([`caixa_core::AplicacaoError::MembroIsSelfAplicacao`], the
+    /// one-node lacre-closure recursion the layout pipeline's
+    /// `validate_no_self_membership` cross-slot gate refuses). Wraps
+    /// [`caixa_core::AplicacaoError`] via `#[from]` so the diagnostic —
+    /// which names the offending Aplicacao / `:membros` entry /
+    /// `:contratos` edge / `:placement` cluster / `:entrada` field
+    /// verbatim per the substrate's typed-view error surface — shares
+    /// one typed view with every peer per-Aplicacao consumer that routes
+    /// through [`caixa_core::require_aplicacao_view`] (`caixa-mesh`'s
+    /// `typed_view` feeding `programs_for_aplicacao` /
+    /// `cilium_network_policies` / `gateway_routes`), matching the peer
+    /// [`Self::NotAnAplicacao`] `#[from]` shape on the
+    /// [`caixa_core::KindMismatch`] view above and the peer
+    /// [`caixa_mesh::Error::InvalidAplicacao`] `#[from]` shape on the
+    /// [`caixa_core::AplicacaoError`] view its sibling per-Aplicacao
+    /// renderer already carries. Pre-lift this crate's
+    /// `process_for_aplicacao` gate was strictly *weaker* than the
+    /// substrate's own author-time gate on every axis
+    /// [`caixa_core::AplicacaoSpec::validate`] +
+    /// [`caixa_core::aplicacao::validate_no_self_membership`] cover: a
+    /// `:kind Aplicacao` caixa with empty `:membros`, an unknown
+    /// `:contratos` member, a duplicate cluster entry, or a
+    /// self-referential `:membros` entry silently rendered a `Process`
+    /// CR whose `AplicacaoIntent.chart_ref` pointed at a chart the
+    /// resolver could not fully materialize (the empty-`:membros` case
+    /// produced a `Process` with no downstream member entries; the
+    /// self-referential case produced a one-node lacre-closure recursion
+    /// the resolver's traversal either refused far from the source
+    /// `caixa.lisp` or exhausted its stack on). Post-lift the tatara
+    /// renderer routes the compound four-arm cascade through
+    /// [`caixa_core::require_aplicacao_view`] — the same substrate
+    /// helper `caixa-mesh`'s `typed_view` already routes through — so
+    /// every per-Aplicacao renderer in the substrate accepts the same
+    /// set of Aplicacaos at emit time by construction, matching the
+    /// author-time [`caixa_core::StandardLayout::verify`] four-step
+    /// cascade byte-for-byte.
+    #[error("aplicacao typed shape violation: {0}")]
+    InvalidAplicacao(#[from] caixa_core::AplicacaoError),
     /// Serialization to YAML/JSON failed.
     #[error("serialization: {0}")]
     Serialize(String),
@@ -238,22 +287,43 @@ impl From<RenderEphemeralLifetime> for EphemeralLifetime {
 
 /// Render a `Caixa` (kind = Aplicacao) + `RenderInputs` to a `Process`.
 pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Process> {
-    // Route the kind gate through the canonical
-    // [`caixa_core::require_kind`] helper so caixa-tatara's per-Aplicacao
-    // entry-gate shares one `require_kind + KindMismatch` cascade with
-    // the peer per-Aplicacao renderer (`caixa-mesh`'s `typed_view` /
-    // `programs_for_aplicacao`) and the peer per-Servico renderers
-    // (`caixa-helm` / `caixa-flux`'s `require_v0_servico_shape`) —
-    // every caixa-side renderer's kind mismatch now surfaces a
-    // diagnostic that names the offending caixa's `:nome`, not just
-    // the rejected kind. The prior inline `if caixa.kind !=
-    // CaixaKind::Aplicacao { return Err(Error::NotAnAplicacao(caixa.
-    // kind)); }` block left this crate as the only per-kind renderer
-    // still on the pre-lift shape (the "feira verb whose error path
-    // doesn't name the offending caixa" punch-list item the compounding
-    // mandate names) — this lift closes that last per-renderer drift
-    // surface on the shared kind-gate axis.
-    caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
+    // Route the per-Aplicacao entry gate through the substrate-canonical
+    // [`caixa_core::require_aplicacao_view`] compound helper — the same
+    // four-arm cascade `caixa-mesh`'s `typed_view` routes through
+    // (`require_kind(Aplicacao)` + `Caixa::aplicacao_view` +
+    // [`caixa_core::AplicacaoSpec::validate`] +
+    // [`caixa_core::aplicacao::validate_no_self_membership`], matching
+    // the byte-for-byte four-step cascade
+    // [`caixa_core::StandardLayout::verify`] runs on the `feira build`
+    // author-time path). Pre-lift this site carried only the two-step
+    // `require_kind + require_valid_versao` prelude — strictly *weaker*
+    // than the substrate's own author-time gate on every axis
+    // [`caixa_core::AplicacaoSpec::validate`] +
+    // [`caixa_core::aplicacao::validate_no_self_membership`] cover: a
+    // `:kind Aplicacao` caixa with empty `:membros`, an unknown
+    // `:contratos` member, a duplicate `:placement` cluster, or a
+    // self-referential `:membros` entry rendered a `Process` CR whose
+    // `AplicacaoIntent.chart_ref` pointed at a chart the resolver could
+    // not fully materialize. Every prior per-Aplicacao renderer's
+    // three-arm compound-entry-gate docstring (the 3aefefb "every
+    // per-Aplicacao `caixa-<target>` renderer routes through
+    // ... caixa-tatara's `process_for_aplicacao`" claim) named this
+    // renderer as one of the callers already routed through the
+    // compound helper; the code carried the two-step prelude below the
+    // claim. This lift closes that comment-vs-code drift structurally
+    // and lands the same posture the peer per-Servico
+    // [`caixa_core::require_v0_servico_shape`] compound gate
+    // (`caixa-helm`, `caixa-flux`) and the sibling per-Aplicacao
+    // [`caixa_core::require_aplicacao_view`] compound gate
+    // (`caixa-mesh`) already take: one substrate helper per compound
+    // gate, one `#[from]` arm on each shared typed view. The returned
+    // [`caixa_core::AplicacaoSpec`] is discarded here because the
+    // downstream `Process`-CR emit body derives every scalar from
+    // per-`Caixa` accessors (`caixa.nome()`, `caixa.lareira_chart_name()`,
+    // `caixa.oci_chart_ref(...)`) rather than from the typed view — the
+    // helper's return value is a compound-gate posture-marker, not a
+    // structural dependency of the emit path.
+    caixa_core::require_aplicacao_view::<Error>(caixa)?;
     // Route the `:versao` presence + carry-through both through the
     // substrate-canonical [`caixa_core::require_valid_versao`] compound
     // gate — one substrate helper folds the two-arm
@@ -437,19 +507,36 @@ fn default_class() -> Classification {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use caixa_core::lareira_chart_name;
+    use caixa_core::{CaixaKind, lareira_chart_name};
     use pretty_assertions::assert_eq;
     use tatara_process::intent::IntentVariant;
     use tatara_process::lifetime::LifetimeVariant;
 
     fn sample_caixa_src() -> String {
-        // Smallest valid Aplicacao caixa.
+        // Smallest valid Aplicacao caixa past the compound
+        // [`caixa_core::require_aplicacao_view`] entry gate
+        // (`require_kind(Aplicacao)` + `Caixa::aplicacao_view` +
+        // [`caixa_core::AplicacaoSpec::validate`] +
+        // [`caixa_core::aplicacao::validate_no_self_membership`]) this
+        // crate's `process_for_aplicacao` now routes through. Pre-lift
+        // this fixture carried an empty `:membros ()` stanza — the
+        // tatara renderer's pre-lift kind-only gate accepted it and
+        // materialized a `Process` CR whose `AplicacaoIntent` pointed
+        // at a chart the resolver had no member entries to fan out on.
+        // Post-lift the substrate's own author-time cascade refuses
+        // empty `:membros` (`AplicacaoError::NoMembros`) and empty
+        // `:placement :clusters` (`AplicacaoError::PlacementWithoutClusters`),
+        // so this fixture ships one member entry (`"worker"`) and one
+        // hosting cluster (`"ephemeral-test-01"`) — the minimal shape
+        // every peer per-Aplicacao renderer's happy-path fixture
+        // (`caixa-mesh::tests::aplicacao_caixa`) already satisfies.
         r#"
 (defcaixa
   :nome "example-attest"
   :kind Aplicacao
   :versao "0.1.0"
-  :membros ())
+  :membros ((:caixa "worker" :versao "^0.1"))
+  :placement (:estrategia Replicated :clusters ("ephemeral-test-01")))
 "#
         .to_string()
     }
@@ -1219,5 +1306,120 @@ mod tests {
                  SemVer-2-shape-invalid :versao, got {other:?}"
             ),
         }
+    }
+
+    #[test]
+    fn aplicacao_view_gate_rejects_empty_membros_through_aplicacao_error() {
+        // Fail-before-pass-after pin on the empty-`:membros` arm of the
+        // compound [`caixa_core::require_aplicacao_view`] gate this
+        // crate's `process_for_aplicacao` now routes through. Pre-lift
+        // the tatara entry gate carried only the two-step
+        // `require_kind + require_valid_versao` prelude — the substrate's
+        // own [`caixa_core::AplicacaoSpec::validate_membros`] arm
+        // ([`caixa_core::AplicacaoError::NoMembros`]) fired at the
+        // author-time `feira build` cascade but every rendering path
+        // that bypassed `feira build` (a struct-literal `Caixa`, a
+        // fixture that mutates the public `membros` field past
+        // [`caixa_core::Caixa::from_lisp`], the deferred M4 admission
+        // webhook) silently materialized a `Process` CR whose
+        // `AplicacaoIntent.chart_ref` pointed at a chart the resolver
+        // had no member entries to fan out on. Post-lift the tatara
+        // renderer routes the substrate's compound four-arm cascade
+        // (`require_kind` + `Caixa::aplicacao_view` +
+        // `AplicacaoSpec::validate` + `validate_no_self_membership`),
+        // so the empty-`:membros` arm surfaces the substrate's own
+        // self-locating [`caixa_core::AplicacaoError::NoMembros`]
+        // diagnostic verbatim — matching the peer per-Aplicacao
+        // renderer `caixa-mesh`'s `typed_view` refusal.
+        let mut caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        caixa.membros.clear();
+        let err = process_for_aplicacao(&caixa, &sample_inputs()).unwrap_err();
+        match err {
+            Error::InvalidAplicacao(caixa_core::AplicacaoError::NoMembros) => {}
+            other => panic!(
+                "expected Error::InvalidAplicacao(AplicacaoError::NoMembros) on an empty :membros, \
+                 got {other:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn aplicacao_view_gate_rejects_self_membership_through_aplicacao_error() {
+        // Fail-before-pass-after pin on the cross-slot self-edge arm
+        // of the compound [`caixa_core::require_aplicacao_view`] gate
+        // this crate's `process_for_aplicacao` now routes through — the
+        // [`caixa_core::aplicacao::validate_no_self_membership`] gate
+        // 3aefefb folded into the compound helper as its fourth step
+        // (`require_kind` + `Caixa::aplicacao_view` +
+        // `AplicacaoSpec::validate` + `validate_no_self_membership`).
+        // Pre-lift the tatara entry gate's two-step
+        // `require_kind + require_valid_versao` prelude accepted a
+        // self-referential Aplicacao (an author who declared `:membros`
+        // naming the Aplicacao's own `:nome`) and materialized a
+        // `Process` CR whose downstream lacre closure was a one-node
+        // recursion the resolver's traversal either refused far from
+        // the source `caixa.lisp` or exhausted its stack on. Post-lift
+        // the tatara renderer inherits the compound self-edge gate by
+        // routing through [`caixa_core::require_aplicacao_view`], so
+        // the fixture's `:membros` naming the Aplicacao's own `:nome`
+        // (`"example-attest"`) surfaces
+        // [`caixa_core::AplicacaoError::MembroIsSelfAplicacao`]
+        // verbatim — self-locating in the offending caixa's `:nome`.
+        // Peer to
+        // [`caixa_mesh::tests::typed_view_rejects_self_referential_membros`]
+        // on the sibling per-Aplicacao renderer's self-edge gate axis;
+        // this pin closes the analogous refusal on caixa-tatara's
+        // per-Aplicacao entry gate.
+        let mut caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        caixa.membros = vec![caixa_core::Membro {
+            caixa: caixa.nome().to_string(),
+            versao: "^0.1".to_string(),
+        }];
+        let err = process_for_aplicacao(&caixa, &sample_inputs()).unwrap_err();
+        match err {
+            Error::InvalidAplicacao(caixa_core::AplicacaoError::MembroIsSelfAplicacao {
+                caixa: nome,
+            }) => {
+                assert_eq!(
+                    nome, "example-attest",
+                    "MembroIsSelfAplicacao must carry the parent Aplicacao's :nome verbatim so the \
+                     diagnostic is self-locating in the source caixa.lisp"
+                );
+            }
+            other => panic!(
+                "expected Error::InvalidAplicacao(AplicacaoError::MembroIsSelfAplicacao {{ .. }}) \
+                 on a self-referential :membros entry, got {other:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn aplicacao_view_gate_routes_through_require_aplicacao_view_happy_path() {
+        // Happy-path pin on the compound
+        // [`caixa_core::require_aplicacao_view`] gate this crate's
+        // `process_for_aplicacao` now routes through. The sample
+        // fixture ships a well-formed `:membros` + `:placement`
+        // (the minimal shape the substrate's four-arm
+        // `require_kind(Aplicacao)` + `Caixa::aplicacao_view` +
+        // `AplicacaoSpec::validate` + `validate_no_self_membership`
+        // cascade accepts), so the render must succeed and surface an
+        // `Intent::Aplicacao` variant. Structurally pins that the
+        // compound gate does not gratuitously reject the substrate's
+        // own canonical happy-path shape — a regression that swapped
+        // the helper's `E: From<KindMismatch> + From<AplicacaoError>`
+        // bound for a stricter one, or that introduced a compound-gate
+        // arm the fixture cannot satisfy, would surface here as a
+        // structural render-side rejection rather than a silent
+        // cluster-apply-time symptom.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        let process = process_for_aplicacao(&caixa, &sample_inputs()).expect("valid caixa emits");
+        assert!(
+            matches!(
+                process.spec.intent.variant().expect("intent"),
+                IntentVariant::Aplicacao(_)
+            ),
+            "the compound require_aplicacao_view happy-path must materialize an \
+             Intent::Aplicacao variant"
+        );
     }
 }
