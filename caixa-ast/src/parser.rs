@@ -307,7 +307,7 @@ mod tests {
     /// them. `{:name` must be LBrace + Keyword, never one symbol.
     #[test]
     fn delimiters_terminate_atoms_without_whitespace() {
-        let nodes = parse(r#"{:a 1}"#).unwrap();
+        let nodes = parse(r"{:a 1}").unwrap();
         let NodeKind::Map(m) = &nodes[0].kind else {
             panic!("expected map, got {:?}", nodes[0].kind)
         };
@@ -315,7 +315,7 @@ mod tests {
         assert!(matches!(&m[0].kind, NodeKind::Keyword(k) if k == "a"));
         assert!(matches!(m[1].kind, NodeKind::Int(1)));
 
-        let nodes = parse(r#"[a b]"#).unwrap();
+        let nodes = parse(r"[a b]").unwrap();
         let NodeKind::Vector(v) = &nodes[0].kind else {
             panic!("expected vector")
         };

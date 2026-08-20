@@ -49,7 +49,7 @@ fn render_flake(c: &Caixa) -> String {
         CaixaKind::Acao => "acao (typed CI run; runs no code itself)",
     };
     format!(
-        r##"{{
+        r#"{{
   description = "{description}";
 
   # Auto-generated from caixa.lisp by `feira nix`. Edit caixa.lisp, rerun.
@@ -90,7 +90,7 @@ fn render_flake(c: &Caixa) -> String {
         }};
       }});
 }}
-"##,
+"#,
         nome = c.nome(),
         versao = c.versao(),
         description = description,

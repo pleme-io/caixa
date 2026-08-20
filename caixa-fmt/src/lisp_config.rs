@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn parses_deffmt_config() {
-        let src = r#"(deffmt-config :line-width 80 :indent 4 :preserve-comments #f)"#;
+        let src = r"(deffmt-config :line-width 80 :indent 4 :preserve-comments #f)";
         let c = FmtConfigLisp::from_lisp(src).unwrap();
         assert_eq!(c.line_width, Some(80));
         assert_eq!(c.indent, Some(4));

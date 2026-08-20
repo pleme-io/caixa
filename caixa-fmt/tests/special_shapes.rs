@@ -15,8 +15,8 @@ fn shapes() {
     for src in [
         r#"(define (resolve-target name ns cluster) (let ((base (lookup name))) (string-append base "/" ns)))"#,
         r#"(if (equal? (status-of r) 0) (log-info "ok") (log-error "the command failed with a nonzero status"))"#,
-        r#"(cond ((null? xs) nil) ((equal? (car xs) target) (car xs)) (else (recur (cdr xs))))"#,
-        r#"(let ((first-value (compute-the-first-value)) (second-value (compute-second))) (combine first-value second-value))"#,
+        r"(cond ((null? xs) nil) ((equal? (car xs) target) (car xs)) (else (recur (cdr xs))))",
+        r"(let ((first-value (compute-the-first-value)) (second-value (compute-second))) (combine first-value second-value))",
         r#"(lambda (x y z) (string-append x "-" y "-" z "-suffix-that-is-long"))"#,
     ] {
         println!("=====\n{}", fmt(src));
@@ -25,7 +25,7 @@ fn shapes() {
 
 #[test]
 fn a_signature_is_never_shattered() {
-    let out = fmt(r#"(define (resolve-target name ns cluster) body)"#);
+    let out = fmt(r"(define (resolve-target name ns cluster) body)");
     assert!(
         out.lines()
             .next()
