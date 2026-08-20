@@ -2860,6 +2860,112 @@ impl MeshPolicy {
         }
     }
 
+    /// Substrate-canonical cross-axis coherence predicate on the
+    /// `:politicas` slot: does the `:rate-limit` token-bucket capacity
+    /// admit one client's full `:retries + 1` attempt burst inside a
+    /// single refill window?
+    ///
+    /// The fourth cross-axis invariant on the `:politicas` surface,
+    /// completing the triangle of pairs the three sibling gates carve
+    /// out — sibling to [`MeshPolicy::breaker_window_observes_timeout`]
+    /// on the `(:timeout, :circuit-breaker :window)` pair,
+    /// [`MeshPolicy::breaker_can_trip_under_rate_limit`] on the
+    /// `(:rate-limit, :circuit-breaker)` pair, and
+    /// [`MeshPolicy::retries_fit_under_breaker_trip_threshold`] on the
+    /// `(:retries, :circuit-breaker :max-failures)` pair, extended onto
+    /// the `(:retries, :rate-limit)` pair — the last cross-axis relation
+    /// among the three scalar `:politicas` axes (`:retries`,
+    /// `:rate-limit`, `:circuit-breaker`) whose axis-triple defines the
+    /// coherence surface every production overlay (Envoy, Istio,
+    /// resilience4j, AWS App Mesh) resolves as one block. Each axis in
+    /// the pair is validated in isolation by the per-axis brackets in
+    /// [`AplicacaoSpec::validate_politicas`] (retries zero-floor + cap,
+    /// rate zero-floor + cap, window canonical-form), so a `MeshPolicy`
+    /// whose axes are each individually well-formed can still name a
+    /// structurally-truncated retry policy the rate limiter refuses to
+    /// admit. The pair `{ :retries 5, :rate-limit "3/s" }` passes every
+    /// per-axis bracket and is nonetheless a retry policy the substrate
+    /// cannot honor: one client's initial attempt plus five retries is
+    /// six attempts, but the token bucket admits at most three tokens
+    /// per one-second refill window, so the fourth attempt onward is
+    /// blocked by the rate limiter itself — the substrate declared six
+    /// attempts and structurally allows three. Envoy's
+    /// `local_rate_limit.token_bucket.max_tokens` paired against
+    /// `retry_policy.num_retries` carries the identical relation; every
+    /// production playbook that pairs the two axes recommends sizing
+    /// the bucket capacity above any single client's retry budget so
+    /// the retry policy is not silently truncated by the same rate
+    /// limiter it feeds through.
+    ///
+    /// The typed test is the integer inequality
+    /// `rl.rate() >= retries + 1` — the retries count is the *number of
+    /// retry attempts beyond the initial* (Envoy's
+    /// `retry_policy.num_retries` semantics), so a client makes at most
+    /// `retries + 1` attempts per client call, each of which consumes
+    /// one token from the local rate-limit bucket. For the bucket to
+    /// *admit* the retry burst without dropping tokens, its capacity
+    /// must not be reached by one client's attempts alone:
+    /// `retries + 1 <= rate`, equivalently `rate >= retries + 1`. The
+    /// boundary case `rate == retries + 1` accepts (the bucket admits
+    /// exactly one client's full retry sequence per refill window —
+    /// retries fully executed). The strict-below case `rate <= retries`
+    /// rejects (the bucket exhausts before retries complete, silently
+    /// truncating the declared retry policy mid-run — the same
+    /// declared-but-structurally-inert footgun the sibling per-axis cap
+    /// arms close on the single-axis surfaces). The equivalent
+    /// coherent-direction form `rl.rate() > retries` sidesteps the
+    /// `retries + 1` addition entirely (both `rate` and `retries` are
+    /// `u32`; the `>` comparison is total on the type with no overflow
+    /// against past-the-guard struct-literal `retries` values a caller
+    /// might pass before `validate` runs), matching the peer
+    /// [`MeshPolicy::retries_fit_under_breaker_trip_threshold`] direct-
+    /// `>`-comparison discipline on the sibling
+    /// `(:retries, :max-failures)` pair.
+    ///
+    /// Vacuously `true` when either axis is absent — a `:politicas`
+    /// that names only one of the pair declares no relation for the
+    /// substrate to hold it to (`:retries` alone is a client-retry
+    /// policy with no rate limiter to saturate; `:rate-limit` alone is
+    /// a token-bucket declaration whose per-client attempt count is
+    /// unconstrained by the substrate, so no per-client saturation
+    /// bound on tokens-per-client-call is knowable at author time).
+    /// Same "unset means the cluster default applies, not zero"
+    /// partition [`MeshPolicy::is_empty`] and the three sibling
+    /// cross-axis predicates
+    /// ([`MeshPolicy::breaker_window_observes_timeout`],
+    /// [`MeshPolicy::breaker_can_trip_under_rate_limit`],
+    /// [`MeshPolicy::retries_fit_under_breaker_trip_threshold`]) carry.
+    ///
+    /// Lifted as a typed predicate on the substrate primitive rather
+    /// than open-coded at the validate gate so every downstream
+    /// consumer of the pair reaches the invariant through one dispatch:
+    /// the [`AplicacaoSpec::validate_politicas`] gate below, the future
+    /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+    /// (MESH-COMPOSITION §III.2 #3) that must emit
+    /// `local_rate_limit.token_bucket.max_tokens` alongside
+    /// `retry_policy.num_retries` as one coherent Envoy block, the
+    /// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// admission webhook, and the future per-`:contratos`-edge
+    /// `:politicas` override the same roadmap acknowledges — which
+    /// resolves an *effective* pair per edge (edge-level `:retries`
+    /// against the Aplicacao-level `:rate-limit`, or vice versa) and
+    /// so must re-check the relation on a pair neither axis's
+    /// declaration site can see whole. Naming the invariant once means
+    /// that resolver folds this predicate over its resolved pair
+    /// instead of re-deriving the comparison, exactly as the three
+    /// sibling cross-axis predicates name the
+    /// `(:timeout, :window)` / `(:rate-limit, :circuit-breaker)` /
+    /// `(:retries, :max-failures)` relations for their own consumers,
+    /// closing the fourth and last cross-axis relation on the scalar
+    /// `:politicas` axis-triple.
+    #[must_use]
+    pub const fn rate_limit_admits_retry_burst(&self) -> bool {
+        match (self.retries(), self.rate_limit()) {
+            (Some(retries), Some(rl)) => rl.rate() > retries,
+            _ => true,
+        }
+    }
+
     /// Substrate-canonical per-`:politicas` `:timeout` Gateway-API-mesh
     /// per-call-deadline scalar accessor every consumer of the
     /// Aplicacao's Gateway API v1.x per-rule request-timeout keys off —
@@ -8385,6 +8491,65 @@ impl AplicacaoSpec {
                 max_failures: cb.max_failures(),
             });
         }
+        // Cross-axis coherence gate on the `(:retries, :rate-limit)`
+        // pair — routed through the substrate primitive
+        // [`MeshPolicy::rate_limit_admits_retry_burst`], which names
+        // the invariant for the future consumers that must resolve the
+        // pair without seeing either declaration site whole (the
+        // per-`:contratos`-edge `:politicas` override
+        // MESH-COMPOSITION §III.2 #3 acknowledges).
+        //
+        // Runs strictly *after* every per-axis bracket (so a
+        // simultaneously zero-floor-violating retries and rate-below-
+        // burst pair surfaces `PolicyRetriesZero` first) and strictly
+        // *after* all three sibling cross-axis arms
+        // ([`MeshPolicy::breaker_window_observes_timeout`],
+        // [`MeshPolicy::breaker_can_trip_under_rate_limit`],
+        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`]) —
+        // each of the three siblings reasons across an axis this arm
+        // does not touch (the per-call timeout, the failure-counter
+        // trip threshold), so its diagnostic is more self-locating
+        // when the offending pair also names one of those axes. Same
+        // "more foundational cross-axis first" ordering the peer
+        // per-axis brackets carry internally (zero-floor before
+        // canonical-form before cap) and every prior cross-axis arm
+        // observes.
+        //
+        // Until this gate landed the `:politicas` surface accepted
+        // the pair `{ :retries 5, :rate-limit "3/s" }` — each axis
+        // individually well-formed and inside its cap — and landed it
+        // at the emit boundary as a retry policy the substrate cannot
+        // honor through completion: one client's `retries + 1 = 6`
+        // attempts consume 6 tokens from a bucket that admits at most
+        // 3 per refill window, so the fourth attempt onward is 429ed
+        // by the local rate limiter and the declared retry policy is
+        // silently truncated by the same rate limiter it feeds
+        // through. This is the same declared-but-structurally-inert
+        // footgun the sibling per-axis cap arms
+        // ([`AplicacaoError::PolicyRetriesExceedsCap`],
+        // [`AplicacaoError::PolicyRateLimitExceedsCap`]) close on the
+        // single-axis surfaces and the sibling cross-axis
+        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] /
+        // [`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`] /
+        // [`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
+        // arms close on the `(:timeout, :window)` /
+        // `(:rate-limit, :circuit-breaker)` /
+        // `(:retries, :max-failures)` pairs, here on the
+        // `(:retries, :rate-limit)` cross-axis one — closing the
+        // fourth and last cross-axis relation on the scalar
+        // `:politicas` axis-triple.
+        if !p.rate_limit_admits_retry_burst() {
+            let retries = p
+                .retries()
+                .expect("cross-axis gate fires only when :retries is present");
+            let rl = p
+                .rate_limit()
+                .expect("cross-axis gate fires only when :rate-limit is present");
+            return Err(AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
+                retries,
+                rate: rl.rate(),
+            });
+        }
         Ok(())
     }
 
@@ -9139,6 +9304,22 @@ pub enum AplicacaoError {
          multi-client failure), lower :retries, or omit one of the two axes"
     )]
     PolicyBreakerTripsBeforeRetriesExhausted { retries: u32, max_failures: u32 },
+    #[error(
+        ":politicas :rate-limit ({rate} per window) cannot admit :politicas :retries \
+         ({retries}) plus the initial attempt — one client's declared retry sequence is \
+         {retries}+1 attempts, each of which consumes one token from the local rate-limit \
+         bucket, but the bucket admits at most {rate} tokens per refill window, so the \
+         retry policy is silently truncated by the same rate limiter it feeds through and \
+         every typed-slot consumer (the future CiliumClusterwideEnvoyConfig per-:politicas \
+         overlay, Envoy's retry_policy.num_retries paired against \
+         local_rate_limit.token_bucket.max_tokens) emits a retry policy the substrate \
+         structurally throttles. Raise :rate strictly above :retries (Envoy / Istio / \
+         resilience4j / AWS App Mesh production playbooks recommend the local rate-limit \
+         bucket capacity be observably larger than any single client's retry budget so the \
+         limiter distinguishes one client's declared retries from sustained multi-client \
+         load), lower :retries, or omit one of the two axes"
+    )]
+    PolicyRateLimitCannotAdmitRetryBurst { retries: u32, rate: u32 },
 }
 
 #[cfg(test)]
@@ -17846,9 +18027,22 @@ mod tests {
         // Enterprise ~1M per-hour. Every value in the validated set
         // must pass; pin the band explicitly so a future tightening
         // surfaces here.
+        //
+        // Clears the fixture's `:retries` (which is `Some(3)`) so this
+        // per-axis sweep is pure: the sibling cross-axis
+        // [`AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst`] gate
+        // rejects any `rate <= retries` pair, so the `rate = 1`
+        // boundary at the head of the sweep would otherwise trip on the
+        // fixture-inherited retry policy rather than the per-axis
+        // boundary this test names. Same discipline the sibling per-axis
+        // `accepts_circuit_breaker_max_failures_typical_values` sweep
+        // takes against the fixture's `:retries` for the peer cross-axis
+        // [`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
+        // arm.
         for rate in [1u32, 10, 100, 1_000, 10_000, 100_000, 1_000_000] {
             for secs in [1u64, 60, 3600] {
                 let mut s = three_member_spec();
+                s.politicas.retries = None;
                 s.politicas.rate_limit = Some(RateLimit {
                     rate,
                     window: Duration::from_secs(secs),
@@ -20058,8 +20252,17 @@ mod tests {
         // per-edge token-bucket rate without any failure counter to
         // starve, so the pair is undeclared and the cross-axis gate
         // has nothing to check.
+        //
+        // Also clears the fixture's `:retries` (which is `Some(3)`) so
+        // the sibling cross-axis
+        // [`AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst`] arm
+        // (which reasons across the paired `(:retries, :rate-limit)`
+        // pair independent of `:circuit-breaker`) is vacuous on this
+        // pin — this test names the *starve* arm's vacuity on the
+        // `:circuit-breaker`-absent case, not the burst arm's.
         let mut s = three_member_spec();
         s.politicas.timeout = None;
+        s.politicas.retries = None;
         s.politicas.circuit_breaker = None;
         s.politicas.rate_limit = Some(RateLimit {
             rate: 1,
@@ -20514,6 +20717,379 @@ mod tests {
                 predicate, gate_ok,
                 "predicate must agree with validate arm on pair \
                  (retries={retries:?}, circuit_breaker={circuit_breaker:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_rate_limit_cannot_admit_retry_burst() {
+        // The fail-before-pass-after pin on the cross-axis
+        // `(:retries, :rate-limit)` invariant. Each axis is
+        // individually well-formed under its own per-axis bracket (both
+        // above the zero floor, both below the cap), but the pair is a
+        // structurally-truncated retry policy: one client's
+        // `retries + 1 = 6` failing attempts consume 6 tokens from a
+        // bucket that admits at most 3 per refill window, so the fourth
+        // attempt onward is 429ed by the local rate limiter and the
+        // declared retry policy is silently truncated by the same rate
+        // limiter it feeds through — the substrate declared six
+        // attempts and structurally allows three.
+        //
+        // Envoy's `local_rate_limit.token_bucket.max_tokens` paired
+        // against `retry_policy.num_retries` carries the identical
+        // relation; every production playbook that pairs the two axes
+        // (Envoy, Istio, resilience4j, AWS App Mesh) sizes the bucket
+        // capacity strictly above any single client's retry budget so
+        // the limiter distinguishes one client's declared retries from
+        // sustained multi-client load.
+        //
+        // Pin both the diagnostic arm and the payload values so a
+        // future re-shape of the arm surfaces here as a deliberate
+        // test edit. Clears `:timeout` and `:circuit-breaker` so the
+        // sibling cross-axis
+        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] /
+        // [`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`] /
+        // [`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
+        // arms do not fire first on the ordering-precedent they hold
+        // over this arm.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(5);
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 3,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
+                retries: 5,
+                rate: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn accepts_rate_limit_admits_retry_burst() {
+        // Positive-control sweep across the production-playbook band
+        // — every pair a real playbook recommends where the bucket
+        // capacity is strictly above the client's retry budget must
+        // validate. Envoy default `num_retries: 3` with 100/s (100
+        // tokens per window admits 4 attempts per client with 96 to
+        // spare); Istio `attempts: 3` with 50/s (50 admits 4);
+        // resilience4j 2 retries with 10/s (10 admits 3); AWS App
+        // Mesh `maxRetries: 5` with 1000/s (1000 admits 6); Cloudflare
+        // Enterprise 3 retries with 1_000_000/h (1M admits 4). Clears
+        // `:timeout` and `:circuit-breaker` so the sibling cross-axis
+        // arms are vacuous on this sweep.
+        for (retries, rate, secs) in [
+            (3u32, 100u32, 1u64),
+            (3, 50, 1),
+            (2, 10, 1),
+            (5, 1000, 1),
+            (3, 1_000_000, 3600),
+            (10, POLICY_RATE_LIMIT_MAX, 1),
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.timeout = None;
+            s.politicas.retries = Some(retries);
+            s.politicas.circuit_breaker = None;
+            s.politicas.rate_limit = Some(RateLimit {
+                rate,
+                window: Duration::from_secs(secs),
+            });
+            s.validate().unwrap_or_else(|e| {
+                panic!(
+                    "production-playbook pair retries={retries} rate={rate}/{secs}s \
+                     must validate; got {e:?}"
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn accepts_rate_exactly_at_boundary_admits_retry_burst() {
+        // Boundary pin: `rate == retries + 1` is the smallest bucket
+        // capacity that structurally admits one client's exhausted
+        // retries through completion (each attempt draws exactly one
+        // token; `retries + 1` tokens available admits `retries + 1`
+        // attempts, retries fully executed). The invariant is `>=`,
+        // stated in the coherent direction `rate >= retries + 1`.
+        // Catches a future off-by-one tightening to `rate > retries + 1`
+        // that would drift the accept set away from the codified
+        // [`MeshPolicy::rate_limit_admits_retry_burst`] predicate.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(3);
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 4,
+            window: Duration::from_secs(1),
+        });
+        s.validate()
+            .expect("rate == retries + 1 is the boundary accept case");
+    }
+
+    #[test]
+    fn rejects_rate_one_below_retry_burst() {
+        // Off-by-one boundary pin: exactly one token short of the
+        // retry burst is still structurally truncating (the invariant
+        // is `>=`, so `<` refuses even a one-token shortfall).
+        // `retries = 3` with `rate = 3` means one client's four
+        // attempts consume four tokens from a three-token bucket —
+        // the fourth attempt is 429ed. Catches a future relaxation to
+        // `>` on the wrong side (`rate > retries`, accepting equal)
+        // that would silently drift the accept boundary and admit a
+        // structurally-truncated retry policy at the emit boundary.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(3);
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 3,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
+                retries: 3,
+                rate: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn cross_axis_burst_gate_vacuous_when_retries_absent() {
+        // The predicate is vacuously `true` when `:retries` is None —
+        // a `:rate-limit` alone declares a token-bucket rate whose
+        // per-client attempt count is unconstrained by the substrate,
+        // so no per-client saturation bound on tokens-per-client-call
+        // is knowable at author time. The substrate takes no position
+        // on whether an omitted `:retries` axis means zero retries or
+        // "the client picks its own retry policy" — either way, the
+        // pair is undeclared and the cross-axis gate has nothing to
+        // check. Pin so a future tightening that made the gate
+        // opinionated on half-declared pairs surfaces here.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = None;
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(1),
+        });
+        s.validate().expect(
+            "cross-axis burst gate must be vacuous when :retries is None, \
+             however low :rate is",
+        );
+    }
+
+    #[test]
+    fn cross_axis_burst_gate_vacuous_when_rate_limit_absent() {
+        // Peer of the sibling `:retries`-absent case: a `:retries`
+        // without a `:rate-limit` declares a client-retry policy with
+        // no rate limiter to saturate, so the pair is undeclared and
+        // the cross-axis gate has nothing to check. Uses
+        // [`POLICY_RETRIES_MAX`] to pin the vacuity across the widest
+        // authored retry budget the per-axis cap admits — a `:retries
+        // POLICY_RETRIES_MAX` alone must remain a clean pass whether
+        // or not `:rate-limit` is declared.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(POLICY_RETRIES_MAX);
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = None;
+        s.validate().expect(
+            "cross-axis burst gate must be vacuous when :rate-limit is None, \
+             however high :retries is",
+        );
+    }
+
+    #[test]
+    fn cross_axis_burst_gate_runs_after_per_axis_brackets() {
+        // Ordering pin: a pair whose retries is *both* zero-floor-
+        // violating and structurally below the retry-burst threshold
+        // must surface the per-axis zero-floor arm first — the
+        // zero-floor diagnostic is more self-locating (its omit-axis
+        // remediation is directly named), where the cross-axis arm
+        // would send the author to reconcile two values one of which
+        // is not a meaningful retry count at all. Same ordering
+        // discipline every per-axis bracket carries internally
+        // (zero-floor before canonical-form before cap), and the
+        // sibling cross-axis
+        // `PolicyRetriesZero`-before-`PolicyBreakerTripsBeforeRetriesExhausted`
+        // ordering pin on the `(:retries, :max-failures)` pair.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(0);
+        s.politicas.circuit_breaker = None;
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRetriesZero,
+            "per-axis retries zero-floor arm must fire before the cross-axis burst gate"
+        );
+    }
+
+    #[test]
+    fn cross_axis_burst_gate_runs_after_sibling_starve_gate() {
+        // Cross-axis ordering pin: a `:politicas` whose axes trip
+        // BOTH cross-axis arms — `:rate-limit` starves the breaker
+        // within `:window` (the sibling
+        // `PolicyBreakerCannotTripUnderRateLimit` invariant) AND
+        // `:retries + 1` exceeds the bucket capacity (this arm) —
+        // must surface the rate-limit-starve diagnostic first. The
+        // starve arm is the token-bucket admission invariant every
+        // rate-limited edge carries against the breaker whether or
+        // not `:retries` is declared, so its diagnostic is more
+        // self-locating; the burst arm reasons across a per-client
+        // retry-policy budget the starve arm does not touch. Same
+        // "more foundational cross-axis first" ordering discipline the
+        // sibling
+        // `PolicyBreakerCannotTripUnderRateLimit`-before-`PolicyBreakerTripsBeforeRetriesExhausted`
+        // pin on the peer pair carries.
+        //
+        // A `{ retries: 5, rate: 1/h, max_failures: 5, cb_window: 10s }`
+        // pair trips both: the rate structurally cannot deliver 5
+        // failures per 10s breaker window (starve arm), and
+        // simultaneously one client's `retries + 1 = 6` attempts alone
+        // would exhaust the 1-token bucket (burst arm).
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(5);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(3600),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                rate: 1,
+                rl_window: Duration::from_secs(3600),
+                max_failures: 5,
+                cb_window: Duration::from_secs(10),
+            },
+            "sibling :rate-limit-starve cross-axis arm must fire before the \
+             burst arm when both apply"
+        );
+    }
+
+    #[test]
+    fn cross_axis_burst_gate_runs_after_sibling_retries_saturate_gate() {
+        // Cross-axis ordering pin: a `:politicas` whose axes trip
+        // BOTH the retries-saturate arm and this burst arm — one
+        // client's `retries + 1` failures saturate the breaker's trip
+        // threshold (the sibling
+        // `PolicyBreakerTripsBeforeRetriesExhausted` invariant) AND
+        // `retries + 1` exceeds the bucket capacity (this arm) —
+        // must surface the retries-saturate diagnostic first. The
+        // saturate arm is the per-client-vs-breaker relation every
+        // retry-with-breaker pair carries whether or not `:rate-limit`
+        // is declared, so its diagnostic is more self-locating; the
+        // burst arm reasons across the rate-limit token-bucket
+        // admission axis the saturate arm does not touch. Same
+        // "more foundational cross-axis first" ordering discipline
+        // carries here.
+        //
+        // A `{ retries: 5, max_failures: 3, cb_window: 60s,
+        // rate: 3/s }` pair trips both: the breaker's `max_failures
+        // = 3` is `<= retries = 5` (saturate arm), and simultaneously
+        // one client's `retries + 1 = 6` attempts alone would exhaust
+        // the 3-token bucket (burst arm). Clears `:timeout` so the
+        // sibling `:window<:timeout` gate is vacuous, and the
+        // `(rate=3/s, max_failures=3, cb_window=60s)` triple keeps
+        // the starve arm coherent (`3 × 60s >= 3 × 1s`) so it is not
+        // the arm that fires first.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.retries = Some(5);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 3,
+            window: Duration::from_secs(60),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 3,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                retries: 5,
+                max_failures: 3,
+            },
+            "sibling :retries-saturate cross-axis arm must fire before the \
+             burst arm when both apply"
+        );
+    }
+
+    #[test]
+    fn rate_limit_admits_retry_burst_predicate_matches_gate_semantic() {
+        // Equivalence pin: the substrate-canonical
+        // [`MeshPolicy::rate_limit_admits_retry_burst`] predicate and
+        // the [`AplicacaoSpec::validate_politicas`] cross-axis arm
+        // must discriminate the same set on every pair covered by
+        // their shared invariant. A future refactor of either side
+        // that breaks the equivalence trips here rather than as a
+        // divergence between the predicate's Boolean answer and the
+        // validate gate's Ok/Err arm — the same predicate-vs-gate
+        // coherence discipline the three sibling cross-axis
+        // predicates ([`MeshPolicy::breaker_window_observes_timeout`],
+        // [`MeshPolicy::breaker_can_trip_under_rate_limit`],
+        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`])
+        // carry against `AplicacaoSpec::validate_politicas`. The sweep
+        // covers both arms of the invariant (strictly below, exactly
+        // at the boundary, strictly above) and both vacuous arms
+        // (None `:retries`, None `:rate-limit`), so the equivalence
+        // holds exhaustively over the axis-covered accept and reject
+        // sets. Clears `:timeout` and `:circuit-breaker` throughout
+        // so the three sibling cross-axis arms are vacuous on every
+        // input.
+        let rl = |rate: u32, secs: u64| {
+            Some(RateLimit {
+                rate,
+                window: Duration::from_secs(secs),
+            })
+        };
+        let cases: &[(Option<u32>, Option<RateLimit>)] = &[
+            // burst-exceeding pairs (predicate = false, gate = Err)
+            (Some(3), rl(3, 1)),
+            (Some(5), rl(1, 1)),
+            (Some(10), rl(5, 1)),
+            // boundary + coherent pairs (predicate = true, gate = Ok)
+            (Some(3), rl(4, 1)),
+            (Some(1), rl(5, 1)),
+            (Some(3), rl(1_000_000, 3600)),
+            // vacuous arms
+            (None, rl(1, 1)),
+            (Some(10), None),
+            (None, None),
+        ];
+        for (retries, rate_limit) in cases.iter().copied() {
+            let politicas = MeshPolicy {
+                retries,
+                rate_limit,
+                ..Default::default()
+            };
+            let predicate = politicas.rate_limit_admits_retry_burst();
+
+            let mut s = three_member_spec();
+            s.politicas = politicas.clone();
+            let gate_ok = !matches!(
+                s.validate(),
+                Err(AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst { .. })
+            );
+
+            assert_eq!(
+                predicate, gate_ok,
+                "predicate must agree with validate arm on pair \
+                 (retries={retries:?}, rate_limit={rate_limit:?})"
             );
         }
     }
