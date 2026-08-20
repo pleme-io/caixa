@@ -1847,7 +1847,7 @@ pub fn programs_yaml_entry(
     // detection test
     // [`programs_yaml_entry_name_field_routes_through_caixa_nome_accessor`]
     // in the tests module.
-    entry.insert_string(FLEET_PROGRAMS_KEY_NAME, caixa.nome().to_string());
+    entry.insert_string(FLEET_PROGRAMS_KEY_NAME, caixa.nome());
     entry.insert_string(KUBE_KEY_NAMESPACE, namespace);
 
     // Two-step per-Servico value-block splice — the `spec.*` field
