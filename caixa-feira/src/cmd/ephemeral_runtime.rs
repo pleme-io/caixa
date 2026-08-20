@@ -15,6 +15,8 @@ use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams, PostParams};
 use tatara_process::phase::ProcessPhase;
 use tatara_process::prelude::Process;
 
+use super::FEIRA_FIELD_MANAGER;
+
 /// Build an in-cluster or kubeconfig-based client (whichever applies).
 pub async fn client() -> Result<Client> {
     Client::try_default()
@@ -36,10 +38,19 @@ pub async fn apply_process(client: Client, process: &Process) -> Result<Process>
         .clone()
         .ok_or_else(|| anyhow!("Process has no metadata.name"))?;
     let api: Api<Process> = Api::namespaced(client, &ns);
-    // Server-side apply with field manager = "feira" — idempotent
-    // across re-runs, conflict-detectable if a competing controller
-    // touches the same fields.
-    let params = PatchParams::apply("feira").force();
+    // Server-side apply routed through the substrate-canonical
+    // [`crate::cmd::FEIRA_FIELD_MANAGER`] `pub const` rather than an
+    // inline `"feira"` byte — idempotent across re-runs, conflict-
+    // detectable if a competing controller touches the same fields.
+    // Sibling of the peer [`crate::cmd::pool::PoolApplyArgs::run`]'s
+    // symmetric `PatchParams::apply(FEIRA_FIELD_MANAGER).force()` on
+    // the peer feira-side writer axis — both writer sites now share
+    // one canonical SSA field-manager id by construction, so a
+    // future rebrand lands as one caixa-feira edit on the const
+    // rather than a coordinated two-file rewrite. See the const's
+    // docstring for the full drift-mode analysis and the peer test
+    // module for the fail-before-pass-after pins.
+    let params = PatchParams::apply(FEIRA_FIELD_MANAGER).force();
     api.patch(&name, &params, &Patch::Apply(process))
         .await
         .with_context(|| format!("server-side apply Process {ns}/{name}"))
