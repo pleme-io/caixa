@@ -950,9 +950,8 @@ fn grid_rows(items: &[Node]) -> Option<Vec<&[Node]>> {
     let mut rows: Vec<&[Node]> = Vec::with_capacity(items.len());
     let mut arity = None;
     for it in items {
-        let cells = match &it.kind {
-            NodeKind::List(c) | NodeKind::Vector(c) => c,
-            _ => return None,
+        let (NodeKind::List(cells) | NodeKind::Vector(cells)) = &it.kind else {
+            return None;
         };
         if cells.is_empty() || !cells.iter().all(is_atom) {
             return None;

@@ -128,9 +128,8 @@ impl LanguageServer for CaixaLsp {
             return Ok(None);
         };
         let src = rope.to_string();
-        let nodes = match caixa_ast::parse(&src) {
-            Ok(n) => n,
-            Err(_) => return Ok(None),
+        let Ok(nodes) = caixa_ast::parse(&src) else {
+            return Ok(None);
         };
         let mut out = Vec::new();
         for n in &nodes {
@@ -169,13 +168,12 @@ impl LanguageServer for CaixaLsp {
             return Ok(None);
         };
         let src = rope.to_string();
-        let offset = match position_to_offset(&src, params.text_document_position_params.position) {
-            Some(o) => o,
-            None => return Ok(None),
+        let Some(offset) = position_to_offset(&src, params.text_document_position_params.position)
+        else {
+            return Ok(None);
         };
-        let nodes = match caixa_ast::parse(&src) {
-            Ok(n) => n,
-            Err(_) => return Ok(None),
+        let Ok(nodes) = caixa_ast::parse(&src) else {
+            return Ok(None);
         };
         for n in &nodes {
             if n.span.contains(offset)
@@ -201,9 +199,8 @@ impl CaixaLsp {
             return;
         };
         let src = rope.to_string();
-        let lint = match caixa_lint::lint_source(&src) {
-            Ok(diags) => diags,
-            Err(_) => return,
+        let Ok(lint) = caixa_lint::lint_source(&src) else {
+            return;
         };
         let lsp_diags: Vec<LspDiagnostic> = lint
             .into_iter()
