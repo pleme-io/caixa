@@ -11,6 +11,8 @@ use serde_json::json;
 
 use tatara_process::pool::EphemeralPool;
 
+use super::FEIRA_FIELD_MANAGER;
+
 /// `feira pool …` — manage EphemeralPool CRs.
 #[derive(Args)]
 pub struct Pool {
@@ -165,9 +167,21 @@ impl PoolApplyArgs {
                     .clone()
                     .ok_or_else(|| anyhow!("Pool has no metadata.name"))?;
                 let api: Api<EphemeralPool> = Api::namespaced(client.clone(), &ns);
+                // Server-side apply routed through the substrate-
+                // canonical [`crate::cmd::FEIRA_FIELD_MANAGER`] `pub const`
+                // rather than an inline `"feira"` byte — sibling of the
+                // peer [`crate::cmd::ephemeral_runtime::apply_process`]'s
+                // symmetric `PatchParams::apply(FEIRA_FIELD_MANAGER).force()`
+                // on the peer feira-side writer axis. See the const's
+                // docstring at `crate::cmd` for the full drift-mode
+                // analysis: sharing one manager id across every feira-
+                // side writer keeps SSA ownership attributable at
+                // `kubectl get ephemeralpool -o yaml`'s `managedFields`
+                // block rather than split across per-verb inline byte-
+                // strings.
                 api.patch(
                     &name,
-                    &PatchParams::apply("feira").force(),
+                    &PatchParams::apply(FEIRA_FIELD_MANAGER).force(),
                     &Patch::Apply(&pool),
                 )
                 .await
