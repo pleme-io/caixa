@@ -710,10 +710,10 @@ impl Node {
             // `items_has_key`) routes through, so any future
             // `NodeKind::Keyword`-adjacent arm extension picks up this
             // dispatch through exactly one edit on the substrate primitive.
-            if let Some(k) = items[i].kind.as_keyword() {
-                if k == key {
-                    return Some(&items[i + 1]);
-                }
+            if let Some(k) = items[i].kind.as_keyword()
+                && k == key
+            {
+                return Some(&items[i + 1]);
             }
             i += 2;
         }

@@ -268,16 +268,16 @@ fn cidr_block_format_hint(m: &TeiaManifest) -> Vec<Violation> {
         // value tree) routes through, sibling to the peer per-`Object`-
         // arm projection at [`no_public_ingress_without_tags`]'s
         // `TeiaValue::as_object` route.
-        if let Some(s) = inst.atributos.get("cidr-block").and_then(TeiaValue::as_str) {
-            if !looks_like_cidr(s) {
-                out.push(Violation {
-                    invariant_id: "cidr-block-looks-valid".into(),
-                    kind: InvariantKind::Hint,
-                    instance_tipo: inst.tipo().to_string(),
-                    instance_nome: inst.nome().to_string(),
-                    message: format!(":cidr-block {s:?} does not look like IPv4/CIDR"),
-                });
-            }
+        if let Some(s) = inst.atributos.get("cidr-block").and_then(TeiaValue::as_str)
+            && !looks_like_cidr(s)
+        {
+            out.push(Violation {
+                invariant_id: "cidr-block-looks-valid".into(),
+                kind: InvariantKind::Hint,
+                instance_tipo: inst.tipo().to_string(),
+                instance_nome: inst.nome().to_string(),
+                message: format!(":cidr-block {s:?} does not look like IPv4/CIDR"),
+            });
         }
     }
     out

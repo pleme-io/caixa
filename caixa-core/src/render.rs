@@ -26049,23 +26049,23 @@ pub fn servico_m2_overlay(
     caixa: &Caixa,
 ) -> Result<BTreeMap<&'static str, serde_yaml::Value>, RenderError> {
     let mut out = BTreeMap::new();
-    if let Some(limits) = caixa.limits() {
-        if !limits.is_empty() {
-            let v = serde_yaml::to_value(limits).map_err(|source| RenderError::Yaml {
-                slot: M2_KEY_LIMITS,
-                source,
-            })?;
-            out.insert(M2_KEY_LIMITS, v);
-        }
+    if let Some(limits) = caixa.limits()
+        && !limits.is_empty()
+    {
+        let v = serde_yaml::to_value(limits).map_err(|source| RenderError::Yaml {
+            slot: M2_KEY_LIMITS,
+            source,
+        })?;
+        out.insert(M2_KEY_LIMITS, v);
     }
-    if let Some(behavior) = caixa.behavior() {
-        if !behavior.is_empty() {
-            let v = serde_yaml::to_value(behavior).map_err(|source| RenderError::Yaml {
-                slot: M2_KEY_BEHAVIOR,
-                source,
-            })?;
-            out.insert(M2_KEY_BEHAVIOR, v);
-        }
+    if let Some(behavior) = caixa.behavior()
+        && !behavior.is_empty()
+    {
+        let v = serde_yaml::to_value(behavior).map_err(|source| RenderError::Yaml {
+            slot: M2_KEY_BEHAVIOR,
+            source,
+        })?;
+        out.insert(M2_KEY_BEHAVIOR, v);
     }
     if !caixa.upgrade_from().is_empty() {
         let v = serde_yaml::to_value(caixa.upgrade_from()).map_err(|source| RenderError::Yaml {

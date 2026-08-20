@@ -178,13 +178,13 @@ impl LanguageServer for CaixaLsp {
             Err(_) => return Ok(None),
         };
         for n in &nodes {
-            if n.span.contains(offset) {
-                if let Some(head) = n.head_symbol() {
-                    return Ok(Some(Hover {
-                        contents: HoverContents::Scalar(MarkedString::String(hover_doc(head))),
-                        range: Some(span_to_range(n.span, &src)),
-                    }));
-                }
+            if n.span.contains(offset)
+                && let Some(head) = n.head_symbol()
+            {
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(hover_doc(head))),
+                    range: Some(span_to_range(n.span, &src)),
+                }));
             }
         }
         Ok(None)

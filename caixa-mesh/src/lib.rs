@@ -7969,14 +7969,14 @@ mod tests {
             // (Workload-identity labels live elsewhere — this only
             // checks the policy's *own* metadata.labels block.)
             for (k, _) in labels {
-                if let Some(s) = k.as_str() {
-                    if s.starts_with(caixa_core::PLEME_LABEL_PREFIX) {
-                        assert!(
-                            s == LABEL_APLICACAO || s == LABEL_CONTRATO,
-                            "policy metadata.labels carries unexpected pleme-prefixed key {s:?} \
-                             (only LABEL_APLICACAO + LABEL_CONTRATO are canonical here)"
-                        );
-                    }
+                if let Some(s) = k.as_str()
+                    && s.starts_with(caixa_core::PLEME_LABEL_PREFIX)
+                {
+                    assert!(
+                        s == LABEL_APLICACAO || s == LABEL_CONTRATO,
+                        "policy metadata.labels carries unexpected pleme-prefixed key {s:?} \
+                         (only LABEL_APLICACAO + LABEL_CONTRATO are canonical here)"
+                    );
                 }
             }
         }

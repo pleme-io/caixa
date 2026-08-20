@@ -12,11 +12,9 @@
 # so the ratchet cannot silently re-permit fixed debt.
 1	clippy::type_complexity	caixa-actions/src/lib.rs
 1	unused_imports	caixa-actions/src/lib.rs
-1	clippy::collapsible_if	caixa-arch/src/invariants.rs
 1	clippy::needless_raw_string_hashes	caixa-arch/src/run.rs
 1	clippy::single_match_else	caixa-ast/src/lexer.rs
 1	clippy::bool_to_int_with_if	caixa-ast/src/node.rs
-1	clippy::collapsible_if	caixa-ast/src/node.rs
 1	clippy::doc_markdown	caixa-ast/src/parser.rs
 1	clippy::extend_with_drain	caixa-ast/src/parser.rs
 2	clippy::needless_raw_string_hashes	caixa-ast/src/parser.rs
@@ -42,7 +40,6 @@
 1	clippy::single_element_loop	caixa-core/src/manifest.rs
 1	clippy::assertions_on_constants	caixa-core/src/render.rs
 1	clippy::case_sensitive_file_extension_comparisons	caixa-core/src/render.rs
-2	clippy::collapsible_if	caixa-core/src/render.rs
 70	clippy::doc_lazy_continuation	caixa-core/src/render.rs
 167	clippy::doc_markdown	caixa-core/src/render.rs
 2	clippy::iter_count	caixa-core/src/render.rs
@@ -68,7 +65,6 @@
 7	clippy::doc_markdown	caixa-feira/src/cmd/deploy.rs
 1	clippy::similar_names	caixa-feira/src/cmd/deploy.rs
 1	clippy::cast_sign_loss	caixa-feira/src/cmd/ephemeral.rs
-1	clippy::collapsible_if	caixa-feira/src/cmd/ephemeral.rs
 2	clippy::doc_markdown	caixa-feira/src/cmd/ephemeral.rs
 3	clippy::map_unwrap_or	caixa-feira/src/cmd/ephemeral.rs
 1	clippy::print_literal	caixa-feira/src/cmd/ephemeral.rs
@@ -97,7 +93,6 @@
 1	clippy::many_single_char_names	caixa-fmt/src/canonical.rs
 1	clippy::match_wildcard_for_single_variants	caixa-fmt/src/canonical.rs
 1	clippy::needless_raw_string_hashes	caixa-fmt/src/lisp_config.rs
-1	clippy::collapsible_if	caixa-fmt/src/printer.rs
 1	clippy::float_cmp	caixa-fmt/src/printer.rs
 1	clippy::manual_let_else	caixa-fmt/src/printer.rs
 1	clippy::match_same_arms	caixa-fmt/src/printer.rs
@@ -115,9 +110,7 @@
 2	clippy::string_extend_chars	caixa-lint/src/rules.rs
 2	clippy::uninlined_format_args	caixa-lint/src/rules.rs
 1	clippy::unnested_or_patterns	caixa-lint/src/rules.rs
-1	clippy::collapsible_if	caixa-lsp/src/main.rs
 4	clippy::manual_let_else	caixa-lsp/src/main.rs
-1	clippy::collapsible_if	caixa-mesh/src/lib.rs
 122	clippy::doc_lazy_continuation	caixa-mesh/src/lib.rs
 1	unused_imports	caixa-mesh/src/lib.rs
 2	clippy::doc_markdown	caixa-operator/src/main.rs
