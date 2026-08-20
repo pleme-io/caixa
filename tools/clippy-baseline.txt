@@ -92,8 +92,6 @@
 1	clippy::match_same_arms	caixa-fmt/src/printer.rs
 1	clippy::needless_raw_string_hashes	caixa-fmt/src/printer.rs
 1	clippy::too_many_lines	caixa-fmt/src/printer.rs
-6	clippy::ignored_unit_patterns	caixa-fmt/tests/corpus_sweep.rs
-1	clippy::manual_let_else	caixa-fmt/tests/corpus_sweep.rs
 1	clippy::unreadable_literal	caixa-fmt/tests/float_roundtrip.rs
 4	clippy::needless_raw_string_hashes	caixa-fmt/tests/grid_shape.rs
 2	clippy::needless_raw_string_hashes	caixa-fmt/tests/proptest_invariants.rs
