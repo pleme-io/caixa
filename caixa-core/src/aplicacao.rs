@@ -2623,6 +2623,68 @@ impl MeshPolicy {
             && self.rate_limit().is_none()
     }
 
+    /// Substrate-canonical cross-axis coherence predicate on the
+    /// `:politicas` slot: does the `:circuit-breaker :window` rolling
+    /// failure-observation interval span at least one full
+    /// `:timeout`-bounded call?
+    ///
+    /// The first *cross-axis* invariant on the `:politicas` surface —
+    /// every prior gate ([`AplicacaoSpec::validate_politicas`]'s four
+    /// zero-floor + canonical-form + cap brackets) validates one axis
+    /// in isolation, so a `MeshPolicy` whose axes are each individually
+    /// well-formed could still name a structurally inert pair. The
+    /// pair `{ timeout: 30s, circuit_breaker: { window: 10s, .. } }`
+    /// passes every per-axis bracket (30s ≤ [`POLICY_TIMEOUT_MAX`],
+    /// 10s ≤ [`POLICY_BREAKER_WINDOW_MAX`], both integer-millisecond,
+    /// both above the zero floor) and is nonetheless a breaker that
+    /// cannot trip on the failure mode it exists to catch: a call
+    /// dispatched at t=0 is declared failed at t=30s, by which point
+    /// the 10s window open at dispatch has rolled twice over, so no
+    /// window can ever hold even one timeout-derived failure however
+    /// high the call volume. Envoy's `outlier_detection.interval`
+    /// carries the identical relation against the per-route request
+    /// timeout; Hystrix ships the canonical ratio in its defaults
+    /// (10s `metrics.rollingStats.timeInMilliseconds` against a 1s
+    /// `execution.isolation.thread.timeoutInMilliseconds`).
+    ///
+    /// Vacuously `true` when either axis is absent — a `:politicas`
+    /// that names only one of the pair declares no relation for the
+    /// substrate to hold it to (`:timeout` alone is a per-call deadline
+    /// with no breaker; `:circuit-breaker` alone is a breaker whose
+    /// failures arrive from the transport's own error signal rather
+    /// than from a substrate-imposed deadline, so no dispatch-to-report
+    /// lag is knowable at author time). This is the same
+    /// "unset means the cluster default applies, not zero" partition
+    /// [`MeshPolicy::is_empty`] and every per-axis accessor's `None`
+    /// arm already carry.
+    ///
+    /// Lifted as a typed predicate on the substrate primitive rather
+    /// than open-coded at the validate gate so every downstream
+    /// consumer of the pair reaches the invariant through one dispatch:
+    /// the [`AplicacaoSpec::validate_politicas`] gate below, the future
+    /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+    /// (MESH-COMPOSITION §III.2 #3) that must emit
+    /// `outlier_detection.interval` and the per-route `timeout` as one
+    /// coherent Envoy block, the future M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook, and the future per-`:contratos`-edge `:politicas`
+    /// override that same roadmap acknowledges — which resolves an
+    /// *effective* pair per edge (edge-level `:timeout` against the
+    /// Aplicacao-level `:window`, or vice versa) and so must re-check
+    /// the relation on a pair neither axis's declaration site can see
+    /// whole. Naming the invariant once means that resolver folds this
+    /// predicate over its resolved pair instead of re-deriving the
+    /// comparison, exactly as the sibling cross-slot
+    /// [`PlacementStrategy::is_shard_keyed`] predicate names the
+    /// `:placement`/`:shard-key` relation for its own consumers.
+    #[must_use]
+    pub const fn breaker_window_observes_timeout(&self) -> bool {
+        match (self.timeout(), self.circuit_breaker()) {
+            (Some(timeout), Some(cb)) => cb.window().as_nanos() >= timeout.as_nanos(),
+            _ => true,
+        }
+    }
+
     /// Substrate-canonical per-`:politicas` `:timeout` Gateway-API-mesh
     /// per-call-deadline scalar accessor every consumer of the
     /// Aplicacao's Gateway API v1.x per-rule request-timeout keys off —
@@ -7999,6 +8061,49 @@ impl AplicacaoSpec {
                 });
             }
         }
+        // Cross-axis coherence gate on the `(:timeout, :circuit-breaker
+        // :window)` pair — routed through the substrate primitive
+        // [`MeshPolicy::breaker_window_observes_timeout`], which names
+        // the invariant for the future consumers that must resolve the
+        // pair without seeing either declaration site whole (the
+        // per-`:contratos`-edge `:politicas` override MESH-COMPOSITION
+        // §III.2 #3 acknowledges).
+        //
+        // Runs strictly *after* all four per-axis brackets so a
+        // per-axis structurally-invalid value always surfaces its own
+        // self-locating diagnostic first: a pair like
+        // `{ timeout: 30s, window: Duration::ZERO }` is both
+        // zero-floor-violating and window-below-timeout, and the
+        // zero-floor arm names the offending axis and its omit-axis
+        // remediation directly, where the cross-axis arm would send the
+        // author to reconcile two values one of which is not a
+        // meaningful window at all. Same ordering discipline the
+        // per-axis brackets already carry internally (zero-floor before
+        // canonical-form before cap).
+        //
+        // Until this gate landed the `:politicas` surface validated
+        // every axis in isolation, so the pair `{ timeout: "30s",
+        // circuit-breaker (:max-failures 5 :window "10s") }` — each axis
+        // individually well-formed and inside its cap — passed validate
+        // and landed at the emit boundary as a breaker that cannot trip
+        // on the timeout failure mode however high the call volume: the
+        // rolling window closes before a single dispatched call is
+        // declared failed. That is the same declared-but-structurally-
+        // inert footgun the sibling per-axis cap arms
+        // ([`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`],
+        // [`AplicacaoError::PolicyRateLimitExceedsCap`]) close on the
+        // single-axis surface, here on the cross-axis one.
+        if !p.breaker_window_observes_timeout() {
+            return Err(AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                window: p
+                    .circuit_breaker()
+                    .expect("cross-axis gate fires only when :circuit-breaker is present")
+                    .window(),
+                timeout: p
+                    .timeout()
+                    .expect("cross-axis gate fires only when :timeout is present"),
+            });
+        }
         Ok(())
     }
 
@@ -8704,6 +8809,21 @@ pub enum AplicacaoError {
          the breaker entirely"
     )]
     PolicyBreakerWindowExceedsCap { window: Duration },
+    #[error(
+        ":politicas :circuit-breaker :window ({window:?}) is shorter than :politicas \
+         :timeout ({timeout:?}) — the rolling failure-observation interval closes before \
+         a single timing-out call can be declared failed, so the dominant failure mode \
+         the breaker exists to catch is structurally never counted: a call dispatched at \
+         t=0 is only reported failed at t={timeout:?}, by which point the window that was \
+         open at dispatch has already rolled, and every typed-slot consumer (the future \
+         CiliumClusterwideEnvoyConfig per-:politicas overlay, Envoy's \
+         outlier_detection.interval paired against the per-route request timeout) emits a \
+         breaker that cannot trip on timeouts however high the call volume. Pin :window \
+         at or above :timeout (Hystrix defaults 10s rolling window against a 1s execution \
+         timeout — a 10× ratio; Envoy / resilience4j production playbooks recommend the \
+         same shape), lower :timeout, or omit one of the two axes"
+    )]
+    PolicyBreakerWindowBelowTimeout { window: Duration, timeout: Duration },
 }
 
 #[cfg(test)]
@@ -18737,6 +18857,18 @@ mod tests {
         // The canonical-forms sweep on the breaker axis: every
         // integer-ms multiple the codec round-trips losslessly
         // passes the canonical gate.
+        //
+        // Clears `:timeout` from the fixture so this per-axis sweep
+        // covers windows shorter than the fixture's 30s timeout
+        // (1ms, 500ms, 1500ms) — the sub-timeout arm is a
+        // structurally-inert breaker
+        // ([`AplicacaoError::PolicyBreakerWindowBelowTimeout`]) that
+        // the cross-axis gate at the end of
+        // [`AplicacaoSpec::validate_politicas`] rejects on the paired
+        // `(:timeout, :window)` shape, not on the per-axis
+        // integer-millisecond canonical-form shape this test pins.
+        // The paired shape is covered by
+        // `rejects_circuit_breaker_window_below_timeout`.
         for window in [
             Duration::from_millis(1),
             Duration::from_millis(500),
@@ -18746,6 +18878,7 @@ mod tests {
             Duration::from_secs(3600),
         ] {
             let mut s = three_member_spec();
+            s.politicas.timeout = None;
             s.politicas.circuit_breaker = Some(CircuitBreaker {
                 max_failures: 5,
                 window,
@@ -18911,6 +19044,17 @@ mod tests {
         // the cap accepts. Pin the inclusive validated set explicitly
         // so a future tightening of the ceiling surfaces here as a
         // deliberate test edit, not a silent contract narrowing.
+        //
+        // Clears `:timeout` from the fixture so this per-axis sweep
+        // covers windows shorter than the fixture's 30s timeout
+        // (Hystrix's 10s default, resilience4j's 30s, and the
+        // sub-second warm-up band) — every such value is a
+        // structurally-inert breaker under the cross-axis gate at the
+        // end of [`AplicacaoSpec::validate_politicas`]
+        // ([`AplicacaoError::PolicyBreakerWindowBelowTimeout`]), and
+        // the paired `(:timeout, :window)` shape is covered by
+        // `rejects_circuit_breaker_window_below_timeout`; this
+        // per-axis pin ranges only over the per-axis-bracket accept set.
         for window in [
             Duration::from_millis(1),
             Duration::from_millis(500),
@@ -18924,6 +19068,7 @@ mod tests {
             Duration::from_secs(3600), // exactly 1h, the cap
         ] {
             let mut s = three_member_spec();
+            s.politicas.timeout = None;
             s.politicas.circuit_breaker = Some(CircuitBreaker {
                 max_failures: 5,
                 window,
@@ -19163,6 +19308,16 @@ mod tests {
     fn circuit_breaker_window_validated_value_round_trips_through_codec() {
         // Peer of the `:timeout` round-trip property on the breaker
         // axis.
+        //
+        // Clears `:timeout` from the fixture so the round-trip pin
+        // ranges over sub-timeout `Duration` values (1ms, 1500ms) the
+        // cross-axis gate would otherwise reject as structurally-inert
+        // breakers ([`AplicacaoError::PolicyBreakerWindowBelowTimeout`]);
+        // the paired `(:timeout, :window)` cross-axis relation is
+        // pinned separately by
+        // `rejects_circuit_breaker_window_below_timeout`, and this
+        // property is a pure serde-codec round-trip on the per-axis
+        // slot.
         for window in [
             Duration::from_millis(1),
             Duration::from_millis(1500),
@@ -19170,6 +19325,7 @@ mod tests {
             Duration::from_secs(3600),
         ] {
             let mut s = three_member_spec();
+            s.politicas.timeout = None;
             s.politicas.circuit_breaker = Some(CircuitBreaker {
                 max_failures: 5,
                 window,
@@ -19181,6 +19337,223 @@ mod tests {
                 back.circuit_breaker.unwrap().window,
                 window,
                 "every validated :circuit-breaker :window must round-trip losslessly"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_window_below_timeout() {
+        // The fail-before-pass-after pin on the cross-axis
+        // `(:timeout, :circuit-breaker :window)` invariant. Each axis
+        // is individually well-formed under its own per-axis bracket
+        // (both integer-millisecond, both above the zero floor, both
+        // below the cap), but the pair is a structurally-inert
+        // breaker: a call dispatched at t=0 is declared failed at
+        // t=30s, by which point the 10s rolling window open at
+        // dispatch has already rolled twice, so no window can hold
+        // a timeout-derived failure however high the call volume.
+        //
+        // Envoy's `outlier_detection.interval` against the per-route
+        // request timeout carries the identical relation; Hystrix
+        // ships the canonical ratio in its defaults (10s window
+        // against a 1s timeout — a 10× ratio, not a 3× under-ratio).
+        //
+        // Pin both the diagnostic arm and the payload values so a
+        // future re-shape of the arm surfaces here as a deliberate
+        // test edit.
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::from_secs(30));
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                window: Duration::from_secs(10),
+                timeout: Duration::from_secs(30),
+            }
+        );
+    }
+
+    #[test]
+    fn accepts_circuit_breaker_window_equal_to_timeout() {
+        // Boundary pin: `:window == :timeout` is the smallest window
+        // that structurally admits at least one full timeout-derived
+        // failure before the rolling interval closes (the invariant
+        // is `:window >= :timeout`, not strict inequality). Catches
+        // a future off-by-one tightening that would drift the accept
+        // set away from the codified [`MeshPolicy::breaker_window_
+        // observes_timeout`] predicate.
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::from_secs(30));
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(30),
+        });
+        s.validate()
+            .expect("window == timeout is the boundary accept case");
+    }
+
+    #[test]
+    fn accepts_circuit_breaker_window_above_timeout() {
+        // Positive-control sweep across the production-playbook band —
+        // Hystrix (1s timeout / 10s window, 10× ratio), Istio (5s /
+        // 30s, 6×), Envoy (10s / 60s, 6×), resilience4j (30s / 300s,
+        // 10×), AWS App Mesh (60s / 300s, 5×). Every pair a real
+        // playbook recommends must validate under the cross-axis gate.
+        for (timeout, window) in [
+            (Duration::from_secs(1), Duration::from_secs(10)),
+            (Duration::from_secs(5), Duration::from_secs(30)),
+            (Duration::from_secs(10), Duration::from_secs(60)),
+            (Duration::from_secs(30), Duration::from_secs(300)),
+            (Duration::from_secs(60), Duration::from_secs(300)),
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.timeout = Some(timeout);
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures: 5,
+                window,
+            });
+            s.validate().unwrap_or_else(|e| {
+                panic!(
+                    "production-playbook pair timeout={timeout:?}/window={window:?} must \
+                     validate; got {e:?}"
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_window_below_timeout_by_one_millisecond_rejected() {
+        // Off-by-one boundary pin: a window exactly 1ms shy of the
+        // timeout is still structurally inert under the invariant
+        // (the dispatch-to-report lag is `timeout`, so the window
+        // must span at least one such lag). Catches a future
+        // strict-inequality relaxation that would silently drift
+        // the accept boundary.
+        let timeout = Duration::from_secs(30);
+        let window = Duration::from_millis(29_999);
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(timeout);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowBelowTimeout { window, timeout }
+        );
+    }
+
+    #[test]
+    fn cross_axis_gate_vacuous_when_timeout_absent() {
+        // The predicate is vacuously `true` when `:timeout` is None —
+        // a `:circuit-breaker` alone declares no relation to a
+        // substrate-imposed deadline (the failure signal reaches the
+        // breaker from the transport's own error surface, so no
+        // dispatch-to-report lag is knowable at author time). Pin so
+        // a future tightening that made the gate opinionated on
+        // half-declared pairs surfaces here.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_millis(1),
+        });
+        s.validate().expect(
+            "cross-axis gate must be vacuous when :timeout is None, however small :window is",
+        );
+    }
+
+    #[test]
+    fn cross_axis_gate_vacuous_when_circuit_breaker_absent() {
+        // Peer of the sibling `:timeout`-absent case: a `:timeout`
+        // without a `:circuit-breaker` declares a per-call deadline
+        // without any rolling-window failure accounting, so the pair
+        // is undeclared and the cross-axis gate has nothing to check.
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::from_secs(3600));
+        s.politicas.circuit_breaker = None;
+        s.validate().expect(
+            "cross-axis gate must be vacuous when :circuit-breaker is None, \
+             however large :timeout is",
+        );
+    }
+
+    #[test]
+    fn cross_axis_gate_runs_after_per_axis_brackets() {
+        // Ordering pin: a pair whose window is *both* zero-floor-
+        // violating and structurally below the timeout must surface
+        // the per-axis zero-floor arm first — the zero-floor
+        // diagnostic is more self-locating (its omit-axis remediation
+        // is directly named), where the cross-axis arm would send the
+        // author to reconcile two values one of which is not a
+        // meaningful window at all. Same ordering discipline every
+        // per-axis bracket carries internally (zero-floor before
+        // canonical-form before cap).
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::from_secs(30));
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::ZERO,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerZeroWindow,
+            "per-axis zero-floor arm must fire before the cross-axis gate"
+        );
+    }
+
+    #[test]
+    fn breaker_window_observes_timeout_predicate_matches_gate_semantic() {
+        // Equivalence pin: the substrate-canonical
+        // [`MeshPolicy::breaker_window_observes_timeout`] predicate
+        // and the [`AplicacaoSpec::validate_politicas`] cross-axis
+        // arm must discriminate the same set on every pair covered
+        // by their shared invariant. A future refactor of either
+        // side that breaks the equivalence trips here rather than as
+        // a divergence between the predicate's Boolean answer and
+        // the validate gate's Ok/Err arm — the same
+        // predicate-vs-gate coherence discipline the peer
+        // [`PlacementStrategy::is_shard_keyed`] predicate carries
+        // against `AplicacaoSpec::validate_placement`. The sweep
+        // covers both arms of the invariant (below, equal, above)
+        // and both vacuous arms (None `:timeout`, None
+        // `:circuit-breaker`), so the equivalence holds
+        // exhaustively over the axis-covered accept and reject sets.
+        let cases: &[(Option<Duration>, Option<Duration>)] = &[
+            (Some(Duration::from_secs(30)), Some(Duration::from_secs(10))),
+            (Some(Duration::from_secs(30)), Some(Duration::from_secs(29))),
+            (Some(Duration::from_secs(30)), Some(Duration::from_secs(30))),
+            (Some(Duration::from_secs(30)), Some(Duration::from_secs(60))),
+            (Some(Duration::from_secs(1)), Some(Duration::from_secs(10))),
+            (None, Some(Duration::from_secs(1))),
+            (Some(Duration::from_secs(30)), None),
+            (None, None),
+        ];
+        for (timeout, window) in cases.iter().copied() {
+            let politicas = MeshPolicy {
+                timeout,
+                circuit_breaker: window.map(|w| CircuitBreaker {
+                    max_failures: 5,
+                    window: w,
+                }),
+                ..Default::default()
+            };
+            let predicate = politicas.breaker_window_observes_timeout();
+
+            let mut s = three_member_spec();
+            s.politicas = politicas.clone();
+            let gate_ok = !matches!(
+                s.validate(),
+                Err(AplicacaoError::PolicyBreakerWindowBelowTimeout { .. })
+            );
+
+            assert_eq!(
+                predicate, gate_ok,
+                "predicate must agree with validate arm on pair \
+                 (timeout={timeout:?}, window={window:?})"
             );
         }
     }
