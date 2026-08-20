@@ -197,7 +197,7 @@ pub(crate) fn programs_for_aplicacao_from_spec(
         // accessor would silently disagree with the emitted programs.yaml
         // `name:` — the drift-detection pins below key off this equality
         // to catch the regression at caixa-mesh build time.
-        entry.insert_string(FLEET_PROGRAMS_KEY_NAME, m.nome().to_string());
+        entry.insert_string(FLEET_PROGRAMS_KEY_NAME, m.nome());
         // Per-`:membros` version-constraint annotation — flows the
         // Membro's `:versao` (the M3 Aplicacao's per-member semver /
         // range constraint) through the canonical
@@ -214,17 +214,14 @@ pub(crate) fn programs_for_aplicacao_from_spec(
         // path discipline the sibling [`FLEET_PROGRAMS_KEY_NAME`] emit
         // above applies on the peer per-`:membros` member-caixa `:nome`
         // axis.
-        entry.insert_string(
-            FLEET_PROGRAMS_KEY_VERSAO,
-            m.versao_requirement().to_string(),
-        );
+        entry.insert_string(FLEET_PROGRAMS_KEY_VERSAO, m.versao_requirement());
         // Annotate with the parent Aplicacao's nome so the operator
         // knows which graph this member belongs to. Consumes the
         // lifted [`caixa_core::FLEET_PROGRAMS_KEY_APLICACAO`] axis-key
         // — see its doc-comment for why the per-entry parent-graph-
         // annotation-key axis lives in one canonical const across
         // the emitter here + the readback probe below.
-        entry.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, caixa.nome().to_string());
+        entry.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, caixa.nome());
         // M3 `:placement` overlay — see the per-call rationale
         // above. Cloned per entry so each programs.yaml row is
         // self-describing for downstream filters that have no
@@ -2841,7 +2838,7 @@ pub(crate) fn cilium_network_policies_from_spec(
             // rather than through a coordinated per-consumer rewrite.
             if let Some(endpoint) = c.target_projected().http_endpoint() {
                 let mut http_rule = serde_yaml::Mapping::new();
-                http_rule.insert_string(CILIUM_KEY_PATH, endpoint.to_string());
+                http_rule.insert_string(CILIUM_KEY_PATH, endpoint);
                 let mut rules = serde_yaml::Mapping::new();
                 rules.insert_singleton_mapping_sequence(CILIUM_KEY_HTTP, http_rule);
                 to_port.insert_mapping(KUBE_KEY_RULES, rules);
@@ -3008,7 +3005,7 @@ pub(crate) fn gateway_routes_from_spec(
     // reaches every consumer by construction. Peer of the
     // sibling [`caixa_core::Entrada::resolved_paths`] (1449891)
     // path-list resolver on the per-HTTPRoute per-rule path axis.
-    listener.insert_string(GATEWAY_API_KEY_HOSTNAME, entrada.hostname().to_string());
+    listener.insert_string(GATEWAY_API_KEY_HOSTNAME, entrada.hostname());
     let mut g_spec = serde_yaml::Mapping::new();
     // `spec.gatewayClassName` binds the emitted `Gateway` to the
     // substrate's chosen K8s Gateway API controller — the same Cilium
@@ -3088,7 +3085,7 @@ pub(crate) fn gateway_routes_from_spec(
     );
 
     let mut parent_ref = serde_yaml::Mapping::new();
-    parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome().to_string());
+    parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome());
     // Per-parentRef listener-selector sub-axis — pins the emitted
     // `HTTPRoute` to the parent Gateway's sole HTTP listener by name,
     // rather than accepting the Gateway API v1 default
@@ -3225,7 +3222,7 @@ pub(crate) fn gateway_routes_from_spec(
     for path in paths {
         let mut path_match = serde_yaml::Mapping::new();
         path_match.insert_string(KUBE_KEY_TYPE, GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX);
-        path_match.insert_string(GATEWAY_API_KEY_VALUE, path.to_string());
+        path_match.insert_string(GATEWAY_API_KEY_VALUE, path);
         let mut match_entry = serde_yaml::Mapping::new();
         match_entry.insert_mapping(GATEWAY_API_KEY_PATH, path_match);
         let mut backend_ref = serde_yaml::Mapping::new();
@@ -3249,7 +3246,7 @@ pub(crate) fn gateway_routes_from_spec(
         // encoding and the `backendRefs[]` service-name reach breaks
         // the operator-side `kubectl get httproute` lookup encoding
         // far from any single-site commit.
-        backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.destination().to_string());
+        backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.destination());
         // Substrate-canonical per-destination L4 port scalar — routes
         // through the lifted [`caixa_core::AplicacaoSpec::port_for_destination`]
         // typed dispatch on the substrate primitive so the per-HTTPRoute
