@@ -82,7 +82,6 @@
 3	clippy::uninlined_format_args	caixa-feira/src/cmd/tofu.rs
 2	clippy::items_after_statements	caixa-feira/tests/feira_e2e.rs
 1	clippy::doc_markdown	caixa-flake/src/flake.rs
-4	clippy::format_push_string	caixa-flake/src/render.rs
 31	clippy::doc_lazy_continuation	caixa-flux/src/lib.rs
 1	clippy::format_in_format_args	caixa-flux/src/lib.rs
 1	clippy::many_single_char_names	caixa-fmt/src/canonical.rs
@@ -99,7 +98,6 @@
 4	clippy::needless_raw_string_hashes	caixa-fmt/tests/grid_shape.rs
 2	clippy::needless_raw_string_hashes	caixa-fmt/tests/proptest_invariants.rs
 3	clippy::needless_raw_string_hashes	caixa-fmt/tests/special_shapes.rs
-2	clippy::format_push_string	caixa-lacre/src/lock.rs
 1	clippy::if_same_then_else	caixa-lacre/src/lock.rs
 3	clippy::needless_raw_string_hashes	caixa-lint/src/rules.rs
 2	clippy::string_extend_chars	caixa-lint/src/rules.rs
@@ -113,9 +111,7 @@
 2	clippy::doc_markdown	caixa-pangea/src/lib.rs
 1	clippy::doc_markdown	caixa-pangea/src/manifest_bridge.rs
 1	clippy::needless_raw_string_hashes	caixa-pangea/src/manifest_bridge.rs
-2	clippy::format_push_string	caixa-provedor/src/backend.rs
 1	clippy::unnecessary_literal_bound	caixa-provedor/src/backend.rs
-1	clippy::format_push_string	caixa-provedor/src/imports.rs
 1	clippy::doc_markdown	caixa-provedor/src/lib.rs
 1	clippy::must_use_candidate	caixa-resolver/src/config.rs
 1	clippy::doc_markdown	caixa-resolver/src/lisp_config.rs
@@ -124,9 +120,7 @@
 1	clippy::too_many_lines	caixa-resolver/src/resolve.rs
 1	dead_code	caixa-resolver/tests/git_integration.rs
 1	clippy::unnecessary_literal_bound	caixa-teia-forge/src/backend.rs
-2	clippy::format_push_string	caixa-teia-forge/src/emit.rs
 1	clippy::doc_markdown	caixa-teia-forge/src/lib.rs
-1	clippy::format_push_string	caixa-teia/src/instance.rs
 1	clippy::unnecessary_to_owned	caixa-teia/src/instance.rs
 2	clippy::match_same_arms	caixa-teia/src/manifest.rs
 1	clippy::doc_markdown	caixa-teia/src/reference.rs

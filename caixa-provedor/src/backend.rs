@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use iac_forge::IacForgeError;
 use iac_forge::backend::{ArtifactKind, Backend, GeneratedArtifact, NamingConvention};
 use iac_forge::ir::{HasAttributes, IacDataSource, IacProvider, IacResource};
@@ -154,14 +156,16 @@ fn emit_go_resource(
     let mut state_fields = String::new();
     for attr in resource.input_attributes() {
         let field = go_pascal(&attr.canonical_name);
-        attrs_schema.push_str(&format!(
-            "\t\t\t{:?}: schema.StringAttribute{{\n\t\t\t\tRequired: {},\n\t\t\t\tSensitive: {},\n\t\t\t}},\n",
+        let _ = writeln!(
+            attrs_schema,
+            "\t\t\t{:?}: schema.StringAttribute{{\n\t\t\t\tRequired: {},\n\t\t\t\tSensitive: {},\n\t\t\t}},",
             attr.canonical_name, attr.required, attr.sensitive
-        ));
-        state_fields.push_str(&format!(
-            "\t{field} rt.Owned[string] `tfsdk:{:?}`\n",
+        );
+        let _ = writeln!(
+            state_fields,
+            "\t{field} rt.Owned[string] `tfsdk:{:?}`",
             attr.canonical_name
-        ));
+        );
     }
 
     format!(
