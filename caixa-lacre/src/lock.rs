@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use serde::{Deserialize, Serialize};
 use tatara_lisp::DeriveTataraDomain;
 
@@ -84,8 +86,8 @@ impl Lacre {
     #[must_use]
     pub fn to_lisp(&self) -> String {
         let mut out = String::from("(deflacre\n");
-        out.push_str(&format!("  :versao-lacre {:?}\n", self.versao_lacre));
-        out.push_str(&format!("  :raiz {:?}\n", self.raiz));
+        let _ = writeln!(out, "  :versao-lacre {:?}", self.versao_lacre);
+        let _ = writeln!(out, "  :raiz {:?}", self.raiz);
         if self.entradas.is_empty() {
             out.push_str("  :entradas ())\n");
             return out;

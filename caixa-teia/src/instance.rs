@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use crate::value::TeiaValue;
 
@@ -190,7 +191,7 @@ impl TeiaInstance {
         let mut out = format!("resource \"{tf_tipo}\" \"{}\" {{", self.nome());
         out.push('\n');
         for (k, v) in &self.atributos {
-            out.push_str(&format!("  {k} = {}\n", v.to_hcl_string()));
+            let _ = writeln!(out, "  {k} = {}", v.to_hcl_string());
         }
         out.push_str("}\n");
         out

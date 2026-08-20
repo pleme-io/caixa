@@ -1,6 +1,8 @@
 //! Render `FlakeLisp` → `flake.nix` source. Transpile mode (always
 //! available); direct-eval mode lands when sui's nixpkgs parity is closer.
 
+use std::fmt::Write as _;
+
 use crate::flake::{FlakeLisp, FlakeOutput, FlakePackage};
 
 #[must_use]
@@ -8,15 +10,16 @@ pub fn render_flake_nix(f: &FlakeLisp) -> String {
     let mut out = String::new();
     out.push_str("# Auto-generated from flake.lisp. Re-run `feira nix` after edits.\n\n");
     out.push_str("{\n");
-    out.push_str(&format!("  description = {:?};\n\n", f.descricao));
+    let _ = writeln!(out, "  description = {:?};", f.descricao);
+    out.push('\n');
 
     // Inputs.
     out.push_str("  inputs = {\n");
     for entrada in &f.entradas {
         if let Some(seg) = &entrada.segue {
-            out.push_str(&format!("    {}.follows = {seg:?};\n", entrada.nome));
+            let _ = writeln!(out, "    {}.follows = {seg:?};", entrada.nome);
         } else {
-            out.push_str(&format!("    {}.url = {:?};\n", entrada.nome, entrada.url));
+            let _ = writeln!(out, "    {}.url = {:?};", entrada.nome, entrada.url);
         }
     }
     out.push_str("  };\n\n");
@@ -55,17 +58,18 @@ fn render_outputs(o: &FlakeOutput, out: &mut String) {
 }
 
 fn render_package(p: &FlakePackage, out: &mut String) {
-    out.push_str(&format!(
+    let _ = writeln!(
+        out,
         "        {} = pkgs.stdenvNoCC.mkDerivation {{\n\
          \tpname = {:?};\n\
          \tversion = \"0.1.0\";\n\
          \tsrc = {};\n\
          \tinstallPhase = \"mkdir -p $out && cp -r . $out/\";\n\
-         }};\n",
+         }};",
         p.nome,
         p.nome,
         nix_src(&p.src)
-    ));
+    );
 }
 
 fn nix_src(s: &str) -> String {
