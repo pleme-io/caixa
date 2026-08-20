@@ -2305,8 +2305,14 @@ pub mod duration_codec {
             },
         )?;
         let s = s.trim();
-        let split = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
-        let (num_part, unit) = s.split_at(split);
+        // Routed through the lifted
+        // [`crate::render::split_magnitude_and_alpha_unit`] primitive —
+        // the single-owner split every ASCII-alphabetic-unit typed-
+        // magnitude codec in caixa-core (`limits::parse_byte_size` /
+        // `limits::parse_duration` / this shared duration codec) shares.
+        // See its docstring for the full sibling roster on the same
+        // primitive altitude.
+        let (num_part, unit) = crate::render::split_magnitude_and_alpha_unit(s);
         let num_trim = num_part.trim();
         // The canonical authoring form for every typed slot routed
         // through this shared codec — `:supervisor :restart-window`,

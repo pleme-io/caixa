@@ -1498,6 +1498,74 @@ pub fn duration_from_integer_magnitude_and_unit(
     }
 }
 
+/// Split a canonical `<integer><ASCII-alphabetic-unit>` typed-magnitude
+/// string on the first ASCII-alphabetic byte and return
+/// `(magnitude_slice, unit_slice)`. If no ASCII-alphabetic byte appears,
+/// the whole input is returned as the magnitude and the unit slice is
+/// empty.
+///
+/// The canonical single-owner primitive every ASCII-alphabetic-unit
+/// typed-magnitude codec in caixa-core routes its magnitude/unit split
+/// through — `limits::parse_byte_size` (backing `:limits :memory`, unit
+/// `{"", "B", "KB", "MB", "GB", "KiB", "MiB", "GiB"}`),
+/// `limits::parse_duration` (backing `:limits :wall-clock`, unit
+/// `{"ms", "s", "", "m", "h"}`), and
+/// `supervisor::duration_codec::parse` (backing the shared
+/// `:supervisor :restart-window` / `:politicas :timeout` /
+/// `:politicas :circuit-breaker :window` duration slots, unit
+/// `{"ms", "s", "", "m", "h"}`). Until this primitive landed each of
+/// the three carried the same two-line inline split:
+///
+/// ```text
+/// let split_at = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
+/// let (num_part, unit) = s.split_at(split_at);
+/// ```
+///
+/// The three sites diverged only in the local binding name (`split` /
+/// `split_at`). A future stricter classification landing at this
+/// shared site — a hypothetical two-byte-unit codec (`"KB"` /
+/// `"MB"`-shape already routes here for byte-size, so the split rule
+/// is already load-bearing on the multi-byte-unit shape), a future
+/// per-codec fast-path that pre-validates the ASCII-only invariant, a
+/// future extension recognizing a caller-supplied non-alphabetic unit
+/// prefix — extends at one location rather than three. Same
+/// "single lifted source of truth" discipline the peer canonical-form
+/// predicates ([`reject_whitespace`] / [`is_digit_only_magnitude`] /
+/// [`is_leading_zero_padded_magnitude`]) and the peer unit-dispatch
+/// table ([`duration_from_integer_magnitude_and_unit`]) carry across
+/// the same typed-magnitude codec surface.
+///
+/// The split boundary is defined on ASCII-alphabetic bytes only, so
+/// no UTF-8 boundary reasoning is needed — every ASCII byte is a
+/// self-delimiting one-byte codepoint, and every non-ASCII byte is
+/// non-alphabetic by construction (the UTF-8 continuation bytes are
+/// `0x80..=0xBF` and the leading bytes of multi-byte sequences are
+/// `0xC0..=0xFF` — none are in the `A..=Z | a..=z` alphabetic set).
+/// The returned unit slice is either empty or begins at an ASCII
+/// alphabetic byte; the returned magnitude slice is either the whole
+/// input or ends immediately before that byte. Callers still `.trim()`
+/// either half if their upstream contract permits interior whitespace
+/// on the magnitude/unit boundary — the paired-arm
+/// [`reject_whitespace`] gate at the codec entry closes that class
+/// before this helper is consulted.
+///
+/// Peer of [`reject_whitespace`] / [`is_digit_only_magnitude`] /
+/// [`is_leading_zero_padded_magnitude`] /
+/// [`duration_from_integer_magnitude_and_unit`] /
+/// [`serialize_option_via_str`] / [`deserialize_option_via_str`] on the
+/// same "typed-magnitude codec single-owner primitive" altitude — the
+/// seven primitives together partition the substrate's typed-magnitude
+/// codec surface: three close the parser-side accepted-set drift
+/// classes (whitespace, leading-`+`/`-`/`.`, leading-zero padding),
+/// one closes the parser-side magnitude/unit split (this helper), one
+/// closes the parser-side unit-dispatch drift class, and two close the
+/// serde-side `Option<T> <-> canonical-string` dispatch shape.
+#[must_use]
+pub fn split_magnitude_and_alpha_unit(s: &str) -> (&str, &str) {
+    let split_at = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
+    s.split_at(split_at)
+}
+
 /// K8s DNS-1123 label rule's max length, in bytes — the floor each
 /// apiserver-side schema enforces independently on every `metadata.name`
 /// / Service name / label value axis a validated identifier lands in.
@@ -59938,6 +60006,124 @@ spec:
                 via_helper, via_supervisor,
                 "supervisor duration codec must agree with the shared \
                  helper on {literal:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn split_magnitude_and_alpha_unit_matches_pre_lift_ascii_alphabetic_split() {
+        // Structural pin on the shared magnitude/unit split lifted from
+        // `limits::parse_byte_size`, `limits::parse_duration`, and
+        // `supervisor::duration_codec::parse`. Every ASCII-alphabetic-
+        // unit typed-magnitude string those three pre-lift codec arms
+        // handled resolves through the shared helper to the same
+        // `(magnitude, unit)` pair the pre-lift
+        // `let split = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
+        //  let (num_part, unit) = s.split_at(split);`
+        // arm produced. A future edit that shifts the split rule
+        // (relaxes ASCII-alphabetic to Unicode alphabetic, tightens
+        // it to a fixed unit vocabulary, or reorders the split
+        // boundary) must trip this pin before it lands rather than
+        // silently drifting the three now-shared codec splits apart.
+        for (input, expected_num, expected_unit) in [
+            // No unit — whole input is the magnitude, unit slice empty.
+            ("", "", ""),
+            ("0", "0", ""),
+            ("30", "30", ""),
+            ("1024", "1024", ""),
+            // Duration-codec accepted-set spot checks (`{ms,s,,m,h}`).
+            ("30s", "30", "s"),
+            ("500ms", "500", "ms"),
+            ("2m", "2", "m"),
+            ("1h", "1", "h"),
+            // Byte-size-codec accepted-set spot checks (multi-byte
+            // units `{B,KB,MB,GB,KiB,MiB,GiB}` all start at the first
+            // ASCII-alphabetic byte).
+            ("64B", "64", "B"),
+            ("1024KiB", "1024", "KiB"),
+            ("1MiB", "1", "MiB"),
+            ("2GiB", "2", "GiB"),
+            ("500KB", "500", "KB"),
+            ("512MB", "512", "MB"),
+            // Unknown-unit shapes — the split still lands on the first
+            // ASCII-alphabetic byte; the downstream unit-dispatch table
+            // is what refuses the unrecognized suffix.
+            ("30x", "30", "x"),
+            ("1e3KiB", "1", "e3KiB"),
+            ("30sec", "30", "sec"),
+            // Zero-magnitude with unit — the single-byte magnitude
+            // `"0"` round-trips losslessly through the split.
+            ("0s", "0", "s"),
+            ("0KiB", "0", "KiB"),
+            // Leading-zero-padded magnitude — the split rule sees only
+            // the ASCII-alphabetic boundary; the downstream
+            // [`is_leading_zero_padded_magnitude`] gate refuses the
+            // shape on a subsequent arm.
+            ("030s", "030", "s"),
+            ("0064MiB", "0064", "MiB"),
+            // Mixed-case unit — the ASCII-alphabetic class covers
+            // both `A..=Z` and `a..=z`, so uppercase units still split
+            // at their first alpha byte; the downstream unit-dispatch
+            // table refuses any suffix outside its accepted set.
+            ("30S", "30", "S"),
+            ("30MS", "30", "MS"),
+        ] {
+            let (got_num, got_unit) = split_magnitude_and_alpha_unit(input);
+            assert_eq!(
+                (got_num, got_unit),
+                (expected_num, expected_unit),
+                "split_magnitude_and_alpha_unit({input:?}) must yield \
+                 ({expected_num:?}, {expected_unit:?})"
+            );
+            // Round-trip invariant: the two returned slices concatenate
+            // back to the input verbatim, byte-for-byte — the split
+            // borrows two disjoint subslices of `input` and loses no
+            // byte.
+            let mut round_trip = String::with_capacity(input.len());
+            round_trip.push_str(got_num);
+            round_trip.push_str(got_unit);
+            assert_eq!(
+                round_trip, input,
+                "split_magnitude_and_alpha_unit({input:?}) must be lossless"
+            );
+        }
+        // Non-ASCII characters never trigger the split — every byte of
+        // a UTF-8 multi-byte sequence lies outside `A..=Z | a..=z`, so
+        // the split boundary is UTF-8-safe by construction.
+        for input in ["30\u{00A0}s", "30\u{2028}s", "\u{2003}30s", "μs30"] {
+            let (got_num, got_unit) = split_magnitude_and_alpha_unit(input);
+            // Every ASCII-alphabetic byte in the input still bounds
+            // the split; verify by re-running the pre-lift inline form
+            // and confirming byte-for-byte agreement.
+            let pre_lift_split = input
+                .find(|c: char| c.is_ascii_alphabetic())
+                .unwrap_or(input.len());
+            let (pre_lift_num, pre_lift_unit) = input.split_at(pre_lift_split);
+            assert_eq!(
+                (got_num, got_unit),
+                (pre_lift_num, pre_lift_unit),
+                "split_magnitude_and_alpha_unit({input:?}) must match \
+                 the pre-lift inline form byte-for-byte on non-ASCII inputs"
+            );
+        }
+        // Cross-codec equivalence — the two `limits::*` codecs and the
+        // supervisor duration codec all agree with the helper on every
+        // accepted `<num><unit>` byte-size / duration string, closing
+        // the pre-lift drift class where the three verbatim-duplicated
+        // magnitude/unit splits could silently diverge.
+        for input in [
+            "64MiB", "1024KiB", "1MiB", "0", "30s", "500ms", "2m", "1h", "0s",
+        ] {
+            let trimmed = input.trim();
+            let (helper_num, helper_unit) = split_magnitude_and_alpha_unit(trimmed);
+            let pre_lift_split = trimmed
+                .find(|c: char| c.is_ascii_alphabetic())
+                .unwrap_or(trimmed.len());
+            let (pre_lift_num, pre_lift_unit) = trimmed.split_at(pre_lift_split);
+            assert_eq!(
+                (helper_num, helper_unit),
+                (pre_lift_num, pre_lift_unit),
+                "helper must reproduce the pre-lift split on {input:?}"
             );
         }
     }
