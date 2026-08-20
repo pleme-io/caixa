@@ -82,7 +82,6 @@
 1	clippy::many_single_char_names	caixa-fmt/src/canonical.rs
 1	clippy::match_wildcard_for_single_variants	caixa-fmt/src/canonical.rs
 1	clippy::float_cmp	caixa-fmt/src/printer.rs
-1	clippy::manual_let_else	caixa-fmt/src/printer.rs
 1	clippy::match_same_arms	caixa-fmt/src/printer.rs
 1	clippy::too_many_lines	caixa-fmt/src/printer.rs
 1	clippy::unreadable_literal	caixa-fmt/tests/float_roundtrip.rs
@@ -90,7 +89,6 @@
 2	clippy::string_extend_chars	caixa-lint/src/rules.rs
 2	clippy::uninlined_format_args	caixa-lint/src/rules.rs
 1	clippy::unnested_or_patterns	caixa-lint/src/rules.rs
-4	clippy::manual_let_else	caixa-lsp/src/main.rs
 122	clippy::doc_lazy_continuation	caixa-mesh/src/lib.rs
 1	unused_imports	caixa-mesh/src/lib.rs
 2	clippy::doc_markdown	caixa-operator/src/main.rs
