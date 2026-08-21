@@ -5107,31 +5107,29 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
         return Err(AplicacaoError::EmptyEntradaHost);
     }
     if host.len() > crate::render::GATEWAY_API_HOSTNAME_MAX_LEN {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: format!(
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            format!(
                 "exceeds Gateway API v1 Hostname max length of {cap} bytes \
                  (got {} bytes; the K8s apiserver rejects longer hostnames at admission time)",
                 host.len(),
                 cap = crate::render::GATEWAY_API_HOSTNAME_MAX_LEN,
             ),
-        });
+        ));
     }
     if host.contains("://") {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: "must not carry a scheme (drop the `https://` or `http://` prefix; \
-                     Gateway API takes the bare hostname)"
-                .to_string(),
-        });
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            "must not carry a scheme (drop the `https://` or `http://` prefix; \
+             Gateway API takes the bare hostname)",
+        ));
     }
     if host.contains('/') {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: "must not carry a path (drop the `/…` suffix; Gateway API path \
-                     matching is in `:entrada :paths`)"
-                .to_string(),
-        });
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            "must not carry a path (drop the `/…` suffix; Gateway API path \
+             matching is in `:entrada :paths`)",
+        ));
     }
     // After the `://` scheme-prefix and `/` path arms have ruled out the
     // two `:`-bearing shapes the Gateway API actively rejects with
@@ -5163,17 +5161,16 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
     // set, structurally, with a self-locating diagnostic at the
     // offending axis instead of a deep parser-shape leak.
     if host.contains(':') {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: "must not contain `:` (the port belongs in the `:entrada :port` \
-                     slot — a separate `u16` axis on the same `:entrada` block, \
-                     defaulting to 8080 — not in the host body; drop the `:<port>` \
-                     suffix and author the bare hostname. If you intended an IPv6 \
-                     literal (`2001:db8::1` / `::1` / `fe80::1`), Gateway API v1 \
-                     Hostname forbids IP literals identically to the IPv4-literal \
-                     arm — use a DNS name)"
-                .to_string(),
-        });
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            "must not contain `:` (the port belongs in the `:entrada :port` \
+             slot — a separate `u16` axis on the same `:entrada` block, \
+             defaulting to 8080 — not in the host body; drop the `:<port>` \
+             suffix and author the bare hostname. If you intended an IPv6 \
+             literal (`2001:db8::1` / `::1` / `fe80::1`), Gateway API v1 \
+             Hostname forbids IP literals identically to the IPv4-literal \
+             arm — use a DNS name)",
+        ));
     }
     // Routed through the lifted [`crate::render::find_ascii_whitespace_byte`]
     // predicate — the same single source of truth every peer
@@ -5200,9 +5197,9 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
     // already carries (`limits.rs:722` / `limits.rs:784` / `limits.rs:845`
     // / `supervisor.rs:823` / `aplicacao.rs:1640`).
     if let Some(b) = crate::render::find_ascii_whitespace_byte(host) {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: format!(
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            format!(
                 "contains ASCII whitespace byte 0x{b:02x} (Gateway API v1 \
                  Hostname is a single-token DNS name — leading, trailing, \
                  or embedded whitespace breaks the K8s apiserver's Hostname \
@@ -5213,7 +5210,7 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
                  `0x20`, tab `0x09`, LF `0x0a`, FF `0x0c`, CR `0x0d` all \
                  refuse identically)"
             ),
-        });
+        ));
     }
     // Peer of the ASCII-whitespace scan above: route the non-ASCII
     // subset of Unicode `White_Space` through the shared
@@ -5255,9 +5252,9 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
     // doc-comment names as the follow-up trajectory) extends at the
     // shared predicate in one edit rather than seven.
     if let Some(ch) = crate::render::find_non_ascii_whitespace_char(host) {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: format!(
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            format!(
                 "contains non-ASCII Unicode whitespace character {ch:?} \
                  (U+{codepoint:04X}) — Gateway API v1 Hostname is a \
                  single-token DNS name limited to `[a-z0-9-]` labels; \
@@ -5274,7 +5271,7 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
                  verbatim)",
                 codepoint = ch as u32,
             ),
-        });
+        ));
     }
 
     // Strip the optional single leading wildcard label *before* the
@@ -5286,27 +5283,25 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
         None => (false, host),
     };
     if had_wildcard && rest.is_empty() {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: "wildcard `*.` must be followed by a domain (e.g. `*.example.com`)".to_string(),
-        });
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            "wildcard `*.` must be followed by a domain (e.g. `*.example.com`)",
+        ));
     }
     if rest.contains('*') {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: "wildcard `*` is allowed only as the first label (`*.example.com`); \
-                     no inner or trailing `*` labels"
-                .to_string(),
-        });
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            "wildcard `*` is allowed only as the first label (`*.example.com`); \
+             no inner or trailing `*` labels",
+        ));
     }
     if rest.ends_with('.') {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: "must not have a trailing `.` (Gateway API hostnames are not \
-                     fully-qualified with a root dot; the apiserver regex rejects \
-                     trailing dots)"
-                .to_string(),
-        });
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            "must not have a trailing `.` (Gateway API hostnames are not \
+             fully-qualified with a root dot; the apiserver regex rejects \
+             trailing dots)",
+        ));
     }
 
     // Reject pure IPv4 literals: four dot-separated labels, every
@@ -5318,43 +5313,42 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
             .iter()
             .all(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_digit()))
     {
-        return Err(AplicacaoError::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: "must not be an IPv4 literal (Gateway API v1 Hostname forbids IP \
-                     literals; use a DNS name)"
-                .to_string(),
-        });
+        return Err(AplicacaoError::entrada_host_invalid(
+            host,
+            "must not be an IPv4 literal (Gateway API v1 Hostname forbids IP \
+             literals; use a DNS name)",
+        ));
     }
 
     // Per-label shape: 1..=63 bytes, lowercase ASCII alphanumeric +
     // hyphen, with non-hyphen at both boundaries.
     for label in &labels {
         if label.is_empty() {
-            return Err(AplicacaoError::EntradaHostInvalid {
-                host: host.to_string(),
-                reason: "has an empty label (consecutive `..` or a leading `.`)".to_string(),
-            });
+            return Err(AplicacaoError::entrada_host_invalid(
+                host,
+                "has an empty label (consecutive `..` or a leading `.`)",
+            ));
         }
         if label.len() > crate::render::DNS_1123_LABEL_MAX_LEN {
-            return Err(AplicacaoError::EntradaHostInvalid {
-                host: host.to_string(),
-                reason: format!(
+            return Err(AplicacaoError::entrada_host_invalid(
+                host,
+                format!(
                     "label {label:?} exceeds DNS-1123 label max length of \
                      {cap} bytes (got {} bytes)",
                     label.len(),
                     cap = crate::render::DNS_1123_LABEL_MAX_LEN,
                 ),
-            });
+            ));
         }
         let bytes = label.as_bytes();
         if !bytes[0].is_ascii_alphanumeric() || !bytes[bytes.len() - 1].is_ascii_alphanumeric() {
-            return Err(AplicacaoError::EntradaHostInvalid {
-                host: host.to_string(),
-                reason: format!(
+            return Err(AplicacaoError::entrada_host_invalid(
+                host,
+                format!(
                     "label {label:?} must start and end with an alphanumeric \
                      (no leading or trailing `-`)"
                 ),
-            });
+            ));
         }
         for &b in bytes {
             let valid = b.is_ascii_digit() || b.is_ascii_lowercase() || b == b'-';
@@ -5378,10 +5372,7 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
                         ch = b as char
                     )
                 };
-                return Err(AplicacaoError::EntradaHostInvalid {
-                    host: host.to_string(),
-                    reason: msg,
-                });
+                return Err(AplicacaoError::entrada_host_invalid(host, msg));
             }
         }
     }
@@ -9295,6 +9286,65 @@ pub enum AplicacaoError {
          load), lower :retries, or omit one of the two axes"
     )]
     PolicyRateLimitCannotAdmitRetryBurst { retries: u32, rate: u32 },
+}
+
+// Fold the `AplicacaoError::EntradaHostInvalid { host: host.to_string(),
+// reason: <expr> }` wire-up sites at [`validate_entrada_host`] onto one
+// substrate primitive per typed variant — the sibling on
+// [`AplicacaoError`] of the four `LayoutError` constructor families
+// [`layout_violation_ctors!`] (131ca0d), [`layout_slot_kind_ctors!`]
+// (0419438), [`LayoutError::missing_entry`] (1b09f9d), and
+// [`layout_nome_only_ctors!`] (3fe3dd7) each carry on
+// [`crate::LayoutError`]. Every one of the fourteen wire-up sites in
+// [`validate_entrada_host`] (the total-length gate, `://` scheme prefix,
+// `/` path suffix, `:` port / IPv6 arm, ASCII / non-ASCII whitespace
+// arms, wildcard shape / inner `*` / trailing-`.` arms, IPv4-literal
+// arm, per-label empty / cap / boundary-`-` / per-byte
+// `[a-z0-9-]`-violation arms) opened the identical four-line
+// `AplicacaoError::EntradaHostInvalid { host: host.to_string(),
+// reason: <expr> }` struct-literal — the exact "same block re-inlined at
+// every consumer" shape the PRIME DIRECTIVE names as a bug, on the same
+// altitude the peer `LayoutError` constructor families each closed on
+// the sibling layout-pipeline envelopes.
+//
+// The `#[must_use]` inherent constructor below collapses the fourteen
+// sites onto one dispatch:
+// `return Err(AplicacaoError::entrada_host_invalid(host, <reason>));`,
+// byte-equal to the pre-lift struct-literal. The uniform two-slot
+// construction (`host: host.to_string()`, `reason: reason.into()`) is
+// spelled once — inside the ctor — rather than at every wire-up site.
+// The `reason: impl Into<String>` bound accepts both `&str` literals
+// (with or without a trailing `.to_string()` at the caller) and
+// `format!(…)` outputs verbatim so no wire-up site changes its per-arm
+// diagnostic shape at the lift. `#[must_use]` fires a compile warning
+// at any wire-up that mistakenly discards the constructed error rather
+// than routing it through `return Err(…)`.
+//
+// Every future consumer that wants to construct
+// [`AplicacaoError::EntradaHostInvalid`] outside [`validate_entrada_host`]
+// (the deferred `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+// per-`:entrada :host` admission validator, a future `feira validate
+// --entrada` per-caixa admission verb, a per-`Certificate` SAN
+// pre-emitter for cert-manager, the multi-`:entrada` host-collision gate
+// when M4 lands `:entrada` as a `Vec`) reaches the variant through one
+// call rather than re-inlining the four-line struct-literal in lockstep
+// with the fourteen in-crate wire-up sites.
+impl AplicacaoError {
+    /// Construct an [`AplicacaoError::EntradaHostInvalid`] naming the
+    /// offending `host` under the given `reason`. Folds the uniform
+    /// `{ host: host.to_string(), reason: reason.into() }` two-slot
+    /// construction onto one substrate primitive so every wire-up in
+    /// [`validate_entrada_host`] reads through one dispatch rather than
+    /// the pre-lift four-line struct-literal block. `reason` accepts both
+    /// `&str` literals and `format!(…)` outputs through the
+    /// `impl Into<String>` bound.
+    #[must_use]
+    pub fn entrada_host_invalid(host: &str, reason: impl Into<String>) -> Self {
+        Self::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: reason.into(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -16295,6 +16345,112 @@ mod tests {
             }
             other => panic!("expected EntradaHostInvalid, got {other:?}"),
         }
+    }
+
+    // Equivalence pin for the [`AplicacaoError::entrada_host_invalid`]
+    // substrate primitive that folds the fourteen
+    // `AplicacaoError::EntradaHostInvalid { host: host.to_string(),
+    // reason: <expr> }` wire-up sites at [`validate_entrada_host`] onto
+    // one dispatch — peer with the sixteen equivalence pins the
+    // [`crate::LayoutError`] `_violation` constructor family carries in
+    // `layout::tests::*_ctor_matches_struct_literal_wrap` (131ca0d). The
+    // fixture host + reason are fixed `&'static str`s so both fields of
+    // both constructed variants pin verbatim: the `host` axis is pinned
+    // through the shared `host.to_string()` wrap (the ctor's uniform
+    // one-slot construction) and the `reason` axis is pinned through
+    // the shared `reason.into()` wrap (the ctor's `impl Into<String>`
+    // routing). Any future regression on the lift (an extra field
+    // introduced without updating the ctor, a diverging string
+    // conversion at either arm) surfaces at this pin's diagnostic
+    // rather than at a per-wire-up struct-literal reintroduction.
+    #[test]
+    fn entrada_host_invalid_ctor_matches_struct_literal_wrap() {
+        let host = "checkout.quero.cloud:8080";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::entrada_host_invalid(host, reason),
+            AplicacaoError::EntradaHostInvalid {
+                host: host.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated constructor must produce byte-equal AplicacaoError to open-coded struct-literal wrap",
+        );
+    }
+
+    // Routing pin — the ctor's `host: &str` argument threads through
+    // `.to_string()` verbatim on the `host` field, so the constructed
+    // variant carries the offending host bytes without any wrapper-
+    // side transformation (no `.to_ascii_lowercase()` normalization,
+    // no `.trim()` strip, no truncation) — the same "diagnostic carries
+    // the offending value verbatim so the author can grep their
+    // caixa.lisp" discipline every peer typed-slot ctor at this
+    // altitude carries.
+    #[test]
+    fn entrada_host_invalid_ctor_routes_host_through_to_string() {
+        // Uppercase + trailing whitespace + port suffix — three
+        // wrapper-side transformations the ctor must *not* apply.
+        let host = " Checkout.quero.CLOUD:8080 ";
+        let err = AplicacaoError::entrada_host_invalid(host, "sample");
+        match err {
+            AplicacaoError::EntradaHostInvalid { host: h, .. } => {
+                assert_eq!(h, host, "host must thread through `.to_string()` verbatim");
+            }
+            other => panic!("expected EntradaHostInvalid, got {other:?}"),
+        }
+    }
+
+    // Routing pin — the ctor's `reason: impl Into<String>` accepts both
+    // `&str` literals and `format!(…)` outputs identically and both
+    // route through `Into::into` verbatim onto the `reason` field.
+    // Pins both codepaths against the same host to prove the two
+    // shapes the fourteen wire-up sites use at their per-arm diagnostic
+    // (ten `&str` literals — some with `.to_string()` at the caller,
+    // some without — plus four `format!(…)` outputs) each produce
+    // byte-equal `reason` fields against the same offending host.
+    #[test]
+    fn entrada_host_invalid_ctor_routes_reason_through_into() {
+        let host = "checkout.quero.cloud";
+        // `&str` literal — the ctor's `impl Into<String>` accepts it
+        // without a caller-side `.to_string()`.
+        let from_literal = AplicacaoError::entrada_host_invalid(host, "literal reason text");
+        // Owned `String` from `format!` — the peer `format!(…)`-shaped
+        // wire-up arm.
+        let from_format =
+            AplicacaoError::entrada_host_invalid(host, format!("{} reason text", "literal"));
+        // `String` from `.to_string()` on a literal — the peer
+        // `"literal".to_string()`-shaped wire-up arm the pre-lift
+        // sites carried.
+        let from_to_string =
+            AplicacaoError::entrada_host_invalid(host, "literal reason text".to_string());
+        match (&from_literal, &from_format, &from_to_string) {
+            (
+                AplicacaoError::EntradaHostInvalid {
+                    reason: r_lit,
+                    host: h_lit,
+                },
+                AplicacaoError::EntradaHostInvalid {
+                    reason: r_fmt,
+                    host: h_fmt,
+                },
+                AplicacaoError::EntradaHostInvalid {
+                    reason: r_ts,
+                    host: h_ts,
+                },
+            ) => {
+                assert_eq!(r_lit, "literal reason text");
+                assert_eq!(r_fmt, "literal reason text");
+                assert_eq!(r_ts, "literal reason text");
+                assert_eq!(h_lit, host);
+                assert_eq!(h_fmt, host);
+                assert_eq!(h_ts, host);
+            }
+            _ => panic!("expected three EntradaHostInvalid variants"),
+        }
+        // Cross-arm equivalence — the three shapes must produce
+        // byte-equal `AplicacaoError` values, so the fourteen wire-up
+        // sites' mixed per-arm shapes fold onto one canonical form.
+        assert_eq!(from_literal, from_format);
+        assert_eq!(from_literal, from_to_string);
     }
 
     #[test]
