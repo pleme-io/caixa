@@ -1193,56 +1193,67 @@ impl LayoutInvariants for StandardLayout {
 
         // Aplicacao invariants — typed graph composition. Like
         // Supervisor, an Aplicacao runs no code itself.
+        //
+        // Compound per-Caixa entry gate on the Aplicacao-kind mesh-slot
+        // family: the layout pipeline's paired `let view =
+        // caixa.aplicacao_view().expect(...); view.validate() …
+        // validate_no_self_membership(...) …` cascade — the typed-shape
+        // cascade ([`crate::AplicacaoSpec::validate`]'s per-slot gates
+        // on `:membros`, `:contratos`, `:entrada`, `:placement`,
+        // `:politicas`, in that declared order) and the cross-slot
+        // self-edge gate ([`crate::aplicacao::validate_no_self_membership`],
+        // the `:membros :caixa` ≠ `:nome` invariant the typed view
+        // cannot enforce on its own because it carries the membros but
+        // not the parent `:nome`) — folded onto the
+        // [`crate::Caixa::validate_aplicacao_shape`] substrate primitive.
+        // The two arms run in the same canonical order at the primitive
+        // (typed-shape cascade → cross-slot self-edge) so the fold is
+        // byte-for-byte equivalent to the pre-fold two-block cascade
+        // this call site formerly carried, pinned by the paired
+        // `validate_aplicacao_shape_folds_{view,self_membership}_arm_matches_gate`
+        // equivalence pins and the
+        // `validate_aplicacao_shape_view_arm_fires_before_self_membership_arm`
+        // ordering pin in the [`crate::Caixa::validate_aplicacao_shape`]
+        // pin family (`manifest.rs`).
+        //
+        // Same lift discipline the peer per-slot compound gates
+        // ([`crate::Caixa::validate_upgrade_from`] d6801df,
+        // [`crate::Caixa::validate_deps`] b5dd55e,
+        // [`crate::Caixa::validate_limits`] baa4688,
+        // [`crate::Caixa::validate_behavior`] 0d2877a) each carry — one
+        // named substrate-primitive gate folds every structural +
+        // cross-slot axis on that slot family onto one call, so every
+        // future consumer that wants to re-check the Aplicacao shape
+        // after a per-slot patch (the deferred
+        // `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission
+        // webhook, a future `feira validate --aplicacao` per-caixa
+        // admission verb, a per-Aplicacao overlay resolver) reaches the
+        // two-arm compound gate through one dispatch rather than
+        // re-inlining the two-dispatch cascade in lockstep with this
+        // wire-up. Peer with the [`crate::render::require_aplicacao_view`]
+        // compound entry gate every per-Aplicacao renderer routes
+        // through (3aefefb): the two consumers of the Aplicacao-shape
+        // cascade now share one substrate primitive on each side of the
+        // author-time-vs-renderer split, rather than two open-coded
+        // cascades kept in lockstep.
+        //
+        // The outer `if caixa.kind().is_aplicacao()` guard stays because
+        // [`crate::Caixa::validate_aplicacao_shape`] is the fold's
+        // identity element on non-Aplicacao kinds (returns `Ok(())`
+        // without touching the mesh slots — same posture as
+        // [`crate::Caixa::validate_limits`] / [`Self`]::
+        // [`crate::Caixa::validate_behavior`] on their `Option`-shaped
+        // slots); the guard is a redundant but zero-cost fast-path that
+        // preserves the peer supervisor branch's `if
+        // caixa.kind().is_supervisor()` parallel structure at this
+        // altitude.
         if caixa.kind().is_aplicacao() {
-            let view = caixa
-                .aplicacao_view()
-                .expect("Aplicacao kind must have an aplicacao_view");
-            view.validate()
+            caixa
+                .validate_aplicacao_shape()
                 .map_err(|err| LayoutError::AplicacaoViolation {
                     caixa: caixa.nome().to_string(),
                     issue: err.to_string(),
                 })?;
-            // Cross-slot coherence: `:membros :caixa` must not name the
-            // Aplicacao's own `:nome`. The typed `AplicacaoSpec` view
-            // carries the membros but not the parent `:nome`, so this
-            // self-edge gate reads one slot against another here, the
-            // same wire-up shape `crate::supervisor::validate_no_self_supervision`
-            // (ad4abf1) uses on the peer supervision-tree axis. Runs
-            // after `view.validate()` so the per-member shape +
-            // duplicate diagnostics surface first; a self-referential
-            // member is always a valid DNS-1123 label (it equals the
-            // already-valid `:nome`), so this ordering never masks a
-            // narrower defect. Because `:contratos` `:de`/`:para` and
-            // `:entrada :para` are already required to be members of
-            // `:membros`, this single gate also transitively closes
-            // those two axes — every validated `:contratos` edge and
-            // every validated `:entrada :para` cannot name the
-            // Aplicacao itself, without re-deriving the partition.
-            //
-            // Routes the `parent_nome` arg through the typed
-            // [`Caixa::nome`] accessor (`caixa.nome()`) rather than
-            // the raw `&caixa.nome` `&String`-borrow of the underlying
-            // field — peer of the sibling supervision-tree-arm
-            // [`crate::supervisor::validate_no_self_supervision`] arg
-            // converge immediately above on the same
-            // [`LayoutInvariants::verify`] cross-slot self-edge gate
-            // wire-up, extended here onto the Aplicacao-kind arm. Both
-            // per-kind arms now key off exactly one typed dispatch on
-            // the substrate primitive for the parent-`:nome` self-edge
-            // arg, closing the raw `&caixa.nome` arg-passing axis on
-            // the cross-slot self-edge gate wire-up across both
-            // typed-name-graph kinds ([`crate::supervisor::validate_no_self_supervision`]
-            // on the supervision tree, this call on the Aplicacao
-            // graph). The [`crate::aplicacao::validate_no_self_membership`]
-            // helper accepts `parent_nome: &str`, so the accessor's
-            // `&str` return threads through without an intermediate
-            // deref-coerce.
-            crate::aplicacao::validate_no_self_membership(caixa.membros(), caixa.nome()).map_err(
-                |err| LayoutError::AplicacaoViolation {
-                    caixa: caixa.nome().to_string(),
-                    issue: err.to_string(),
-                },
-            )?;
         }
 
         Ok(())
