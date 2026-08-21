@@ -624,81 +624,47 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::acao_owns_code(caixa));
         }
 
-        // Kind ↔ slot coherence: the M3 mesh slots (:membros,
-        // :contratos, :politicas, :placement, :entrada) compose the
-        // typed graph of a :kind Aplicacao (MESH-COMPOSITION §III.1).
-        // `Caixa::aplicacao_view` only folds them into a validatable
-        // AplicacaoSpec when the kind is Aplicacao, and the
-        // caixa-mesh/-flux/-helm renderers only emit them for an
-        // Aplicacao — so on any *other* kind a declared mesh slot is the
-        // manifest field's documented "ignored otherwise": it silently
-        // passes verify and then vanishes (never validated, never
-        // rendered), far from the source caixa.lisp. Reject it here —
-        // before the path-existence loops — mirroring the
-        // SupervisorOwnsCode / AplicacaoOwnsCode kind-coherence gates
-        // above: a slot foreign to the kind is a build error, not a
-        // silent drop. `declared_mesh_slots` is the single typed source
-        // of the mesh-slot set + its canonical diagnostic order.
-        if !caixa.kind().is_aplicacao() {
-            let mesh_slots = caixa.declared_mesh_slots();
-            if !mesh_slots.is_empty() {
-                return Err(LayoutError::mesh_slots_on_non_aplicacao(caixa, mesh_slots));
-            }
-        }
-
-        // Kind ↔ slot coherence (mirror of the mesh-slot gate above on
-        // the supervisor-tree slot set): the supervisor slots
-        // (:estrategia, :max-restarts, :restart-window, :children)
-        // compose the typed OTP supervisor of a :kind Supervisor
-        // (INSPIRATIONS §II.2). `Caixa::supervisor_view` only folds them
-        // into a validatable SupervisorSpec when the kind is Supervisor,
-        // and the wasm-operator's hierarchical reconciler only consumes
-        // them for one — so on any *other* kind a declared supervisor
-        // slot is the manifest field's documented "ignored otherwise":
-        // it silently passes verify and then vanishes (never validated,
-        // never reconciled), far from the source caixa.lisp. Reject it
-        // here — beside the mesh-slot gate, before the path-existence
-        // loops — naming the offending kind + slot(s). `declared_
-        // supervisor_slots` is the single typed source of the
-        // supervisor-slot set + its canonical diagnostic order.
-        if !caixa.kind().is_supervisor() {
-            let supervisor_slots = caixa.declared_supervisor_slots();
-            if !supervisor_slots.is_empty() {
-                return Err(LayoutError::supervisor_slots_on_non_supervisor(
-                    caixa,
-                    supervisor_slots,
-                ));
-            }
-        }
-
-        // Kind ↔ slot coherence (mirror of the mesh-slot + supervisor-slot
-        // gates above on the M2 Servico-runtime slot set): the M2 slots
-        // (:limits, :behavior, :upgrade-from) configure the runtime of a
-        // long-running wasm component, i.e. a :kind Servico — :limits is
-        // Lunatic per-process sandboxing (INSPIRATIONS §III.1), :behavior
-        // the OTP gen_server callback set (§II.3), :upgrade-from the OTP
-        // appup hot-reload table (§II.4). The caixa-helm / caixa-flux
-        // renderers gate on `require_kind(_, Servico)` and only emit these
-        // slots for a Servico — so on any *other* kind a declared M2 slot
-        // is the manifest field's documented "ignored otherwise": its
-        // well-formedness is checked by the M2 invariant blocks below, but
-        // the value is never rendered into a chart / programs.yaml entry —
-        // it silently passes verify and then vanishes, far from the source
-        // caixa.lisp. Reject it here — beside the mesh- and supervisor-slot
-        // gates, before the M2 validate blocks (which would otherwise spend
-        // their diagnostics on a value the kind can never render) — naming
-        // the offending kind + slot(s). `declared_servico_slots` is the
-        // single typed source of the M2-slot set + its canonical
-        // diagnostic order.
-        if !caixa.kind().is_servico() {
-            let servico_slots = caixa.declared_servico_slots();
-            if !servico_slots.is_empty() {
-                return Err(LayoutError::servico_slots_on_non_servico(
-                    caixa,
-                    servico_slots,
-                ));
-            }
-        }
+        // Kind ↔ typed-slot coherence on the M3 mesh / supervisor-tree /
+        // M2 Servico-runtime slot families — folded onto one substrate
+        // primitive at [`crate::Caixa::validate_kind_slot_coherence`].
+        // Pre-lift each of the three arms lived as a self-similar
+        // five-line `if !caixa.kind().is_<owner>() { let slots =
+        // caixa.declared_<family>_slots(); if !slots.is_empty() { return
+        // Err(LayoutError::<family>_on_non_<owner>(caixa, slots)); } }`
+        // block at this call site — three consumers, three identical
+        // shapes, one substrate primitive on [`Caixa`] closing the
+        // duplication the PRIME DIRECTIVE names as a bug. The primitive
+        // preserves the pre-fold canonical diagnostic order — mesh →
+        // supervisor → servico — pinned by the load-bearing
+        // `validate_kind_slot_coherence_mesh_arm_fires_before_supervisor_arm`
+        // / `_supervisor_arm_fires_before_servico_arm` ordering pins at
+        // caixa-core/src/manifest.rs, so this wire-up is byte-for-byte
+        // equivalent to the pre-fold three-block cascade on every fixture
+        // exercising any of the three arms. Peer with the per-slot
+        // compound entry gates the substrate already carries
+        // ([`crate::Caixa::validate_deps`] b5dd55e,
+        // [`crate::Caixa::validate_limits`] baa4688,
+        // [`crate::Caixa::validate_behavior`] 0d2877a,
+        // [`crate::Caixa::validate_upgrade_from`] d6801df,
+        // [`crate::Caixa::validate_aplicacao_shape`] 949a7a0,
+        // [`crate::Caixa::validate_supervisor_shape`] 4c70105,
+        // [`crate::Caixa::validate_acao_shape`] 5d6df54) — the
+        // author-time gate axis on the per-slot algebra now shares one
+        // substrate primitive per compound gate, and this lift closes
+        // the symmetric axis on the cross-family kind ↔ slot coherence
+        // algebra so the layout pipeline routes the three self-similar
+        // gates through one substrate primitive rather than three
+        // open-coded blocks. The sibling
+        // [`LayoutError::ForeignCodeSlot`] (code-surface family) and
+        // [`LayoutError::CiOnNonAcao`] (`:ci` axis) gates stay
+        // open-coded downstream: the former bakes the kind-check into
+        // its declared_*_slots helper by design (so it carries no outer
+        // `if !kind().is_<owner>()` guard), the latter carries a
+        // distinct `{ caixa, kind }` wrap shape (no `slots` field —
+        // `:ci` is a single `Option`, not a `Vec`-of-named-slots) whose
+        // reshape onto the uniform `{ caixa, kind, slots }` envelope a
+        // future symmetry lift can join here.
+        caixa.validate_kind_slot_coherence()?;
 
         // Kind ↔ slot coherence (mirror of the three gates above on the
         // Acao `:ci` slot, CANTEIRO §7.1-C): `:ci` carries a typed CI
