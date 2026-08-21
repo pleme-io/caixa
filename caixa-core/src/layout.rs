@@ -940,18 +940,66 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
-        // Behavior callbacks: every declared callback must (a) be
-        // value-shape valid (no empty / absolute / parent-escaping
-        // path values that would silently subvert the layout
-        // checker's `root.join(p)` sandbox), then (b) resolve on disk.
-        // The shape pass runs first so the diagnostic names *which
-        // :behavior slot* is malformed before the existence check
-        // would otherwise surface a less-helpful "missing entry".
-        if let Some(b) = caixa.behavior() {
-            b.validate().map_err(|err| LayoutError::BehaviorViolation {
+        // Compound per-Caixa entry gate on the M2 `:behavior` slot's
+        // pure value-shape surface: the layout pipeline's
+        // `if let Some(b) = caixa.behavior() { b.validate() }`
+        // `Option::None → Ok(()) | Some(_) → dispatch` unwrap-and-
+        // dispatch pattern — the six-slot value-shape cascade on the
+        // present-slot arm ([`crate::BehaviorSpec::validate`]'s per-
+        // `:on-init` / `:on-call` / `:on-cast` / `:on-info` /
+        // `:on-state-change` / `:on-terminate` non-empty / relative /
+        // no-`..`-parent-escape / terminating-`.lisp`-extension
+        // arm-set routed through the shared
+        // [`crate::render::require_sandboxed_lisp_path`] helper) —
+        // folded onto the [`crate::Caixa::validate_behavior`] substrate
+        // primitive. The absent-slot arm (`behavior: None`, the
+        // canonical "no callback declared — the runtime falls back to
+        // the wasm-engine's default per arm" author shape) is the
+        // fold's identity element and passes trivially through the
+        // primitive, byte-equal to the pre-lift `if let Some(b) = …`
+        // guard this call site formerly carried. Pinned by the paired
+        // `validate_behavior_folds_arm_matches_gate` equivalence pin
+        // and the `validate_behavior_accepts_none` /
+        // `_accepts_clean_fixture` positive-control pins in the
+        // [`crate::Caixa::validate_behavior`] pin family
+        // (`manifest.rs`).
+        //
+        // The value-shape gate runs BEFORE the on-disk callback-path
+        // existence walk below so a malformed `:behavior` slot
+        // surfaces its self-locating per-slot diagnostic (naming the
+        // offending `:on-*` slot) rather than the less-helpful
+        // "missing behavior-callback" the existence probe would raise
+        // against the resolved sandbox-escape path.
+        //
+        // Same lift discipline the peer per-Caixa compound gates
+        // ([`crate::Caixa::validate_limits`] baa4688,
+        // [`crate::Caixa::validate_upgrade_from`] d6801df,
+        // [`crate::Caixa::validate_deps`] b5dd55e) each carry — one
+        // named substrate-primitive gate per typed slot folds every
+        // structural axis on that slot (plus the `Option::None`
+        // identity element for the `Option`-shaped slots) onto one
+        // call, so every future consumer that wants to re-check
+        // `:behavior` after a per-`{:on-init, …, :on-terminate}`
+        // patch (the deferred `caixa.pleme.io/v1alpha1/Caixa` CR
+        // materializer's admission webhook, a future `feira validate
+        // --behavior` per-caixa admission verb, a per-`:behavior`
+        // overlay resolver) reaches the six-slot cascade through one
+        // dispatch rather than re-inlining the `if let Some(b) = …`
+        // unwrap-and-dispatch pattern in lockstep with this wire-up.
+        // The paired on-disk existence walk stays open-coded at this
+        // altitude because it needs the [`LayoutInvariants::exists`]
+        // filesystem oracle the pure typed-shape surface has no
+        // reference to — mirror of the peer M2 `:upgrade-from` per-
+        // instruction script-path existence probe that stayed at this
+        // altitude after the [`crate::Caixa::validate_upgrade_from`]
+        // lift for the same reason.
+        caixa
+            .validate_behavior()
+            .map_err(|err| LayoutError::BehaviorViolation {
                 caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
+        if let Some(b) = caixa.behavior() {
             for p in b.declared_paths() {
                 let full = root.join(p);
                 if !self.exists(&full) {

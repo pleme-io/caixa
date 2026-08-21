@@ -4634,6 +4634,107 @@ impl Caixa {
         }
     }
 
+    /// Compound per-`Caixa` entry gate on the M2 `:behavior` slot's
+    /// pure typed-shape surface — folds the
+    /// [`crate::BehaviorSpec::validate`] six-slot value-shape cascade
+    /// (each declared `:on-init` / `:on-call` / `:on-cast` / `:on-info`
+    /// / `:on-state-change` / `:on-terminate` callback-path is
+    /// non-empty / relative / no-`..`-parent-escape / terminating-
+    /// `.lisp`-extension, routed through the shared
+    /// [`crate::render::require_sandboxed_lisp_path`] arm-set) onto one
+    /// substrate primitive on [`Caixa`]. The `#[serde(default)]`
+    /// absent-slot arm (`behavior: None`, the canonical "no callback
+    /// declared — the runtime falls back to the wasm-engine's default
+    /// callback per arm" author shape [`crate::BehaviorSpec::is_empty`]'s
+    /// per-slot `None` cascade reads) is the fold's identity element
+    /// and passes trivially; the present-slot arm (`behavior: Some(b)`)
+    /// dispatches to [`crate::BehaviorSpec::validate`] verbatim,
+    /// threading its per-slot [`crate::BehaviorError`] Display through
+    /// untouched.
+    ///
+    /// Scope note — the on-disk callback-path existence walk paired
+    /// with the value-shape gate at
+    /// [`crate::layout::StandardLayout::verify`] stays open-coded at
+    /// the layout altitude, because it needs the
+    /// [`crate::layout::LayoutInvariants`] filesystem oracle
+    /// ([`crate::layout::LayoutInvariants::exists`]) that the pure
+    /// per-Caixa typed-shape surface this compound gate folds onto has
+    /// no reference to. Same posture the peer M2 `:upgrade-from`
+    /// per-Caixa compound gate ([`Self::validate_upgrade_from`]
+    /// d6801df) already carries: the pure typed-shape surface folds
+    /// onto the substrate primitive; the per-instruction script-path
+    /// existence probe on the paired axis (there `:state-change
+    /// :script`; here `:on-*`) stays at the layout altitude.
+    ///
+    /// Prior to this lift the pure value-shape surface of the M2
+    /// `:behavior` slot lived only wired open-coded at the layout
+    /// wire-up site ([`crate::layout::StandardLayout::verify`],
+    /// caixa-core/src/layout.rs), through the
+    /// `if let Some(b) = caixa.behavior() { b.validate() … }`
+    /// unwrap-and-dispatch pattern paired with the same
+    /// [`crate::LayoutError::BehaviorViolation`]-wrap envelope: every
+    /// future consumer that wanted to gate the `:behavior` slot's
+    /// value-shape as a whole — the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's per-CR
+    /// admission webhook re-checking `:behavior` after a per-`{:on-init,
+    /// :on-call, :on-cast, :on-info, :on-state-change, :on-terminate}`
+    /// patch (the exact case the peer `:on-*` accessor docstrings on
+    /// [`crate::BehaviorSpec`] already name as deferred consumers of
+    /// the slot), a future `feira validate --behavior` per-caixa
+    /// admission verb, a per-`:behavior` overlay resolver a future
+    /// per-cluster callback-overlay lift would materialize — was
+    /// structurally forced to either re-inline the two-line
+    /// `Option::None → Ok(()) | Some(_) → …` unwrap-and-dispatch
+    /// pattern in lockstep with the layout wire-up (the duplication the
+    /// PRIME DIRECTIVE names as a bug) or call the whole
+    /// [`crate::layout::StandardLayout::verify`] pipeline and pay every
+    /// peer per-Caixa gate ([`Self::validate_nome`],
+    /// [`Self::validate_versao`], [`Self::validate_deps`],
+    /// [`Self::validate_etiquetas`], [`Self::validate_autores`],
+    /// [`Self::validate_repositorio`], [`Self::validate_descricao`],
+    /// [`Self::validate_licenca`], [`Self::validate_edicao`],
+    /// [`Self::validate_limits`], [`Self::validate_upgrade_from`],
+    /// [`Self::validate_code_paths`], plus the per-kind
+    /// `require_supervisor_view` / `require_aplicacao_view` gates, plus
+    /// the on-disk existence walks) to re-check one slot. Post-lift
+    /// each such consumer reaches the [`crate::BehaviorSpec::validate`]
+    /// six-slot cascade (and its identity-element on the absent slot)
+    /// through one call on the substrate primitive.
+    ///
+    /// The per-slot compound entry-gate discipline lifted here onto the
+    /// M2 `:behavior` axis is the sibling of the peer per-slot compound
+    /// gates ([`crate::AplicacaoSpec::validate_contratos`],
+    /// [`crate::MeshPolicy::validate`],
+    /// [`crate::SupervisorSpec::validate_children`],
+    /// [`Self::validate_upgrade_from`], [`Self::validate_deps`],
+    /// [`Self::validate_limits`]) that fold every structural + cross-
+    /// slot axis on their slot onto one substrate primitive. Extended
+    /// here to the M2 `:behavior` slot, the last of the four M2 typed
+    /// slots (`:limits`, `:behavior`, `:upgrade-from`, plus the
+    /// supervisor-only `:children` peer) whose per-Caixa compound-gate
+    /// wire-up still lived open-coded at the layout altitude after the
+    /// [`Self::validate_limits`] lift (baa4688) closed the sibling M2
+    /// `:limits` slot's cascade. With this lift the "one named per-slot
+    /// / per-Caixa compound gate per typed slot folding every structural
+    /// axis on that slot (plus the `Option::None` identity element for
+    /// the `Option`-shaped slots) onto one substrate primitive"
+    /// discipline spans every M2 typed slot uniformly, so a reader who
+    /// has learned any peer M2 gate reads `:behavior` without a per-
+    /// slot exception carve-out.
+    ///
+    /// # Errors
+    ///
+    /// Returns every [`crate::BehaviorError`] variant on the present-
+    /// slot arm — verbatim from [`crate::BehaviorSpec::validate`].
+    /// Passes trivially on the absent-slot arm (`behavior: None`, the
+    /// fold's identity element).
+    pub fn validate_behavior(&self) -> Result<(), crate::BehaviorError> {
+        match self.behavior() {
+            Some(b) => b.validate(),
+            None => Ok(()),
+        }
+    }
+
     /// Reject `:restart-window` values the shared
     /// [`crate::supervisor::duration_codec::parse`] refuses. The flat
     /// `restart_window: Option<String>` slot on [`Caixa`] is stored
@@ -19660,6 +19761,114 @@ mod tests {
         c.limits = Some(crate::LimitsSpec::default());
         c.validate_limits()
             .expect("Some(LimitsSpec::default()) must pass the compound gate cleanly");
+    }
+
+    // ── Caixa::validate_behavior — compound per-Caixa entry gate on ──
+    // ── the M2 `:behavior` slot's pure value-shape surface: folds   ──
+    // ── the [`crate::BehaviorSpec::validate`] six-slot cascade on   ──
+    // ── the present-slot arm and the `Option::None` identity        ──
+    // ── element on the absent-slot arm onto one substrate primitive.──
+    // ── Byte-for-byte equivalent to the pre-fold                    ──
+    // ── `if let Some(b) = caixa.behavior() { b.validate() }`        ──
+    // ── unwrap-and-dispatch pattern at                              ──
+    // ── `crate::layout::StandardLayout::verify` (`layout.rs`). The  ──
+    // ── on-disk callback-path existence walk stays open-coded at    ──
+    // ── the layout altitude because it needs the                    ──
+    // ── [`crate::layout::LayoutInvariants::exists`] filesystem       ──
+    // ── oracle the pure typed-shape surface has no reference to —   ──
+    // ── mirror of the peer M2 `:upgrade-from` per-instruction       ──
+    // ── script-path existence probe that stayed at the layout       ──
+    // ── altitude after the [`Caixa::validate_upgrade_from`] lift    ──
+    // ── (d6801df) for the same reason.                              ──
+
+    #[test]
+    fn validate_behavior_folds_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // present-slot arm: a fixture whose `:behavior` carries an
+        // absolute-path `:on-init` (`"/etc/passwd"`, which
+        // [`crate::BehaviorSpec::validate`] rejects through
+        // [`crate::BehaviorError::AbsolutePath`]) surfaces the same
+        // [`crate::BehaviorError`] byte-equal through both the
+        // compound gate [`Caixa::validate_behavior`] and the standalone
+        // [`crate::BehaviorSpec::validate`] gate on the same
+        // `BehaviorSpec` value. Pins the fold — a silent regression
+        // that de-folded the present-slot arm would surface here as a
+        // mismatch between the two dispatches. Sibling in shape to the
+        // peer per-arm equivalence pins the
+        // [`Caixa::validate_limits`] (baa4688),
+        // [`Caixa::validate_upgrade_from`] (d6801df),
+        // [`crate::MeshPolicy::validate`],
+        // [`crate::AplicacaoSpec::validate_contratos`], and
+        // [`crate::SupervisorSpec::validate_children`] compound gates
+        // each carry on their axes.
+        use crate::BehaviorSpec;
+        use std::path::PathBuf;
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("/etc/passwd")),
+            ..Default::default()
+        };
+        c.behavior = Some(b.clone());
+        let via_method = c.validate_behavior().unwrap_err();
+        let via_standalone = b.validate().unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_behavior must surface the present-slot \
+             arm's diagnostic byte-equal to the standalone \
+             `BehaviorSpec::validate` on the same `BehaviorSpec` value"
+        );
+        assert!(
+            matches!(via_method, crate::BehaviorError::AbsolutePath { .. }),
+            "expected AbsolutePath on the absolute `:on-init` path, \
+             got {via_method:?}"
+        );
+    }
+
+    #[test]
+    fn validate_behavior_accepts_none() {
+        // Positive control on the absent-slot arm (the fold's identity
+        // element): a caixa without any `:behavior` block (the
+        // canonical "no callback declared — the runtime falls back to
+        // the wasm-engine's default per arm" author shape
+        // [`crate::BehaviorSpec::is_empty`]'s per-slot `None` cascade
+        // reads, and the shape the [`Caixa::template`] scaffold emits
+        // by construction) passes the compound gate cleanly,
+        // regardless of any per-slot defect a subsequent `Some(_)`
+        // binding would surface. Pins the identity element of the fold
+        // on the absent-slot side, matching the peer
+        // `validate_limits_accepts_none` (baa4688) and
+        // `validate_upgrade_from_accepts_empty_upgrade_from` (d6801df)
+        // positive-control postures on the sibling M2 slots.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        assert!(
+            c.behavior().is_none(),
+            "template caixa must carry an absent :behavior — got {:?}",
+            c.behavior()
+        );
+        c.validate_behavior()
+            .expect("absent :behavior must pass the compound gate cleanly");
+    }
+
+    #[test]
+    fn validate_behavior_accepts_clean_fixture() {
+        // Positive control on the present-slot arm: a caixa whose
+        // `:behavior` is `Some(BehaviorSpec::default())` (all six
+        // slots `None` — every slot absent under the outer `Some(_)`
+        // binding, so every present-slot arm on
+        // [`crate::BehaviorSpec::validate`] is vacuous) passes the
+        // compound gate cleanly. A future tightening of any one arm
+        // that surfaces a diagnostic on the all-`None` `BehaviorSpec`
+        // would land here as a test failure first. Pins the
+        // present-slot arm's accept-shape on the canonical
+        // "declared-but-empty" author fixture the sibling
+        // `empty_behavior_round_trip` peer already round-trips
+        // (`caixa-core/src/behavior.rs` tests). Mirror of the peer
+        // `validate_limits_accepts_clean_fixture` (baa4688)
+        // positive-control posture on the sibling M2 `:limits` slot.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.behavior = Some(crate::BehaviorSpec::default());
+        c.validate_behavior()
+            .expect("Some(BehaviorSpec::default()) must pass the compound gate cleanly");
     }
 
     // ── Caixa::validate_deps — compound per-Caixa entry gate on the ──
