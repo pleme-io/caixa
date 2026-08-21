@@ -1530,22 +1530,13 @@ impl WitContract {
 
         if self.is_http() {
             if subject.is_some() || slot.is_some() {
-                let (de, para, wit) = edge();
-                return Err(AplicacaoError::ContratoWrongTarget {
-                    de,
-                    para,
-                    wit,
-                    expected: WitTarget::HTTP_FIELD_NAME,
-                });
+                return Err(AplicacaoError::contrato_wrong_target(
+                    edge(),
+                    WitTarget::HTTP_FIELD_NAME,
+                ));
             }
             let ep = endpoint.ok_or_else(|| {
-                let (de, para, wit) = edge();
-                AplicacaoError::ContratoMissingTarget {
-                    de,
-                    para,
-                    wit,
-                    expected: WitTarget::HTTP_FIELD_NAME,
-                }
+                AplicacaoError::contrato_missing_target(edge(), WitTarget::HTTP_FIELD_NAME)
             })?;
             if ep.is_empty() {
                 let (de, para) = self.edge_pair();
@@ -1588,22 +1579,13 @@ impl WitContract {
         }
         if self.is_pubsub() {
             if endpoint.is_some() || slot.is_some() {
-                let (de, para, wit) = edge();
-                return Err(AplicacaoError::ContratoWrongTarget {
-                    de,
-                    para,
-                    wit,
-                    expected: WitTarget::PUBSUB_FIELD_NAME,
-                });
+                return Err(AplicacaoError::contrato_wrong_target(
+                    edge(),
+                    WitTarget::PUBSUB_FIELD_NAME,
+                ));
             }
             let s = subject.ok_or_else(|| {
-                let (de, para, wit) = edge();
-                AplicacaoError::ContratoMissingTarget {
-                    de,
-                    para,
-                    wit,
-                    expected: WitTarget::PUBSUB_FIELD_NAME,
-                }
+                AplicacaoError::contrato_missing_target(edge(), WitTarget::PUBSUB_FIELD_NAME)
             })?;
             if s.is_empty() {
                 let (de, para) = self.edge_pair();
@@ -1641,22 +1623,13 @@ impl WitContract {
         }
         if self.is_store() {
             if endpoint.is_some() || subject.is_some() {
-                let (de, para, wit) = edge();
-                return Err(AplicacaoError::ContratoWrongTarget {
-                    de,
-                    para,
-                    wit,
-                    expected: WitTarget::STORE_FIELD_NAME,
-                });
+                return Err(AplicacaoError::contrato_wrong_target(
+                    edge(),
+                    WitTarget::STORE_FIELD_NAME,
+                ));
             }
             let sl = slot.ok_or_else(|| {
-                let (de, para, wit) = edge();
-                AplicacaoError::ContratoMissingTarget {
-                    de,
-                    para,
-                    wit,
-                    expected: WitTarget::STORE_FIELD_NAME,
-                }
+                AplicacaoError::contrato_missing_target(edge(), WitTarget::STORE_FIELD_NAME)
             })?;
             if sl.is_empty() {
                 let (de, para) = self.edge_pair();
@@ -1702,13 +1675,10 @@ impl WitContract {
 
         // Unrecognized WIT world — must not carry any payload target.
         if endpoint.is_some() || subject.is_some() || slot.is_some() {
-            let (de, para, wit) = edge();
-            return Err(AplicacaoError::ContratoWrongTarget {
-                de,
-                para,
-                wit,
-                expected: WitTarget::CAPABILITY_EXPECTED,
-            });
+            return Err(AplicacaoError::contrato_wrong_target(
+                edge(),
+                WitTarget::CAPABILITY_EXPECTED,
+            ));
         }
         Ok(WitTarget::Capability)
     }
@@ -9345,6 +9315,83 @@ impl AplicacaoError {
             reason: reason.into(),
         }
     }
+}
+
+// Fold the seven `AplicacaoError::Contrato{Wrong,Missing}Target { de, para,
+// wit, expected }` wire-up sites at [`WitContract::target`] onto one
+// substrate-primitive family per typed variant — the paired sibling on
+// [`AplicacaoError`] of the four `LayoutError` constructor families
+// [`layout_violation_ctors!`] (131ca0d, 16 variants on `{ caixa, issue }`),
+// [`layout_slot_kind_ctors!`] (0419438, 4 variants on
+// `{ caixa, kind, slots }`), [`LayoutError::missing_entry`] (1b09f9d,
+// 1 variant on `{ kind, path }`), and [`layout_nome_only_ctors!`] (3fe3dd7,
+// 6 variants on `<Variant>(String)`) each carry on the sibling layout-side
+// envelope. Every one of the seven wire-up sites in [`WitContract::target`]
+// (four `ContratoWrongTarget` arms on the payload-field-mismatch axis —
+// HTTP with subject/slot, PubSub with endpoint/slot, Store with
+// endpoint/subject, Capability with any payload; three
+// `ContratoMissingTarget` arms on the payload-field-absent axis — HTTP
+// without `:endpoint`, PubSub without `:subject`, Store without `:slot`)
+// opened the identical six-line
+// `AplicacaoError::Contrato<Wrong|Missing>Target { de, para, wit, expected:
+// WitTarget::<label> }` struct-literal against the local `edge()` closure
+// returning `(de, para, wit) = self.edge_triple()` — the exact "same block
+// re-inlined at every consumer" shape the PRIME DIRECTIVE names as a bug,
+// on the same altitude the peer four `LayoutError` constructor families
+// each closed on their sibling envelopes.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(edge: (String, String, String), expected:
+// &'static str) -> AplicacaoError`, collapsing the seven sites onto one
+// dispatch per arm: `return
+// Err(AplicacaoError::contrato_wrong_target(edge(), <label>));` / `.ok_or_else(||
+// AplicacaoError::contrato_missing_target(edge(), <label>))?`, byte-equal to
+// the pre-lift struct-literal on the same edge fixture. The uniform four-
+// field construction (`de, para, wit` triple-destructure onto same-named
+// fields + `expected` verbatim) is spelled once — inside the macro —
+// rather than at every wire-up site. `#[must_use]` fires a compile warning
+// at any wire-up that mistakenly discards the constructed error.
+//
+// Every future consumer that wants to construct one of these two variants
+// outside [`WitContract::target`] (a deferred
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-`:contratos`
+// admission validator raising wrong-target / missing-target diagnostics
+// on unrecognized shapes, a future `feira validate --contratos` per-caixa
+// admission verb, a per-`WitContract` payload-axis pre-emitter probing
+// the [`WitTarget`] arm against the declared `:endpoint`/`:subject`/`:slot`
+// slots) reaches the variant through one call rather than re-inlining the
+// six-line struct-literal block in lockstep with the seven in-crate
+// wire-up sites.
+macro_rules! contrato_target_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl AplicacaoError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`AplicacaoError::",
+                    stringify!($variant),
+                    "`] naming the offending edge `(de, para, wit)` triple ",
+                    "under the given `expected` payload-field-name label. ",
+                    "Folds the uniform `{ de, para, wit, expected }` four-",
+                    "slot struct-literal onto one substrate primitive so ",
+                    "every [`WitContract::target`] wire-up on this variant ",
+                    "reads through one dispatch rather than the pre-lift ",
+                    "six-line open-coded block. The `edge` triple threads ",
+                    "verbatim from [`WitContract::edge_triple`] via the ",
+                    "local `edge()` closure at the call site."
+                )]
+                #[must_use]
+                pub fn $ctor(edge: (String, String, String), expected: &'static str) -> Self {
+                    let (de, para, wit) = edge;
+                    Self::$variant { de, para, wit, expected }
+                }
+            )*
+        }
+    };
+}
+
+contrato_target_ctors! {
+    contrato_wrong_target => ContratoWrongTarget,
+    contrato_missing_target => ContratoMissingTarget,
 }
 
 #[cfg(test)]
@@ -31536,5 +31583,166 @@ mod tests {
              {:?}, expected {:?})",
             omitted.estrategia, PLACEMENT_ESTRATEGIA_DEFAULT,
         );
+    }
+
+    // ── contrato_target_ctors! fold pins ────────────────────────────────
+    //
+    // Fixture edge triple + payload-field-name label pair for every
+    // `contrato_target_ctors!`-generated ctor pin below. Kept as
+    // non-default `("cart", "catalog", "wasi:http/proxy")` +
+    // `WitTarget::HTTP_FIELD_NAME` so a byte-equality mistake against
+    // the fixture default doesn't silently pass. Peer of the sibling
+    // `entrada_host_invalid_ctor_matches_struct_literal_wrap` /
+    // `<slot>_violation_ctor_matches_struct_literal_wrap` /
+    // `<slot>_slots_on_non_<owner>_ctor_matches_struct_literal_wrap` /
+    // `missing_entry_ctor_matches_struct_literal_wrap` /
+    // `<slot>_ctor_matches_tuple_literal_wrap` equivalence pins on the
+    // four `LayoutError` constructor families each closed on their
+    // sibling envelopes.
+    fn contrato_target_ctor_fixture() -> (String, String, String, &'static str) {
+        (
+            "cart".to_string(),
+            "catalog".to_string(),
+            "wasi:http/proxy".to_string(),
+            WitTarget::HTTP_FIELD_NAME,
+        )
+    }
+
+    #[test]
+    fn contrato_wrong_target_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::ContratoWrongTarget` to the pre-lift open-
+        // coded struct-literal on the same edge fixture, so the fold
+        // cannot silently drift on any future field-addition /
+        // reordering / string-conversion tweak on the variant. Peer of
+        // the sibling `entrada_host_invalid_ctor_matches_struct_literal_wrap`
+        // (17dd504) / the four `LayoutError` family equivalence pins.
+        let (de, para, wit, expected) = contrato_target_ctor_fixture();
+        let lifted = AplicacaoError::contrato_wrong_target(
+            (de.clone(), para.clone(), wit.clone()),
+            expected,
+        );
+        let struct_literal = AplicacaoError::ContratoWrongTarget {
+            de,
+            para,
+            wit,
+            expected,
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_missing_target_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin peer of the sibling
+        // `contrato_wrong_target_ctor_matches_struct_literal_wrap` above
+        // on the paired `ContratoMissingTarget` variant of the same
+        // four-slot envelope shape the `contrato_target_ctors!` macro
+        // closes.
+        let (de, para, wit, expected) = contrato_target_ctor_fixture();
+        let lifted = AplicacaoError::contrato_missing_target(
+            (de.clone(), para.clone(), wit.clone()),
+            expected,
+        );
+        let struct_literal = AplicacaoError::ContratoMissingTarget {
+            de,
+            para,
+            wit,
+            expected,
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_target_ctors_route_edge_triple_through_verbatim() {
+        // Routing pin: the `(de, para, wit)` triple threads verbatim
+        // onto same-named fields on both generated ctors, no wrapper-
+        // side lowercase / trim / re-order. Sweeps a non-default triple
+        // (`"cart-svc" → "catalog-v2"`, `"nats:pub-sub"`) so any
+        // wrapper-side transformation surfaces here rather than at a
+        // downstream diagnostic-shape drift. Sibling of
+        // `entrada_host_invalid_ctor_routes_host_through_to_string`
+        // (17dd504) on the paired triple-carrying envelope.
+        let edge = (
+            "cart-svc".to_string(),
+            "catalog-v2".to_string(),
+            "nats:pub-sub".to_string(),
+        );
+        let wrong =
+            AplicacaoError::contrato_wrong_target(edge.clone(), WitTarget::PUBSUB_FIELD_NAME);
+        let missing = AplicacaoError::contrato_missing_target(edge, WitTarget::PUBSUB_FIELD_NAME);
+        let AplicacaoError::ContratoWrongTarget {
+            de: wde,
+            para: wpara,
+            wit: wwit,
+            ..
+        } = wrong
+        else {
+            panic!("contrato_wrong_target must construct the ContratoWrongTarget variant");
+        };
+        let AplicacaoError::ContratoMissingTarget {
+            de: mde,
+            para: mpara,
+            wit: mwit,
+            ..
+        } = missing
+        else {
+            panic!("contrato_missing_target must construct the ContratoMissingTarget variant");
+        };
+        assert_eq!(wde, "cart-svc");
+        assert_eq!(wpara, "catalog-v2");
+        assert_eq!(wwit, "nats:pub-sub");
+        assert_eq!(mde, "cart-svc");
+        assert_eq!(mpara, "catalog-v2");
+        assert_eq!(mwit, "nats:pub-sub");
+    }
+
+    #[test]
+    fn contrato_target_ctors_route_expected_through_verbatim() {
+        // Routing pin: the `expected: &'static str` label threads
+        // verbatim (identity, not copy-and-transform) onto the
+        // `expected` field of both variants, so the four canonical
+        // labels [`WitTarget::HTTP_FIELD_NAME`] /
+        // [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`]
+        // / [`WitTarget::CAPABILITY_EXPECTED`] survive the fold as
+        // pointer-equal (not merely value-equal) references — a wrapper-
+        // side `.to_string()` / `Cow::Owned` promotion would break the
+        // `&'static str` contract downstream consumers depend on.
+        for label in [
+            WitTarget::HTTP_FIELD_NAME,
+            WitTarget::PUBSUB_FIELD_NAME,
+            WitTarget::STORE_FIELD_NAME,
+            WitTarget::CAPABILITY_EXPECTED,
+        ] {
+            let (de, para, wit, _) = contrato_target_ctor_fixture();
+            let wrong = AplicacaoError::contrato_wrong_target(
+                (de.clone(), para.clone(), wit.clone()),
+                label,
+            );
+            let missing = AplicacaoError::contrato_missing_target((de, para, wit), label);
+            match wrong {
+                AplicacaoError::ContratoWrongTarget { expected, .. } => {
+                    assert!(
+                        std::ptr::eq(expected.as_ptr(), label.as_ptr())
+                            && expected.len() == label.len(),
+                        "contrato_wrong_target must thread the &'static str \
+                         label pointer-equal onto the `expected` field \
+                         (label = {label:?})",
+                    );
+                }
+                other => panic!("expected ContratoWrongTarget, got {other:?}"),
+            }
+            match missing {
+                AplicacaoError::ContratoMissingTarget { expected, .. } => {
+                    assert!(
+                        std::ptr::eq(expected.as_ptr(), label.as_ptr())
+                            && expected.len() == label.len(),
+                        "contrato_missing_target must thread the &'static \
+                         str label pointer-equal onto the `expected` field \
+                         (label = {label:?})",
+                    );
+                }
+                other => panic!("expected ContratoMissingTarget, got {other:?}"),
+            }
+        }
     }
 }
