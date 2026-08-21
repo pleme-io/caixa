@@ -5020,6 +5020,142 @@ impl Caixa {
         crate::render::decompose_ci(self, ci).map(|_| ())
     }
 
+    /// Compound per-`Caixa` kind ↔ typed-slot coherence gate on the
+    /// three "declared but ignored" typed-slot families — M3 mesh
+    /// (`:membros` / `:contratos` / `:politicas` / `:placement` /
+    /// `:entrada`, owned by `:kind Aplicacao`, MESH-COMPOSITION §III.1),
+    /// supervisor-tree (`:estrategia` / `:max-restarts` /
+    /// `:restart-window` / `:children`, owned by `:kind Supervisor`,
+    /// INSPIRATIONS §II.2), and M2 Servico-runtime (`:limits` /
+    /// `:behavior` / `:upgrade-from`, owned by `:kind Servico`,
+    /// INSPIRATIONS §III.1 / §II.3 / §II.4). Folds the three sibling
+    /// [`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] kind-coherence
+    /// gates — each pre-lift a self-similar five-line
+    /// `if !caixa.kind().is_<owner>() { let slots = caixa.declared_
+    /// <family>_slots(); if !slots.is_empty() { return
+    /// Err(LayoutError::<family>_on_non_<owner>(caixa, slots)); } }`
+    /// block at [`crate::layout::StandardLayout::verify`] — onto one
+    /// substrate primitive on [`Caixa`]. Every arm passes as an
+    /// identity element on the owner kind (the paired
+    /// [`Self::kind`] `is_<owner>()` guard short-circuits before the
+    /// per-family `declared_*_slots` gate fires) and on non-owner
+    /// kinds carrying no declared slot in that family (the
+    /// [`Vec::is_empty`] check short-circuits before the wrap fires),
+    /// so a bare no-code caixa on any kind passes the fold trivially
+    /// on all three arms.
+    ///
+    /// Prior to this lift the three-arm cascade lived only wired
+    /// open-coded at the layout wire-up site
+    /// ([`crate::layout::StandardLayout::verify`], caixa-core/src/
+    /// layout.rs) as three self-similar five-line blocks paired with
+    /// three [`crate::LayoutError::mesh_slots_on_non_aplicacao`] /
+    /// [`crate::LayoutError::supervisor_slots_on_non_supervisor`] /
+    /// [`crate::LayoutError::servico_slots_on_non_servico`] ctor
+    /// dispatches (each of which the peer
+    /// [`crate::layout::layout_slot_kind_ctors!`] macro already folds
+    /// onto one substrate primitive per typed variant, 0419438) —
+    /// every future consumer that wanted to gate the whole
+    /// kind-coherence cascade as a unit (the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission
+    /// webhook re-checking every typed-slot family after a per-slot
+    /// patch, a future `feira validate --kind-coherence` per-caixa
+    /// admission verb, a per-`Caixa` overlay resolver rejecting a
+    /// kind-foreign patch against a cluster-local snapshot) was
+    /// structurally forced to either re-inline the three-block
+    /// cascade in lockstep with the layout wire-up (the duplication
+    /// the PRIME DIRECTIVE names as a bug) or call the whole
+    /// [`crate::layout::StandardLayout::verify`] pipeline and pay
+    /// every peer per-`Caixa` gate to re-check three slot families.
+    /// Post-fold each such consumer reaches the three-arm cascade
+    /// through one call on the substrate primitive.
+    ///
+    /// Diagnostic order matches the pre-fold layout wire-up
+    /// canonical sequence — mesh → supervisor → servico — pinned by
+    /// the load-bearing
+    /// `validate_kind_slot_coherence_mesh_arm_fires_before_supervisor_arm`
+    /// / `_supervisor_arm_fires_before_servico_arm` ordering pins
+    /// below. The three arms enumerate every typed-slot family the
+    /// substrate carries whose "declared but ignored" footgun is
+    /// gated at the layout altitude by a `{ caixa, kind, slots }`
+    /// wrap variant — the peer
+    /// [`crate::LayoutError::ForeignCodeSlot`] gate on the
+    /// code-surface family sits outside this fold because
+    /// [`Self::declared_foreign_code_slots`] bakes the kind-check
+    /// into the helper (so the layout wire-up carries no outer
+    /// `if !caixa.kind().is_<owner>()` guard), and the peer
+    /// [`crate::LayoutError::CiOnNonAcao`] gate on the `:ci` axis
+    /// carries a distinct `{ caixa, kind }` wrap shape (no `slots`
+    /// field — `:ci` is a single `Option` not a `Vec`-of-named-slots)
+    /// that a future symmetry lift closing the Acao axis onto this
+    /// same fold would need to reshape into the sibling
+    /// `AcaoSlotsOnNonAcao { caixa, kind, slots }` shape before
+    /// joining.
+    ///
+    /// Peer to the per-kind compound entry gates every substrate
+    /// primitive on the M2/M3 typed-slot family already carries
+    /// ([`Self::validate_deps`] b5dd55e, [`Self::validate_limits`]
+    /// baa4688, [`Self::validate_behavior`] 0d2877a,
+    /// [`Self::validate_upgrade_from`] d6801df,
+    /// [`Self::validate_aplicacao_shape`] 949a7a0,
+    /// [`Self::validate_supervisor_shape`] 4c70105,
+    /// [`Self::validate_acao_shape`] 5d6df54): the author-time gate
+    /// axis on the *per-slot* algebra now shares one substrate
+    /// primitive per compound gate, and this lift closes the
+    /// symmetric axis on the *cross-family* kind ↔ slot coherence
+    /// algebra so the layout pipeline routes the three self-similar
+    /// gates through one substrate primitive rather than three
+    /// open-coded blocks. Every future kind that adds its own
+    /// exclusive typed-slot family (an `Actor`-owned per-virtual-
+    /// actor grain slot the M5 Orleans-inspired kind reaches
+    /// through, a per-Aplicacao overlay slot the M4 CR materializer
+    /// consults) folds onto this compound gate as one arm addition
+    /// rather than a fourth open-coded block at the wire-up site.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`crate::LayoutError`] variant surfacing
+    /// under the canonical mesh → supervisor → servico order:
+    /// [`crate::LayoutError::MeshSlotsOnNonAplicacao`] on a non-
+    /// Aplicacao caixa with a declared M3 mesh slot,
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] on a
+    /// non-Supervisor caixa with a declared supervisor-tree slot,
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] on a
+    /// non-Servico caixa with a declared M2 slot. Passes trivially
+    /// on the owner kind of each family and on non-owner kinds
+    /// carrying no declared slot in that family (the fold's identity
+    /// element on both axes).
+    pub fn validate_kind_slot_coherence(&self) -> Result<(), crate::LayoutError> {
+        if !self.kind().is_aplicacao() {
+            let mesh_slots = self.declared_mesh_slots();
+            if !mesh_slots.is_empty() {
+                return Err(crate::LayoutError::mesh_slots_on_non_aplicacao(
+                    self, mesh_slots,
+                ));
+            }
+        }
+        if !self.kind().is_supervisor() {
+            let supervisor_slots = self.declared_supervisor_slots();
+            if !supervisor_slots.is_empty() {
+                return Err(crate::LayoutError::supervisor_slots_on_non_supervisor(
+                    self,
+                    supervisor_slots,
+                ));
+            }
+        }
+        if !self.kind().is_servico() {
+            let servico_slots = self.declared_servico_slots();
+            if !servico_slots.is_empty() {
+                return Err(crate::LayoutError::servico_slots_on_non_servico(
+                    self,
+                    servico_slots,
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Reject per-entry values on the three Caixa-level code-surface
     /// path lists (`:bibliotecas`, `:exe`, `:servicos`) that the
     /// layout checker's `root.join(p)` sandbox would silently subvert.
@@ -21046,5 +21182,282 @@ mod tests {
         let c = acao_fixture("demo");
         c.validate_acao_shape()
             .expect("clean Acao fixture must pass the compound gate");
+    }
+
+    fn bare_servico_fixture(nome: &str) -> Caixa {
+        // A minimal Servico caixa with no code and no typed slots —
+        // the cross-family fold's identity element on every arm.
+        // Clears the biblioteca slot the template seeds so the
+        // per-arm patches below can each add exactly one typed slot
+        // without a peer `ServicoOwnsCode` / layout-side kind-gate
+        // firing upstream.
+        let mut c = Caixa::from_lisp(&Caixa::template(nome)).unwrap();
+        c.kind = CaixaKind::Servico;
+        c.bibliotecas = vec![];
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_folds_mesh_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the M3
+        // mesh-slot arm of the cross-family kind-coherence fold: a
+        // non-Aplicacao caixa carrying a declared M3 mesh slot (here
+        // a `:kind Servico` fixture with a single `:membros` entry —
+        // the smallest possible M3 slot declaration on a foreign
+        // kind) surfaces the same
+        // [`crate::LayoutError::MeshSlotsOnNonAplicacao`] variant
+        // through both the compound gate
+        // [`Caixa::validate_kind_slot_coherence`] and the standalone
+        // constructor [`crate::LayoutError::mesh_slots_on_non_aplicacao`]
+        // dispatched on the same `declared_mesh_slots` list. Pins
+        // the fold — a silent regression that de-folded the mesh
+        // arm would surface here as a mismatch between the two
+        // dispatches. Sibling in shape to the peer
+        // `validate_aplicacao_shape_folds_view_arm_matches_gate` /
+        // `validate_supervisor_shape_folds_view_arm_matches_gate` /
+        // `validate_acao_shape_folds_decompose_arm_matches_gate`
+        // per-arm equivalence pins on the sibling per-kind compound
+        // gates.
+        use crate::aplicacao::Membro;
+        let mut c = bare_servico_fixture("demo");
+        c.membros = vec![Membro {
+            caixa: "cart".into(),
+            versao: "^0.1".into(),
+        }];
+        let via_method = c.validate_kind_slot_coherence().unwrap_err();
+        let via_standalone =
+            crate::LayoutError::mesh_slots_on_non_aplicacao(&c, c.declared_mesh_slots());
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_kind_slot_coherence must surface the M3 \
+             mesh-slot arm's diagnostic byte-equal to the standalone \
+             LayoutError::mesh_slots_on_non_aplicacao ctor on the same \
+             declared_mesh_slots list",
+        );
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_folds_supervisor_arm_matches_gate() {
+        // Per-arm equivalence pin on the supervisor-tree arm — the
+        // sibling of the mesh arm on the cross-family fold. A
+        // non-Supervisor caixa carrying a declared supervisor slot
+        // (a `:kind Servico` fixture with `:estrategia` set — the
+        // smallest possible supervisor slot declaration on a
+        // foreign kind) surfaces the same
+        // [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+        // variant through both dispatches, pinned by field pair
+        // through `PartialEq`.
+        use crate::supervisor::RestartStrategy;
+        let mut c = bare_servico_fixture("demo");
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        let via_method = c.validate_kind_slot_coherence().unwrap_err();
+        let via_standalone = crate::LayoutError::supervisor_slots_on_non_supervisor(
+            &c,
+            c.declared_supervisor_slots(),
+        );
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_kind_slot_coherence must surface the \
+             supervisor-tree arm's diagnostic byte-equal to the \
+             standalone LayoutError::supervisor_slots_on_non_supervisor \
+             ctor on the same declared_supervisor_slots list",
+        );
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_folds_servico_arm_matches_gate() {
+        // Per-arm equivalence pin on the M2 Servico-runtime arm —
+        // the third and last arm on the cross-family fold. A
+        // non-Servico caixa carrying a declared M2 slot (a `:kind
+        // Biblioteca` fixture with `:limits` set — the smallest
+        // possible M2 slot declaration on a foreign kind) surfaces
+        // the same [`crate::LayoutError::ServicoSlotsOnNonServico`]
+        // variant through both dispatches. The three arms together
+        // enumerate every typed-slot family the substrate carries
+        // whose "declared but ignored" footgun is gated at the
+        // layout altitude by a `{ caixa, kind, slots }` wrap variant,
+        // so the per-arm pins collectively cover the whole
+        // cross-family kind-coherence axis.
+        use crate::limits::LimitsSpec;
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Biblioteca;
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: None,
+            wall_clock: None,
+            cpu: None,
+        });
+        let via_method = c.validate_kind_slot_coherence().unwrap_err();
+        let via_standalone =
+            crate::LayoutError::servico_slots_on_non_servico(&c, c.declared_servico_slots());
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_kind_slot_coherence must surface the M2 \
+             Servico-runtime arm's diagnostic byte-equal to the \
+             standalone LayoutError::servico_slots_on_non_servico ctor \
+             on the same declared_servico_slots list",
+        );
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_mesh_arm_fires_before_supervisor_arm() {
+        // Cross-arm ordering pin between the first two arms of the
+        // fold: a fixture carrying BOTH a declared M3 mesh slot
+        // (`:membros`) AND a declared supervisor-tree slot
+        // (`:estrategia`) on a foreign kind (a `:kind Servico` here —
+        // foreign to both the Aplicacao arm and the Supervisor arm)
+        // surfaces the M3 mesh diagnostic first through the compound
+        // gate. Pins the pre-fold layout wire-up's canonical
+        // diagnostic sequence (mesh → supervisor → servico) as a
+        // property of the substrate primitive rather than a
+        // convention of the layout call site. A silent reordering
+        // regression at the primitive would surface here as a
+        // wrong-variant match before landing at a downstream
+        // consumer's diagnostic-ordering expectation.
+        use crate::aplicacao::Membro;
+        use crate::supervisor::RestartStrategy;
+        let mut c = bare_servico_fixture("demo");
+        c.membros = vec![Membro {
+            caixa: "cart".into(),
+            versao: "^0.1".into(),
+        }];
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        let err = c.validate_kind_slot_coherence().unwrap_err();
+        assert!(
+            matches!(err, crate::LayoutError::MeshSlotsOnNonAplicacao { .. }),
+            "expected MeshSlotsOnNonAplicacao to fire before \
+             SupervisorSlotsOnNonSupervisor under the canonical \
+             mesh → supervisor → servico order, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_supervisor_arm_fires_before_servico_arm() {
+        // Cross-arm ordering pin between the second and third arms
+        // of the fold: a fixture carrying BOTH a declared
+        // supervisor-tree slot (`:estrategia`) AND a declared M2 slot
+        // (`:limits`) on a kind foreign to both (a `:kind Biblioteca`
+        // here — foreign to both the Supervisor and the Servico
+        // arms) surfaces the supervisor-tree diagnostic first
+        // through the compound gate. Together with the peer
+        // `_mesh_arm_fires_before_supervisor_arm` pin above this
+        // pins the whole three-arm canonical order (mesh →
+        // supervisor → servico) at the substrate primitive.
+        use crate::limits::LimitsSpec;
+        use crate::supervisor::RestartStrategy;
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Biblioteca;
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: None,
+            wall_clock: None,
+            cpu: None,
+        });
+        let err = c.validate_kind_slot_coherence().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::LayoutError::SupervisorSlotsOnNonSupervisor { .. }
+            ),
+            "expected SupervisorSlotsOnNonSupervisor to fire before \
+             ServicoSlotsOnNonServico under the canonical mesh → \
+             supervisor → servico order, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_accepts_owner_kind_on_every_arm() {
+        // Positive control on the identity-element arm: the owner
+        // kind of each typed-slot family passes the compound gate
+        // even when it declares the full slot set that family owns.
+        // Aplicacao with `:membros` populated passes the mesh arm;
+        // Supervisor with `:estrategia` populated passes the
+        // supervisor arm; Servico with `:limits` populated passes
+        // the servico arm. Pins the fold's identity element on
+        // every owner kind — a silent regression that dropped the
+        // paired `!kind().is_<owner>()` short-circuit guard would
+        // surface here as a false-positive rejection of every
+        // native-slot declaration. Peer with the
+        // `validate_<kind>_shape_accepts_non_<kind>_kind` identity-
+        // element pins on the sibling per-Caixa compound gates.
+        use crate::aplicacao::{Membro, Placement, PlacementStrategy};
+        use crate::limits::LimitsSpec;
+        use crate::supervisor::{ChildSpec, RestartPolicy, RestartStrategy};
+
+        let mut apli = Caixa::from_lisp(&Caixa::template("app")).unwrap();
+        apli.kind = CaixaKind::Aplicacao;
+        apli.bibliotecas = vec![];
+        apli.membros = vec![Membro {
+            caixa: "cart".into(),
+            versao: "^0.1".into(),
+        }];
+        apli.placement = Some(Placement {
+            estrategia: PlacementStrategy::SingleNode,
+            clusters: vec!["rio".into()],
+            shard_key: None,
+            affinity: None,
+        });
+        apli.validate_kind_slot_coherence().expect(
+            "an :kind Aplicacao caixa with declared M3 mesh slots must \
+             pass the compound gate — Aplicacao is the mesh-slot family's \
+             owner kind and the fold's identity element on that arm",
+        );
+
+        let mut sup = Caixa::from_lisp(&Caixa::template("sup")).unwrap();
+        sup.kind = CaixaKind::Supervisor;
+        sup.bibliotecas = vec![];
+        sup.estrategia = Some(RestartStrategy::OneForOne);
+        sup.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        sup.validate_kind_slot_coherence().expect(
+            "an :kind Supervisor caixa with declared supervisor-tree slots \
+             must pass the compound gate — Supervisor is the \
+             supervisor-slot family's owner kind and the fold's identity \
+             element on that arm",
+        );
+
+        let mut svc = bare_servico_fixture("svc");
+        svc.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: None,
+            wall_clock: None,
+            cpu: None,
+        });
+        svc.validate_kind_slot_coherence().expect(
+            "an :kind Servico caixa with declared M2 slots must pass the \
+             compound gate — Servico is the M2-slot family's owner kind \
+             and the fold's identity element on that arm",
+        );
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_accepts_bare_caixa_on_every_kind() {
+        // Positive control on the second identity-element arm: a
+        // bare caixa (no declared typed slots) passes the compound
+        // gate on every kind. Pins the fold's identity element on
+        // the empty-slot axis — the paired `Vec::is_empty` short-
+        // circuit guard fires before the wrap dispatch on all three
+        // arms, so a bare caixa of any kind surfaces no diagnostic.
+        // A silent regression that dropped the emptiness guard
+        // would surface here as a false-positive rejection of every
+        // no-slot caixa across the whole kind axis.
+        for kind in CaixaKind::ALL {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = *kind;
+            c.bibliotecas = vec![];
+            c.validate_kind_slot_coherence().unwrap_or_else(|err| {
+                panic!(
+                    "a bare :kind {kind:?} caixa (no declared typed slots) \
+                     must pass the compound gate — the fold's identity \
+                     element on the empty-slot axis is the paired \
+                     Vec::is_empty short-circuit guard, got {err:?}",
+                )
+            });
+        }
     }
 }
