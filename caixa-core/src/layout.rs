@@ -900,18 +900,45 @@ impl LayoutInvariants for StandardLayout {
 
         // ── M2 typed-substrate invariants ────────────────────────────────
 
-        // Lunatic-style per-process limits: every declared axis must
-        // be meaningfully non-zero. A zero on any axis is the same
-        // authorial-intent footgun as a 0-failure circuit-breaker or
-        // a 0-port :entrada — wasmtime would consume the value as
-        // "trap immediately" rather than the author's "an unspecified
-        // bound". See `LimitsSpec::validate` for the full rationale.
-        if let Some(l) = caixa.limits() {
-            l.validate().map_err(|err| LayoutError::LimitsViolation {
+        // Compound per-Caixa entry gate on the M2 `:limits` slot: the
+        // layout pipeline's `if let Some(l) = caixa.limits() { l.validate() }`
+        // `Option::None → Ok(()) | Some(_) → dispatch` unwrap-and-
+        // dispatch pattern — the four-axis cascade on the present-slot
+        // arm ([`crate::LimitsSpec::validate`]'s `:memory` wasm32
+        // zero-floor / below-page / above-cap / non-page-multiple;
+        // `:fuel` zero-floor / cap; `:wall-clock` zero-floor / cap;
+        // `:cpu` zero-floor / cap) folded onto the
+        // [`crate::Caixa::validate_limits`] substrate primitive. The
+        // absent-slot arm (`limits: None`, the canonical "no bound
+        // declared — engine-default applies" author shape) is the
+        // fold's identity element and passes trivially through the
+        // primitive, byte-equal to the pre-lift `if let Some(l) = …`
+        // guard this call site formerly carried. Pinned by the paired
+        // `validate_limits_folds_arm_matches_gate` equivalence pin and
+        // the `validate_limits_accepts_none` / `_accepts_clean_fixture`
+        // positive-control pins in the [`crate::Caixa::validate_limits`]
+        // pin family (`manifest.rs`).
+        //
+        // Same lift discipline the peer per-Caixa compound gates
+        // ([`crate::Caixa::validate_upgrade_from`] d6801df,
+        // [`crate::Caixa::validate_deps`] b5dd55e) each carry — one
+        // named substrate-primitive gate per typed slot folds every
+        // structural axis on that slot (plus the `Option::None`
+        // identity element for the `Option`-shaped slots) onto one
+        // call, so every future consumer that wants to re-check
+        // `:limits` after a per-`{:memory, :fuel, :wall-clock, :cpu}`
+        // patch (the deferred `caixa.pleme.io/v1alpha1/Caixa` CR
+        // materializer's admission webhook, a future `feira validate
+        // --limits` per-caixa admission verb, a per-`:limits` overlay
+        // resolver) reaches the four-axis cascade through one dispatch
+        // rather than re-inlining the `if let Some(l) = …` unwrap-and-
+        // dispatch pattern in lockstep with this wire-up.
+        caixa
+            .validate_limits()
+            .map_err(|err| LayoutError::LimitsViolation {
                 caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
-        }
 
         // Behavior callbacks: every declared callback must (a) be
         // value-shape valid (no empty / absolute / parent-escaping

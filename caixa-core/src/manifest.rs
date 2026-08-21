@@ -4562,6 +4562,78 @@ impl Caixa {
         Ok(())
     }
 
+    /// Compound per-`Caixa` entry gate on the M2 `:limits` slot — folds
+    /// the [`crate::LimitsSpec::validate`] four-axis cascade (`:memory`
+    /// wasm32 zero-floor / below-page / above-cap / non-page-multiple;
+    /// `:fuel` zero-floor / cap; `:wall-clock` zero-floor / cap; `:cpu`
+    /// zero-floor / cap) onto one substrate primitive on [`Caixa`]. The
+    /// `#[serde(default)]` absent-slot arm (`limits: None`, the
+    /// canonical "no bound declared — engine-default applies" author
+    /// shape [`crate::LimitsSpec::is_empty`]'s per-axis `None` cascade
+    /// reads) is the fold's identity element and passes trivially; the
+    /// present-slot arm (`limits: Some(l)`) dispatches to
+    /// [`crate::LimitsSpec::validate`] verbatim, threading its per-axis
+    /// [`crate::LimitsError`] Display through untouched.
+    ///
+    /// Prior to this lift the M2 `:limits` slot lived only wired
+    /// open-coded at the layout wire-up site
+    /// ([`crate::layout::StandardLayout::verify`], caixa-core/src/layout.rs),
+    /// through the `if let Some(l) = caixa.limits() { l.validate() … }`
+    /// three-line `Option::None → Ok(()) | Some(_) → …` unwrap-and-
+    /// dispatch pattern paired with the same
+    /// [`crate::LayoutError::LimitsViolation`]-wrap envelope: every
+    /// future consumer that wanted to gate `:limits` as a whole — the
+    /// deferred `caixa.pleme.io/v1alpha1/Caixa` CR materializer's
+    /// per-CR admission webhook re-checking `:limits` after a per-
+    /// `{:memory, :fuel, :wall-clock, :cpu}` patch (the exact case the
+    /// [`Self::limits`] accessor docstring names as the second
+    /// consumer of the slot), a future `feira validate --limits` per-
+    /// caixa admission verb, a per-`:limits` overlay resolver a per-
+    /// cluster `:limits-overrides` overlay lift would materialize — was
+    /// structurally forced to either re-inline the two-line
+    /// `Option::None → Ok(()) | Some(_) → …` unwrap-and-dispatch
+    /// pattern in lockstep with the layout wire-up (the duplication the
+    /// PRIME DIRECTIVE names as a bug) or call the whole
+    /// [`crate::layout::StandardLayout::verify`] pipeline and pay every
+    /// peer per-Caixa gate ([`Self::validate_nome`],
+    /// [`Self::validate_versao`], [`Self::validate_deps`],
+    /// [`Self::validate_etiquetas`], [`Self::validate_autores`],
+    /// [`Self::validate_repositorio`], [`Self::validate_descricao`],
+    /// [`Self::validate_licenca`], [`Self::validate_edicao`],
+    /// [`Self::validate_upgrade_from`], [`Self::validate_code_paths`],
+    /// plus the per-kind `require_supervisor_view` /
+    /// `require_aplicacao_view` gates, plus the on-disk existence
+    /// walks) to re-check one slot. Post-lift each such consumer
+    /// reaches the [`crate::LimitsSpec::validate`] four-axis cascade
+    /// (and its identity-element on the absent slot) through one call
+    /// on the substrate primitive.
+    ///
+    /// The per-slot compound entry-gate discipline lifted here onto the
+    /// M2 `:limits` axis is the sibling of the peer per-slot compound
+    /// gates ([`crate::AplicacaoSpec::validate_contratos`],
+    /// [`crate::MeshPolicy::validate`],
+    /// [`crate::SupervisorSpec::validate_children`],
+    /// [`Self::validate_upgrade_from`], [`Self::validate_deps`]) that
+    /// fold every structural + cross-slot axis on their slot onto one
+    /// substrate primitive. Extended here to the M2 `:limits` slot, the
+    /// first of the two M2 typed slots (`:limits`, `:behavior`) whose
+    /// per-Caixa compound-gate wire-up still lived open-coded at the
+    /// layout altitude after the [`Self::validate_upgrade_from`] lift
+    /// (d6801df) closed the sibling M2 slot's cascade.
+    ///
+    /// # Errors
+    ///
+    /// Returns every [`crate::LimitsError`] variant on the present-slot
+    /// arm — verbatim from [`crate::LimitsSpec::validate`]. Passes
+    /// trivially on the absent-slot arm (`limits: None`, the fold's
+    /// identity element).
+    pub fn validate_limits(&self) -> Result<(), crate::LimitsError> {
+        match self.limits() {
+            Some(l) => l.validate(),
+            None => Ok(()),
+        }
+    }
+
     /// Reject `:restart-window` values the shared
     /// [`crate::supervisor::duration_codec::parse`] refuses. The flat
     /// `restart_window: Option<String>` slot on [`Caixa`] is stored
@@ -19493,6 +19565,101 @@ mod tests {
         );
         c.validate_upgrade_from()
             .expect("empty :upgrade-from must pass the compound gate cleanly");
+    }
+
+    // ── Caixa::validate_limits — compound per-Caixa entry gate on   ──
+    // ── the M2 `:limits` slot: folds the                            ──
+    // ── [`crate::LimitsSpec::validate`] four-axis cascade on the    ──
+    // ── present-slot arm and the `Option::None` identity element on ──
+    // ── the absent-slot arm onto one substrate primitive.           ──
+    // ── Byte-for-byte equivalent to the pre-fold                    ──
+    // ── `if let Some(l) = caixa.limits() { l.validate() }`          ──
+    // ── unwrap-and-dispatch pattern at                              ──
+    // ── `crate::layout::StandardLayout::verify` (`layout.rs`).      ──
+
+    #[test]
+    fn validate_limits_folds_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // present-slot arm: a fixture whose `:limits` carries a
+        // zero-floor-violating `:fuel` (`Some(0)`, which
+        // [`crate::LimitsSpec::validate`] rejects through
+        // [`crate::LimitsError::FuelZero`]) surfaces the same
+        // [`crate::LimitsError`] byte-equal through both the compound
+        // gate [`Caixa::validate_limits`] and the standalone
+        // [`crate::LimitsSpec::validate`] gate on the same `LimitsSpec`
+        // value. Pins the fold — a silent regression that de-folded
+        // the present-slot arm would surface here as a mismatch
+        // between the two dispatches. Sibling in shape to the peer
+        // per-arm equivalence pins the
+        // [`crate::AplicacaoSpec::validate_contratos`] /
+        // [`crate::MeshPolicy::validate`] /
+        // [`crate::SupervisorSpec::validate_children`] /
+        // [`Caixa::validate_upgrade_from`] compound gates each carry
+        // on their axes.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        let l = crate::LimitsSpec {
+            memory: None,
+            fuel: Some(0),
+            wall_clock: None,
+            cpu: None,
+        };
+        c.limits = Some(l);
+        let via_method = c.validate_limits().unwrap_err();
+        let via_standalone = l.validate().unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_limits must surface the present-slot \
+             arm's diagnostic byte-equal to the standalone \
+             `LimitsSpec::validate` on the same `LimitsSpec` value"
+        );
+        assert!(
+            matches!(via_method, crate::LimitsError::FuelZero),
+            "expected FuelZero on the zero-floor-violating `:fuel`, \
+             got {via_method:?}"
+        );
+    }
+
+    #[test]
+    fn validate_limits_accepts_none() {
+        // Positive control on the absent-slot arm (the fold's identity
+        // element): a caixa without any `:limits` block (the
+        // canonical "no bound declared — engine-default applies"
+        // author shape [`crate::LimitsSpec::is_empty`]'s per-axis
+        // `None` cascade reads, and the shape the [`Caixa::template`]
+        // scaffold emits by construction) passes the compound gate
+        // cleanly, regardless of any per-axis defect a subsequent
+        // `Some(_)` binding would surface. Pins the identity element
+        // of the fold on the absent-slot side, matching the peer
+        // `validate_upgrade_from_accepts_empty_upgrade_from` positive-
+        // control posture on the sibling M2 slot.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        assert!(
+            c.limits().is_none(),
+            "template caixa must carry an absent :limits — got {:?}",
+            c.limits()
+        );
+        c.validate_limits()
+            .expect("absent :limits must pass the compound gate cleanly");
+    }
+
+    #[test]
+    fn validate_limits_accepts_clean_fixture() {
+        // Positive control on the present-slot arm: a caixa whose
+        // `:limits` is `Some(LimitsSpec::default())` (all four axes
+        // `None` — every axis absent under the outer `Some(_)`
+        // binding, so every present-slot arm on
+        // [`crate::LimitsSpec::validate`] is vacuous) passes the
+        // compound gate cleanly. A future tightening of any one axis
+        // that surfaces a diagnostic on the all-`None` `LimitsSpec`
+        // would land here as a test failure first. Pins the
+        // present-slot arm's accept-shape on the canonical
+        // "declared-but-empty" author fixture the
+        // `limits_round_trip_via_json` peer already round-trips
+        // (`caixa-core/src/manifest.rs:6971`).
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.limits = Some(crate::LimitsSpec::default());
+        c.validate_limits()
+            .expect("Some(LimitsSpec::default()) must pass the compound gate cleanly");
     }
 
     // ── Caixa::validate_deps — compound per-Caixa entry gate on the ──
