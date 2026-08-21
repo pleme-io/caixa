@@ -820,10 +820,10 @@ impl LayoutInvariants for StandardLayout {
         for p in caixa.bibliotecas() {
             let full = root.join(p);
             if !self.exists(&full) {
-                return Err(LayoutError::MissingEntry {
-                    kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
-                    path: full,
-                });
+                return Err(LayoutError::missing_entry(
+                    crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                    full,
+                ));
             }
         }
 
@@ -831,10 +831,10 @@ impl LayoutInvariants for StandardLayout {
         for p in caixa.exe() {
             let full = root.join(p);
             if !self.exists(&full) {
-                return Err(LayoutError::MissingEntry {
-                    kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
-                    path: full,
-                });
+                return Err(LayoutError::missing_entry(
+                    crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                    full,
+                ));
             }
             if !full.starts_with(&exe_dir) {
                 return Err(LayoutError::ExeOutsideDir(full));
@@ -845,10 +845,10 @@ impl LayoutInvariants for StandardLayout {
         for p in caixa.servicos() {
             let full = root.join(p);
             if !self.exists(&full) {
-                return Err(LayoutError::MissingEntry {
-                    kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
-                    path: full,
-                });
+                return Err(LayoutError::missing_entry(
+                    crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                    full,
+                ));
             }
             if !full.starts_with(&servicos_dir) {
                 return Err(LayoutError::ServicoOutsideDir(full));
@@ -954,10 +954,10 @@ impl LayoutInvariants for StandardLayout {
             for p in b.declared_paths() {
                 let full = root.join(p);
                 if !self.exists(&full) {
-                    return Err(LayoutError::MissingEntry {
-                        kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
-                        path: full,
-                    });
+                    return Err(LayoutError::missing_entry(
+                        crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+                        full,
+                    ));
                 }
             }
         }
@@ -1018,10 +1018,10 @@ impl LayoutInvariants for StandardLayout {
                 if let Some(p) = instr.declared_path() {
                     let full = root.join(p);
                     if !self.exists(&full) {
-                        return Err(LayoutError::MissingEntry {
-                            kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
-                            path: full,
-                        });
+                        return Err(LayoutError::missing_entry(
+                            crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+                            full,
+                        ));
                     }
                 }
             }
@@ -1506,6 +1506,57 @@ layout_slot_kind_ctors! {
     foreign_code_slot => ForeignCodeSlot,
 }
 
+// Fold the five [`LayoutError::MissingEntry`] wire-up sites at
+// [`StandardLayout::verify`] onto one substrate primitive on `LayoutError` —
+// the third and last uniform-shape envelope on `LayoutError` after the
+// `{ caixa, issue }` family the [`layout_violation_ctors!`] macro closed
+// (131ca0d) and the `{ caixa, kind, slots }` family the peer
+// [`layout_slot_kind_ctors!`] macro closed (0419438). Each of the five
+// wire-up sites on `MissingEntry` (`:bibliotecas` iteration line 823,
+// `:exe` iteration line 834, `:servicos` iteration line 848, `:behavior`
+// on-disk callback-path iteration line 957, `:upgrade-from` per-
+// instruction script-path iteration line 1021) opened the same four-line
+// `LayoutError::MissingEntry { kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_<slot>,
+// path: full }` struct-literal block — the exact "same block re-inlined
+// at every consumer" shape the PRIME DIRECTIVE names as a bug, on the
+// same altitude the peer `_violation` / `_slots_on_non_*` families each
+// closed on the sibling `LayoutError` envelopes.
+//
+// One `#[must_use]` inherent constructor on `LayoutError` collapses the
+// five sites onto one dispatch:
+// `return Err(LayoutError::missing_entry(<kind-label>, full));`, byte-
+// equal to the pre-lift struct-literal block. A macro is not warranted
+// on the one-variant envelope shape `{ kind: &'static str, path: PathBuf }`
+// (unlike the sibling 16-variant `_violation` / 4-variant
+// `_slots_on_non_*` shapes), but the same substrate-primitive discipline
+// applies: every future consumer that wants to construct a `MissingEntry`
+// outside the layout pipeline (a per-slot admission webhook probing a
+// declared path against an out-of-band filesystem oracle, a `feira
+// validate --lib` / `--exe` / `--servico` / `--behavior` / `--upgrade`
+// per-caixa admission verb, the deferred `caixa.pleme.io/v1alpha1/Caixa`
+// CR materializer's admission-webhook floor, a per-cluster overlay
+// resolver rejecting a missing entry against a cluster-local filesystem
+// snapshot) reaches the variant through one call rather than re-inlining
+// the four-line struct-literal block in lockstep with the five
+// layout-pipeline wire-up sites.
+impl LayoutError {
+    /// Construct a [`LayoutError::MissingEntry`] naming the missing
+    /// declared entry at `path` under the canonical `kind` label from
+    /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
+    /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE`] /
+    /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO`] /
+    /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK`] /
+    /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT`].
+    /// Folds the uniform `{ kind, path }` two-slot construction onto one
+    /// substrate primitive so every [`StandardLayout::verify`] wire-up
+    /// on this variant reads through one dispatch rather than the
+    /// pre-lift open-coded struct-literal block.
+    #[must_use]
+    pub fn missing_entry(kind: &'static str, path: PathBuf) -> Self {
+        Self::MissingEntry { kind, path }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1980,6 +2031,98 @@ mod tests {
                 caixa: c.nome().to_string(),
                 kind: c.kind(),
                 slots: ":limits :behavior :upgrade-from".to_string(),
+            },
+        );
+    }
+
+    // ── LayoutError::missing_entry substrate-primitive constructor ───────
+    //
+    // The [`LayoutError::missing_entry`] constructor beside the enum
+    // definition folds the `{ kind: &'static str, path: PathBuf }`
+    // uniform-shape envelope onto one substrate primitive — the third
+    // and last uniform-shape envelope on `LayoutError` after the
+    // `{ caixa, issue }` family the [`layout_violation_ctors!`] macro
+    // closed (131ca0d) and the `{ caixa, kind, slots }` family the peer
+    // [`layout_slot_kind_ctors!`] macro closed (0419438). The pins below
+    // (fail-before-pass-after by construction — a byte-mismatched
+    // constructor arm would trip its equivalence pin first) lock the
+    // constructor to its struct-literal peer under `PartialEq`, so every
+    // wire-up in [`StandardLayout::verify`] on this variant produces a
+    // byte-equal `LayoutError` to the pre-lift open-coded block. The two
+    // cross-axis pins that follow (canonical-kind-label sweep, non-
+    // default path) route each of the two constructor input axes through
+    // its arg verbatim, so the fold does not silently collapse onto a
+    // fixture default on either axis.
+
+    #[test]
+    fn missing_entry_ctor_matches_struct_literal_wrap() {
+        // Per-envelope equivalence pin — the `missing_entry` constructor
+        // produces a `LayoutError::MissingEntry` byte-equal under
+        // `PartialEq` to the open-coded four-line struct-literal wrap on
+        // the same `(kind, path)` fixture. Peer of the sibling
+        // `<slot>_violation_ctor_matches_struct_literal_wrap` /
+        // `<slot>_slots_on_non_<owner>_ctor_matches_struct_literal_wrap`
+        // pins on the two prior uniform-shape envelopes on the same
+        // `LayoutError`.
+        let path = PathBuf::from("/tmp/x/lib/demo.lisp");
+        assert_eq!(
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                path.clone(),
+            ),
+            LayoutError::MissingEntry {
+                kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                path,
+            },
+        );
+    }
+
+    #[test]
+    fn missing_entry_ctor_routes_kind_through_arg_verbatim() {
+        // Pin the fold's `kind: &'static str` arg through every canonical
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_*`] label the five
+        // wire-up sites in [`StandardLayout::verify`] pass — so the fold
+        // does not silently collapse onto one hard-coded label. Sweep
+        // matches the arm set the peer
+        // `layout_missing_entry_kind_m2_consts_pin_canonical_kebab_case_labels`
+        // pin (below) covers on the const-label declarations.
+        let path = PathBuf::from("/tmp/x/entry");
+        for kind in [
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+        ] {
+            assert_eq!(
+                LayoutError::missing_entry(kind, path.clone()),
+                LayoutError::MissingEntry {
+                    kind,
+                    path: path.clone(),
+                },
+                "missing_entry ctor must thread `kind` verbatim on every canonical label",
+            );
+        }
+    }
+
+    #[test]
+    fn missing_entry_ctor_routes_path_through_arg_verbatim() {
+        // Pin the fold's `path: PathBuf` arg against a non-default,
+        // multi-component `PathBuf` — the ctor threads the caller's
+        // `PathBuf` verbatim into the wrap envelope, so the fold does
+        // not silently collapse onto a fixed component prefix, a
+        // canonicalized form, or a single-component pass-through.
+        let path = PathBuf::from("/alt/root")
+            .join("servicos")
+            .join("hello-rio.computeunit.yaml");
+        assert_eq!(
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                path.clone(),
+            ),
+            LayoutError::MissingEntry {
+                kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                path,
             },
         );
     }
