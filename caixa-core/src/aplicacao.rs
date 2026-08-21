@@ -7685,14 +7685,20 @@ impl AplicacaoSpec {
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         self.validate_membros()?;
 
+        // `:contratos` per-slot gate — folds both structural axes on the
+        // slot into one substrate primitive: the per-entry cascade (shape
+        // + membership + self-loop + `:wit` emptiness + WIT-shape ↔
+        // target + whole-edge dedup) and the cross-edge sync-cycle axis
+        // ([`AplicacaoSpec::detect_sync_cycles`], MESH-COMPOSITION §III.3
+        // — pub-sub edges excluded, "acyclic by construction"). Same
+        // fold-per-axis-plus-cross-axis discipline the sibling
+        // [`AplicacaoSpec::validate_politicas`] per-slot gate carries via
+        // [`MeshPolicy::validate`] (f03a154 / 90a6f87), extended here
+        // onto `:contratos` so every future consumer of the slot (the M4
+        // admission webhook re-checking `:contratos` after a per-edge
+        // patch, the per-edge policy resolver MESH-COMPOSITION §III.2 #3
+        // acknowledges) reaches *both* structural axes through one call.
         self.validate_contratos()?;
-
-        // Cycles in the synchronous-edge subgraph are build errors
-        // (MESH-COMPOSITION §III.3). Pub-sub edges are excluded — they
-        // are "acyclic by construction" because the publisher fires
-        // and forgets, so no caller blocks on a downstream that loops
-        // back to it.
-        self.detect_sync_cycles()?;
 
         self.validate_entrada()?;
 
@@ -7742,8 +7748,9 @@ impl AplicacaoSpec {
 
     /// Reject `:contratos` entries whose endpoints are malformed,
     /// reference a Servico outside the graph, self-loop, carry an
-    /// empty `:wit` shape, or duplicate a prior entry on the six-axis
-    /// identity key.
+    /// empty `:wit` shape, duplicate a prior entry on the six-axis
+    /// identity key, or close a synchronous-edge cycle in the
+    /// resulting typed graph.
     ///
     /// The `:contratos` slot is the typed inter-Servico edge set
     /// (MESH-COMPOSITION §III.1): each entry is a WIT-typed directed
@@ -7752,10 +7759,21 @@ impl AplicacaoSpec {
     /// (caixa-mesh's per-`(:de, :para)` `CiliumNetworkPolicy` +
     /// per-HTTP `HTTPRoute`) fans out on.
     ///
-    /// Six axes are gated here, in the canonical edge-direction order
-    /// the paired diagnostics already encode (per-arm value shape
-    /// before graph-membership lookup; structural self-edge before
-    /// payload-shape target dispatch; whole-edge dedup last):
+    /// Two structural axes on the slot are folded into this per-slot
+    /// gate: the per-entry axis (six per-edge arms, listed below) and
+    /// the cross-edge synchronous-cycle axis (MESH-COMPOSITION §III.3,
+    /// dispatched to [`AplicacaoSpec::detect_sync_cycles`] after the
+    /// per-entry cascade). Same
+    /// per-axis-plus-cross-axis-fold-into-one-per-slot-gate discipline
+    /// the sibling [`AplicacaoSpec::validate_politicas`] per-slot gate
+    /// carries via [`MeshPolicy::validate`] (f03a154 / 90a6f87) on the
+    /// `:politicas` slot, extended here onto `:contratos`.
+    ///
+    /// Six per-entry axes are gated first, in the canonical
+    /// edge-direction order the paired diagnostics already encode
+    /// (per-arm value shape before graph-membership lookup; structural
+    /// self-edge before payload-shape target dispatch; whole-edge dedup
+    /// last):
     ///
     ///   - per-arm `:de` / `:para` value shape via
     ///     [`validate_contrato_caixa`] (empty + DNS-1123 grammar),
@@ -7775,6 +7793,20 @@ impl AplicacaoSpec {
     ///     ([`ContratoIdentity`]'s `(de, para, wit, endpoint, subject,
     ///     slot)` tuple).
     ///
+    /// One cross-edge axis is gated last, after the per-entry cascade
+    /// completes cleanly:
+    ///
+    ///   - synchronous-edge cycle detection via
+    ///     [`AplicacaoSpec::detect_sync_cycles`] (iterative DFS with
+    ///     three-coloring over the sync-only subgraph, pub-sub edges
+    ///     skipped per MESH-COMPOSITION §III.3 —
+    ///     [`AplicacaoError::ContratoCycle`]). Runs *after* the
+    ///     per-entry cascade so a per-entry defect surfaces through its
+    ///     narrower shape/membership/dedup arm before the cross-edge
+    ///     cycle diagnostic, matching the pre-fold `validate`-side
+    ///     dispatch ordering (`validate_contratos()? →
+    ///     detect_sync_cycles()?`).
+    ///
     /// Lifted out of [`AplicacaoSpec::validate`]'s inline `let mut
     /// seen_contracts = …; for c in self.contratos() { … }` block onto
     /// a named per-slot gate, closing the last unlifted per-slot gate
@@ -7786,18 +7818,21 @@ impl AplicacaoSpec {
     ///
     /// Self-contained on `&self` — it resolves its own membership
     /// oracle through [`AplicacaoSpec::membro_names`] rather than
-    /// borrowing one threaded down from `validate` — so a future
-    /// consumer that re-validates *one* slot against a mutated spec
-    /// (the M4 admission webhook re-checking `:contratos` after a
-    /// per-`(:de, :para)` edge patch without re-walking `:membros` /
-    /// `:entrada` / `:placement` / `:politicas`, or the M4 per-edge
-    /// policy resolver MESH-COMPOSITION §III.2 #3 acknowledges — which
-    /// resolves an effective per-edge [`MeshPolicy`] and must re-check
-    /// the edge's own identity closure before it can key a per-edge
-    /// override off the endpoint tuple) reaches the axis through one
-    /// call, exactly as [`AplicacaoSpec::detect_sync_cycles`] and
-    /// [`AplicacaoSpec::validate_entrada`] are already self-contained
-    /// for those same consumers.
+    /// borrowing one threaded down from `validate`, and runs its own
+    /// cross-edge cycle probe rather than deferring the axis to an
+    /// outer dispatch — so a future consumer that re-validates *one*
+    /// slot against a mutated spec (the M4 admission webhook
+    /// re-checking `:contratos` after a per-`(:de, :para)` edge patch
+    /// without re-walking `:membros` / `:entrada` / `:placement` /
+    /// `:politicas`, or the M4 per-edge policy resolver
+    /// MESH-COMPOSITION §III.2 #3 acknowledges — which resolves an
+    /// effective per-edge [`MeshPolicy`] and must re-check the edge's
+    /// own identity closure *and* the sync-cycle invariant before it
+    /// can key a per-edge override off the endpoint tuple) reaches
+    /// *both* structural axes on the slot through one call, exactly as
+    /// [`AplicacaoSpec::validate_politicas`] reaches both per-axis and
+    /// cross-axis surfaces on `:politicas` through
+    /// [`MeshPolicy::validate`].
     fn validate_contratos(&self) -> Result<(), AplicacaoError> {
         let names = self.membro_names();
 
@@ -7897,6 +7932,33 @@ impl AplicacaoSpec {
                 }
             })?;
         }
+
+        // Cross-edge cycle axis on the `:contratos` slot — folded into
+        // the per-slot gate so the two structural axes on `:contratos`
+        // (per-entry shape + membership + dedup above; cross-edge sync-
+        // cycle detection here) reach every consumer through one call.
+        // Same discipline the sibling per-slot compound gate
+        // [`MeshPolicy::validate`] (f03a154) established on `:politicas`
+        // — one named per-slot gate that folds *both* per-axis and
+        // cross-axis surfaces on the same slot onto one substrate
+        // primitive — extended here onto `:contratos`, closing the last
+        // per-slot-axis-family that lived split across `validate` (the
+        // per-entry `validate_contratos` half here and the cross-edge
+        // `detect_sync_cycles` call the sibling below at `validate`
+        // dispatched separately).
+        //
+        // Runs after the per-entry cascade so a per-entry defect (empty
+        // arm, unknown endpoint, self-loop, empty `:wit`, WIT-shape ↔
+        // target inconsistency, whole-edge duplicate) surfaces first
+        // through its narrower [`AplicacaoError`] arm before the cross-
+        // edge cycle diagnostic. This matches the pre-lift ordering the
+        // `validate`-side dispatch used verbatim (`self.validate_contratos()?
+        // → self.detect_sync_cycles()?`) — the cycle detector was
+        // already the second `:contratos`-axis gate in the dispatch,
+        // just at the outer altitude; the fold moves it under the same
+        // named per-slot gate without reshaping the diagnostic order.
+        self.detect_sync_cycles()?;
+
         Ok(())
     }
 
@@ -8463,6 +8525,21 @@ impl AplicacaoSpec {
     /// to itself, in declaration order. Adjacency lists and DFS roots
     /// are visited in `BTreeMap` key order so the diagnostic is
     /// deterministic across runs.
+    ///
+    /// Now the cross-edge axis of the per-slot compound gate
+    /// [`AplicacaoSpec::validate_contratos`] — invoked at the tail of
+    /// the per-entry cascade rather than at the outer
+    /// [`AplicacaoSpec::validate`] dispatch, so both structural axes on
+    /// `:contratos` (per-entry shape + membership + dedup; cross-edge
+    /// sync-cycle) reach every consumer through one call. Kept
+    /// standalone (rather than inlined) so consumers that want only the
+    /// cross-edge axis (the M4 per-edge policy resolver
+    /// MESH-COMPOSITION §III.2 #3 acknowledges, whose per-edge patch
+    /// mutates one `:contratos` entry and needs to re-probe *just* the
+    /// cycle invariant against the post-patch adjacency without
+    /// re-running the per-entry shape/membership/dedup cascade the
+    /// per-entry-only [M4 admission] fast path already covered) still
+    /// have a self-contained entry point on the cycle axis.
     fn detect_sync_cycles(&self) -> Result<(), AplicacaoError> {
         use std::collections::{BTreeMap, BTreeSet};
 
@@ -28003,6 +28080,220 @@ mod tests {
             !spec.membro_names().contains("catalog"),
             "fixture must have dropped the `:contratos` edge's \
              `:para` target from the graph's node set",
+        );
+    }
+
+    #[test]
+    fn validate_contratos_folds_cycle_axis_matches_gate() {
+        // Fold-into-per-slot-gate equivalence pin on the
+        // cross-edge cycle axis: an [`AplicacaoError::ContratoCycle`]
+        // surfaces byte-equal through both
+        // [`AplicacaoSpec::validate_contratos`] and
+        // [`AplicacaoSpec::validate`] on a fixture whose only defect is
+        // a synchronous-edge cycle in `:contratos`. Pins the fold that
+        // moved the cross-edge cycle axis onto the per-slot gate — a
+        // future silent regression that de-folded the axis back to the
+        // outer [`AplicacaoSpec::validate`] dispatch (a rebase artifact,
+        // a peer per-slot gate lift that skipped the cross-axis half of
+        // the [`MeshPolicy::validate`]-analogous discipline) would
+        // surface here as `Some(ContratoCycle)` from `validate` and
+        // `None` from `validate_contratos`.
+        //
+        // Cycle fixture is the same shape as the peer
+        // [`rejects_three_node_synchronous_cycle`] test carries: a
+        // clean 3-cycle over the HTTP subgraph (catalog → cart →
+        // payment → catalog), so the per-entry cascade (shape +
+        // membership + self-loop + `:wit` emptiness + WIT-target +
+        // whole-edge dedup) passes cleanly and the sole surviving
+        // refusal shape is the cross-edge cycle axis. The `cycle`
+        // vector is normalized to a sorted body set for the equality
+        // compare (the traversal path's starting node depends on
+        // BTreeMap iteration order, which is deterministic but is not
+        // the load-bearing property this pin covers).
+        //
+        // Peer of the sibling per-slot ≡ `validate` equivalence pins
+        // [`validate_contratos_matches_gate_on_every_per_axis_shape`]
+        // (per-entry axes) and
+        // [`validate_contratos_matches_gate_on_reason_carrying_arms`]
+        // (parser-owned reason arms) already carry on the six
+        // per-entry axes — this extends the discipline onto the
+        // cross-edge cycle axis newly folded into the per-slot gate,
+        // matching the peer per-slot compound gate
+        // [`AplicacaoSpec::validate_politicas`] (f03a154) which folded
+        // both per-axis and cross-axis surfaces on `:politicas`.
+        let mut spec = three_member_spec();
+        spec.contratos = vec![
+            contract_http("catalog", "cart", "/x"),
+            contract_http("cart", "payment", "/y"),
+            contract_http("payment", "catalog", "/z"),
+        ];
+        let per_slot_err = spec.validate_contratos().unwrap_err();
+        let gate_err = spec.validate().unwrap_err();
+        assert_eq!(
+            per_slot_err, gate_err,
+            "the per-slot gate and `validate` must return byte-equal \
+             `AplicacaoError::ContratoCycle` on a cycle-only fixture \
+             — the fold pins the cross-edge axis onto the per-slot \
+             gate the same way the peer `validate_politicas` fold \
+             pinned the `:politicas` cross-axis surface",
+        );
+        match per_slot_err {
+            AplicacaoError::ContratoCycle { ref cycle } => {
+                assert_eq!(
+                    cycle.first(),
+                    cycle.last(),
+                    "cycle traversal must close on the back-edge \
+                     target — the diagnostic shape the peer \
+                     `rejects_three_node_synchronous_cycle` pins",
+                );
+                let body: std::collections::HashSet<_> = cycle.iter().cloned().collect();
+                assert_eq!(body.len(), 3, "3-cycle must visit 3 distinct nodes");
+                assert!(body.contains("cart"));
+                assert!(body.contains("catalog"));
+                assert!(body.contains("payment"));
+            }
+            other => panic!("expected ContratoCycle, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_contratos_per_entry_arm_fires_before_cycle_arm() {
+        // Diagnostic-ordering pin on the fold: a `:contratos` fixture
+        // carrying *both* a per-entry defect (a self-loop, the
+        // structural-self-edge arm on the per-entry cascade — chosen
+        // because it never masks or is masked by the cycle diagnostic
+        // on the peer arms) *and* a would-be synchronous-edge cycle in
+        // the remaining edges must surface the per-entry diagnostic
+        // first through both [`AplicacaoSpec::validate_contratos`] and
+        // [`AplicacaoSpec::validate`] — pinning the fold's canonical
+        // per-entry-before-cross-edge dispatch ordering, byte-equal to
+        // the pre-fold `validate`-side sequence
+        // (`validate_contratos()? → detect_sync_cycles()?`) the
+        // dispatch encoded verbatim. A silent regression that reversed
+        // the ordering inside the fold would surface here as a cycle
+        // diagnostic on a fixture carrying an earlier per-entry defect
+        // — masking the narrower "this edge is degenerate" arm behind
+        // the coarser "this graph deadlocks" arm.
+        //
+        // Peer of the diagnostic-ordering property the pre-fold
+        // dispatch encoded at the [`AplicacaoSpec::validate`]
+        // altitude (`validate_contratos()? → detect_sync_cycles()?`),
+        // now enforced inside the per-slot gate's own body, so a future
+        // consumer that reaches only the per-slot gate (the M4
+        // admission webhook re-checking `:contratos` after a per-edge
+        // patch) inherits the ordering property by construction.
+        let mut spec = three_member_spec();
+        // The three-member fixture already has cart → catalog and
+        // cart → payment; adding catalog → cart closes a 2-cycle on
+        // the HTTP subgraph.
+        spec.contratos
+            .push(contract_http("catalog", "cart", "/refresh"));
+        // Add a self-loop on `payment` — the per-entry structural-
+        // self-edge arm — which must surface first.
+        spec.contratos
+            .push(contract_http("payment", "payment", "/loop"));
+        let per_slot_err = spec.validate_contratos().unwrap_err();
+        let gate_err = spec.validate().unwrap_err();
+        assert_eq!(
+            per_slot_err, gate_err,
+            "per-slot gate and `validate` must agree on the ordering \
+             fixture's surfaced diagnostic — a divergence here means \
+             the fold reshaped one dispatch's ordering without the \
+             other",
+        );
+        assert!(
+            matches!(
+                per_slot_err,
+                AplicacaoError::ContratoSelfLoop { ref caixa, .. }
+                    if caixa == "payment"
+            ),
+            "the per-entry structural-self-edge arm must fire before \
+             the cross-edge cycle arm — pinning the fold's per-entry-\
+             before-cross-edge dispatch ordering byte-equal to the \
+             pre-fold `validate_contratos()? → detect_sync_cycles()?` \
+             sequence; got {per_slot_err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_contratos_cycle_axis_is_self_contained_on_slot() {
+        // Self-containment pin on the folded cross-edge cycle axis:
+        // [`AplicacaoSpec::validate_contratos`] surfaces
+        // [`AplicacaoError::ContratoCycle`] directly against `&self`
+        // without depending on the peer per-slot gates
+        // ([`AplicacaoSpec::validate_membros`],
+        // [`AplicacaoSpec::validate_entrada`],
+        // [`AplicacaoSpec::validate_placement`],
+        // [`AplicacaoSpec::validate_politicas`]) running first — the
+        // shape a future single-slot re-validator (the M4 admission
+        // webhook re-checking `:contratos` after a per-`(:de, :para)`
+        // edge patch, the per-edge policy resolver MESH-COMPOSITION
+        // §III.2 #3 acknowledges) reaches *both* structural axes on
+        // the slot through one call. A spec with a per-`:politicas`
+        // refusal shape (zero `:timeout`, the first per-axis arm the
+        // peer [`MeshPolicy::validate`] gate covers) AND a
+        // synchronous-edge cycle in `:contratos` must:
+        //
+        //   - surface [`AplicacaoError::ContratoCycle`] through the
+        //     per-slot gate `validate_contratos` directly (proves the
+        //     cycle axis reaches the per-slot altitude without the
+        //     peer `:politicas` gate running first);
+        //   - surface [`AplicacaoError::ContratoCycle`] through
+        //     `validate` (which reaches `validate_contratos` before
+        //     `validate_politicas` per the fixed dispatch order), so
+        //     the fold's cross-slot ordering (`:membros` →
+        //     `:contratos` → `:entrada` → `:placement` → `:politicas`)
+        //     is byte-equal to the pre-fold dispatch's ordering.
+        //
+        // Same self-contained-on-`&self` posture the peer per-slot
+        // gates [`AplicacaoSpec::validate_entrada`] (20cd523),
+        // [`AplicacaoSpec::validate_contratos`] per-entry axis
+        // (906a5c6), and [`AplicacaoSpec::validate_politicas`]
+        // (f03a154) already carry — extended here onto the newly-
+        // folded cross-edge cycle axis. Peer of the sibling per-slot
+        // self-containment pins
+        // `validate_entrada_resolves_membership_through_own_oracle`
+        // and `validate_contratos_resolves_membership_through_own_oracle`
+        // on the per-entry membership axis — extends the discipline
+        // onto the cross-edge cycle axis of the same per-slot gate.
+        let mut spec = three_member_spec();
+        // Poison `:politicas` — zero-`:timeout` trips the first per-
+        // axis arm the [`MeshPolicy::validate`] gate covers, so any
+        // dispatch that reached `:politicas` would surface a
+        // `:politicas` diagnostic instead of `ContratoCycle`.
+        spec.politicas.timeout = Some(Duration::from_secs(0));
+        // Close a synchronous-edge cycle on the HTTP subgraph.
+        spec.contratos
+            .push(contract_http("catalog", "cart", "/refresh"));
+        let per_slot_err = spec.validate_contratos().unwrap_err();
+        assert!(
+            matches!(per_slot_err, AplicacaoError::ContratoCycle { .. }),
+            "the per-slot gate must surface `ContratoCycle` directly \
+             against `&self` — a peer per-slot gate's regression \
+             would surface a non-`ContratoCycle` diagnostic here; \
+             got {per_slot_err:?}",
+        );
+        let gate_err = spec.validate().unwrap_err();
+        assert!(
+            matches!(gate_err, AplicacaoError::ContratoCycle { .. }),
+            "`validate`'s five-slot dispatch must reach the fold's \
+             cross-edge cycle axis on `:contratos` before the peer \
+             `:politicas` gate — a dispatch-order regression would \
+             surface a `:politicas` diagnostic here; got {gate_err:?}",
+        );
+        // Sanity: the poisoned `:politicas` alone would trip
+        // [`MeshPolicy::validate`] under the peer per-slot gate, so
+        // the cycle-first surfacing above is a real ordering property,
+        // not a case where the `:politicas` axis silently accepts the
+        // fixture.
+        let mut politicas_only = three_member_spec();
+        politicas_only.politicas.timeout = Some(Duration::from_secs(0));
+        assert!(
+            politicas_only.validate_politicas().is_err(),
+            "the poisoned `:politicas` fixture must trip the peer \
+             per-slot gate on its own — otherwise the self-contained \
+             cycle-first surfacing above would not be an ordering \
+             property",
         );
     }
 
