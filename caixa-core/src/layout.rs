@@ -642,11 +642,7 @@ impl LayoutInvariants for StandardLayout {
         if !caixa.kind().is_aplicacao() {
             let mesh_slots = caixa.declared_mesh_slots();
             if !mesh_slots.is_empty() {
-                return Err(LayoutError::MeshSlotsOnNonAplicacao {
-                    caixa: caixa.nome().to_string(),
-                    kind: caixa.kind(),
-                    slots: mesh_slots.join(" "),
-                });
+                return Err(LayoutError::mesh_slots_on_non_aplicacao(caixa, mesh_slots));
             }
         }
 
@@ -668,11 +664,10 @@ impl LayoutInvariants for StandardLayout {
         if !caixa.kind().is_supervisor() {
             let supervisor_slots = caixa.declared_supervisor_slots();
             if !supervisor_slots.is_empty() {
-                return Err(LayoutError::SupervisorSlotsOnNonSupervisor {
-                    caixa: caixa.nome().to_string(),
-                    kind: caixa.kind(),
-                    slots: supervisor_slots.join(" "),
-                });
+                return Err(LayoutError::supervisor_slots_on_non_supervisor(
+                    caixa,
+                    supervisor_slots,
+                ));
             }
         }
 
@@ -698,11 +693,10 @@ impl LayoutInvariants for StandardLayout {
         if !caixa.kind().is_servico() {
             let servico_slots = caixa.declared_servico_slots();
             if !servico_slots.is_empty() {
-                return Err(LayoutError::ServicoSlotsOnNonServico {
-                    caixa: caixa.nome().to_string(),
-                    kind: caixa.kind(),
-                    slots: servico_slots.join(" "),
-                });
+                return Err(LayoutError::servico_slots_on_non_servico(
+                    caixa,
+                    servico_slots,
+                ));
             }
         }
 
@@ -768,11 +762,7 @@ impl LayoutInvariants for StandardLayout {
         // gates above already close it.
         let foreign_code_slots = caixa.declared_foreign_code_slots();
         if !foreign_code_slots.is_empty() {
-            return Err(LayoutError::ForeignCodeSlot {
-                caixa: caixa.nome().to_string(),
-                kind: caixa.kind(),
-                slots: foreign_code_slots.join(" "),
-            });
+            return Err(LayoutError::foreign_code_slot(caixa, foreign_code_slots));
         }
 
         // Per-entry path-shape gate on the three Caixa-level code-surface
@@ -1412,6 +1402,76 @@ layout_violation_ctors! {
     aplicacao_violation => AplicacaoViolation,
 }
 
+// Fold the four `LayoutError::*SlotsOn*` / `LayoutError::ForeignCodeSlot`
+// kind-coherence wrap sites onto one substrate primitive per typed variant —
+// the sibling of [`layout_violation_ctors!`] above on the second uniform
+// error-envelope shape `LayoutError` carries: `{ caixa: caixa.nome(),
+// kind: caixa.kind(), slots: <declared_*_slots()>.join(" ") }`. Every
+// wire-up in [`StandardLayout::verify`] on this shape (four sites: the
+// M3-mesh gate on non-Aplicacao, the supervisor-tree gate on
+// non-Supervisor, the M2-runtime gate on non-Servico, the code-surface
+// `ForeignCodeSlot` gate) used to open-code the identical four-field
+// `.{ caixa: caixa.nome().to_string(), kind: caixa.kind(), slots:
+// <declared_*_slots>.join(" ") }` block — the exact "same block re-inlined
+// at every consumer" shape the PRIME DIRECTIVE names as a bug on the same
+// altitude the peer [`layout_violation_ctors!`] macro just closed on the
+// `{ caixa, issue }` sibling shape.
+//
+// The macro below generates one static constructor per variant of shape
+// `fn <slot>_on_non_<owner>(caixa: &Caixa, slots: Vec<&'static str>) ->
+// LayoutError`, so every wire-up site collapses onto one dispatch:
+// `return Err(LayoutError::<slot>_on_non_<owner>(caixa, <declared_slots>));`.
+// The uniform four-field construction is spelled once — inside the macro —
+// rather than at every wire-up site. Every constructor is `#[must_use]` so
+// a caller who mistakenly discards the constructed error (rather than
+// routing it through `return Err(…)`) trips a compile warning at the
+// wire-up site.
+//
+// Peer with the `_violation` constructor family above on the same
+// `LayoutError` — the two together now fold every uniform-shape
+// `LayoutError` variant carried by [`StandardLayout::verify`] onto one
+// substrate primitive per typed variant, so the layout-side error-wrap
+// surface reads through one dispatch per variant rather than N open-coded
+// blocks. Every future consumer that wants to construct one of these
+// variants outside the layout pipeline (a per-slot admission webhook, a
+// `feira validate --kind X` verb, an overlay resolver rejecting a
+// kind-foreign patch) reaches its variant through one call, matching the
+// `_violation` family's substrate-primitive discipline.
+macro_rules! layout_slot_kind_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl LayoutError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LayoutError::",
+                    stringify!($variant),
+                    "`] naming the offending slot list under `caixa.nome()` ",
+                    "at `caixa.kind()`. Folds the uniform `{ caixa: caixa.",
+                    "nome().to_string(), kind: caixa.kind(), slots: slots.",
+                    "join(\" \") }` four-field construction onto one substrate ",
+                    "primitive so every [`StandardLayout::verify`] wire-up on ",
+                    "this variant reads through one dispatch rather than the ",
+                    "pre-lift open-coded block."
+                )]
+                #[must_use]
+                pub fn $ctor(caixa: &crate::Caixa, slots: Vec<&'static str>) -> Self {
+                    Self::$variant {
+                        caixa: caixa.nome().to_string(),
+                        kind: caixa.kind(),
+                        slots: slots.join(" "),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+layout_slot_kind_ctors! {
+    mesh_slots_on_non_aplicacao => MeshSlotsOnNonAplicacao,
+    supervisor_slots_on_non_supervisor => SupervisorSlotsOnNonSupervisor,
+    servico_slots_on_non_servico => ServicoSlotsOnNonServico,
+    foreign_code_slot => ForeignCodeSlot,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1723,6 +1783,169 @@ mod tests {
             LayoutError::BehaviorViolation {
                 caixa: "alt-nome".to_string(),
                 issue: "sample issue".to_string(),
+            },
+        );
+    }
+
+    // ── LayoutError kind-coherence constructor family ────────────────────
+    //
+    // The [`layout_slot_kind_ctors!`] macro (sibling of
+    // [`layout_violation_ctors!`] beside the `LayoutError` enum definition)
+    // generates one static constructor per `*SlotsOn*` / `ForeignCodeSlot`
+    // variant that folds the uniform `{ caixa: caixa.nome().to_string(),
+    // kind: caixa.kind(), slots: slots.join(" ") }` four-field construction
+    // onto one substrate primitive. The per-variant equivalence pins below
+    // (fail-before-pass-after by construction — a byte-mismatched macro arm
+    // would trip its equivalence pin first) lock each generated constructor
+    // to its struct-literal peer under `PartialEq`, so every wire-up in
+    // [`StandardLayout::verify`] on that variant produces a byte-equal
+    // `LayoutError` to the pre-lift open-coded block. The three cross-axis
+    // pins that follow (non-default `:nome`, non-default kind, non-trivial
+    // slots list) route each of the three constructor input axes through
+    // its declared accessor / arg, so the fold does not silently collapse
+    // onto a fixture default on any axis.
+
+    fn layout_slot_kind_ctor_fixture() -> (Caixa, Vec<&'static str>) {
+        (caixa(CaixaKind::Biblioteca), vec![":membros", ":contratos"])
+    }
+
+    // Same rationale as `assert_violation_ctor_matches` above: the helper
+    // terminates on the equality check, so the owned-arg lint's general
+    // API-shape target does not apply.
+    #[allow(clippy::needless_pass_by_value)]
+    fn assert_slot_kind_ctor_matches(actual: LayoutError, expected: LayoutError) {
+        assert_eq!(
+            actual, expected,
+            "generated constructor must produce byte-equal LayoutError to open-coded struct-literal wrap",
+        );
+    }
+
+    #[test]
+    fn mesh_slots_on_non_aplicacao_ctor_matches_struct_literal_wrap() {
+        let (c, slots) = layout_slot_kind_ctor_fixture();
+        assert_slot_kind_ctor_matches(
+            LayoutError::mesh_slots_on_non_aplicacao(&c, slots.clone()),
+            LayoutError::MeshSlotsOnNonAplicacao {
+                caixa: c.nome().to_string(),
+                kind: c.kind(),
+                slots: slots.join(" "),
+            },
+        );
+    }
+
+    #[test]
+    fn supervisor_slots_on_non_supervisor_ctor_matches_struct_literal_wrap() {
+        let (c, slots) = layout_slot_kind_ctor_fixture();
+        assert_slot_kind_ctor_matches(
+            LayoutError::supervisor_slots_on_non_supervisor(&c, slots.clone()),
+            LayoutError::SupervisorSlotsOnNonSupervisor {
+                caixa: c.nome().to_string(),
+                kind: c.kind(),
+                slots: slots.join(" "),
+            },
+        );
+    }
+
+    #[test]
+    fn servico_slots_on_non_servico_ctor_matches_struct_literal_wrap() {
+        let (c, slots) = layout_slot_kind_ctor_fixture();
+        assert_slot_kind_ctor_matches(
+            LayoutError::servico_slots_on_non_servico(&c, slots.clone()),
+            LayoutError::ServicoSlotsOnNonServico {
+                caixa: c.nome().to_string(),
+                kind: c.kind(),
+                slots: slots.join(" "),
+            },
+        );
+    }
+
+    #[test]
+    fn foreign_code_slot_ctor_matches_struct_literal_wrap() {
+        let (c, slots) = layout_slot_kind_ctor_fixture();
+        assert_slot_kind_ctor_matches(
+            LayoutError::foreign_code_slot(&c, slots.clone()),
+            LayoutError::ForeignCodeSlot {
+                caixa: c.nome().to_string(),
+                kind: c.kind(),
+                slots: slots.join(" "),
+            },
+        );
+    }
+
+    #[test]
+    fn slot_kind_ctor_routes_caixa_prefix_through_nome_accessor() {
+        // Pin the fold's `caixa = caixa.nome().to_string()` half against a
+        // non-default `:nome` — the accessor threads the caller's `:nome`
+        // verbatim into the wrap envelope, so the fold does not silently
+        // collapse onto the default `"demo"` fixture nome. Peer of the
+        // sibling `violation_ctor_routes_caixa_prefix_through_nome_accessor`
+        // pin on the `{ caixa, issue }` envelope; extended here onto the
+        // `{ caixa, kind, slots }` envelope so both `LayoutError`-shape
+        // constructor families guarantee the `:nome`-derived-caixa slot
+        // routes through [`Caixa::nome`] rather than a hard-coded string.
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "alt-nome".into();
+        let actual = LayoutError::mesh_slots_on_non_aplicacao(&c, vec![":membros"]);
+        assert_eq!(
+            actual,
+            LayoutError::MeshSlotsOnNonAplicacao {
+                caixa: "alt-nome".to_string(),
+                kind: CaixaKind::Biblioteca,
+                slots: ":membros".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn slot_kind_ctor_routes_kind_through_caixa_kind_accessor() {
+        // Pin the fold's `kind = caixa.kind()` half against a non-default
+        // kind — the accessor threads the caller's `:kind` verbatim into
+        // the wrap envelope, so the fold does not silently collapse onto
+        // one hard-coded kind. Sweeps every non-Aplicacao / non-Supervisor
+        // / non-Servico kind the corresponding gate can fire on so the
+        // pin covers the kind-derivation axis on every downstream variant.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            let c = caixa(kind);
+            let actual = LayoutError::foreign_code_slot(&c, vec![":exe"]);
+            assert_eq!(
+                actual,
+                LayoutError::ForeignCodeSlot {
+                    caixa: c.nome().to_string(),
+                    kind,
+                    slots: ":exe".to_string(),
+                },
+                "foreign_code_slot ctor must thread `caixa.kind()` verbatim on every kind",
+            );
+        }
+    }
+
+    #[test]
+    fn slot_kind_ctor_routes_slots_through_join_separator() {
+        // Pin the fold's `slots = slots.join(" ")` half against a
+        // multi-entry slots list — the join threads exactly one ASCII
+        // space between entries, in caller-supplied order, so the fold
+        // does not silently collapse onto a fixed separator (`", "`, `";
+        // "`, `"\n"`), a sorted order, or a single-entry pass-through.
+        // Uses the M2 servico-slot vocabulary since these are what the
+        // corresponding `servico_slots_on_non_servico` gate reports.
+        let c = caixa(CaixaKind::Biblioteca);
+        let actual = LayoutError::servico_slots_on_non_servico(
+            &c,
+            vec![":limits", ":behavior", ":upgrade-from"],
+        );
+        assert_eq!(
+            actual,
+            LayoutError::ServicoSlotsOnNonServico {
+                caixa: c.nome().to_string(),
+                kind: c.kind(),
+                slots: ":limits :behavior :upgrade-from".to_string(),
             },
         );
     }
