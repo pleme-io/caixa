@@ -2966,6 +2966,114 @@ impl MeshPolicy {
         }
     }
 
+    /// Substrate-canonical fold over the four cross-axis coherence
+    /// predicates on the `:politicas` slot — returns the *first*
+    /// cross-axis violation (as its [`AplicacaoError`] variant) in the
+    /// canonical "more-foundational-cross-axis first" ordering
+    /// [`MeshPolicy::breaker_window_observes_timeout`] on
+    /// `(:timeout, :circuit-breaker :window)` →
+    /// [`MeshPolicy::breaker_can_trip_under_rate_limit`] on
+    /// `(:rate-limit, :circuit-breaker)` →
+    /// [`MeshPolicy::retries_fit_under_breaker_trip_threshold`] on
+    /// `(:retries, :circuit-breaker :max-failures)` →
+    /// [`MeshPolicy::rate_limit_admits_retry_burst`] on `(:retries,
+    /// :rate-limit)`. Returns `None` when every cross-axis relation
+    /// holds (the vacuous shape [`MeshPolicy::is_empty`] and the fully-
+    /// coherent shape both land here).
+    ///
+    /// The ordering discipline this method encodes was open-coded four
+    /// times at [`AplicacaoSpec::validate_politicas`] — each cross-axis
+    /// gate was an `if !<predicate>() { let <a> = self.<axis>().expect(
+    /// "cross-axis gate fires only when :<axis> is present"); let <b>
+    /// = self.<axis>().expect(…); return Err(<variant>) }` block whose
+    /// axis-fetch step depended on the predicate having just returned
+    /// `false` (structurally guaranteed both paired axes are `Some`,
+    /// but the compiler cannot see through the predicate body, so
+    /// every arm re-called the accessor with `.expect(…)` to reach
+    /// the axis it just tested). Two unsound consequences: (1) the
+    /// validate gate carried eight `.expect(…)` panic call sites the
+    /// predicate contract already forbids on every well-typed input
+    /// but the type system does not enforce; (2) the
+    /// "which-cross-axis-fires-first-when-two-apply" contract lived
+    /// twice — once in each predicate's own doc comments and once at
+    /// the validate call site's four-arm cascade. Lifting the four-arm
+    /// cascade onto this substrate primitive collapses both
+    /// duplications: the predicate contract and the axis-fetch step
+    /// live in the same body (no `.expect(…)` — the pattern match at
+    /// each arm rebinds the paired axes so their `Some` presence is a
+    /// compile-time property of the local scope), and the ordering
+    /// discipline lives once at the top of the primitive rather than
+    /// scattered across four sibling doc-comment blocks that must
+    /// stay in lockstep.
+    ///
+    /// Every downstream cross-axis consumer (the [`AplicacaoSpec::
+    /// validate_politicas`] gate below, the future M4 `mesh.pleme.io/
+    /// v1alpha1/Aplicacao` CR materializer's admission webhook, the
+    /// per-`:contratos`-edge `:politicas` override MESH-COMPOSITION
+    /// §III.2 #3 acknowledges — the last of which resolves an
+    /// *effective* per-edge pair and must emit *the same* diagnostic
+    /// on the same paired-axis input as `feira build`) reaches through
+    /// one call rather than re-inlining the four pattern-matches +
+    /// accessor-fetches + variant-constructions + ordering-cascade.
+    ///
+    /// Returns owned copies of every axis carried into the diagnostic:
+    /// [`Duration`] and [`u32`] are `Copy`, so no `String` allocation
+    /// occurs on the happy path when no violation fires.
+    #[must_use]
+    pub fn first_cross_axis_violation(&self) -> Option<AplicacaoError> {
+        // Ordering discipline this fold encodes matches the four
+        // per-arm predicate doc comments' pairwise-ordering contract:
+        // window-below-timeout wins over every arm that names `:rate-
+        // limit` or `:retries` (its diagnostic is more self-locating —
+        // the pair is a per-call-deadline invariant every synchronous
+        // edge carries whether or not `:rate-limit`/`:retries` is
+        // declared); the starve arm wins over the two retry arms (its
+        // diagnostic reasons across the token-bucket-vs-breaker
+        // relation, an axis the retry arms do not touch); the
+        // retries-saturate arm wins over the retries-burst arm (its
+        // diagnostic reasons across the per-client-vs-breaker
+        // relation, which carries whether or not `:rate-limit` is
+        // declared). Each arm rebinds the paired axes through the
+        // pattern match, so the `.expect(…)` panics the four-block
+        // cascade at `validate_politicas` carried collapse to no-op
+        // pattern rebindings the compiler statically proves exhaust.
+        if let (Some(t), Some(cb)) = (self.timeout(), self.circuit_breaker())
+            && !self.breaker_window_observes_timeout()
+        {
+            return Some(AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                window: cb.window(),
+                timeout: t,
+            });
+        }
+        if let (Some(rl), Some(cb)) = (self.rate_limit(), self.circuit_breaker())
+            && !self.breaker_can_trip_under_rate_limit()
+        {
+            return Some(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                rate: rl.rate(),
+                rl_window: rl.window(),
+                max_failures: cb.max_failures(),
+                cb_window: cb.window(),
+            });
+        }
+        if let (Some(retries), Some(cb)) = (self.retries(), self.circuit_breaker())
+            && !self.retries_fit_under_breaker_trip_threshold()
+        {
+            return Some(AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                retries,
+                max_failures: cb.max_failures(),
+            });
+        }
+        if let (Some(retries), Some(rl)) = (self.retries(), self.rate_limit())
+            && !self.rate_limit_admits_retry_burst()
+        {
+            return Some(AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
+                retries,
+                rate: rl.rate(),
+            });
+        }
+        None
+    }
+
     /// Substrate-canonical per-`:politicas` `:timeout` Gateway-API-mesh
     /// per-call-deadline scalar accessor every consumer of the
     /// Aplicacao's Gateway API v1.x per-rule request-timeout keys off —
@@ -8342,213 +8450,55 @@ impl AplicacaoSpec {
                 });
             }
         }
-        // Cross-axis coherence gate on the `(:timeout, :circuit-breaker
-        // :window)` pair — routed through the substrate primitive
-        // [`MeshPolicy::breaker_window_observes_timeout`], which names
-        // the invariant for the future consumers that must resolve the
-        // pair without seeing either declaration site whole (the
-        // per-`:contratos`-edge `:politicas` override MESH-COMPOSITION
-        // §III.2 #3 acknowledges).
+        // Cross-axis coherence cascade over the `:politicas` scalar
+        // axis-triple `(:retries, :rate-limit, :circuit-breaker)` plus
+        // the paired-with-`:timeout` per-call-deadline arm — routed
+        // through the substrate primitive
+        // [`MeshPolicy::first_cross_axis_violation`], which folds all
+        // four cross-axis coherence predicates
+        // ([`MeshPolicy::breaker_window_observes_timeout`],
+        // [`MeshPolicy::breaker_can_trip_under_rate_limit`],
+        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`],
+        // [`MeshPolicy::rate_limit_admits_retry_burst`]) into one
+        // ordered Boolean-to-diagnostic fold, and names the ordering
+        // discipline (window-below-timeout → starve → retries-saturate
+        // → retries-burst — more-foundational-cross-axis first) once
+        // in the substrate primitive rather than four times at the
+        // per-arm doc comments and four times at this validate site.
         //
         // Runs strictly *after* all four per-axis brackets so a
         // per-axis structurally-invalid value always surfaces its own
-        // self-locating diagnostic first: a pair like
-        // `{ timeout: 30s, window: Duration::ZERO }` is both
-        // zero-floor-violating and window-below-timeout, and the
+        // self-locating diagnostic first (a pair like `{ timeout: 30s,
+        // window: Duration::ZERO }` surfaces `PolicyBreakerZeroWindow`
+        // ahead of the cross-axis window-below-timeout arm — the
         // zero-floor arm names the offending axis and its omit-axis
-        // remediation directly, where the cross-axis arm would send the
-        // author to reconcile two values one of which is not a
-        // meaningful window at all. Same ordering discipline the
-        // per-axis brackets already carry internally (zero-floor before
-        // canonical-form before cap).
+        // remediation directly, where the cross-axis arm would send
+        // the author to reconcile two values one of which is not a
+        // meaningful window at all). Same ordering discipline the
+        // per-axis brackets already carry internally (zero-floor
+        // before canonical-form before cap) and the compound fold
+        // encodes across the cross-axis arms.
         //
-        // Until this gate landed the `:politicas` surface validated
-        // every axis in isolation, so the pair `{ timeout: "30s",
-        // circuit-breaker (:max-failures 5 :window "10s") }` — each axis
-        // individually well-formed and inside its cap — passed validate
-        // and landed at the emit boundary as a breaker that cannot trip
-        // on the timeout failure mode however high the call volume: the
-        // rolling window closes before a single dispatched call is
-        // declared failed. That is the same declared-but-structurally-
-        // inert footgun the sibling per-axis cap arms
-        // ([`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`],
-        // [`AplicacaoError::PolicyRateLimitExceedsCap`]) close on the
-        // single-axis surface, here on the cross-axis one.
-        if !p.breaker_window_observes_timeout() {
-            return Err(AplicacaoError::PolicyBreakerWindowBelowTimeout {
-                window: p
-                    .circuit_breaker()
-                    .expect("cross-axis gate fires only when :circuit-breaker is present")
-                    .window(),
-                timeout: p
-                    .timeout()
-                    .expect("cross-axis gate fires only when :timeout is present"),
-            });
-        }
-        // Cross-axis coherence gate on the `(:rate-limit,
-        // :circuit-breaker)` pair — routed through the substrate
-        // primitive [`MeshPolicy::breaker_can_trip_under_rate_limit`],
-        // which names the invariant for the future consumers that
-        // must resolve the pair without seeing either declaration
-        // site whole (the per-`:contratos`-edge `:politicas` override
-        // MESH-COMPOSITION §III.2 #3 acknowledges).
-        //
-        // Runs strictly *after* every per-axis bracket (so a rate
-        // that is zero-floor-violating and simultaneously below the
-        // trip threshold surfaces `PolicyRateLimitZero` first) and
-        // strictly *after* the sibling
-        // [`MeshPolicy::breaker_window_observes_timeout`] cross-axis
-        // arm (so a pair that is both structurally-inert against the
-        // timeout and starving the breaker surfaces
-        // `PolicyBreakerWindowBelowTimeout` first — the timeout
-        // relation is the per-call-deadline invariant every
-        // synchronous edge carries whether or not `:rate-limit` is
-        // declared, and its diagnostic is more self-locating). Same
-        // ordering discipline every per-axis bracket carries
-        // internally (zero-floor before canonical-form before cap).
-        //
-        // Until this gate landed the `:politicas` surface accepted
-        // the pair `{ rate-limit: "1/h", circuit-breaker (:max-failures
-        // 5 :window "10s") }` — each axis individually well-formed and
-        // inside its cap — and landed it at the emit boundary as a
-        // breaker whose token-bucket-declared call rate cannot
-        // structurally reach `:max-failures` within `:window` however
-        // catastrophic the upstream failure rate: the bucket admits
-        // `rate × cb.window / rl.window` calls per rolling breaker
-        // window, and if that scalar is below `max_failures` the
-        // failure counter cannot roll over. That is the same
-        // declared-but-structurally-inert footgun the sibling per-axis
-        // cap arms ([`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`],
-        // [`AplicacaoError::PolicyRateLimitExceedsCap`]) close on the
-        // single-axis surface and the sibling cross-axis
-        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] arm
-        // closes on the `(:timeout, :window)` pair, here on the
-        // `(:rate-limit, :circuit-breaker)` cross-axis one.
-        if !p.breaker_can_trip_under_rate_limit() {
-            let cb = p
-                .circuit_breaker()
-                .expect("cross-axis gate fires only when :circuit-breaker is present");
-            let rl = p
-                .rate_limit()
-                .expect("cross-axis gate fires only when :rate-limit is present");
-            return Err(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
-                rate: rl.rate(),
-                rl_window: rl.window(),
-                max_failures: cb.max_failures(),
-                cb_window: cb.window(),
-            });
-        }
-        // Cross-axis coherence gate on the `(:retries, :circuit-breaker
-        // :max-failures)` pair — routed through the substrate primitive
-        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`],
-        // which names the invariant for the future consumers that must
-        // resolve the pair without seeing either declaration site whole
-        // (the per-`:contratos`-edge `:politicas` override
-        // MESH-COMPOSITION §III.2 #3 acknowledges).
-        //
-        // Runs strictly *after* every per-axis bracket (so a
-        // simultaneously zero-floor-violating retries and saturating
-        // pair surfaces `PolicyRetriesZero` first) and strictly *after*
-        // both sibling cross-axis arms
-        // ([`MeshPolicy::breaker_window_observes_timeout`],
-        // [`MeshPolicy::breaker_can_trip_under_rate_limit`]) — the
-        // timeout relation is the per-call-deadline invariant every
-        // synchronous edge carries and the rate-limit relation is the
-        // token-bucket admission invariant every rate-limited edge
-        // carries, both of which reason across axes the retry-policy
-        // arm does not touch. Same "more foundational cross-axis first"
-        // ordering the peer per-axis brackets carry internally
-        // (zero-floor before canonical-form before cap).
-        //
-        // Until this gate landed the `:politicas` surface accepted the
-        // pair `{ :retries 3, :circuit-breaker (:max-failures 3
-        // :window "1s") }` — each axis individually well-formed and
-        // inside its cap — and landed it at the emit boundary as a
-        // retry policy the substrate cannot honor through completion:
-        // one client's `retries + 1 = 4` failing attempts hit the trip
-        // threshold on the third attempt, the breaker opens, and the
-        // fourth attempt (the last declared retry) is blocked. The
-        // declared retry policy is silently truncated mid-run — the
-        // same declared-but-structurally-inert footgun the sibling
-        // per-axis cap arms
+        // The four cross-axis predicates each close a
+        // declared-but-structurally-inert pair the per-axis brackets
+        // cannot see: `{ timeout: 30s, window: 10s }` is a breaker
+        // that cannot trip on the timeout failure mode (the window
+        // rolls before a single call is declared failed); `{ rate-
+        // limit: "1/h", max-failures: 5, cb_window: 10s }` is a
+        // breaker whose token-bucket-admitted call rate cannot reach
+        // `:max-failures` within `:window`; `{ :retries 3, :max-
+        // failures 3 }` is a retry policy the breaker truncates on
+        // the last declared retry; `{ :retries 5, :rate-limit "3/s"
+        // }` is a retry policy the rate limiter itself truncates.
+        // These are the same declared-but-structurally-inert footguns
+        // the sibling per-axis cap arms
         // ([`AplicacaoError::PolicyRetriesExceedsCap`],
-        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`]) close
-        // on the single-axis surfaces and the sibling cross-axis
-        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] /
-        // [`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`]
-        // arms close on the `(:timeout, :window)` and `(:rate-limit,
-        // :circuit-breaker)` pairs, here on the `(:retries,
-        // :max-failures)` cross-axis one.
-        if !p.retries_fit_under_breaker_trip_threshold() {
-            let retries = p
-                .retries()
-                .expect("cross-axis gate fires only when :retries is present");
-            let cb = p
-                .circuit_breaker()
-                .expect("cross-axis gate fires only when :circuit-breaker is present");
-            return Err(AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
-                retries,
-                max_failures: cb.max_failures(),
-            });
-        }
-        // Cross-axis coherence gate on the `(:retries, :rate-limit)`
-        // pair — routed through the substrate primitive
-        // [`MeshPolicy::rate_limit_admits_retry_burst`], which names
-        // the invariant for the future consumers that must resolve the
-        // pair without seeing either declaration site whole (the
-        // per-`:contratos`-edge `:politicas` override
-        // MESH-COMPOSITION §III.2 #3 acknowledges).
-        //
-        // Runs strictly *after* every per-axis bracket (so a
-        // simultaneously zero-floor-violating retries and rate-below-
-        // burst pair surfaces `PolicyRetriesZero` first) and strictly
-        // *after* all three sibling cross-axis arms
-        // ([`MeshPolicy::breaker_window_observes_timeout`],
-        // [`MeshPolicy::breaker_can_trip_under_rate_limit`],
-        // [`MeshPolicy::retries_fit_under_breaker_trip_threshold`]) —
-        // each of the three siblings reasons across an axis this arm
-        // does not touch (the per-call timeout, the failure-counter
-        // trip threshold), so its diagnostic is more self-locating
-        // when the offending pair also names one of those axes. Same
-        // "more foundational cross-axis first" ordering the peer
-        // per-axis brackets carry internally (zero-floor before
-        // canonical-form before cap) and every prior cross-axis arm
-        // observes.
-        //
-        // Until this gate landed the `:politicas` surface accepted
-        // the pair `{ :retries 5, :rate-limit "3/s" }` — each axis
-        // individually well-formed and inside its cap — and landed it
-        // at the emit boundary as a retry policy the substrate cannot
-        // honor through completion: one client's `retries + 1 = 6`
-        // attempts consume 6 tokens from a bucket that admits at most
-        // 3 per refill window, so the fourth attempt onward is 429ed
-        // by the local rate limiter and the declared retry policy is
-        // silently truncated by the same rate limiter it feeds
-        // through. This is the same declared-but-structurally-inert
-        // footgun the sibling per-axis cap arms
-        // ([`AplicacaoError::PolicyRetriesExceedsCap`],
-        // [`AplicacaoError::PolicyRateLimitExceedsCap`]) close on the
-        // single-axis surfaces and the sibling cross-axis
-        // [`AplicacaoError::PolicyBreakerWindowBelowTimeout`] /
-        // [`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`] /
-        // [`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
-        // arms close on the `(:timeout, :window)` /
-        // `(:rate-limit, :circuit-breaker)` /
-        // `(:retries, :max-failures)` pairs, here on the
-        // `(:retries, :rate-limit)` cross-axis one — closing the
-        // fourth and last cross-axis relation on the scalar
-        // `:politicas` axis-triple.
-        if !p.rate_limit_admits_retry_burst() {
-            let retries = p
-                .retries()
-                .expect("cross-axis gate fires only when :retries is present");
-            let rl = p
-                .rate_limit()
-                .expect("cross-axis gate fires only when :rate-limit is present");
-            return Err(AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
-                retries,
-                rate: rl.rate(),
-            });
+        // [`AplicacaoError::PolicyRateLimitExceedsCap`],
+        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`])
+        // close on the single-axis surfaces, extended here onto the
+        // scalar axis-triple's cross-axis surfaces.
+        if let Some(err) = p.first_cross_axis_violation() {
+            return Err(err);
         }
         Ok(())
     }
@@ -21092,6 +21042,257 @@ mod tests {
                  (retries={retries:?}, rate_limit={rate_limit:?})"
             );
         }
+    }
+
+    /// Sweep body shared by every `first_cross_axis_violation` ≡ gate
+    /// equivalence pin — assert that on each `(label, politicas,
+    /// expected)` case the substrate-canonical fold and the validate
+    /// cascade agree byte-for-byte. Extracted so each pin's own body
+    /// stays under `clippy::too_many_lines`.
+    fn assert_first_cross_axis_violation_agrees_with_gate(
+        cases: &[(&str, MeshPolicy, Option<AplicacaoError>)],
+    ) {
+        for (label, politicas, expected) in cases {
+            let fold = politicas.first_cross_axis_violation();
+            assert_eq!(
+                fold.as_ref(),
+                expected.as_ref(),
+                "fold must return {expected:?} on `{label}`; got {fold:?}"
+            );
+
+            let mut s = three_member_spec();
+            s.politicas = politicas.clone();
+            let gate = s.validate();
+            match expected {
+                None => {
+                    // No cross-axis violation: validate must pass (the
+                    // per-axis brackets pass by construction on every
+                    // fixture above; every fixture's non-`:politicas`
+                    // slots come from `three_member_spec`).
+                    gate.as_ref()
+                        .unwrap_or_else(|e| panic!("`{label}` must validate cleanly; got {e:?}"));
+                }
+                Some(want) => {
+                    let got =
+                        gate.expect_err(&format!("`{label}` must surface a cross-axis violation"));
+                    assert_eq!(
+                        &got, want,
+                        "validate cross-axis cascade must return {want:?} on `{label}`; got {got:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn first_cross_axis_violation_matches_gate_on_single_arm_and_vacuous_shapes() {
+        // Equivalence pin on the compound cross-axis fold: the
+        // substrate-canonical [`MeshPolicy::first_cross_axis_violation`]
+        // and the [`AplicacaoSpec::validate_politicas`] cross-axis
+        // cascade must return identical `AplicacaoError` variants on
+        // every axis-covered input — the "compound-fold ≡ gate"
+        // contract that generalizes the four sibling per-arm pins
+        // onto the compound primitive that folds all four. A future
+        // refactor of either side that breaks the equivalence trips
+        // here rather than as a divergence between what the substrate
+        // primitive answers and what `feira build` accepts.
+        //
+        // Half-A of the sweep: every single-arm violation (one arm
+        // fires with the three sibling arms vacuous), the vacuous
+        // shape (empty policy — no arm fires), and the fully-coherent
+        // shape (every axis declared inside the coherence surface —
+        // no arm fires). Half-B (pairwise-ordering coverage — the
+        // "which arm wins when two apply" contract) lives in the
+        // sibling `first_cross_axis_violation_matches_gate_on_pairwise_orderings`
+        // pin; splitting keeps each pin's body under
+        // `clippy::too_many_lines`.
+        let cb = |max_failures: u32, secs: u64| CircuitBreaker {
+            max_failures,
+            window: Duration::from_secs(secs),
+        };
+        let rl = |rate: u32, secs: u64| RateLimit {
+            rate,
+            window: Duration::from_secs(secs),
+        };
+        let cases: &[(&str, MeshPolicy, Option<AplicacaoError>)] = &[
+            (
+                "window-below-timeout only",
+                MeshPolicy {
+                    timeout: Some(Duration::from_secs(30)),
+                    circuit_breaker: Some(cb(5, 10)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                    window: Duration::from_secs(10),
+                    timeout: Duration::from_secs(30),
+                }),
+            ),
+            (
+                "starve only",
+                MeshPolicy {
+                    rate_limit: Some(rl(1, 3600)),
+                    circuit_breaker: Some(cb(5, 10)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                    rate: 1,
+                    rl_window: Duration::from_secs(3600),
+                    max_failures: 5,
+                    cb_window: Duration::from_secs(10),
+                }),
+            ),
+            (
+                "retries-saturate only",
+                MeshPolicy {
+                    retries: Some(3),
+                    circuit_breaker: Some(cb(3, 60)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                    retries: 3,
+                    max_failures: 3,
+                }),
+            ),
+            (
+                "retries-burst only",
+                MeshPolicy {
+                    retries: Some(5),
+                    rate_limit: Some(rl(3, 1)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
+                    retries: 5,
+                    rate: 3,
+                }),
+            ),
+            ("empty policy", MeshPolicy::default(), None),
+            (
+                "fully-coherent policy",
+                MeshPolicy {
+                    timeout: Some(Duration::from_secs(30)),
+                    retries: Some(3),
+                    circuit_breaker: Some(cb(5, 60)),
+                    mtls_required: Some(true),
+                    rate_limit: Some(rl(100, 1)),
+                },
+                None,
+            ),
+        ];
+        assert_first_cross_axis_violation_agrees_with_gate(cases);
+    }
+
+    #[test]
+    fn first_cross_axis_violation_matches_gate_on_pairwise_orderings() {
+        // Half-B of the compound-fold ≡ gate equivalence pin: the
+        // load-bearing pairwise-ordering coverage. Every ordered pair
+        // of the four cross-axis arms — six combinations — where two
+        // arms are simultaneously eligible must surface the
+        // more-foundational arm's diagnostic verbatim. Pins the fold's
+        // arm-ordering byte-for-byte against the validate cascade's
+        // arm-ordering, so a future reshuffle of either side that
+        // silently drifts the ordering trips here rather than as a
+        // per-arm miss the sibling per-arm `_predicate_matches_gate_semantic`
+        // pins cannot catch (they clear every sibling arm, so their
+        // sweeps are pairwise-ordering-agnostic by construction).
+        //
+        // The six pairs the four-arm cascade admits:
+        // window-before-starve, window-before-saturate,
+        // window-before-burst, starve-before-saturate,
+        // starve-before-burst, saturate-before-burst.
+        let cb = |max_failures: u32, secs: u64| CircuitBreaker {
+            max_failures,
+            window: Duration::from_secs(secs),
+        };
+        let rl = |rate: u32, secs: u64| RateLimit {
+            rate,
+            window: Duration::from_secs(secs),
+        };
+        let cases: &[(&str, MeshPolicy, Option<AplicacaoError>)] = &[
+            (
+                "window+starve → window wins",
+                MeshPolicy {
+                    timeout: Some(Duration::from_secs(30)),
+                    rate_limit: Some(rl(1, 3600)),
+                    circuit_breaker: Some(cb(5, 10)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                    window: Duration::from_secs(10),
+                    timeout: Duration::from_secs(30),
+                }),
+            ),
+            (
+                "window+retries-saturate → window wins",
+                MeshPolicy {
+                    timeout: Some(Duration::from_secs(30)),
+                    retries: Some(5),
+                    circuit_breaker: Some(cb(3, 10)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                    window: Duration::from_secs(10),
+                    timeout: Duration::from_secs(30),
+                }),
+            ),
+            (
+                "window+retries-burst → window wins",
+                MeshPolicy {
+                    timeout: Some(Duration::from_secs(30)),
+                    retries: Some(5),
+                    rate_limit: Some(rl(3, 1)),
+                    circuit_breaker: Some(cb(5, 10)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                    window: Duration::from_secs(10),
+                    timeout: Duration::from_secs(30),
+                }),
+            ),
+            (
+                "starve+retries-saturate → starve wins",
+                MeshPolicy {
+                    retries: Some(5),
+                    rate_limit: Some(rl(1, 3600)),
+                    circuit_breaker: Some(cb(5, 10)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                    rate: 1,
+                    rl_window: Duration::from_secs(3600),
+                    max_failures: 5,
+                    cb_window: Duration::from_secs(10),
+                }),
+            ),
+            (
+                "starve+retries-burst → starve wins",
+                MeshPolicy {
+                    retries: Some(5),
+                    rate_limit: Some(rl(1, 3600)),
+                    circuit_breaker: Some(cb(10, 10)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                    rate: 1,
+                    rl_window: Duration::from_secs(3600),
+                    max_failures: 10,
+                    cb_window: Duration::from_secs(10),
+                }),
+            ),
+            (
+                "retries-saturate+retries-burst → saturate wins",
+                MeshPolicy {
+                    retries: Some(5),
+                    rate_limit: Some(rl(3, 1)),
+                    circuit_breaker: Some(cb(3, 60)),
+                    ..Default::default()
+                },
+                Some(AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                    retries: 5,
+                    max_failures: 3,
+                }),
+            ),
+        ];
+        assert_first_cross_axis_violation_agrees_with_gate(cases);
     }
 
     #[test]
