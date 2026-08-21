@@ -4796,6 +4796,70 @@ impl Caixa {
             })
     }
 
+    /// Compound per-`Caixa` entry gate on the Aplicacao-kind mesh-slot
+    /// family — folds the paired [`crate::AplicacaoSpec::validate`]
+    /// typed-shape cascade (per-slot gates on `:membros`, `:contratos`,
+    /// `:entrada`, `:placement`, `:politicas`, in that declared order)
+    /// plus the cross-slot self-edge gate
+    /// ([`crate::aplicacao::validate_no_self_membership`], the
+    /// `:membros :caixa` ≠ `:nome` invariant the typed view cannot
+    /// enforce on its own because it carries the membros but not the
+    /// parent `:nome`) onto one substrate primitive on [`Caixa`]. On
+    /// non-Aplicacao kinds the fold is the identity element — the paired
+    /// [`Self::aplicacao_view`] accessor returns `None` off the
+    /// Aplicacao arm (peer with the [`Self::validate_limits`] /
+    /// [`Self::validate_behavior`] M2 `Option`-arm identity element),
+    /// so the gate passes trivially without touching the mesh slots.
+    ///
+    /// Prior to this lift the paired cascade lived only wired open-coded
+    /// at the layout wire-up site
+    /// ([`crate::layout::StandardLayout::verify`], caixa-core/src/layout.rs),
+    /// as the three-line `let view = caixa.aplicacao_view().expect(...);
+    /// view.validate() … validate_no_self_membership(...) …` pattern
+    /// paired with two `.map_err(|err| LayoutError::AplicacaoViolation
+    /// { caixa, issue })` wraps — every future consumer that wanted to
+    /// gate the Aplicacao-shape cascade as a whole (the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's per-CR
+    /// admission webhook re-checking `:membros` / `:contratos` after a
+    /// per-slot patch, a future `feira validate --aplicacao` per-caixa
+    /// admission verb, a per-Aplicacao overlay resolver) was structurally
+    /// forced to either re-inline the two-dispatch cascade in lockstep
+    /// with the layout wire-up (the duplication the PRIME DIRECTIVE
+    /// names as a bug) or call the whole
+    /// [`crate::layout::StandardLayout::verify`] pipeline and pay every
+    /// peer per-Caixa gate to re-check one slot family. Post-fold each
+    /// such consumer reaches the two-arm compound gate through one call
+    /// on the substrate primitive.
+    ///
+    /// Peer to the [`crate::render::require_aplicacao_view`] compound
+    /// entry gate every per-Aplicacao *renderer* routes through
+    /// (3aefefb folded `validate_no_self_membership` onto the renderer
+    /// path) — this gate mirrors the same fold on the *layout* path, so
+    /// the two consumers of the Aplicacao-shape cascade (the author-time
+    /// gate and every per-Aplicacao renderer) share one substrate
+    /// primitive rather than two open-coded cascades kept in lockstep.
+    /// Same lift discipline the peer per-slot compound gates
+    /// ([`Self::validate_upgrade_from`] d6801df, [`Self::validate_deps`]
+    /// b5dd55e, [`Self::validate_limits`] baa4688,
+    /// [`Self::validate_behavior`] 0d2877a) each carry.
+    ///
+    /// # Errors
+    ///
+    /// Returns every [`crate::AplicacaoError`] variant on the present-
+    /// kind arm — the typed-shape cascade's per-slot arms first
+    /// (matching [`crate::AplicacaoSpec::validate`]'s declared order),
+    /// then the cross-slot self-edge arm
+    /// ([`crate::AplicacaoError::MembroIsSelfAplicacao`]). Passes
+    /// trivially on non-Aplicacao kinds (the fold's identity element).
+    pub fn validate_aplicacao_shape(&self) -> Result<(), crate::AplicacaoError> {
+        let Some(view) = self.aplicacao_view() else {
+            return Ok(());
+        };
+        view.validate()?;
+        crate::aplicacao::validate_no_self_membership(self.membros(), self.nome())?;
+        Ok(())
+    }
+
     /// Reject per-entry values on the three Caixa-level code-surface
     /// path lists (`:bibliotecas`, `:exe`, `:servicos`) that the
     /// layout checker's `root.join(p)` sandbox would silently subvert.
@@ -20050,5 +20114,246 @@ mod tests {
         );
         c.validate_deps()
             .expect("empty :deps / :deps-dev must pass the compound gate cleanly");
+    }
+
+    // ── Caixa::validate_aplicacao_shape — compound per-Caixa gate ────────
+
+    /// Build a minimal well-formed Aplicacao fixture on top of the
+    /// canonical template. Every arm of the compound gate then patches
+    /// exactly one axis away from clean so its per-arm diagnostic
+    /// surfaces without collateral noise from a peer slot.
+    fn aplicacao_fixture(nome: &str) -> Caixa {
+        use crate::aplicacao::{Membro, Placement, PlacementStrategy};
+        let mut c = Caixa::from_lisp(&Caixa::template(nome)).unwrap();
+        c.kind = CaixaKind::Aplicacao;
+        c.bibliotecas = vec![];
+        c.membros = vec![
+            Membro {
+                caixa: "checkout".into(),
+                versao: "^0.1".into(),
+            },
+            Membro {
+                caixa: "cart".into(),
+                versao: "^0.1".into(),
+            },
+        ];
+        // `:placement` defaults to `Replicated` with an empty
+        // `:clusters` list which
+        // [`crate::AplicacaoSpec::validate_placement`] refuses; every
+        // per-strategy variant needs at least one named cluster (per
+        // MESH-COMPOSITION §II.1). Pin a single-cluster `SingleNode`
+        // placement so the typed-shape cascade passes cleanly and the
+        // per-arm fixtures below can each patch exactly one axis.
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::SingleNode,
+            clusters: vec!["rio".into()],
+            shard_key: None,
+            affinity: None,
+        });
+        c
+    }
+
+    #[test]
+    fn validate_aplicacao_shape_folds_view_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // typed-shape cascade arm: a fixture whose typed
+        // [`crate::AplicacaoSpec`] view fails
+        // [`crate::AplicacaoSpec::validate`] (here — empty `:membros`,
+        // which [`crate::AplicacaoSpec::validate_membros`] rejects as
+        // [`crate::AplicacaoError::NoMembros`] at the first per-slot
+        // gate) surfaces the same [`crate::AplicacaoError`] diagnostic
+        // through both the compound gate
+        // [`Caixa::validate_aplicacao_shape`] and the standalone
+        // [`crate::AplicacaoSpec::validate`] on the same folded view.
+        // Pins the fold — a silent regression that de-folded the
+        // typed-shape arm would surface here as a mismatch between the
+        // two dispatches. Sibling in shape to the peer
+        // `validate_deps_folds_per_entry_arm_matches_gate` (b5dd55e) /
+        // `validate_upgrade_from_folds_per_entry_arm_matches_gate`
+        // (d6801df) per-arm equivalence pins on the sibling per-slot
+        // compound gates.
+        let mut c = aplicacao_fixture("demo");
+        c.membros = vec![];
+        let via_method = c.validate_aplicacao_shape().unwrap_err();
+        let via_standalone = c.aplicacao_view().unwrap().validate().unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_aplicacao_shape must surface the typed-\
+             shape arm's diagnostic byte-equal to the standalone \
+             `AplicacaoSpec::validate` on the same folded view",
+        );
+        assert!(
+            matches!(via_method, crate::AplicacaoError::NoMembros),
+            "expected NoMembros on the empty :membros, got {via_method:?}",
+        );
+    }
+
+    #[test]
+    fn validate_aplicacao_shape_folds_self_membership_arm_matches_gate() {
+        // Per-arm equivalence pin on the cross-slot self-edge axis: a
+        // fixture whose `:membros` names the Aplicacao's own `:nome`
+        // (which [`crate::aplicacao::validate_no_self_membership`]
+        // rejects as [`crate::AplicacaoError::MembroIsSelfAplicacao`],
+        // a one-node lacre-closure recursion in the Aplicacao's
+        // mesh-graph) surfaces the same
+        // [`crate::AplicacaoError::MembroIsSelfAplicacao`] through both
+        // the compound gate and the standalone
+        // [`crate::aplicacao::validate_no_self_membership`] keyed off
+        // the same `(membros, nome)` pair. Pins the fold's second arm
+        // — reaching this arm through the compound gate requires the
+        // typed-shape cascade to pass first, which itself pins one
+        // cross-arm ordering step. Sibling in shape to the peer
+        // `validate_deps_folds_self_edge_arm_matches_gate` (b5dd55e)
+        // cross-slot equivalence pin on the sibling per-slot compound
+        // gate.
+        use crate::aplicacao::Membro;
+        let mut c = aplicacao_fixture("demo");
+        c.membros = vec![Membro {
+            caixa: "demo".into(),
+            versao: "^0.1".into(),
+        }];
+        let via_method = c.validate_aplicacao_shape().unwrap_err();
+        let via_standalone =
+            crate::aplicacao::validate_no_self_membership(c.membros(), c.nome()).unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_aplicacao_shape must surface the cross-\
+             slot self-edge diagnostic byte-equal to the standalone \
+             `aplicacao::validate_no_self_membership` on the same \
+             (membros, nome) pair",
+        );
+        assert!(
+            matches!(
+                via_method,
+                crate::AplicacaoError::MembroIsSelfAplicacao { ref caixa } if caixa == "demo"
+            ),
+            "expected MembroIsSelfAplicacao carrying (caixa=\"demo\"), \
+             got {via_method:?}",
+        );
+    }
+
+    #[test]
+    fn validate_aplicacao_shape_view_arm_fires_before_self_membership_arm() {
+        // Cross-arm ordering pin between the two arms of the fold: a
+        // fixture carrying BOTH a typed-shape violation (a `:contratos`
+        // edge whose `:para` is not a declared member — rejected by
+        // [`crate::AplicacaoSpec::validate_contratos`] as
+        // [`crate::AplicacaoError::ContratoMemberMissing`]) AND a
+        // would-be self-edge violation (a `:membros` entry naming the
+        // caixa's own `:nome`) surfaces the typed-shape diagnostic
+        // first through the compound gate. Sanity assertion: the
+        // self-referential `:membros` entry alone under the same
+        // parent `:nome` trips the self-edge arm on its own via the
+        // standalone [`crate::aplicacao::validate_no_self_membership`],
+        // so the typed-shape-first surfacing is a real ordering
+        // property, not a case where the self-edge arm silently
+        // accepts the fixture. Pins the pre-fold layout wire-up's
+        // canonical dispatch order (typed-shape cascade → cross-slot
+        // self-edge) as a property of the substrate primitive rather
+        // than a convention of the layout call site. Sibling in shape
+        // to `validate_deps_per_entry_arm_fires_before_self_edge_arm`
+        // (b5dd55e) on the sibling per-slot compound gate's per-arm
+        // ordering property.
+        use crate::aplicacao::{Membro, WitContract};
+        let mut c = aplicacao_fixture("demo");
+        c.membros = vec![Membro {
+            caixa: "demo".into(),
+            versao: "^0.1".into(),
+        }];
+        c.contratos = vec![WitContract {
+            de: "demo".into(),
+            para: "orphan".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        }];
+        let err = c.validate_aplicacao_shape().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::AplicacaoError::ContratoMemberMissing { ref caixa }
+                    if caixa == "orphan"
+            ),
+            "typed-shape arm must fire before self-edge arm — expected \
+             ContratoMemberMissing on \"orphan\", got {err:?}",
+        );
+        // Sanity: the self-referential `:membros` entry alone under
+        // the same parent `:nome` trips the self-edge arm on its own
+        // — proves the typed-shape-first surfacing above is a real
+        // ordering property, not a case where the self-edge arm
+        // silently accepts the fixture.
+        let sanity = crate::aplicacao::validate_no_self_membership(
+            &[Membro {
+                caixa: "demo".into(),
+                versao: "^0.1".into(),
+            }],
+            "demo",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                sanity,
+                crate::AplicacaoError::MembroIsSelfAplicacao { ref caixa }
+                    if caixa == "demo"
+            ),
+            "sanity: the self-referential :membros entry alone must \
+             trip the self-edge arm — got {sanity:?}",
+        );
+    }
+
+    #[test]
+    fn validate_aplicacao_shape_accepts_non_aplicacao_kind() {
+        // Positive control on the identity-element arm: every non-
+        // Aplicacao kind passes the compound gate trivially — the
+        // paired [`Caixa::aplicacao_view`] accessor returns `None`
+        // off the Aplicacao arm (by construction, keyed on
+        // `caixa.kind().is_aplicacao()`), so the fold short-circuits
+        // to `Ok(())` without touching the mesh slots. Pins the
+        // identity element on every non-Aplicacao kind — a future
+        // refactor that made the mesh-slot cascade fire on the wrong
+        // kind (say, on a `Servico` whose mesh slots happen to be
+        // populated in a mis-authored manifest, which the peer
+        // [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-
+        // coherence gate would refuse upstream anyway) surfaces here
+        // as a test failure first. Peer with the
+        // `validate_limits_accepts_none` / `validate_behavior_accepts_none`
+        // identity-element pins on the sibling M2 `Option`-shaped
+        // per-Caixa compound gates.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Acao,
+        ] {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = kind;
+            assert!(
+                c.aplicacao_view().is_none(),
+                "aplicacao_view must return None off the Aplicacao arm \
+                 for kind {kind:?}",
+            );
+            c.validate_aplicacao_shape().expect(
+                "non-Aplicacao kinds must pass the compound gate as the fold's identity element",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_aplicacao_shape_accepts_clean_fixture() {
+        // Positive control: a well-formed Aplicacao (two DNS-1123
+        // members with valid semver constraints, no `:contratos` /
+        // `:entrada` / `:placement` / `:politicas` set — every
+        // per-slot gate accepts the vacuous / omitted arm) passes the
+        // compound gate cleanly. A future tightening of either arm's
+        // accepted set surfaces here as a test failure first. Mirrors
+        // the peer `validate_deps_accepts_clean_fixture` (b5dd55e) /
+        // `validate_upgrade_from_accepts_clean_fixture` (d6801df)
+        // positive-control postures on the sibling per-Caixa
+        // compound gates.
+        let c = aplicacao_fixture("demo");
+        c.validate_aplicacao_shape()
+            .expect("clean Aplicacao fixture must pass the compound gate");
     }
 }
