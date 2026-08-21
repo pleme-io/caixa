@@ -4385,6 +4385,136 @@ impl Caixa {
         Ok(())
     }
 
+    /// Compound per-`Caixa` entry gate on the M2 `:upgrade-from` slot:
+    /// folds the three [`crate::upgrade`] top-level validators — the
+    /// per-entry shape + cross-entry duplicate-`:from` gate
+    /// ([`crate::upgrade::validate_upgrade_from`]), the cross-slot
+    /// `:from < :versao` SemVer-2 precedence gate
+    /// ([`crate::upgrade::validate_upgrade_from_against_versao`]), and the
+    /// cross-slot `:state-change` ↔ `:on-state-change` composition gate
+    /// ([`crate::upgrade::validate_upgrade_from_against_behavior`]) — onto
+    /// one substrate primitive on [`Caixa`]. The three dispatches run in
+    /// the same order the layout pipeline
+    /// ([`crate::layout::StandardLayout::verify`], the `feira build`
+    /// author-time gate) has always sequenced them, so the fold is
+    /// byte-for-byte equivalent to the pre-fold three-block cascade at
+    /// that call site (pinned by the per-arm
+    /// `validate_upgrade_from_folds_per_entry_arm_matches_gate` /
+    /// `_folds_versao_arm_matches_gate` / `_folds_behavior_arm_matches_gate`
+    /// equivalence pins and by the cross-arm
+    /// `validate_upgrade_from_per_entry_arm_fires_before_versao_arm` /
+    /// `_versao_arm_fires_before_behavior_arm` ordering pins).
+    ///
+    /// Prior to this lift the three [`crate::upgrade`] top-level validators
+    /// lived only open-coded at the layout wire-up site
+    /// ([`crate::layout::StandardLayout::verify`], caixa-core/src/layout.rs),
+    /// each threaded through the same `self.upgrade_from()` slice and each
+    /// paired with the same [`crate::LayoutError::UpgradeViolation`]-wrap
+    /// envelope: every future consumer that wanted to gate `:upgrade-from`
+    /// as a whole — the deferred `caixa.pleme.io/v1alpha1/Caixa` CR
+    /// materializer's per-CR admission webhook re-checking `:upgrade-from`
+    /// after a per-`(:from … :instructions …)` patch, a future `feira
+    /// validate --upgrade` per-caixa admission verb, a per-`:upgrade-from`
+    /// overlay resolver a per-cluster overlay lift would materialize —
+    /// was structurally forced to either re-inline the three-dispatch
+    /// cascade in lockstep with the layout wire-up (the duplication the
+    /// PRIME DIRECTIVE names as a bug) or call the whole
+    /// [`crate::layout::StandardLayout::verify`] pipeline and pay every
+    /// peer per-Caixa gate to re-check one slot. Post-fold each such
+    /// consumer reaches the three-arm compound gate through one call on
+    /// the substrate primitive.
+    ///
+    /// The three arms together name one contract with three axes:
+    ///
+    ///   - **per-entry + cross-entry graph-edge invariant** — every entry's
+    ///     `:from` parses as SemVer-2 and every per-instruction / within-
+    ///     entry ordering / singularity gate on each entry's
+    ///     `:instructions` list passes, and no two entries share the same
+    ///     parsed `:from` (the wasm-operator's OTP appup
+    ///     `release_handler:install_release/1` analog picks at most one
+    ///     matching block per running version — two entries with the same
+    ///     parsed semver are an ambiguous edge in the typed upgrade graph).
+    ///   - **cross-slot reachability invariant** — every entry's `:from`
+    ///     is strictly less than the caixa's own `:versao` under SemVer-2
+    ///     precedence. An entry whose `:from >= :versao` is structurally
+    ///     unreachable by the operator's `:from`-match dispatch (the
+    ///     operator loads the current `:versao` and matches the *running*
+    ///     version against each entry's `:from`; an entry whose `:from >=
+    ///     :versao` is never reached because the operator never runs a
+    ///     version >= the current one that it could then upgrade *to* the
+    ///     current one).
+    ///   - **cross-slot composition invariant** — every entry carrying a
+    ///     `(:state-change …)` instruction has a `:behavior
+    ///     :on-state-change` callback declared on the same caixa. The
+    ///     per-version migration script is the `gen_server:code_change/3`
+    ///     analog and the runtime hook it is delivered through during hot
+    ///     upgrade is the `:on-state-change` callback (the upgrade.rs
+    ///     module doc pins the composition verbatim: "Composes with the
+    ///     `:behavior :on-state-change` callback to deliver state migration
+    ///     during hot upgrades").
+    ///
+    /// All three axes must hold together — every consumer's
+    /// `:upgrade-from` accept-set past this compound gate is the same
+    /// set the `feira build` author-time gate admits.
+    ///
+    /// The per-slot compound entry gate discipline lifted here onto the
+    /// M2 `:upgrade-from` axis is the sibling of the peer per-kind
+    /// compound entry gates ([`crate::render::require_supervisor_view`]
+    /// / [`crate::render::require_aplicacao_view`] /
+    /// [`crate::render::require_v0_servico_shape`]) that fold every
+    /// per-kind cascade at the per-kind altitude, and of the peer
+    /// per-slot compound gates ([`crate::AplicacaoSpec::validate_contratos`],
+    /// [`crate::MeshPolicy::validate`],
+    /// [`crate::SupervisorSpec::validate_children`]) that fold every
+    /// structural axis on their slot onto one substrate primitive.
+    /// Extended here to the last unlifted compound-cascade wire-up at
+    /// the layout-pipeline altitude — the three-dispatch M2
+    /// `:upgrade-from` cascade that lived only open-coded at the layout
+    /// wire-up site.
+    ///
+    /// The per-instruction script-path on-disk existence-probe walk that
+    /// [`crate::layout::StandardLayout::verify`] runs immediately after
+    /// this gate (which resolves each entry's `:instructions
+    /// (:state-change :script)` against the layout root) stays open-coded
+    /// at the layout wire-up site — that arm needs the filesystem oracle
+    /// on the [`crate::LayoutInvariants`] trait, not the pure per-Caixa
+    /// typed-shape surface this compound gate folds. Same posture the
+    /// peer [`Self::validate_code_paths`] takes on the sibling code-path
+    /// axes: the typed-shape gate fires on the per-Caixa surface, the
+    /// on-disk existence check fires on the [`crate::StandardLayout`]
+    /// surface.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::UpgradeError::FromInvalid`] /
+    /// [`crate::UpgradeError::ModuleEmpty`] /
+    /// [`crate::UpgradeError::ModuleInvalid`] /
+    /// [`crate::UpgradeError::EmptyScript`] /
+    /// [`crate::UpgradeError::AbsoluteScript`] /
+    /// [`crate::UpgradeError::ParentEscapeScript`] /
+    /// [`crate::UpgradeError::NonLispExtensionScript`] /
+    /// [`crate::UpgradeError::RestartNotExclusive`] /
+    /// [`crate::UpgradeError::StateChangeWithoutPriorLoad`] /
+    /// [`crate::UpgradeError::PurgeWithoutPriorLoad`] /
+    /// [`crate::UpgradeError::StateChangeAfterCleanup`] /
+    /// [`crate::UpgradeError::DuplicateLoadModule`] /
+    /// [`crate::UpgradeError::DuplicateStateChange`] /
+    /// [`crate::UpgradeError::DuplicateCleanup`] /
+    /// [`crate::UpgradeError::DuplicateFrom`] on the per-entry +
+    /// cross-entry axis; [`crate::UpgradeError::FromNotBeforeVersao`] on
+    /// the cross-slot `:from ↔ :versao` axis;
+    /// [`crate::UpgradeError::StateChangeWithoutOnStateChangeCallback`]
+    /// on the cross-slot `:state-change ↔ :on-state-change` axis.
+    pub fn validate_upgrade_from(&self) -> Result<(), crate::UpgradeError> {
+        crate::upgrade::validate_upgrade_from(self.upgrade_from())?;
+        crate::upgrade::validate_upgrade_from_against_versao(self.upgrade_from(), self.versao())?;
+        crate::upgrade::validate_upgrade_from_against_behavior(
+            self.upgrade_from(),
+            self.behavior(),
+        )?;
+        Ok(())
+    }
+
     /// Reject `:restart-window` values the shared
     /// [`crate::supervisor::duration_codec::parse`] refuses. The flat
     /// `restart_window: Option<String>` slot on [`Caixa`] is stored
@@ -19006,5 +19136,315 @@ mod tests {
         // anchoring the lifted constant's current byte to the canonical
         // CAIXA-SDLC §I license scaffold's documented shape.
         assert_eq!(CAIXA_LICENCA_DEFAULT, "MIT");
+    }
+
+    // ── Caixa::validate_upgrade_from — compound per-Caixa entry gate on ──
+    // ── the M2 `:upgrade-from` slot: folds the three top-level        ──
+    // ── `crate::upgrade` validators (per-entry + cross-entry           ──
+    // ── duplicate-`:from`, cross-slot `:from < :versao` precedence,   ──
+    // ── cross-slot `:state-change` ↔ `:on-state-change` composition)  ──
+    // ── onto one substrate primitive. Byte-for-byte equivalent to the ──
+    // ── pre-fold three-block cascade at                               ──
+    // ── `crate::layout::StandardLayout::verify` under the same        ──
+    // ── canonical dispatch order.                                     ──
+
+    #[test]
+    fn validate_upgrade_from_folds_per_entry_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // per-entry + cross-entry axis: a fixture whose `:upgrade-from`
+        // carries a per-entry-invalid `:from` (git-tag shape `"v0.1.0"`,
+        // which `semver::Version::parse` rejects) surfaces the same
+        // [`crate::UpgradeError`] through the compound gate
+        // [`Caixa::validate_upgrade_from`] and the standalone per-entry
+        // gate [`crate::upgrade::validate_upgrade_from`] on the same
+        // [`Caixa::upgrade_from`] slice. Pins the fold — a silent
+        // regression that de-folded the per-entry arm would surface here
+        // as a mismatch between the two dispatches. Sibling in shape to
+        // the peer per-slot-≡-standalone equivalence pins the
+        // [`crate::AplicacaoSpec::validate_contratos`] /
+        // [`crate::MeshPolicy::validate`] /
+        // [`crate::SupervisorSpec::validate_children`] compound gates
+        // each carry on their axes.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![crate::UpgradeFromEntry {
+            from: "v0.1.0".into(),
+            instructions: vec![crate::UpgradeInstruction::Restart],
+        }];
+        let via_method = c.validate_upgrade_from().unwrap_err();
+        let via_standalone = crate::upgrade::validate_upgrade_from(c.upgrade_from()).unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_upgrade_from must surface the per-entry \
+             axis's diagnostic byte-equal to the standalone \
+             `crate::upgrade::validate_upgrade_from` on the same \
+             upgrade_from() slice"
+        );
+        assert!(
+            matches!(
+                via_method,
+                crate::UpgradeError::FromInvalid { ref from, .. } if from == "v0.1.0"
+            ),
+            "expected FromInvalid on the git-tag-shape `:from`, got {via_method:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_folds_versao_arm_matches_gate() {
+        // Per-arm equivalence pin on the cross-slot `:from ↔ :versao`
+        // precedence axis: a fixture with a well-formed `:from` (so the
+        // per-entry arm passes) whose parsed semver is >= the caixa's
+        // `:versao` under SemVer-2 precedence surfaces the same
+        // [`crate::UpgradeError::FromNotBeforeVersao`] through both the
+        // compound gate and the standalone
+        // [`crate::upgrade::validate_upgrade_from_against_versao`] gate
+        // keyed off the same `(upgrade_from, versao)` pair. Pins the
+        // fold's second arm — reaching this arm through the compound
+        // gate requires the per-entry arm to pass first, which itself
+        // pins the per-arm cross-arm ordering.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.versao = "0.1.0".into();
+        c.upgrade_from = vec![crate::UpgradeFromEntry {
+            from: "0.2.0".into(),
+            instructions: vec![crate::UpgradeInstruction::Restart],
+        }];
+        let via_method = c.validate_upgrade_from().unwrap_err();
+        let via_standalone =
+            crate::upgrade::validate_upgrade_from_against_versao(c.upgrade_from(), c.versao())
+                .unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_upgrade_from must surface the \
+             `:from >= :versao` diagnostic byte-equal to the standalone \
+             `crate::upgrade::validate_upgrade_from_against_versao` on \
+             the same (upgrade_from, versao) pair"
+        );
+        assert!(
+            matches!(
+                via_method,
+                crate::UpgradeError::FromNotBeforeVersao { ref from, ref versao }
+                    if from == "0.2.0" && versao == "0.1.0"
+            ),
+            "expected FromNotBeforeVersao carrying the offending pair, got {via_method:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_folds_behavior_arm_matches_gate() {
+        // Per-arm equivalence pin on the cross-slot `:state-change ↔
+        // :on-state-change` composition axis: a fixture with a
+        // well-formed `:from` strictly less than `:versao` (so the
+        // per-entry and versao arms both pass) whose `:instructions`
+        // list carries a `(:state-change …)` instruction with no
+        // `:behavior :on-state-change` callback declared surfaces the
+        // same [`crate::UpgradeError::StateChangeWithoutOnStateChangeCallback`]
+        // through both the compound gate and the standalone
+        // [`crate::upgrade::validate_upgrade_from_against_behavior`]
+        // gate keyed off the same `(upgrade_from, behavior)` pair.
+        // Reaching this arm through the compound gate requires both
+        // prior arms to pass first — the ordering pin below pins the
+        // per-arm dispatch order explicitly.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.versao = "0.2.0".into();
+        c.behavior = None;
+        c.upgrade_from = vec![crate::UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![
+                crate::UpgradeInstruction::LoadModule {
+                    module: "demo".into(),
+                },
+                crate::UpgradeInstruction::StateChange {
+                    script: std::path::PathBuf::from("lib/m.lisp"),
+                },
+                crate::UpgradeInstruction::SoftPurge {
+                    module: "demo-old".into(),
+                },
+            ],
+        }];
+        let via_method = c.validate_upgrade_from().unwrap_err();
+        let via_standalone =
+            crate::upgrade::validate_upgrade_from_against_behavior(c.upgrade_from(), c.behavior())
+                .unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_upgrade_from must surface the \
+             `:state-change` ↔ `:on-state-change` composition \
+             diagnostic byte-equal to the standalone \
+             `crate::upgrade::validate_upgrade_from_against_behavior` \
+             on the same (upgrade_from, behavior) pair"
+        );
+        assert!(
+            matches!(
+                via_method,
+                crate::UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                    ref from,
+                    ref script,
+                } if from == "0.1.0" && script == &std::path::PathBuf::from("lib/m.lisp")
+            ),
+            "expected StateChangeWithoutOnStateChangeCallback carrying \
+             the offending (from, script) pair, got {via_method:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_per_entry_arm_fires_before_versao_arm() {
+        // Cross-arm ordering pin between the first two arms of the
+        // fold: a fixture carrying BOTH a per-entry-invalid `:from`
+        // (`"v0.0.5"` — git-tag shape rejected by
+        // [`crate::upgrade::validate_upgrade_from`]) AND a would-be
+        // versao-precedence violation on a second entry (`"0.2.0" >=
+        // :versao "0.1.0"`) surfaces the per-entry diagnostic first
+        // through the compound gate. Sanity assertion: the second
+        // entry alone under the same `:versao` trips the versao arm
+        // on its own via the standalone
+        // [`crate::upgrade::validate_upgrade_from_against_versao`], so
+        // the per-entry-first surfacing is a real ordering property,
+        // not a case where the versao arm silently accepts the
+        // fixture. Pins the pre-fold layout wire-up's canonical
+        // dispatch order (per-entry → versao → behavior) as a
+        // property of the substrate primitive rather than a
+        // convention of the layout call site.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.versao = "0.1.0".into();
+        c.upgrade_from = vec![
+            crate::UpgradeFromEntry {
+                from: "v0.0.5".into(),
+                instructions: vec![crate::UpgradeInstruction::Restart],
+            },
+            crate::UpgradeFromEntry {
+                from: "0.2.0".into(),
+                instructions: vec![crate::UpgradeInstruction::Restart],
+            },
+        ];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::UpgradeError::FromInvalid { ref from, .. } if from == "v0.0.5"
+            ),
+            "per-entry arm must fire before versao arm — expected \
+             FromInvalid on `v0.0.5`, got {err:?}"
+        );
+        // Sanity: the versao-violating second entry alone under the
+        // same `:versao` trips the versao arm on its own — proves the
+        // per-entry-first surfacing above is a real ordering property.
+        let sanity = crate::upgrade::validate_upgrade_from_against_versao(
+            &[crate::UpgradeFromEntry {
+                from: "0.2.0".into(),
+                instructions: vec![crate::UpgradeInstruction::Restart],
+            }],
+            "0.1.0",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(sanity, crate::UpgradeError::FromNotBeforeVersao { .. }),
+            "sanity: the versao-violating fixture alone must trip the \
+             versao arm — got {sanity:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_versao_arm_fires_before_behavior_arm() {
+        // Cross-arm ordering pin between the second and third arms of
+        // the fold: a fixture carrying BOTH a versao-precedence
+        // violation (`:from "0.2.0" >= :versao "0.1.0"`) AND a
+        // would-be missing-callback violation (a `(:state-change …)`
+        // instruction with no `:behavior :on-state-change`) surfaces
+        // the versao diagnostic first through the compound gate.
+        // Sanity assertion: the missing-callback fixture alone (with
+        // the versao-precedence violation removed by bumping
+        // `:versao` past `:from`) trips the behavior arm on its own
+        // via the standalone
+        // [`crate::upgrade::validate_upgrade_from_against_behavior`],
+        // so the versao-first surfacing is a real ordering property,
+        // not a case where the behavior arm silently accepts the
+        // fixture.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.versao = "0.1.0".into();
+        c.behavior = None;
+        c.upgrade_from = vec![crate::UpgradeFromEntry {
+            from: "0.2.0".into(),
+            instructions: vec![
+                crate::UpgradeInstruction::LoadModule {
+                    module: "demo".into(),
+                },
+                crate::UpgradeInstruction::StateChange {
+                    script: std::path::PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        }];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::UpgradeError::FromNotBeforeVersao { ref from, .. } if from == "0.2.0"
+            ),
+            "versao arm must fire before behavior arm — expected \
+             FromNotBeforeVersao on `0.2.0`, got {err:?}"
+        );
+        // Sanity: the same instructions under a `:versao` that
+        // accepts the `:from` (so the versao arm passes) trips the
+        // behavior arm — proves the versao-first surfacing above is a
+        // real ordering property.
+        let sanity = crate::upgrade::validate_upgrade_from_against_behavior(
+            &[crate::UpgradeFromEntry {
+                from: "0.2.0".into(),
+                instructions: vec![
+                    crate::UpgradeInstruction::LoadModule {
+                        module: "demo".into(),
+                    },
+                    crate::UpgradeInstruction::StateChange {
+                        script: std::path::PathBuf::from("lib/m.lisp"),
+                    },
+                ],
+            }],
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                sanity,
+                crate::UpgradeError::StateChangeWithoutOnStateChangeCallback { .. }
+            ),
+            "sanity: the missing-callback fixture alone must trip the \
+             behavior arm — got {sanity:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_accepts_clean_fixture() {
+        // Positive control: a well-formed `:upgrade-from` (single entry
+        // with `:from` strictly less than `:versao`, no
+        // `:state-change` instruction so the behavior arm is vacuous)
+        // passes the compound gate cleanly. A future tightening of any
+        // one arm's accepted set surfaces here as a test failure
+        // first. Mirrors the peer `validate_versao_accepts_canonical_forms`
+        // positive-control posture on the sibling per-Caixa gate.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.versao = "0.2.0".into();
+        c.upgrade_from = vec![crate::UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![crate::UpgradeInstruction::Restart],
+        }];
+        c.validate_upgrade_from()
+            .expect("clean fixture must pass the compound `:upgrade-from` gate");
+    }
+
+    #[test]
+    fn validate_upgrade_from_accepts_empty_upgrade_from() {
+        // Positive control on the empty-list arm: a caixa without any
+        // `:upgrade-from` block (the default `Vec::new()`
+        // `#[serde(default)]` folds an omitted slot onto) passes the
+        // compound gate cleanly regardless of `:versao` or `:behavior`
+        // — each of the three standalone validators is vacuous on the
+        // empty entry list. Pins the identity element of the fold on
+        // the empty-slot side.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        assert!(
+            c.upgrade_from().is_empty(),
+            "template caixa must carry an empty :upgrade-from — got {:?}",
+            c.upgrade_from()
+        );
+        c.validate_upgrade_from()
+            .expect("empty :upgrade-from must pass the compound gate cleanly");
     }
 }

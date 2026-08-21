@@ -951,108 +951,60 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
-        // Upgrade-from entries: every entry's typed shape must hold
-        // (`:from` is a valid semver; every instruction's `:module`
-        // is a DNS-1123 label; every `:state-change :script` is
-        // non-empty / relative / parent-escape-free) AND the
-        // graph-edge-set invariant on the `:from` axis (at most one
-        // entry per parsed semver — OTP appup picks at most one
-        // matching block per running version, so two entries with the
-        // same `:from` are an ambiguous edge), BEFORE the existing
-        // path-existence pass runs, so the diagnostic names *which
-        // slot* is malformed rather than the less-helpful "missing
-        // upgrade-script" (which doesn't fire for non-script axes at
-        // all). Mirrors the b0c8389 `BehaviorSpec::validate` wiring on
-        // the peer M2 typed slot: the validate pass on the typed value
-        // happens first, the on-disk path-existence pass happens
-        // second.
+        // Compound per-Caixa entry gate on `:upgrade-from`: the layout
+        // pipeline's three-dispatch M2 `:upgrade-from` cascade — the
+        // per-entry shape + cross-entry duplicate-`:from` gate
+        // ([`crate::upgrade::validate_upgrade_from`]), the cross-slot
+        // `:from < :versao` SemVer-2 precedence gate
+        // ([`crate::upgrade::validate_upgrade_from_against_versao`]), and
+        // the cross-slot `:state-change` ↔ `:on-state-change` composition
+        // gate ([`crate::upgrade::validate_upgrade_from_against_behavior`])
+        // — folded onto the [`crate::Caixa::validate_upgrade_from`]
+        // substrate primitive. The three dispatches run in the same
+        // canonical order at the primitive (per-entry → versao → behavior)
+        // so the fold is byte-for-byte equivalent to the pre-fold
+        // three-block cascade this call site formerly carried, pinned by
+        // the paired
+        // `validate_upgrade_from_folds_{per_entry,versao,behavior}_arm_matches_gate`
+        // equivalence pins and the
+        // `validate_upgrade_from_{per_entry_arm_fires_before_versao_arm,
+        // versao_arm_fires_before_behavior_arm}` ordering pins in the
+        // [`crate::Caixa::validate_upgrade_from`] pin family
+        // (`manifest.rs`).
         //
-        // The duplicate-`:from` arm of [`validate_upgrade_from`]
-        // closes the typed-graph-set invariant on the fifth axis to
-        // get this discipline — `:children :caixa` (dbf50a9),
-        // `:membros :caixa` (4bb3f3d), `:contratos` (5dbcfaf),
-        // `:placement :clusters` (c7c7799), `:entrada :paths`
-        // (eb3456d) are the prior four. Without it a caixa.lisp with
-        // two `(:from "0.1.0" …)` blocks silently passed `feira
-        // build` and the wasm-operator picked either set non-
-        // deterministically at hot-upgrade time, far from the source.
+        // Runs BEFORE the existing per-instruction script-path existence
+        // pass below so a malformed typed slot surfaces its own
+        // self-locating diagnostic rather than the less-helpful "missing
+        // upgrade-script" (which doesn't fire for non-script axes at all).
+        // Same lift discipline the peer per-slot compound gates
+        // ([`crate::AplicacaoSpec::validate_contratos`] and its
+        // `:membros` / `:entrada` / `:placement` / `:politicas` peers,
+        // [`crate::MeshPolicy::validate`],
+        // [`crate::SupervisorSpec::validate_children`]) each carry — one
+        // named substrate-primitive gate per typed slot folds every
+        // structural axis on that slot onto one call, so every future
+        // consumer that wants to re-check `:upgrade-from` after a
+        // per-entry patch (the deferred `caixa.pleme.io/v1alpha1/Caixa`
+        // CR materializer's admission webhook, a future `feira validate
+        // --upgrade` per-caixa admission verb, a per-`:upgrade-from`
+        // overlay resolver) reaches the three-arm compound gate through
+        // one dispatch rather than re-inlining the three-dispatch
+        // cascade in lockstep with this wire-up.
         //
-        // 26da2c7 closed the per-entry validate gap; this commit closes
-        // the cross-entry one on the same wiring site.
-        crate::upgrade::validate_upgrade_from(caixa.upgrade_from()).map_err(|err| {
-            LayoutError::UpgradeViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            }
-        })?;
-        // Cross-slot precedence gate: every `:upgrade-from :from` must
-        // be strictly less than the caixa's own `:versao` under
-        // SemVer-2 precedence. An upgrade block whose `:from` is
-        // greater than or equal to `:versao` is structurally
-        // unreachable by the wasm-operator's `:from`-match dispatch
-        // (the operator loads the current `:versao` and matches the
-        // *running* version against each entry's `:from`; an entry
-        // whose `:from >= :versao` is never reached because the
-        // operator never runs a version >= the current one that it
-        // could then upgrade *to* the current one).
-        //
-        // Same cross-slot value-shape discipline as the typed
-        // `:placement` strategy ↔ `:shard-key` partition (934bc58):
-        // one slot's value constrains the valid set of another's, and
-        // the constraint becomes a structural property visible at
-        // validate time. Runs *after* the per-entry shape pass + the
-        // cross-entry duplicate gate so the precedence diagnostic
-        // fires on already-parseable `:from`/`:versao` values (a
-        // malformed `:from` surfaces as `FromInvalid` first; a
-        // malformed `:versao` falls through silently here and is
-        // gated by the narrower `ManifestError::VersaoInvalid` arm
-        // at its load-bearing call site). Mirrors the
-        // arm-ordering posture every peer cross-axis gate uses
-        // (`*_invalid_fires_before_duplicate_check` /
-        // `*_takes_precedence_over_*` pins on every typed-graph axis).
-        crate::upgrade::validate_upgrade_from_against_versao(caixa.upgrade_from(), caixa.versao())
+        // The per-instruction on-disk existence-probe walk below stays
+        // open-coded at the layout wire-up site — that arm needs the
+        // filesystem oracle on the [`LayoutInvariants`] trait, not on
+        // the pure per-Caixa typed-shape surface the compound gate
+        // folds. Same posture [`crate::Caixa::validate_code_paths`] takes
+        // on the sibling code-path axes: the typed-shape gate fires on
+        // the per-Caixa surface, the on-disk existence check fires on
+        // the [`StandardLayout`] surface.
+        caixa
+            .validate_upgrade_from()
             .map_err(|err| LayoutError::UpgradeViolation {
                 caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
-        // Cross-slot composition gate: every `:upgrade-from` entry whose
-        // `:instructions` list carries a `(:state-change …)` instruction
-        // must also have `:behavior :on-state-change` declared on the
-        // same caixa. The per-version migration script is the
-        // `gen_server:code_change/3` analog and the runtime hook it is
-        // delivered through during hot upgrade is the `:on-state-change`
-        // callback (upgrade.rs module doc verbatim: "Composes with the
-        // `:behavior :on-state-change` callback to deliver state
-        // migration during hot upgrades"; behavior.rs module doc on
-        // `:on-state-change` mirrors the promise from the callback side
-        // — "Composes with the `:upgrade-from` slot declared at the
-        // Caixa root"). Without the callback the per-version script has
-        // no runtime delivery path and the operator's hot-upgrade
-        // dispatch either fails the upgrade mid-flight or silently
-        // skips the migration, far from the source caixa.lisp.
-        //
-        // Same cross-slot value-shape discipline as the peer
-        // `validate_upgrade_from_against_versao` gate at this wire-up
-        // site (the `:from` ↔ `:versao` precedence partition) and the
-        // typed `:placement` strategy ↔ `:shard-key` partition
-        // (934bc58): one slot's value constrains the valid set of
-        // another's, and the constraint becomes a structural property
-        // visible at validate time. Runs *after*
-        // `validate_upgrade_from_against_versao` (and therefore after
-        // `validate_upgrade_from` and `BehaviorSpec::validate`) so
-        // narrower per-entry / per-callback diagnostics surface first;
-        // a `:state-change` instruction with a malformed `:script`
-        // (EmptyScript, AbsoluteScript, ParentEscapeScript) lands on
-        // its narrower per-instruction-shape diagnostic before the
-        // missing-callback gate fires.
-        crate::upgrade::validate_upgrade_from_against_behavior(
-            caixa.upgrade_from(),
-            caixa.behavior(),
-        )
-        .map_err(|err| LayoutError::UpgradeViolation {
-            caixa: caixa.nome().to_string(),
-            issue: err.to_string(),
-        })?;
         for entry in caixa.upgrade_from() {
             for instr in entry.instructions() {
                 if let Some(p) = instr.declared_path() {
