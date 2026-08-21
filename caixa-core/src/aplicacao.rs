@@ -1306,6 +1306,90 @@ impl WitContract {
         true
     }
 
+    /// Reject a `:contratos` entry whose `:de` or `:para` names a
+    /// caixa the `:membros` graph does not contain — the substrate-
+    /// primitive per-edge graph-membership gate every consumer of the
+    /// typed inter-Servico edge's endpoint-resolution axis reaches
+    /// through one dispatch.
+    ///
+    /// A `:contratos` entry is a typed directed edge between two
+    /// declared members (MESH-COMPOSITION §III.1 — "the typed edges
+    /// address graph nodes, so a reference to a node the graph does
+    /// not contain is a build error"). Both endpoints must resolve
+    /// against the same [`AplicacaoSpec::membro_names`] oracle: the
+    /// paired [`AplicacaoError::ContratoMemberMissing`] diagnostic
+    /// framing does not distinguish `:de` from `:para` (both arms
+    /// carry the offending `caixa` name verbatim without a
+    /// slot-discriminator field, unlike the sibling per-arm shape
+    /// gate [`validate_contrato_caixa`] whose paired
+    /// [`AplicacaoError::ContratoCaixaEmpty`] / `ContratoCaixaInvalid`
+    /// variants each carry a `slot: &'static str` tag). So the two
+    /// arms are byte-identical modulo the accessor projection they
+    /// key off, and folding them into one per-edge dispatch preserves
+    /// every existing diagnostic-fired output byte-for-byte while
+    /// closing the last inline duplication the substrate-primitive
+    /// per-edge gate family carried inside
+    /// [`AplicacaoSpec::validate_contratos`].
+    ///
+    /// Routes through the paired [`Self::source`] / [`Self::destination`]
+    /// scalar accessors so every future rebrand of the underlying
+    /// `:de` / `:para` storage (a lift from `String` to a typed
+    /// `ServicoName(String)` newtype, a per-Aplicacao interning arena
+    /// the M4 CR materializer authors, a per-cluster caller-alias
+    /// table the operator pins through a future `:placement`-scoped
+    /// slot, an M4 promotion from `String` to a typed edge-endpoint
+    /// enum) flows through the same body without a coordinated
+    /// per-consumer rewrite. Peer of the sibling per-edge substrate
+    /// primitives already lifted on the same `impl WitContract`
+    /// surface ([`Self::is_self_loop`] on the identity-space arm,
+    /// [`Self::target`] on the payload-shape ↔ target-consistency
+    /// arm, [`Self::identity`] on the dedup-key arm) — this run
+    /// extends the shape to the last per-edge axis
+    /// [`AplicacaoSpec::validate_contratos`] carried as an inline
+    /// twin-arm cascade.
+    ///
+    /// Every future consumer that wants to re-check *one* edge's
+    /// graph-membership reaches through one call: the M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// admission-webhook re-checking `:contratos` after a
+    /// per-`(:de, :para)` edge patch without re-walking the whole
+    /// `:contratos` list, the per-`:contratos`-edge `:politicas`
+    /// override MESH-COMPOSITION §III.2 #3 acknowledges — which
+    /// resolves an effective per-edge [`MeshPolicy`] and must
+    /// re-check the edge's endpoints against the same membership
+    /// oracle before it can key a per-edge override off the endpoint
+    /// tuple. Pre-lift each such consumer was structurally forced to
+    /// either re-inline the twin `if !names.contains(...)` cascade
+    /// (the duplication the PRIME DIRECTIVE names as a bug) or call
+    /// [`AplicacaoSpec::validate_contratos`] and pay a whole-list
+    /// walk to re-check one edge. Post-lift each reaches the axis
+    /// through one dispatch on the substrate primitive.
+    ///
+    /// `:de` runs before `:para` per the canonical edge-direction
+    /// order the sibling per-arm shape gate
+    /// [`validate_contrato_caixa`] arm ordering, the self-loop
+    /// diagnostic string, and every peer arm ordering in
+    /// [`AplicacaoSpec::validate_contratos`] already use — a
+    /// well-shaped-but-phantom `:de` fires before a well-shaped-but-
+    /// phantom `:para`, preserving byte-equal ordering with the
+    /// pre-lift inline cascade.
+    fn require_endpoints_in(
+        &self,
+        names: &std::collections::HashSet<&str>,
+    ) -> Result<(), AplicacaoError> {
+        if !names.contains(self.source()) {
+            return Err(AplicacaoError::ContratoMemberMissing {
+                caixa: self.source().to_string(),
+            });
+        }
+        if !names.contains(self.destination()) {
+            return Err(AplicacaoError::ContratoMemberMissing {
+                caixa: self.destination().to_string(),
+            });
+        }
+        Ok(())
+    }
+
     /// Typed view of the contract's payload target. Enforces that the
     /// `:wit` shape and the carried `:endpoint`/`:subject`/`:slot`
     /// fields agree, and that each carried value is itself
@@ -7676,8 +7760,11 @@ impl AplicacaoSpec {
     ///   - per-arm `:de` / `:para` value shape via
     ///     [`validate_contrato_caixa`] (empty + DNS-1123 grammar),
     ///     `:de` before `:para`;
-    ///   - per-arm graph-membership against the
-    ///     [`AplicacaoSpec::membro_names`] oracle, `:de` before `:para`;
+    ///   - per-edge graph-membership against the
+    ///     [`AplicacaoSpec::membro_names`] oracle via
+    ///     [`WitContract::require_endpoints_in`] (folds the twin
+    ///     `:de` / `:para` arms onto one substrate-primitive
+    ///     dispatch), `:de` before `:para`;
     ///   - structural self-edge via [`WitContract::is_self_loop`]
     ///     (caller-equals-callee under any WIT shape);
     ///   - `:wit` emptiness ([`AplicacaoError::EmptyWit`]);
@@ -7747,16 +7834,19 @@ impl AplicacaoSpec {
             // and diagnostic strings already use.
             validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_DE, c.source())?;
             validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_PARA, c.destination())?;
-            if !names.contains(c.source()) {
-                return Err(AplicacaoError::ContratoMemberMissing {
-                    caixa: c.source().to_string(),
-                });
-            }
-            if !names.contains(c.destination()) {
-                return Err(AplicacaoError::ContratoMemberMissing {
-                    caixa: c.destination().to_string(),
-                });
-            }
+            // Per-edge graph-membership gate on the twin `:de` / `:para`
+            // arms — folded onto the substrate-primitive dispatch
+            // [`WitContract::require_endpoints_in`] so every per-edge
+            // consumer of the endpoint-resolution axis (this per-slot
+            // gate at build time, the M4 admission webhook re-checking
+            // one edge after a per-`(:de, :para)` patch, the per-edge
+            // `:politicas` override MESH-COMPOSITION §III.2 #3
+            // acknowledges) reaches the axis through one call rather
+            // than re-inlining the twin `if !names.contains(...)`
+            // cascade. `:de` fires before `:para` inside the primitive,
+            // preserving byte-equal diagnostic ordering with the
+            // pre-lift inline cascade.
+            c.require_endpoints_in(&names)?;
             // A `:contratos` entry is an *inter*-Servico contract
             // (MESH-COMPOSITION §III.1 — "Servico A calls Servico B"): a
             // typed edge between two distinct graph nodes. An edge whose
@@ -27914,6 +28004,146 @@ mod tests {
             "fixture must have dropped the `:contratos` edge's \
              `:para` target from the graph's node set",
         );
+    }
+
+    #[test]
+    fn wit_contract_require_endpoints_in_folds_per_arm_membership_cascade() {
+        // Fail-before-pass-after equivalence pin on the lifted
+        // per-edge substrate primitive [`WitContract::require_endpoints_in`]:
+        // both arms (`:de` phantom and `:para` phantom) must fire the
+        // `AplicacaoError::ContratoMemberMissing` diagnostic with a
+        // `caixa` carrier byte-equal to the offending accessor's
+        // projection, and `:de` must fire before `:para` when both
+        // arms would trip on the same call — preserving the canonical
+        // edge-direction order the peer per-arm shape gate
+        // [`validate_contrato_caixa`], the [`WitContract::is_self_loop`]
+        // diagnostic, and every peer per-arm ordering in
+        // [`AplicacaoSpec::validate_contratos`] already carry.
+        //
+        // Two-endpoint oracle covers exactly enough graph nodes to
+        // exercise each arm in isolation: the `:de` arm fires when
+        // the source is off-oracle and the destination is on-oracle,
+        // the `:para` arm fires when the source is on-oracle and the
+        // destination is off-oracle, and the `:de`-before-`:para`
+        // ordering falls out from a probe where *both* endpoints are
+        // off-oracle — the diagnostic's `caixa` field must byte-equal
+        // the source, not the destination, pinning the primitive's
+        // arm ordering as `:de` first.
+        let mut names: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        names.insert("cart");
+        names.insert("catalog");
+
+        // `:de` phantom, `:para` on-oracle
+        let de_phantom = contract_http("phantom-de", "catalog", "/x");
+        let err = de_phantom.require_endpoints_in(&names).unwrap_err();
+        assert_eq!(
+            err,
+            AplicacaoError::ContratoMemberMissing {
+                caixa: de_phantom.source().to_string(),
+            },
+            "the `:de` phantom arm must fire ContratoMemberMissing \
+             with `caixa` byte-equal to `WitContract::source` — a \
+             bypass here (a raw `.de.clone()` regression, a divergent \
+             accessor on a per-CR alias table) would silently split \
+             the primitive's diagnostic from the substrate-primitive \
+             scalar accessor every downstream consumer routes through",
+        );
+
+        // `:de` on-oracle, `:para` phantom
+        let para_phantom = contract_http("cart", "phantom-para", "/x");
+        let err = para_phantom.require_endpoints_in(&names).unwrap_err();
+        assert_eq!(
+            err,
+            AplicacaoError::ContratoMemberMissing {
+                caixa: para_phantom.destination().to_string(),
+            },
+            "the `:para` phantom arm must fire ContratoMemberMissing \
+             with `caixa` byte-equal to `WitContract::destination` — \
+             symmetric callee-side pin to the `:de` arm above",
+        );
+
+        // Both endpoints off-oracle: the `:de` arm must fire first,
+        // pinning the primitive's canonical edge-direction order.
+        let both_phantom = contract_http("phantom-de", "phantom-para", "/x");
+        let err = both_phantom.require_endpoints_in(&names).unwrap_err();
+        assert_eq!(
+            err,
+            AplicacaoError::ContratoMemberMissing {
+                caixa: both_phantom.source().to_string(),
+            },
+            "when both endpoints are off-oracle, the `:de` arm must \
+             fire before the `:para` arm — preserving byte-equal \
+             ordering with the pre-lift inline cascade in \
+             `validate_contratos` and with every peer per-arm \
+             ordering the sibling per-edge substrate primitives \
+             already carry",
+        );
+
+        // Both endpoints on-oracle: clean pass.
+        let clean = contract_http("cart", "catalog", "/x");
+        clean.require_endpoints_in(&names).unwrap();
+    }
+
+    #[test]
+    fn validate_contratos_membership_gate_routes_through_require_endpoints_in() {
+        // Convergence pin: the whole-spec end-to-end route through
+        // [`AplicacaoSpec::validate_contratos`] must reach the
+        // per-edge substrate primitive
+        // [`WitContract::require_endpoints_in`] on every membership
+        // arm — the diagnostic fired at the per-slot altitude must
+        // byte-equal the diagnostic the primitive fires when called
+        // directly on the same edge and the same oracle. Pins the
+        // primitive as the sole load-bearing gate on the membership
+        // axis, so any future silent detour that re-inlined the twin
+        // `if !names.contains(...)` cascade back into the per-slot
+        // gate (a rebase-artifact regression, an M4 admission-webhook
+        // consumer that bypassed the primitive) would surface here as
+        // a byte-equal miss between the two dispatches.
+        //
+        // Same equivalence-pin discipline the peer
+        // [`validate_contratos_matches_gate_on_every_per_axis_shape`]
+        // pin already carries on the per-slot gate ≡ `validate` axis,
+        // extended here onto the per-slot gate ≡ per-edge primitive
+        // axis at one altitude deeper.
+        for phantom_edge in [
+            contract_http("phantom-de", "catalog", "/x"),
+            contract_http("cart", "phantom-para", "/x"),
+        ] {
+            let mut spec = three_member_spec();
+            spec.contratos.push(phantom_edge.clone());
+            let per_slot_err = spec.validate_contratos().unwrap_err();
+            let primitive_err = phantom_edge
+                .require_endpoints_in(&spec.membro_names())
+                .unwrap_err();
+            assert_eq!(
+                per_slot_err, primitive_err,
+                "the per-slot gate must reach the per-edge substrate \
+                 primitive on every membership arm — a bypass here \
+                 would silently split the two dispatches on the \
+                 same edge + same oracle input",
+            );
+            // And the diagnostic's `caixa` carrier must byte-equal
+            // the offending accessor's projection at both altitudes,
+            // pinning the accessor routing across the whole-spec
+            // path.
+            let AplicacaoError::ContratoMemberMissing { ref caixa } = per_slot_err else {
+                panic!("expected ContratoMemberMissing, got {per_slot_err:?}");
+            };
+            let expected = if spec.membro_names().contains(phantom_edge.source()) {
+                phantom_edge.destination()
+            } else {
+                phantom_edge.source()
+            };
+            assert_eq!(
+                caixa, expected,
+                "the whole-spec ContratoMemberMissing.caixa carrier \
+                 must byte-equal the offending edge's accessor \
+                 projection — a bypass here would silently split \
+                 the wrap envelope's `caixa` field from the \
+                 substrate-primitive scalar accessor every \
+                 downstream consumer routes through",
+            );
+        }
     }
 
     #[test]
