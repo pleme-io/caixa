@@ -610,10 +610,10 @@ impl LayoutInvariants for StandardLayout {
             || !caixa.exe().is_empty()
             || !caixa.servicos().is_empty();
         if caixa.kind().is_supervisor() && has_code {
-            return Err(LayoutError::SupervisorOwnsCode(caixa.nome().to_string()));
+            return Err(LayoutError::supervisor_owns_code(caixa));
         }
         if caixa.kind().is_aplicacao() && has_code {
-            return Err(LayoutError::AplicacaoOwnsCode(caixa.nome().to_string()));
+            return Err(LayoutError::aplicacao_owns_code(caixa));
         }
         // An Acao's sole payload is its `:ci` slot (CANTEIRO §7.1-C) —
         // like Supervisor/Aplicacao it runs no code of its own, so a
@@ -621,7 +621,7 @@ impl LayoutInvariants for StandardLayout {
         // ignored" footgun the two gates above already close for the
         // other two no-code kinds.
         if caixa.kind().is_acao() && has_code {
-            return Err(LayoutError::AcaoOwnsCode(caixa.nome().to_string()));
+            return Err(LayoutError::acao_owns_code(caixa));
         }
 
         // Kind ↔ slot coherence: the M3 mesh slots (:membros,
@@ -796,13 +796,11 @@ impl LayoutInvariants for StandardLayout {
         }
 
         if caixa.kind().requires_exe() && caixa.exe().is_empty() {
-            return Err(LayoutError::BinarioWithoutExe(caixa.nome().to_string()));
+            return Err(LayoutError::binario_without_exe(caixa));
         }
 
         if caixa.kind().requires_servicos() && caixa.servicos().is_empty() {
-            return Err(LayoutError::ServicoWithoutServicos(
-                caixa.nome().to_string(),
-            ));
+            return Err(LayoutError::servico_without_servicos(caixa));
         }
 
         // Required-slot gate on the fifth [`CaixaKind`] arm — mirror of
@@ -814,7 +812,7 @@ impl LayoutInvariants for StandardLayout {
         // a less-helpful "no :ci" surprise far from the source
         // caixa.lisp.
         if caixa.kind().requires_ci() && caixa.ci().is_none() {
-            return Err(LayoutError::MissingCi(caixa.nome().to_string()));
+            return Err(LayoutError::missing_ci(caixa));
         }
 
         for p in caixa.bibliotecas() {
@@ -1557,6 +1555,81 @@ impl LayoutError {
     }
 }
 
+// Fold the six `LayoutError::<Variant>(caixa.nome().to_string())` nome-
+// only tuple-variant wire-up sites at [`StandardLayout::verify`] onto one
+// substrate primitive per typed variant — the fourth uniform-shape
+// envelope on `LayoutError` after the `{ caixa, issue }` family the
+// [`layout_violation_ctors!`] macro closed (131ca0d), the
+// `{ caixa, kind, slots }` family the peer [`layout_slot_kind_ctors!`]
+// macro closed (0419438), and the `{ kind, path }`
+// [`LayoutError::missing_entry`] one-variant ctor (1b09f9d). Each of the
+// six wire-up sites on this shape (`SupervisorOwnsCode` /
+// `AplicacaoOwnsCode` / `AcaoOwnsCode` at the no-code kind-coherence gate;
+// `BinarioWithoutExe` / `ServicoWithoutServicos` / `MissingCi` at the
+// required-slot gate) opened the identical one-line
+// `LayoutError::<Variant>(caixa.nome().to_string())` tuple-literal — the
+// exact "same block re-inlined at every consumer" shape the PRIME
+// DIRECTIVE names as a bug, on the same altitude the peer `_violation` /
+// `_slots_on_non_*` / `missing_entry` families each closed on the
+// sibling `LayoutError` envelopes.
+//
+// The macro below generates one static constructor per variant of shape
+// `fn <slot>(caixa: &Caixa) -> LayoutError`, so every wire-up site
+// collapses onto one dispatch:
+// `return Err(LayoutError::<slot>(caixa));`, byte-equal to the pre-lift
+// tuple-literal. The uniform one-field construction (`caixa: caixa.nome()
+// .to_string()`) is spelled once — inside the macro — rather than at
+// every wire-up site. Every constructor is `#[must_use]` so a caller who
+// mistakenly discards the constructed error (rather than routing it
+// through `return Err(…)`) trips a compile warning at the wire-up site.
+//
+// Peer with the three prior `LayoutError`-envelope constructor families
+// — the four together now fold every uniform-shape `LayoutError` variant
+// carried by [`StandardLayout::verify`] onto one substrate primitive per
+// typed variant, so every layout-side error-wrap on `LayoutError` reads
+// through one dispatch per variant rather than N open-coded blocks.
+// Every future consumer that wants to construct one of these variants
+// outside the layout pipeline (a per-slot admission webhook probing an
+// Acao's `:ci` slot, a `feira validate --kind <X>` verb refusing a
+// no-code kind that declares `:bibliotecas` / `:exe` / `:servicos`, an
+// overlay resolver rejecting a required-slot omission against a
+// cluster-local snapshot) reaches its variant through one call, matching
+// the `_violation` / `_slots_on_non_*` / `missing_entry` families'
+// substrate-primitive discipline.
+macro_rules! layout_nome_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl LayoutError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LayoutError::",
+                    stringify!($variant),
+                    "`] naming the offending `caixa.nome()`. Folds the ",
+                    "uniform `Self::",
+                    stringify!($variant),
+                    "(caixa.nome().to_string())` one-field tuple-",
+                    "literal onto one substrate primitive so every ",
+                    "[`StandardLayout::verify`] wire-up on this variant ",
+                    "reads through one dispatch rather than the pre-lift ",
+                    "open-coded block."
+                )]
+                #[must_use]
+                pub fn $ctor(caixa: &crate::Caixa) -> Self {
+                    Self::$variant(caixa.nome().to_string())
+                }
+            )*
+        }
+    };
+}
+
+layout_nome_only_ctors! {
+    binario_without_exe => BinarioWithoutExe,
+    servico_without_servicos => ServicoWithoutServicos,
+    missing_ci => MissingCi,
+    supervisor_owns_code => SupervisorOwnsCode,
+    aplicacao_owns_code => AplicacaoOwnsCode,
+    acao_owns_code => AcaoOwnsCode,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2124,6 +2197,135 @@ mod tests {
                 kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
                 path,
             },
+        );
+    }
+
+    // ── LayoutError::<nome-only> constructor family ──────────────────────
+    //
+    // The [`layout_nome_only_ctors!`] macro (below the `LayoutError` enum
+    // definition) generates one static constructor per `<Variant>(String)`
+    // tuple-variant that folds the uniform `Self::<Variant>(caixa.nome()
+    // .to_string())` one-field construction onto one substrate primitive.
+    // The per-variant equivalence pins below (fail-before-pass-after by
+    // construction — a byte-mismatched macro arm would trip its
+    // equivalence pin first) lock each generated constructor to its
+    // tuple-literal peer under `PartialEq`, so every wire-up in
+    // [`StandardLayout::verify`] on that variant produces a byte-equal
+    // `LayoutError` to the pre-lift open-coded tuple-literal. The
+    // cross-axis pin that follows (non-default `:nome`) routes the sole
+    // constructor input axis through its declared accessor, so the fold
+    // does not silently collapse onto the fixture default `:nome`.
+
+    fn layout_nome_only_ctor_fixture() -> Caixa {
+        caixa(CaixaKind::Biblioteca)
+    }
+
+    // Same rationale as `assert_violation_ctor_matches` / `assert_slot_
+    // kind_ctor_matches` above: the helper terminates on the equality
+    // check, so the owned-arg lint's general API-shape target does not
+    // apply.
+    #[allow(clippy::needless_pass_by_value)]
+    fn assert_nome_only_ctor_matches(actual: LayoutError, expected: LayoutError) {
+        assert_eq!(
+            actual, expected,
+            "generated constructor must produce byte-equal LayoutError to open-coded tuple-literal wrap",
+        );
+    }
+
+    #[test]
+    fn binario_without_exe_ctor_matches_tuple_literal_wrap() {
+        let c = layout_nome_only_ctor_fixture();
+        assert_nome_only_ctor_matches(
+            LayoutError::binario_without_exe(&c),
+            LayoutError::BinarioWithoutExe(c.nome().to_string()),
+        );
+    }
+
+    #[test]
+    fn servico_without_servicos_ctor_matches_tuple_literal_wrap() {
+        let c = layout_nome_only_ctor_fixture();
+        assert_nome_only_ctor_matches(
+            LayoutError::servico_without_servicos(&c),
+            LayoutError::ServicoWithoutServicos(c.nome().to_string()),
+        );
+    }
+
+    #[test]
+    fn missing_ci_ctor_matches_tuple_literal_wrap() {
+        let c = layout_nome_only_ctor_fixture();
+        assert_nome_only_ctor_matches(
+            LayoutError::missing_ci(&c),
+            LayoutError::MissingCi(c.nome().to_string()),
+        );
+    }
+
+    #[test]
+    fn supervisor_owns_code_ctor_matches_tuple_literal_wrap() {
+        let c = layout_nome_only_ctor_fixture();
+        assert_nome_only_ctor_matches(
+            LayoutError::supervisor_owns_code(&c),
+            LayoutError::SupervisorOwnsCode(c.nome().to_string()),
+        );
+    }
+
+    #[test]
+    fn aplicacao_owns_code_ctor_matches_tuple_literal_wrap() {
+        let c = layout_nome_only_ctor_fixture();
+        assert_nome_only_ctor_matches(
+            LayoutError::aplicacao_owns_code(&c),
+            LayoutError::AplicacaoOwnsCode(c.nome().to_string()),
+        );
+    }
+
+    #[test]
+    fn acao_owns_code_ctor_matches_tuple_literal_wrap() {
+        let c = layout_nome_only_ctor_fixture();
+        assert_nome_only_ctor_matches(
+            LayoutError::acao_owns_code(&c),
+            LayoutError::AcaoOwnsCode(c.nome().to_string()),
+        );
+    }
+
+    #[test]
+    fn nome_only_ctor_routes_caixa_through_nome_accessor() {
+        // Pin the fold's `caixa.nome().to_string()` sole-field construction
+        // against a non-default `:nome` — the accessor threads the caller's
+        // `:nome` verbatim into the tuple-variant, so the fold does not
+        // silently collapse onto the default `"demo"` fixture nome. Peer of
+        // the sibling `violation_ctor_routes_caixa_prefix_through_nome_
+        // accessor` / `slot_kind_ctor_routes_caixa_prefix_through_nome_
+        // accessor` pins on the `{ caixa, issue }` / `{ caixa, kind,
+        // slots }` envelopes; extended here onto the sixth
+        // `<Variant>(String)` envelope so every LayoutError-shape ctor
+        // family guarantees the `:nome`-derived-caixa slot routes through
+        // [`Caixa::nome`] rather than a hard-coded string. Sweeps the six
+        // ctors in the [`layout_nome_only_ctors!`] macro so the pin covers
+        // every generated arm.
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "alt-nome".into();
+        assert_eq!(
+            LayoutError::binario_without_exe(&c),
+            LayoutError::BinarioWithoutExe("alt-nome".to_string()),
+        );
+        assert_eq!(
+            LayoutError::servico_without_servicos(&c),
+            LayoutError::ServicoWithoutServicos("alt-nome".to_string()),
+        );
+        assert_eq!(
+            LayoutError::missing_ci(&c),
+            LayoutError::MissingCi("alt-nome".to_string()),
+        );
+        assert_eq!(
+            LayoutError::supervisor_owns_code(&c),
+            LayoutError::SupervisorOwnsCode("alt-nome".to_string()),
+        );
+        assert_eq!(
+            LayoutError::aplicacao_owns_code(&c),
+            LayoutError::AplicacaoOwnsCode("alt-nome".to_string()),
+        );
+        assert_eq!(
+            LayoutError::acao_owns_code(&c),
+            LayoutError::AcaoOwnsCode("alt-nome".to_string()),
         );
     }
 
