@@ -1224,6 +1224,87 @@ impl LayoutInvariants for StandardLayout {
                 .map_err(|err| LayoutError::aplicacao_violation(caixa, err))?;
         }
 
+        // Acao invariants — typed CI-run decompose. Like Supervisor and
+        // Aplicacao, an Acao runs no code itself; unlike them, its sole
+        // payload is a [`canteiro_types::CiRun`] whose declared-node
+        // shape can carry three structural violations
+        // ([`canteiro_types::DecomposeError`]: `DuplicateNode`,
+        // `UnknownDep`, `Cycle`) the layout pipeline formerly deferred
+        // to [`caixa_actions::validate`] — layout only checked `:ci`
+        // *presence* via [`Self::MissingCi`] above, so a `:kind Acao`
+        // carrying a structurally illegal `:ci` (a duplicate node
+        // name, a dependency on an undeclared node, a dependency
+        // cycle) passed `feira build` cleanly and surfaced the
+        // diagnostic only when [`caixa_actions::validate`] later
+        // refused it — far from the source `caixa.lisp` on the
+        // author-time gate side.
+        //
+        // Compound per-Caixa entry gate on the Acao-kind `:ci` slot
+        // family: the [`crate::render::decompose_ci`] typed decompose
+        // gate — the sibling axis owned by the substrate-canonical
+        // [`crate::render::require_acao_view`] compound helper every
+        // per-`Acao` renderer routes through — folded onto the
+        // [`crate::Caixa::validate_acao_shape`] substrate primitive.
+        // The single-arm fold is byte-for-byte equivalent to the
+        // pre-fold `decompose_ci(caixa, ci).map(|_| ())?` call this
+        // wire-up sees, pinned by the paired
+        // `validate_acao_shape_folds_decompose_arm_matches_gate`
+        // equivalence pin and the
+        // `validate_acao_shape_accepts_non_acao_kind` /
+        // `validate_acao_shape_accepts_absent_ci_slot` identity-
+        // element pins in the
+        // [`crate::Caixa::validate_acao_shape`] pin family
+        // (`manifest.rs`).
+        //
+        // Same lift discipline the peer per-kind compound gates
+        // ([`crate::Caixa::validate_supervisor_shape`] 4c70105,
+        // [`crate::Caixa::validate_aplicacao_shape`] 949a7a0,
+        // [`crate::Caixa::validate_upgrade_from`] d6801df,
+        // [`crate::Caixa::validate_deps`] b5dd55e,
+        // [`crate::Caixa::validate_limits`] baa4688,
+        // [`crate::Caixa::validate_behavior`] 0d2877a) each carry —
+        // one named substrate-primitive gate folds every structural
+        // axis on that kind onto one call, so every future consumer
+        // that wants to re-check the Acao shape after a per-node
+        // patch (a per-`Acao` CR materializer's admission webhook, a
+        // future `feira validate --acao` per-caixa admission verb, a
+        // per-`Acao` overlay resolver) reaches the compound gate
+        // through one dispatch rather than re-inlining the decompose
+        // cascade in lockstep with this wire-up. Peer with the
+        // [`crate::render::require_acao_view`] compound entry gate
+        // every per-`Acao` renderer routes through: the two consumers
+        // of the Acao-shape cascade now share one substrate primitive
+        // on each side of the author-time-vs-renderer split, rather
+        // than two open-coded cascades kept in lockstep. Closes the
+        // last per-kind asymmetry — with this wire-up the four typed
+        // named-caixa kinds (`Servico` / `Aplicacao` / `Supervisor` /
+        // `Acao`) each route through one compound per-Caixa shape
+        // gate at the layout altitude.
+        //
+        // Runs *after* the [`Self::MissingCi`] presence gate above
+        // (so a `:kind Acao` caixa with `ci = None` surfaces the
+        // presence diagnostic first — the fold's identity-element arm
+        // passes cleanly on absent `:ci`) and *after* the sibling
+        // Supervisor / Aplicacao shape gates so the per-kind
+        // diagnostic ordering at the layout altitude reads as the
+        // canonical `Supervisor → Aplicacao → Acao` sweep.
+        //
+        // The outer `if caixa.kind().is_acao()` guard stays because
+        // [`crate::Caixa::validate_acao_shape`] is the fold's
+        // identity element on non-Acao kinds (returns `Ok(())`
+        // without touching the `:ci` slot — same posture as
+        // [`crate::Caixa::validate_supervisor_shape`] /
+        // [`crate::Caixa::validate_aplicacao_shape`] on the sibling
+        // typed-view-carrying arms); the guard is a redundant but
+        // zero-cost fast-path that preserves the peer supervisor /
+        // aplicacao branches' `if caixa.kind().is_<kind>()` parallel
+        // structure at this altitude.
+        if caixa.kind().is_acao() {
+            caixa
+                .validate_acao_shape()
+                .map_err(|err| LayoutError::acao_violation(caixa, err))?;
+        }
+
         Ok(())
     }
 }
@@ -1280,6 +1361,8 @@ pub enum LayoutError {
     SupervisorOwnsCode(String),
     #[error("aplicacao caixa '{caixa}' violates typed shape: {issue}")]
     AplicacaoViolation { caixa: String, issue: String },
+    #[error("acao caixa '{caixa}' violates typed shape: {issue}")]
+    AcaoViolation { caixa: String, issue: String },
     #[error(
         "aplicacao caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — aplicacaos compose Servicos, they don't run code themselves"
     )]
@@ -1432,6 +1515,7 @@ layout_violation_ctors! {
     restart_window_violation => RestartWindowViolation,
     supervisor_violation => SupervisorViolation,
     aplicacao_violation => AplicacaoViolation,
+    acao_violation => AcaoViolation,
 }
 
 // Fold the four `LayoutError::*SlotsOn*` / `LayoutError::ForeignCodeSlot`
@@ -1704,7 +1788,7 @@ mod tests {
     // `actual`/`expected` are only ever read, never moved into anything —
     // the ergonomic tradeoff (owned + move-in vs. reference + &-borrow at
     // every call site) favors the owned form for a test-only assertion
-    // helper called from 16 wire-up pins. The lint targets the general
+    // helper called from 17 wire-up pins. The lint targets the general
     // API-shape case where callers still have downstream uses for the
     // moved value; the assertion helper terminates on the equality check.
     #[allow(clippy::needless_pass_by_value)]
@@ -1901,6 +1985,27 @@ mod tests {
         assert_violation_ctor_matches(
             LayoutError::aplicacao_violation(&c, issue),
             LayoutError::AplicacaoViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn acao_violation_ctor_matches_struct_literal_wrap() {
+        // Sibling of [`aplicacao_violation_ctor_matches_struct_literal_wrap`]
+        // / [`supervisor_violation_ctor_matches_struct_literal_wrap`] on
+        // the third per-kind compound-shape wrap envelope on
+        // `LayoutError`. Pins the macro-generated `acao_violation`
+        // constructor to its struct-literal peer under `PartialEq`, so
+        // every wire-up in [`StandardLayout::verify`] on the
+        // [`LayoutError::AcaoViolation`] variant produces a byte-equal
+        // `LayoutError` to the pre-lift open-coded block. Closes the
+        // pin family the peer per-kind shape wraps already carry.
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::acao_violation(&c, issue),
+            LayoutError::AcaoViolation {
                 caixa: c.nome().to_string(),
                 issue: issue.to_string(),
             },
@@ -6171,6 +6276,81 @@ mod tests {
         layout
             .verify(&c, &root)
             .expect("an Acao caixa with a declared :ci slot passes layout verify");
+    }
+
+    #[test]
+    fn acao_with_cyclic_ci_rejected_at_layout() {
+        // Layout-side wire-up pin on the compound
+        // [`crate::Caixa::validate_acao_shape`] gate: a `:kind Acao`
+        // caixa declaring a structurally illegal `:ci` (here — a
+        // minimal two-node cycle `a → b → a`, one of the three
+        // `canteiro_types::DecomposeError` arms
+        // [`crate::decompose_ci`] refuses) surfaces
+        // [`LayoutError::AcaoViolation`] at `feira build` time rather
+        // than passing the layout gate silently and deferring the
+        // diagnostic to [`caixa_actions::validate`] at renderer time.
+        //
+        // Pre-lift the layout pipeline only checked `:ci` *presence*
+        // via [`LayoutError::MissingCi`]; the decompose gate lived
+        // only wired open-coded at
+        // [`caixa_actions::validate`] via the substrate-canonical
+        // [`crate::require_acao_view`] compound helper. This wire-up
+        // pin locks the new layout-side compound-shape gate in place
+        // — a future regression that dropped the `if
+        // caixa.kind().is_acao() { validate_acao_shape() }` block or
+        // relaxed the diagnostic surface trips here at caixa-core
+        // build time. Sibling in shape to the peer
+        // [`aplicacao_must_not_have_bibliotecas`] /
+        // [`supervisor_must_not_have_bibliotecas`] /
+        // [`acao_must_not_have_bibliotecas`] layout wire-up pins on
+        // the sibling per-kind shape gates.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Acao);
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "a",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "a".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["b".into()],
+                ),
+                canteiro_types::CiNode::new(
+                    "b",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "b".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["a".into()],
+                ),
+            ],
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::AcaoViolation { caixa, issue } => {
+                assert_eq!(caixa, "demo");
+                assert!(
+                    issue.contains("decompose"),
+                    "AcaoViolation issue must name the decompose axis (got: {issue:?})",
+                );
+                assert!(
+                    issue.contains("demo"),
+                    "AcaoViolation issue must name the offending caixa nome via the folded \
+                     CiDecomposeFailure Display (got: {issue:?})",
+                );
+            }
+            other => panic!("expected AcaoViolation on a cyclic :ci, got {other:?}"),
+        }
     }
 
     #[test]

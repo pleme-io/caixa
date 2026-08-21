@@ -4932,6 +4932,94 @@ impl Caixa {
         Ok(())
     }
 
+    /// Compound per-`Caixa` entry gate on the Acao-kind `:ci` slot
+    /// family — folds the [`crate::decompose_ci`] typed decompose gate
+    /// (`canteiro_types::decompose` refusing every illegal
+    /// [`canteiro_types::CiRun`] shape: duplicate node name, dependency
+    /// on an undeclared node, dependency cycle) onto one substrate
+    /// primitive on [`Caixa`]. On non-`Acao` kinds the fold is the
+    /// identity element — the paired [`Self::kind`] `is_acao()` guard
+    /// short-circuits before the decompose gate ever fires (peer with
+    /// the [`Self::validate_aplicacao_shape`] /
+    /// [`Self::validate_supervisor_shape`] typed-view identity element
+    /// and the [`Self::validate_limits`] / [`Self::validate_behavior`]
+    /// M2 `Option`-arm identity element), so the gate passes trivially
+    /// without touching the `:ci` slot. An `:kind Acao` caixa with
+    /// `ci = None` is also an identity-element pass: the presence gate
+    /// is the sibling axis owned by [`crate::LayoutError::MissingCi`] /
+    /// [`crate::require_ci`] / [`crate::MissingCiSlot`], not by the
+    /// decompose gate — a caixa that carries no `:ci` slot has no run
+    /// to decompose. Same split the peer per-Servico
+    /// [`crate::LayoutError::ServicoWithoutServicos`] presence gate and
+    /// per-Binario [`crate::LayoutError::BinarioWithoutExe`] presence
+    /// gate keep from their sibling per-slot shape gates, so the two
+    /// axes stay separately diagnosable at the layout altitude.
+    ///
+    /// Prior to this lift the decompose gate lived only wired
+    /// open-coded at the [`caixa_actions::validate`] renderer-side
+    /// entry gate (routed through the substrate-canonical
+    /// [`crate::require_acao_view`] compound helper) — the *layout*
+    /// pipeline ([`crate::layout::StandardLayout::verify`], caixa-core/
+    /// src/layout.rs) only checked `:ci` *presence* via
+    /// [`crate::LayoutError::MissingCi`], so a `:kind Acao` caixa
+    /// carrying a structurally illegal `:ci` (a duplicate node name, a
+    /// dependency on an undeclared node, a dependency cycle) passed
+    /// `feira build` cleanly and surfaced the diagnostic only when
+    /// [`caixa_actions::validate`] later refused it — far from the
+    /// source `caixa.lisp` on the author-time gate side. Every future
+    /// consumer that wanted to gate the Acao-shape cascade as a whole
+    /// (a per-`Acao` CR materializer's admission webhook re-checking
+    /// `:ci` after a per-node patch, a future `feira validate --acao`
+    /// per-caixa admission verb, a per-`Acao` overlay resolver
+    /// rejecting an added / renamed node against a cluster-local
+    /// snapshot) was structurally forced to either re-inline the
+    /// decompose dispatch in lockstep with the renderer-side wire-up
+    /// (the duplication the PRIME DIRECTIVE names as a bug) or call
+    /// the whole [`caixa_actions::validate`] renderer and pay the
+    /// per-node accumulation to re-check one slot. Post-fold each such
+    /// consumer reaches the decompose gate through one call on the
+    /// substrate primitive.
+    ///
+    /// Peer to the [`crate::require_acao_view`] compound entry gate
+    /// every per-`Acao` *renderer* routes through (which already folds
+    /// the same `require_ci + decompose_ci` two-arm cascade behind its
+    /// `require_kind` prelude) — this gate mirrors the same fold on
+    /// the *layout* path, so the two consumers of the Acao-shape
+    /// cascade (the author-time gate and every per-`Acao` renderer)
+    /// share one substrate primitive rather than two open-coded
+    /// cascades kept in lockstep. Same lift discipline the peer
+    /// per-kind compound gates ([`Self::validate_aplicacao_shape`]
+    /// 949a7a0, [`Self::validate_supervisor_shape`] 4c70105,
+    /// [`Self::validate_upgrade_from`] d6801df, [`Self::validate_deps`]
+    /// b5dd55e, [`Self::validate_limits`] baa4688,
+    /// [`Self::validate_behavior`] 0d2877a) each carry. Closes the
+    /// last per-kind asymmetry: with this lift the four typed
+    /// named-caixa kinds (`Servico` / `Aplicacao` / `Supervisor` /
+    /// `Acao`) each carry a compound per-`Caixa` shape gate on the
+    /// substrate, and the layout pipeline routes through the same one
+    /// substrate primitive per kind rather than four open-coded
+    /// cascades.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`crate::CiDecomposeFailure`] typed view on the
+    /// present-slot arm — the caixa's `:nome` alongside the borrowed
+    /// [`canteiro_types::DecomposeError`] source (`DuplicateNode` /
+    /// `UnknownDep` / `Cycle`) verbatim, so a consumer that fans on
+    /// the specific arm reaches for `err.source` directly rather than
+    /// re-parsing the Display bytes. Passes trivially on non-`Acao`
+    /// kinds and on `:kind Acao` caixas with absent `:ci` (the fold's
+    /// two identity-element arms).
+    pub fn validate_acao_shape(&self) -> Result<(), crate::CiDecomposeFailure> {
+        if !self.kind().is_acao() {
+            return Ok(());
+        }
+        let Some(ci) = self.ci() else {
+            return Ok(());
+        };
+        crate::render::decompose_ci(self, ci).map(|_| ())
+    }
+
     /// Reject per-entry values on the three Caixa-level code-surface
     /// path lists (`:bibliotecas`, `:exe`, `:servicos`) that the
     /// layout checker's `root.join(p)` sandbox would silently subvert.
@@ -20679,5 +20767,284 @@ mod tests {
         let c = supervisor_fixture("demo");
         c.validate_supervisor_shape()
             .expect("clean Supervisor fixture must pass the compound gate");
+    }
+
+    // ── Caixa::validate_acao_shape — compound per-Caixa gate ─────────────
+
+    /// Build a minimal well-formed `:kind Acao` fixture with a valid
+    /// two-node acyclic `:ci` slot. Every arm of the compound gate
+    /// then patches exactly one axis away from clean so its per-arm
+    /// diagnostic surfaces without collateral noise from a peer slot.
+    /// Peer of [`supervisor_fixture`] / [`aplicacao_fixture`] on the
+    /// sibling per-kind compound gates' pin families.
+    fn acao_fixture(nome: &str) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template(nome)).unwrap();
+        c.kind = CaixaKind::Acao;
+        // Acaos don't run code — clear the biblioteca slot the template
+        // seeds so the compound gate's per-arm diagnostics surface
+        // without the peer `AcaoOwnsCode` kind-coherence gate firing
+        // upstream at the layout altitude.
+        c.bibliotecas = vec![];
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "build",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "build".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec![],
+                ),
+                canteiro_types::CiNode::new(
+                    "test",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "test".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["build".into()],
+                ),
+            ],
+        });
+        c
+    }
+
+    #[test]
+    fn validate_acao_shape_folds_decompose_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // decompose axis: a fixture whose `:ci` slot fails
+        // [`canteiro_types::decompose`] (here — a minimal two-node
+        // cycle `a → b → a`, which the sibling
+        // [`crate::render::decompose_ci`] wraps as
+        // [`crate::CiDecomposeFailure`] carrying
+        // [`canteiro_types::DecomposeError::Cycle`]) surfaces the same
+        // [`crate::CiDecomposeFailure`] diagnostic through both the
+        // compound gate [`Caixa::validate_acao_shape`] and the
+        // standalone [`crate::render::decompose_ci`] on the same
+        // `(caixa, ci)` fixture. Pins the fold — a silent regression
+        // that de-folded the decompose arm would surface here as a
+        // mismatch between the two dispatches. Sibling in shape to the
+        // peer `validate_supervisor_shape_folds_view_arm_matches_gate`
+        // / `validate_aplicacao_shape_folds_view_arm_matches_gate` on
+        // the sibling per-kind compound gates.
+        //
+        // [`crate::CiDecomposeFailure`] does not derive `PartialEq`
+        // (its `#[source]` carrier [`canteiro_types::DecomposeError`]
+        // does, but the wrapper deliberately does not), so the two
+        // dispatches are compared through their field pair
+        // (`nome` + `source`) rather than through `assert_eq!` on the
+        // wrapper itself — every field on the wrapper is thereby
+        // pinned byte-equal without depending on an implementation
+        // detail of `CiDecomposeFailure`'s derive set.
+        let mut c = acao_fixture("demo");
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "a",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "a".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["b".into()],
+                ),
+                canteiro_types::CiNode::new(
+                    "b",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "b".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["a".into()],
+                ),
+            ],
+        });
+        let via_method = c.validate_acao_shape().unwrap_err();
+        let via_standalone =
+            crate::render::decompose_ci(&c, c.ci().expect("fixture has a :ci")).unwrap_err();
+        assert_eq!(
+            via_method.nome, via_standalone.nome,
+            "Caixa::validate_acao_shape must surface the decompose \
+             failure's `nome` byte-equal to the standalone \
+             `decompose_ci` on the same (caixa, ci) fixture",
+        );
+        assert_eq!(
+            via_method.source, via_standalone.source,
+            "Caixa::validate_acao_shape must surface the decompose \
+             failure's `source` byte-equal to the standalone \
+             `decompose_ci` on the same (caixa, ci) fixture",
+        );
+        assert_eq!(
+            via_method.source,
+            canteiro_types::DecomposeError::Cycle,
+            "expected the two-node cycle `a → b → a` to surface as \
+             DecomposeError::Cycle, got {source:?}",
+            source = via_method.source,
+        );
+    }
+
+    #[test]
+    fn validate_acao_shape_folds_duplicate_node_arm_matches_gate() {
+        // Per-arm equivalence pin on the `DuplicateNode` decompose
+        // arm — the sibling of `Cycle` on the substrate's
+        // `canteiro_types::DecomposeError` enumeration. A fixture
+        // whose `:ci` slot carries two nodes sharing one name
+        // surfaces the same [`crate::CiDecomposeFailure`] through
+        // both dispatches, pinned by field pair. The three
+        // decompose arms (`DuplicateNode` / `UnknownDep` / `Cycle`)
+        // together enumerate every failure mode
+        // [`canteiro_types::decompose`] refuses, so the per-arm
+        // pins collectively cover the whole decompose axis.
+        let mut c = acao_fixture("demo");
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "twin",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "twin".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec![],
+                ),
+                canteiro_types::CiNode::new(
+                    "twin",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "twin".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec![],
+                ),
+            ],
+        });
+        let via_method = c.validate_acao_shape().unwrap_err();
+        assert_eq!(
+            via_method.source,
+            canteiro_types::DecomposeError::DuplicateNode("twin".into()),
+            "expected DuplicateNode on the two-\"twin\"-name fixture, \
+             got {source:?}",
+            source = via_method.source,
+        );
+    }
+
+    #[test]
+    fn validate_acao_shape_folds_unknown_dep_arm_matches_gate() {
+        // Per-arm equivalence pin on the `UnknownDep` decompose arm —
+        // the third and last arm on `canteiro_types::DecomposeError`
+        // after `Cycle` and `DuplicateNode`. A fixture whose `:ci`
+        // slot names a `deps` entry no declared node satisfies
+        // surfaces the same [`crate::CiDecomposeFailure`] through
+        // both dispatches. Pins the third decompose arm at the
+        // compound gate.
+        let mut c = acao_fixture("demo");
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![canteiro_types::CiNode::new(
+                "orphan",
+                canteiro_types::EnvClass::None,
+                canteiro_types::ActionRef {
+                    name: "orphan".into(),
+                    command: "true".into(),
+                    args: vec![],
+                },
+                vec!["ghost".into()],
+            )],
+        });
+        let via_method = c.validate_acao_shape().unwrap_err();
+        assert_eq!(
+            via_method.source,
+            canteiro_types::DecomposeError::UnknownDep {
+                node: "orphan".into(),
+                dep: "ghost".into(),
+            },
+            "expected UnknownDep on the orphan-node-depends-on-ghost \
+             fixture, got {source:?}",
+            source = via_method.source,
+        );
+    }
+
+    #[test]
+    fn validate_acao_shape_accepts_non_acao_kind() {
+        // Positive control on the identity-element arm: every non-
+        // Acao kind passes the compound gate trivially — the paired
+        // `caixa.kind().is_acao()` guard short-circuits before the
+        // decompose gate ever fires, so the fold returns `Ok(())`
+        // without touching the `:ci` slot even when a non-Acao
+        // fixture happens to declare one (the sibling
+        // [`crate::LayoutError::CiOnNonAcao`] kind-coherence gate
+        // catches that at the layout altitude anyway). Pins the
+        // identity element on every non-Acao kind. Peer with the
+        // `validate_supervisor_shape_accepts_non_supervisor_kind` /
+        // `validate_aplicacao_shape_accepts_non_aplicacao_kind`
+        // identity-element pins on the sibling per-Caixa compound
+        // gates.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+        ] {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = kind;
+            c.validate_acao_shape().expect(
+                "non-Acao kinds must pass the compound gate as the fold's identity element",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_acao_shape_accepts_absent_ci_slot() {
+        // Positive control on the second identity-element arm: a
+        // `:kind Acao` caixa with `ci = None` passes the compound
+        // gate trivially — the presence gate is the sibling axis
+        // owned by [`crate::LayoutError::MissingCi`] /
+        // [`crate::require_ci`] / [`crate::MissingCiSlot`], not by
+        // the decompose gate. A caixa that carries no `:ci` slot
+        // has no run to decompose, so the fold's `let Some(ci) = …
+        // else { return Ok(()) }` arm short-circuits before the
+        // decompose gate fires. Pins that the two axes stay
+        // separately diagnosable at the layout altitude — a future
+        // regression that collapsed the presence gate onto the
+        // shape gate here would land a
+        // [`crate::CiDecomposeFailure`] on the wrong axis and
+        // surface an off-target diagnostic at `feira build` time.
+        let mut c = acao_fixture("demo");
+        c.ci = None;
+        c.validate_acao_shape().expect(
+            "an :kind Acao caixa with absent :ci must pass the compound gate — \
+             the presence gate is layout's MissingCi axis, not the decompose gate",
+        );
+    }
+
+    #[test]
+    fn validate_acao_shape_accepts_clean_fixture() {
+        // Positive control: a well-formed Acao (a two-node acyclic
+        // `:ci` run with `test` depending on `build`) passes the
+        // compound gate cleanly. A future tightening of the
+        // decompose gate's accepted set surfaces here as a test
+        // failure first. Mirrors the peer
+        // `validate_supervisor_shape_accepts_clean_fixture` /
+        // `validate_aplicacao_shape_accepts_clean_fixture`
+        // positive-control posture on the sibling per-Caixa
+        // compound gates.
+        let c = acao_fixture("demo");
+        c.validate_acao_shape()
+            .expect("clean Acao fixture must pass the compound gate");
     }
 }
