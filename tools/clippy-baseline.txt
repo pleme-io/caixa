@@ -20,7 +20,7 @@
 17	clippy::doc_markdown	caixa-core/src/aplicacao.rs
 1	clippy::redundant_guards	caixa-core/src/aplicacao.rs
 1	clippy::ref_option	caixa-core/src/aplicacao.rs
-2	clippy::too_many_lines	caixa-core/src/aplicacao.rs
+1	clippy::too_many_lines	caixa-core/src/aplicacao.rs
 2	clippy::type_complexity	caixa-core/src/behavior.rs
 2	clippy::ref_as_ptr	caixa-core/src/dep.rs
 7	clippy::doc_markdown	caixa-core/src/kind.rs

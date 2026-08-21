@@ -1539,8 +1539,7 @@ impl WitContract {
                 AplicacaoError::contrato_missing_target(edge(), WitTarget::HTTP_FIELD_NAME)
             })?;
             if ep.is_empty() {
-                let (de, para) = self.edge_pair();
-                return Err(AplicacaoError::ContratoEndpointEmpty { de, para });
+                return Err(AplicacaoError::contrato_endpoint_empty(self.edge_pair()));
             }
             if !ep.starts_with('/') {
                 let (de, para) = self.edge_pair();
@@ -1588,8 +1587,7 @@ impl WitContract {
                 AplicacaoError::contrato_missing_target(edge(), WitTarget::PUBSUB_FIELD_NAME)
             })?;
             if s.is_empty() {
-                let (de, para) = self.edge_pair();
-                return Err(AplicacaoError::ContratoSubjectEmpty { de, para });
+                return Err(AplicacaoError::contrato_subject_empty(self.edge_pair()));
             }
             // The `:subject` lands at runtime as the NATS subject the
             // producer publishes to and the consumer subscribes from.
@@ -1632,8 +1630,7 @@ impl WitContract {
                 AplicacaoError::contrato_missing_target(edge(), WitTarget::STORE_FIELD_NAME)
             })?;
             if sl.is_empty() {
-                let (de, para) = self.edge_pair();
-                return Err(AplicacaoError::ContratoSlotEmpty { de, para });
+                return Err(AplicacaoError::contrato_slot_empty(self.edge_pair()));
             }
             // Value-shape gate on the third (and last) typed payload
             // axis the `WitContract::target` dispatch carries — the
@@ -7864,8 +7861,7 @@ impl AplicacaoSpec {
                 });
             }
             if c.world_ref().is_empty() {
-                let (de, para) = c.edge_pair();
-                return Err(AplicacaoError::EmptyWit { de, para });
+                return Err(AplicacaoError::empty_wit(c.edge_pair()));
             }
             // Shape ↔ target consistency — surfaces "HTTP wit without
             // :endpoint", "NATS wit with :endpoint set", etc. as named
@@ -9392,6 +9388,82 @@ macro_rules! contrato_target_ctors {
 contrato_target_ctors! {
     contrato_wrong_target => ContratoWrongTarget,
     contrato_missing_target => ContratoMissingTarget,
+}
+
+// Fold the four `AplicacaoError::{EmptyWit, ContratoEndpointEmpty,
+// ContratoSubjectEmpty, ContratoSlotEmpty} { de, para }` wire-up sites
+// onto one substrate-primitive family per typed variant — the paired
+// `{ de: String, para: String }` two-slot sibling on [`AplicacaoError`]
+// of the peer four-slot [`contrato_target_ctors!`] (14b81d5,
+// `{ de, para, wit, expected }` on `ContratoWrongTarget` /
+// `ContratoMissingTarget`) and of the two-slot
+// [`AplicacaoError::entrada_host_invalid`] (17dd504, `{ host, reason }`)
+// on the sibling per-`:entrada :host` envelope. Every one of the four
+// wire-up sites — three under [`WitContract::target`] (the empty
+// [`WitTarget::Http`] `:endpoint`, empty [`WitTarget::PubSub`]
+// `:subject`, empty [`WitTarget::Store`] `:slot`) and one under
+// [`AplicacaoSpec::validate`] (the empty `:contratos :wit` field the
+// value-shape gate fires ahead of) — opened the identical two-line
+// `let (de, para) = <contract>.edge_pair(); return Err(
+// AplicacaoError::<Variant> { de, para });` block against the local
+// [`WitContract::edge_pair`] composite-projection accessor, the exact
+// "same block re-inlined at every consumer" shape the PRIME DIRECTIVE
+// names as a bug, on the same altitude the peer [`contrato_target_ctors!`]
+// and [`AplicacaoError::entrada_host_invalid`] each closed on their
+// sibling envelopes.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(edge: (String, String)) -> AplicacaoError`,
+// collapsing the four sites onto one dispatch per arm:
+// `return Err(AplicacaoError::<ctor>(<contract>.edge_pair()));`, byte-
+// equal to the pre-lift struct-literal on the same edge pair. The
+// uniform two-field construction (`de, para` pair-destructure onto
+// same-named fields) is spelled once — inside the macro — rather than
+// at every wire-up site. `#[must_use]` fires a compile warning at any
+// wire-up that mistakenly discards the constructed error.
+//
+// Every future consumer that wants to construct one of these four
+// variants outside the two in-crate wire-up sites (a deferred
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-`:contratos`
+// admission validator raising empty-payload / empty-`:wit` diagnostics,
+// a future `feira validate --contratos` per-caixa admission verb, an
+// M4 typed WIT-registry-driven per-arm pre-emitter probing the
+// [`WitContract`] payload slot against a canonical per-arm requirement
+// table) reaches the variant through one call rather than re-inlining
+// the two-line pair-destructure block in lockstep with the four
+// in-crate wire-up sites.
+macro_rules! contrato_empty_pair_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl AplicacaoError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`AplicacaoError::",
+                    stringify!($variant),
+                    "`] naming the offending edge `(de, para)` pair. ",
+                    "Folds the uniform `{ de, para }` two-slot struct-",
+                    "literal onto one substrate primitive so every ",
+                    "wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift two-line open-coded ",
+                    "`let (de, para) = <contract>.edge_pair(); return ",
+                    "Err(<Variant> { de, para });` block. The `edge` ",
+                    "pair threads verbatim from [`WitContract::edge_pair`] ",
+                    "at the call site."
+                )]
+                #[must_use]
+                pub fn $ctor(edge: (String, String)) -> Self {
+                    let (de, para) = edge;
+                    Self::$variant { de, para }
+                }
+            )*
+        }
+    };
+}
+
+contrato_empty_pair_ctors! {
+    empty_wit => EmptyWit,
+    contrato_endpoint_empty => ContratoEndpointEmpty,
+    contrato_subject_empty => ContratoSubjectEmpty,
+    contrato_slot_empty => ContratoSlotEmpty,
 }
 
 #[cfg(test)]
@@ -31743,6 +31815,117 @@ mod tests {
                 }
                 other => panic!("expected ContratoMissingTarget, got {other:?}"),
             }
+        }
+    }
+
+    // ── contrato_empty_pair_ctors! fold pins ────────────────────────────
+    //
+    // Fixture edge pair for every `contrato_empty_pair_ctors!`-generated
+    // ctor pin below. Kept as non-default `("cart", "catalog")` so a
+    // byte-equality mistake against the fixture default doesn't silently
+    // pass. Peer of the sibling `contrato_target_ctor_fixture` (14b81d5,
+    // triple + expected-label envelope on
+    // `contrato_target_ctors!`) / `entrada_host_invalid_ctor_matches_
+    // struct_literal_wrap` (17dd504, host + reason envelope on
+    // `entrada_host_invalid`) / the four `LayoutError` family
+    // equivalence pins.
+    fn contrato_empty_pair_ctor_fixture() -> (String, String) {
+        ("cart".to_string(), "catalog".to_string())
+    }
+
+    #[test]
+    fn empty_wit_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::EmptyWit` to the pre-lift open-coded
+        // struct-literal on the same edge pair, so the fold cannot
+        // silently drift on any future field-addition / reordering /
+        // string-conversion tweak on the variant. Peer of the sibling
+        // `contrato_wrong_target_ctor_matches_struct_literal_wrap`
+        // (14b81d5) / `entrada_host_invalid_ctor_matches_struct_literal_wrap`
+        // (17dd504) / the four `LayoutError` family equivalence pins.
+        let (de, para) = contrato_empty_pair_ctor_fixture();
+        let lifted = AplicacaoError::empty_wit((de.clone(), para.clone()));
+        let struct_literal = AplicacaoError::EmptyWit { de, para };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_endpoint_empty_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin peer of the sibling
+        // `empty_wit_ctor_matches_struct_literal_wrap` above on the
+        // paired `ContratoEndpointEmpty` variant of the same two-slot
+        // envelope shape the `contrato_empty_pair_ctors!` macro closes.
+        let (de, para) = contrato_empty_pair_ctor_fixture();
+        let lifted = AplicacaoError::contrato_endpoint_empty((de.clone(), para.clone()));
+        let struct_literal = AplicacaoError::ContratoEndpointEmpty { de, para };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_subject_empty_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin peer of the sibling
+        // `contrato_endpoint_empty_ctor_matches_struct_literal_wrap`
+        // above on the paired `ContratoSubjectEmpty` variant of the
+        // same two-slot envelope shape.
+        let (de, para) = contrato_empty_pair_ctor_fixture();
+        let lifted = AplicacaoError::contrato_subject_empty((de.clone(), para.clone()));
+        let struct_literal = AplicacaoError::ContratoSubjectEmpty { de, para };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_slot_empty_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin peer of the sibling
+        // `contrato_subject_empty_ctor_matches_struct_literal_wrap`
+        // above on the paired `ContratoSlotEmpty` variant of the same
+        // two-slot envelope shape.
+        let (de, para) = contrato_empty_pair_ctor_fixture();
+        let lifted = AplicacaoError::contrato_slot_empty((de.clone(), para.clone()));
+        let struct_literal = AplicacaoError::ContratoSlotEmpty { de, para };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_empty_pair_ctors_route_edge_pair_through_verbatim() {
+        // Routing pin: the `(de, para)` pair threads verbatim onto
+        // same-named fields on all four generated ctors, no wrapper-
+        // side lowercase / trim / re-order. Sweeps a non-default pair
+        // (`"cart-svc" → "catalog-v2"`) so any wrapper-side
+        // transformation surfaces here rather than at a downstream
+        // diagnostic-shape drift. Sibling of
+        // `contrato_target_ctors_route_edge_triple_through_verbatim`
+        // (14b81d5) on the paired triple-carrying envelope and of
+        // `entrada_host_invalid_ctor_routes_host_through_to_string`
+        // (17dd504) on the sibling `{ host, reason }` envelope.
+        let edge = ("cart-svc".to_string(), "catalog-v2".to_string());
+        let variants: [(AplicacaoError, &'static str); 4] = [
+            (AplicacaoError::empty_wit(edge.clone()), "EmptyWit"),
+            (
+                AplicacaoError::contrato_endpoint_empty(edge.clone()),
+                "ContratoEndpointEmpty",
+            ),
+            (
+                AplicacaoError::contrato_subject_empty(edge.clone()),
+                "ContratoSubjectEmpty",
+            ),
+            (
+                AplicacaoError::contrato_slot_empty(edge.clone()),
+                "ContratoSlotEmpty",
+            ),
+        ];
+        for (built, label) in variants {
+            let (de, para) = match built {
+                AplicacaoError::EmptyWit { de, para }
+                | AplicacaoError::ContratoEndpointEmpty { de, para }
+                | AplicacaoError::ContratoSubjectEmpty { de, para }
+                | AplicacaoError::ContratoSlotEmpty { de, para } => (de, para),
+                other => panic!("expected {label} pair variant, got {other:?}"),
+            };
+            assert_eq!(de, "cart-svc", "de field on {label} must thread verbatim");
+            assert_eq!(
+                para, "catalog-v2",
+                "para field on {label} must thread verbatim",
+            );
         }
     }
 }
