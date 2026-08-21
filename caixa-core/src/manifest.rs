@@ -4162,6 +4162,52 @@ impl Caixa {
     /// mirrors that convention until a deliberate choice retires the
     /// override pattern. Only within-list duplicates are structurally
     /// incoherent — those are what this gate closes.
+    ///
+    /// Compound per-`Caixa` entry gate on the dep-graph axis: folds the
+    /// two standalone dep-list validators — the per-entry + within-list
+    /// duplicate-`:nome` walk (the [`Dep::validate`] +
+    /// [`crate::render::insert_first_seen`] cascade this method opened
+    /// on) and the cross-slot self-edge gate
+    /// ([`crate::dep::validate_no_self_dep`]) — onto one substrate
+    /// primitive on [`Caixa`]. The two arms run in the same canonical
+    /// order the layout pipeline
+    /// ([`crate::layout::StandardLayout::verify`], the `feira build`
+    /// author-time gate) has always sequenced them (per-entry +
+    /// cross-entry duplicate → cross-slot self-edge), so the fold is
+    /// byte-for-byte equivalent to the pre-fold two-block cascade at
+    /// that call site (pinned by the paired
+    /// `validate_deps_folds_per_entry_arm_matches_gate` /
+    /// `validate_deps_folds_self_edge_arm_matches_gate` equivalence
+    /// pins and the `validate_deps_per_entry_arm_fires_before_self_edge_arm`
+    /// ordering pin). Self-contained on `&self` — resolves its three
+    /// inputs ([`Self::deps`], [`Self::deps_dev`], [`Self::nome`])
+    /// through the substrate primitives' own accessor family, the same
+    /// posture every peer per-slot compound gate
+    /// ([`crate::AplicacaoSpec::validate_contratos`],
+    /// [`crate::MeshPolicy::validate`],
+    /// [`crate::SupervisorSpec::validate_children`],
+    /// [`Self::validate_upgrade_from`]) already carries.
+    ///
+    /// Prior to this lift [`crate::dep::validate_no_self_dep`] lived
+    /// only open-coded at the layout wire-up site
+    /// ([`crate::layout::StandardLayout::verify`], caixa-core/src/layout.rs)
+    /// as a standalone two-arg dispatch immediately after this method's
+    /// per-entry + cross-entry walk, both wrapped through the same
+    /// [`crate::LayoutError::DepsViolation`] envelope: every future
+    /// consumer that wanted to gate the dep-graph as a whole — the
+    /// deferred `caixa.pleme.io/v1alpha1/Caixa` CR materializer's
+    /// per-CR admission webhook re-checking `:deps` / `:deps-dev` after
+    /// a per-entry patch, a future `feira validate --deps` per-caixa
+    /// admission verb, a per-`:deps` overlay resolver a per-cluster
+    /// overlay lift would materialize (each the deferred consumer this
+    /// method's peer [`Self::deps`] / [`Self::deps_dev`] accessors'
+    /// docstrings already name) — was structurally forced to either
+    /// re-inline the two-dispatch cascade in lockstep with the layout
+    /// wire-up (the duplication the PRIME DIRECTIVE names as a bug) or
+    /// call the whole [`crate::layout::StandardLayout::verify`] pipeline
+    /// and pay every peer per-Caixa gate to re-check one slot. Post-fold
+    /// each such consumer reaches the two-arm compound gate through one
+    /// call on the substrate primitive.
     pub fn validate_deps(&self) -> Result<(), DepError> {
         for &list in crate::dep::DepList::ALL {
             let mut seen = std::collections::HashSet::new();
@@ -4175,6 +4221,7 @@ impl Caixa {
                 })?;
             }
         }
+        crate::dep::validate_no_self_dep(self.deps(), self.deps_dev(), self.nome())?;
         Ok(())
     }
 
@@ -19446,5 +19493,186 @@ mod tests {
         );
         c.validate_upgrade_from()
             .expect("empty :upgrade-from must pass the compound gate cleanly");
+    }
+
+    // ── Caixa::validate_deps — compound per-Caixa entry gate on the ──
+    // ── dep-graph axis: folds the two standalone validators         ──
+    // ── (per-entry + within-list duplicate walk that this method    ──
+    // ── opened on, cross-slot self-edge via                         ──
+    // ── `crate::dep::validate_no_self_dep`) onto one substrate      ──
+    // ── primitive. Byte-for-byte equivalent to the pre-fold         ──
+    // ── two-block cascade at                                        ──
+    // ── `crate::layout::StandardLayout::verify` under the same      ──
+    // ── canonical dispatch order (per-entry → self-edge).           ──
+
+    #[test]
+    fn validate_deps_folds_per_entry_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // per-entry + within-list duplicate axis: a fixture whose
+        // `:deps` carries a per-entry-invalid `:versao` (`"^bad"`,
+        // which [`crate::parse_requirement`] rejects) surfaces the
+        // same [`crate::DepError`] through the compound gate
+        // [`Caixa::validate_deps`] and the standalone per-entry walk
+        // ([`Dep::validate`]) on the offending entry. Pins the
+        // fold — a silent regression that de-folded the per-entry arm
+        // would surface here as a mismatch between the two
+        // dispatches. Sibling in shape to the peer
+        // `validate_upgrade_from_folds_per_entry_arm_matches_gate`
+        // per-arm equivalence pin (d6801df) on the M2
+        // `:upgrade-from` compound gate's per-entry arm, extended
+        // here onto the universal-axis `:deps` compound gate's
+        // per-entry arm.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("d", "^bad")];
+        let via_method = c.validate_deps().unwrap_err();
+        let via_standalone = c.deps()[0].validate().unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_deps must surface the per-entry arm's \
+             diagnostic byte-equal to the standalone \
+             `Dep::validate` on the same offending entry",
+        );
+        assert!(
+            matches!(
+                via_method,
+                DepError::VersaoInvalid { ref nome, .. } if nome == "d"
+            ),
+            "expected VersaoInvalid on the malformed :versao, got {via_method:?}",
+        );
+    }
+
+    #[test]
+    fn validate_deps_folds_self_edge_arm_matches_gate() {
+        // Per-arm equivalence pin on the cross-slot self-edge axis:
+        // a fixture whose `:deps` lists the caixa's own `:nome`
+        // (a self-dep, which
+        // [`crate::dep::validate_no_self_dep`] rejects as a
+        // structurally-invalid one-node cycle in the lacre closure's
+        // dep-graph) surfaces the same [`crate::DepError::DepIsSelf`]
+        // through both the compound gate and the standalone
+        // [`crate::dep::validate_no_self_dep`] gate keyed off the
+        // same `(deps, deps_dev, nome)` triple. Pins the fold's
+        // second arm — reaching this arm through the compound gate
+        // requires the per-entry + within-list duplicate walk to
+        // pass first, which itself pins one cross-arm ordering step.
+        // Sibling in shape to the peer
+        // `validate_upgrade_from_folds_versao_arm_matches_gate` /
+        // `_folds_behavior_arm_matches_gate` cross-slot equivalence
+        // pins (d6801df) on the M2 `:upgrade-from` compound gate's
+        // cross-slot arms.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("demo", "^0.1")];
+        let via_method = c.validate_deps().unwrap_err();
+        let via_standalone =
+            crate::dep::validate_no_self_dep(c.deps(), c.deps_dev(), c.nome()).unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_deps must surface the cross-slot \
+             self-edge diagnostic byte-equal to the standalone \
+             `crate::dep::validate_no_self_dep` on the same \
+             (deps, deps_dev, nome) triple",
+        );
+        assert!(
+            matches!(
+                via_method,
+                DepError::DepIsSelf { ref nome, list }
+                    if nome == "demo" && list == crate::render::DEP_AUTHOR_KEY_DEPS
+            ),
+            "expected DepIsSelf carrying (nome=\"demo\", list=\":deps\"), got {via_method:?}",
+        );
+    }
+
+    #[test]
+    fn validate_deps_per_entry_arm_fires_before_self_edge_arm() {
+        // Cross-arm ordering pin between the two arms of the fold:
+        // a fixture carrying BOTH a per-entry-invalid `:versao`
+        // (`"^bad"` — [`crate::parse_requirement`] rejects the
+        // requirement grammar) on a non-self-dep entry AND a
+        // would-be self-edge violation on a second entry (the
+        // caixa's own `:nome` "demo") surfaces the per-entry
+        // diagnostic first through the compound gate. Sanity
+        // assertion: the second entry alone under the same parent
+        // `:nome` trips the self-edge arm on its own via the
+        // standalone [`crate::dep::validate_no_self_dep`], so the
+        // per-entry-first surfacing is a real ordering property,
+        // not a case where the self-edge arm silently accepts the
+        // fixture. Pins the pre-fold layout wire-up's canonical
+        // dispatch order (per-entry + within-list duplicate →
+        // self-edge) as a property of the substrate primitive
+        // rather than a convention of the layout call site. Sibling
+        // in shape to
+        // `validate_upgrade_from_per_entry_arm_fires_before_versao_arm`
+        // (d6801df) on the M2 `:upgrade-from` compound gate's
+        // per-arm ordering property.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![
+            Dep::simple("orquestra", "^bad"),
+            Dep::simple("demo", "^0.1"),
+        ];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::VersaoInvalid { ref nome, .. } if nome == "orquestra"
+            ),
+            "per-entry arm must fire before self-edge arm — expected \
+             VersaoInvalid on \"orquestra\", got {err:?}",
+        );
+        // Sanity: the self-referential entry alone under the same
+        // parent `:nome` trips the self-edge arm on its own — proves
+        // the per-entry-first surfacing above is a real ordering
+        // property, not a case where the self-edge arm silently
+        // accepts the fixture.
+        let sanity = crate::dep::validate_no_self_dep(&[Dep::simple("demo", "^0.1")], &[], "demo")
+            .unwrap_err();
+        assert!(
+            matches!(sanity, DepError::DepIsSelf { ref nome, .. } if nome == "demo"),
+            "sanity: the self-referential entry alone must trip the \
+             self-edge arm — got {sanity:?}",
+        );
+    }
+
+    #[test]
+    fn validate_deps_accepts_clean_fixture() {
+        // Positive control: a well-formed dep-graph (one `:deps`
+        // entry naming a non-self DNS-1123 nome + Cargo-shaped
+        // requirement, one `:deps-dev` entry on a distinct non-self
+        // nome) passes the compound gate cleanly. A future
+        // tightening of either arm's accepted set surfaces here as
+        // a test failure first. Mirrors the peer
+        // `validate_upgrade_from_accepts_clean_fixture` positive-
+        // control posture on the sibling per-Caixa compound gate.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("caixa-teia", "^0.1")];
+        c.deps_dev = vec![Dep::simple("caixa-lint", "^0.2")];
+        c.validate_deps()
+            .expect("clean fixture must pass the compound `:deps` gate");
+    }
+
+    #[test]
+    fn validate_deps_accepts_empty_deps_lists() {
+        // Positive control on the empty-list arm: a caixa without
+        // any `:deps` or `:deps-dev` entries (the default
+        // `Vec::new()` `#[serde(default)]` folds an omitted slot
+        // onto) passes the compound gate cleanly regardless of
+        // `:nome` — both the per-entry walk and the self-edge walk
+        // are vacuous on the empty entry list. Pins the identity
+        // element of the fold on the empty-slot side, peer with the
+        // `validate_upgrade_from_accepts_empty_upgrade_from` empty-
+        // arm positive control (d6801df) on the sibling
+        // `:upgrade-from` compound gate.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        assert!(
+            c.deps().is_empty(),
+            "template caixa must carry an empty :deps — got {:?}",
+            c.deps(),
+        );
+        assert!(
+            c.deps_dev().is_empty(),
+            "template caixa must carry an empty :deps-dev — got {:?}",
+            c.deps_dev(),
+        );
+        c.validate_deps()
+            .expect("empty :deps / :deps-dev must pass the compound gate cleanly");
     }
 }
