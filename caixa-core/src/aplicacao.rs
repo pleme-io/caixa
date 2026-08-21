@@ -7600,200 +7600,8 @@ impl AplicacaoSpec {
     ///     omit the field instead to express "no policy on this axis")
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         self.validate_membros()?;
-        let names = self.membro_names();
 
-        // Identity key for the typed-edge duplicate gate below: every
-        // field that distinguishes one contract from another. Two
-        // entries that agree on all six are *the same edge declared
-        // twice*, the typed-graph analogue of duplicate `:membros` /
-        // `:placement :clusters` / `:entrada :paths` entries (which
-        // are already build errors at this layer). Rejecting it at the
-        // validate gate closes a renderer-side footgun: caixa-mesh's
-        // `cilium_network_policies` keys each emitted policy by
-        // `<aplicacao>-<de>-to-<para>`, so two contracts with identical
-        // (de, para) and identical payload would land as two K8s
-        // objects with colliding `metadata.name`, rejected at apply
-        // time far from the source caixa.lisp.
-        let mut seen_contracts: std::collections::HashSet<ContratoIdentity<'_>> =
-            std::collections::HashSet::new();
-        for c in self.contratos() {
-            // Per-axis value-shape gate on every `:contratos` name
-            // reference, before any graph-membership lookup. Empty +
-            // DNS-1123-malformed `:de`/`:para` values silently fell
-            // through to `ContratoMemberMissing` at the lookup arm
-            // because every `:membros :caixa` is shape-validated
-            // (3f9d7a0), so the `names` set structurally cannot contain
-            // an empty / malformed string and the membership-lookup
-            // diagnostic always misframed the root cause as
-            // "this caixa is not in `:membros`". The shape gate runs
-            // ahead of the lookup so structurally-impossible-to-match
-            // inputs route through the narrower self-locating
-            // diagnostic, preserving the legitimate "well-shaped
-            // phantom reference" arm. `:de` runs before `:para` per
-            // the canonical edge-direction order the existing
-            // membership lookup, self-edge check, target dispatch,
-            // and diagnostic strings already use.
-            // Route the per-`:contratos` per-arm DNS-1123 shape-gate arg
-            // + the paired [`AplicacaoError::ContratoMemberMissing`]
-            // diagnostic's `caixa:` carrier through the lifted
-            // [`WitContract::source`] / [`WitContract::destination`]
-            // scalar accessors rather than the raw `&c.de` / `&c.para`
-            // `&String`-borrow arg site + the raw `c.de.clone()` /
-            // `c.para.clone()` field-access `String`-carry sites — the
-            // last unlifted per-`:contratos` raw-field-access sites in
-            // the M3 mesh-slot validator's per-edge per-arm shape-gate
-            // arg + phantom-name diagnostic wrap-envelope emit surface.
-            // `c.source()` is byte-identical to `&c.de` (pinned by the
-            // sibling `wit_contract_source_returns_de_byte_equal_across_permutations`
-            // + `wit_contract_source_borrows_from_de_storage` accessor
-            // tests) and `c.destination()` is byte-identical to `&c.para`
-            // (pinned by the sibling
-            // `wit_contract_destination_returns_para_byte_equal_across_permutations`
-            // + `wit_contract_destination_borrows_from_para_storage`
-            // accessor tests) — so a future rebrand of either underlying
-            // storage flows through the accessor's one body without a
-            // coordinated per-consumer rewrite across the M3 mesh
-            // validator's per-edge shape-gate + phantom-name refusal
-            // arms. Peer of the sibling per-`:contratos` self-loop
-            // arm's `.source().to_string()` / `.world_ref().to_string()`
-            // `String`-carry sites the earlier convergence lifted onto
-            // the same accessor pair.
-            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_DE, c.source())?;
-            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_PARA, c.destination())?;
-            if !names.contains(c.source()) {
-                return Err(AplicacaoError::ContratoMemberMissing {
-                    caixa: c.source().to_string(),
-                });
-            }
-            if !names.contains(c.destination()) {
-                return Err(AplicacaoError::ContratoMemberMissing {
-                    caixa: c.destination().to_string(),
-                });
-            }
-            // A `:contratos` entry is an *inter*-Servico contract
-            // (MESH-COMPOSITION §III.1 — "Servico A calls Servico B"): a
-            // typed edge between two distinct graph nodes. An edge whose
-            // `:de` equals its `:para` is a Servico contracting with
-            // itself — a degenerate edge under every WIT shape. The
-            // synchronous shapes were caught only incidentally, and with
-            // a misleading diagnostic: `detect_sync_cycles` reported
-            // `cart → cart` as a `ContratoCycle` whose path is
-            // `["cart", "cart"]` — framing a self-edge as a multi-node
-            // deadlock. The pub-sub shape slipped through entirely
-            // (`detect_sync_cycles` excludes `WitTarget::PubSub`, so a
-            // `nats:pub-sub` edge from a member to itself silently
-            // validated, then rendered a `CiliumNetworkPolicy` whose
-            // endpointSelector and fromEndpoints both name the same
-            // program — a self-allow rule that is a no-op, since
-            // intra-pod traffic never traverses the mesh). A self-edge's
-            // runtime meaning is an in-process call, which doesn't go
-            // through the mesh at all, so no `:contratos` edge can carry
-            // it. Firing the gate before the `:wit`/`target()` shape
-            // checks means the structural "this edge can't exist" error
-            // precedes the narrower payload-shape diagnostics, and shape-
-            // agnostically covers all four `WitTarget` arms (HTTP / Store
-            // / Capability / PubSub) at one point — closing the pub-sub
-            // hole and replacing the misleading cycle diagnostic in one
-            // gate. Peer of the duplicate-`:contratos` / duplicate-
-            // `:membros` set gates: both reject a structurally
-            // ill-formed graph at the typed surface, before the renderer
-            // emits a K8s object that fails or no-ops far from the source
-            // caixa.lisp.
-            // Route the per-`:contratos` structural self-edge probe
-            // through the lifted [`WitContract::is_self_loop`] typed
-            // predicate rather than the raw `c.de == c.para` field-
-            // equality check — the one production consumer of the per-
-            // `:contratos` caller-equals-callee endpoint-equality axis
-            // now keys off exactly one typed dispatch on the substrate
-            // primitive, so any future rebrand of the axis (an M4-typed-
-            // caller enum whose identity comparison rule the predicate
-            // could route through, a per-cluster caller/callee-alias
-            // table the M4 CR materializer resolves per-CR before the
-            // equality probe) migrates as a single caixa-core edit
-            // rather than a coordinated rewrite of the gate + every
-            // downstream self-edge consumer. Peer of the sibling
-            // [`WitContract::is_http`] / [`WitContract::is_pubsub`] /
-            // [`WitContract::is_store`] shape-predicate routing on the
-            // `:wit` world-ref axis, extended onto the per-edge
-            // endpoint-equality axis.
-            //
-            // Route the paired [`AplicacaoError::ContratoSelfLoop`]
-            // diagnostic's `caixa:` / `wit:` carriers through the
-            // lifted [`WitContract::source`] / [`WitContract::world_ref`]
-            // scalar accessors rather than the raw `c.de.clone()` /
-            // `c.wit.clone()` field-access `String`-carry sites — the
-            // last unlifted per-`:contratos` raw-field-access
-            // `.clone()` sites in the M3 mesh-slot validator's self-
-            // edge refusal arm. `.source().to_string()` is byte-
-            // identical to `.de.clone()` (pinned by the sibling
-            // `source_returns_de_byte_equal_across_permutations` accessor
-            // test), and `.world_ref().to_string()` is byte-identical
-            // to `.wit.clone()` (pinned by the sibling
-            // `world_ref_returns_wit_byte_equal_across_permutations`
-            // accessor test) — so a future rebrand of either underlying
-            // storage flows through the accessor's one body without a
-            // coordinated per-consumer rewrite across the M3 mesh
-            // validator.
-            if c.is_self_loop() {
-                return Err(AplicacaoError::ContratoSelfLoop {
-                    caixa: c.source().to_string(),
-                    wit: c.world_ref().to_string(),
-                });
-            }
-            if c.world_ref().is_empty() {
-                let (de, para) = c.edge_pair();
-                return Err(AplicacaoError::EmptyWit { de, para });
-            }
-            // Shape ↔ target consistency — surfaces "HTTP wit without
-            // :endpoint", "NATS wit with :endpoint set", etc. as named
-            // build errors instead of silent renderer drops. Threaded
-            // through the duplicate-edge diagnostic below (via
-            // [`WitTarget::label`]) so the "which typed target arm did
-            // the duplicate carry" question is answered by the typed
-            // enum's variant discriminator, not by re-probing the raw
-            // `Option<String>` payload fields.
-            let target_view = c.target()?;
-            // Contract identity: (de, para, wit, endpoint, subject, slot).
-            // Two contracts that match on all six are the same typed edge
-            // declared twice — author error, not a legitimate variant of
-            // "same caller-callee pair, different payload" (e.g.
-            // cart→catalog at /products vs /search), which keeps distinct
-            // identity keys via the differing endpoint payloads.
-            //
-            // Route the six-axis dedup key through the lifted
-            // [`WitContract::identity`] composite-projection accessor
-            // rather than the inline six-tuple builder — the two
-            // substrate primitives on the per-`:contratos` identity axis
-            // (the [`ContratoIdentity`] type alias's six axes, this
-            // dedup-key's six tuple arms) now migrate as a unit on any
-            // future axis addition. Peer of the sibling per-`:contratos`
-            // composite-projection [`WitContract::edge_pair`] /
-            // [`WitContract::edge_triple`] accessors on the
-            // caller-callee / caller-callee-wit prefix axes; extends
-            // the discipline onto the full-identity axis that carries
-            // the three payload-shape arms too.
-            let key = c.identity();
-            crate::render::insert_first_seen(&mut seen_contracts, key, || {
-                // Route the per-`:contratos` duplicate-gate diagnostic's
-                // `(de, para, wit)` triple through the lifted
-                // [`WitContract::edge_triple`] typed accessor rather
-                // than pairing `edge_pair()` for the `(de, para)` prefix
-                // with a raw `c.wit.clone()` for the `wit:` tail — the
-                // paired-with-raw-field-access shape was the last
-                // per-`:contratos` diagnostic constructor bypassing the
-                // substrate-primitive composite projection, sibling to
-                // the eight [`AplicacaoError::Contrato*`] triple-
-                // carrying constructors [`WitContract::target`]'s edge
-                // closure feeds through the same accessor.
-                let (de, para, wit) = c.edge_triple();
-                AplicacaoError::ContratoDuplicate {
-                    de,
-                    para,
-                    wit,
-                    target: target_view.label(),
-                }
-            })?;
-        }
+        self.validate_contratos()?;
 
         // Cycles in the synchronous-edge subgraph are build errors
         // (MESH-COMPOSITION §III.3). Pub-sub edges are excluded — they
@@ -7846,6 +7654,160 @@ impl AplicacaoSpec {
     /// [`WitContract::identity`] on their own axes.
     fn membro_names(&self) -> std::collections::HashSet<&str> {
         self.membros().iter().map(Membro::nome).collect()
+    }
+
+    /// Reject `:contratos` entries whose endpoints are malformed,
+    /// reference a Servico outside the graph, self-loop, carry an
+    /// empty `:wit` shape, or duplicate a prior entry on the six-axis
+    /// identity key.
+    ///
+    /// The `:contratos` slot is the typed inter-Servico edge set
+    /// (MESH-COMPOSITION §III.1): each entry is a WIT-typed directed
+    /// edge whose `:de` / `:para` reference two distinct members and
+    /// whose `:wit` picks the payload shape the paired L4/L7 renderer
+    /// (caixa-mesh's per-`(:de, :para)` `CiliumNetworkPolicy` +
+    /// per-HTTP `HTTPRoute`) fans out on.
+    ///
+    /// Six axes are gated here, in the canonical edge-direction order
+    /// the paired diagnostics already encode (per-arm value shape
+    /// before graph-membership lookup; structural self-edge before
+    /// payload-shape target dispatch; whole-edge dedup last):
+    ///
+    ///   - per-arm `:de` / `:para` value shape via
+    ///     [`validate_contrato_caixa`] (empty + DNS-1123 grammar),
+    ///     `:de` before `:para`;
+    ///   - per-arm graph-membership against the
+    ///     [`AplicacaoSpec::membro_names`] oracle, `:de` before `:para`;
+    ///   - structural self-edge via [`WitContract::is_self_loop`]
+    ///     (caller-equals-callee under any WIT shape);
+    ///   - `:wit` emptiness ([`AplicacaoError::EmptyWit`]);
+    ///   - WIT shape ↔ target consistency via [`WitContract::target`]
+    ///     (the four `WitTarget` arms — `Http` / `PubSub` / `Store` /
+    ///     `Capability` — each carry their own required payload field);
+    ///   - six-axis whole-edge dedup via [`WitContract::identity`]
+    ///     ([`ContratoIdentity`]'s `(de, para, wit, endpoint, subject,
+    ///     slot)` tuple).
+    ///
+    /// Lifted out of [`AplicacaoSpec::validate`]'s inline `let mut
+    /// seen_contracts = …; for c in self.contratos() { … }` block onto
+    /// a named per-slot gate, closing the last unlifted per-slot gate
+    /// on the M3 mesh-slot family. Every peer slot already carries the
+    /// shape ([`AplicacaoSpec::validate_membros`],
+    /// [`AplicacaoSpec::validate_entrada`],
+    /// [`AplicacaoSpec::validate_placement`],
+    /// [`AplicacaoSpec::validate_politicas`]).
+    ///
+    /// Self-contained on `&self` — it resolves its own membership
+    /// oracle through [`AplicacaoSpec::membro_names`] rather than
+    /// borrowing one threaded down from `validate` — so a future
+    /// consumer that re-validates *one* slot against a mutated spec
+    /// (the M4 admission webhook re-checking `:contratos` after a
+    /// per-`(:de, :para)` edge patch without re-walking `:membros` /
+    /// `:entrada` / `:placement` / `:politicas`, or the M4 per-edge
+    /// policy resolver MESH-COMPOSITION §III.2 #3 acknowledges — which
+    /// resolves an effective per-edge [`MeshPolicy`] and must re-check
+    /// the edge's own identity closure before it can key a per-edge
+    /// override off the endpoint tuple) reaches the axis through one
+    /// call, exactly as [`AplicacaoSpec::detect_sync_cycles`] and
+    /// [`AplicacaoSpec::validate_entrada`] are already self-contained
+    /// for those same consumers.
+    fn validate_contratos(&self) -> Result<(), AplicacaoError> {
+        let names = self.membro_names();
+
+        // Identity key for the typed-edge duplicate gate below: every
+        // field that distinguishes one contract from another. Two
+        // entries that agree on all six are *the same edge declared
+        // twice*, the typed-graph analogue of duplicate `:membros` /
+        // `:placement :clusters` / `:entrada :paths` entries (which
+        // are already build errors at this layer). Rejecting it at the
+        // validate gate closes a renderer-side footgun: caixa-mesh's
+        // `cilium_network_policies` keys each emitted policy by
+        // `<aplicacao>-<de>-to-<para>`, so two contracts with identical
+        // (de, para) and identical payload would land as two K8s
+        // objects with colliding `metadata.name`, rejected at apply
+        // time far from the source caixa.lisp.
+        let mut seen_contracts: std::collections::HashSet<ContratoIdentity<'_>> =
+            std::collections::HashSet::new();
+        for c in self.contratos() {
+            // Per-axis value-shape gate on every `:contratos` name
+            // reference, before any graph-membership lookup. Empty +
+            // DNS-1123-malformed `:de`/`:para` values silently fell
+            // through to `ContratoMemberMissing` at the lookup arm
+            // because every `:membros :caixa` is shape-validated
+            // (3f9d7a0), so the `names` set structurally cannot contain
+            // an empty / malformed string and the membership-lookup
+            // diagnostic always misframed the root cause as
+            // "this caixa is not in `:membros`". The shape gate runs
+            // ahead of the lookup so structurally-impossible-to-match
+            // inputs route through the narrower self-locating
+            // diagnostic, preserving the legitimate "well-shaped
+            // phantom reference" arm. `:de` runs before `:para` per
+            // the canonical edge-direction order the existing
+            // membership lookup, self-edge check, target dispatch,
+            // and diagnostic strings already use.
+            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_DE, c.source())?;
+            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_PARA, c.destination())?;
+            if !names.contains(c.source()) {
+                return Err(AplicacaoError::ContratoMemberMissing {
+                    caixa: c.source().to_string(),
+                });
+            }
+            if !names.contains(c.destination()) {
+                return Err(AplicacaoError::ContratoMemberMissing {
+                    caixa: c.destination().to_string(),
+                });
+            }
+            // A `:contratos` entry is an *inter*-Servico contract
+            // (MESH-COMPOSITION §III.1 — "Servico A calls Servico B"): a
+            // typed edge between two distinct graph nodes. An edge whose
+            // `:de` equals its `:para` is a Servico contracting with
+            // itself — a degenerate edge under every WIT shape. Firing
+            // the gate before the `:wit`/`target()` shape checks means
+            // the structural "this edge can't exist" error precedes the
+            // narrower payload-shape diagnostics, and shape-agnostically
+            // covers all four `WitTarget` arms (HTTP / Store / Capability
+            // / PubSub) at one point. Peer of the duplicate-`:contratos`
+            // / duplicate-`:membros` set gates: both reject a structurally
+            // ill-formed graph at the typed surface, before the renderer
+            // emits a K8s object that fails or no-ops far from the source
+            // caixa.lisp.
+            if c.is_self_loop() {
+                return Err(AplicacaoError::ContratoSelfLoop {
+                    caixa: c.source().to_string(),
+                    wit: c.world_ref().to_string(),
+                });
+            }
+            if c.world_ref().is_empty() {
+                let (de, para) = c.edge_pair();
+                return Err(AplicacaoError::EmptyWit { de, para });
+            }
+            // Shape ↔ target consistency — surfaces "HTTP wit without
+            // :endpoint", "NATS wit with :endpoint set", etc. as named
+            // build errors instead of silent renderer drops. Threaded
+            // through the duplicate-edge diagnostic below (via
+            // [`WitTarget::label`]) so the "which typed target arm did
+            // the duplicate carry" question is answered by the typed
+            // enum's variant discriminator, not by re-probing the raw
+            // `Option<String>` payload fields.
+            let target_view = c.target()?;
+            // Contract identity: (de, para, wit, endpoint, subject, slot).
+            // Two contracts that match on all six are the same typed edge
+            // declared twice — author error, not a legitimate variant of
+            // "same caller-callee pair, different payload" (e.g.
+            // cart→catalog at /products vs /search), which keeps distinct
+            // identity keys via the differing endpoint payloads.
+            let key = c.identity();
+            crate::render::insert_first_seen(&mut seen_contracts, key, || {
+                let (de, para, wit) = c.edge_triple();
+                AplicacaoError::ContratoDuplicate {
+                    de,
+                    para,
+                    wit,
+                    target: target_view.label(),
+                }
+            })?;
+        }
+        Ok(())
     }
 
     /// Reject `:entrada` values that are operationally meaningless,
@@ -27692,6 +27654,231 @@ mod tests {
             !spec.membro_names().contains("cart"),
             "fixture must have dropped the `:entrada :para` target \
              from the graph's node set",
+        );
+    }
+
+    #[test]
+    fn validate_contratos_matches_gate_on_every_per_axis_shape() {
+        // Per-slot-gate ≡ validate equivalence pin on the lifted
+        // [`AplicacaoSpec::validate_contratos`]: the named per-slot
+        // gate must discriminate the same set as
+        // [`AplicacaoSpec::validate`] on every `:contratos`-covered
+        // input, so a future consumer that re-validates the one slot
+        // (the M4 admission webhook re-checking `:contratos` after a
+        // per-`(:de, :para)` edge patch, the per-`:contratos`-edge
+        // `:politicas` override MESH-COMPOSITION §III.2 #3
+        // acknowledges — which resolves an effective per-edge
+        // [`MeshPolicy`] and must re-check the edge's identity closure
+        // before it can key a per-edge override off the endpoint
+        // tuple) accepts exactly what `feira build` accepts and
+        // surfaces the same diagnostic on the same input. Covers each
+        // of the six gated axes (`:de`/`:para` per-arm shape,
+        // per-arm graph-membership, structural self-loop, `:wit`
+        // emptiness) plus the clean-pass canonical fixture; the
+        // reason-carrying arms (`ContratoCaixaInvalid` on `:de`/`:para`
+        // shape, `ContratoWitInvalid` on WIT-shape ↔ target dispatch,
+        // `ContratoDuplicate` on whole-edge dedup) whose `reason:` /
+        // `target:` carriers depend on library implementation
+        // details are pinned separately below with a `matches!`
+        // predicate on the arm identity plus the mirror equivalence
+        // between the two entry points.
+        //
+        // Peer of the sibling per-slot equivalence pins
+        // `validate_matches_gate_on_per_axis_and_phase_boundary_shapes`
+        // / `_on_cross_axis_and_clean_pass_shapes` (f03a154) on the
+        // `:politicas` slot's compound entry gate, and
+        // `validate_entrada_matches_gate_on_every_per_axis_shape`
+        // (20cd523) on the `:entrada` slot's per-slot gate — extended
+        // here onto the `:contratos` slot's newly-named per-slot gate,
+        // closing the last unlifted per-slot gate on the M3 mesh-slot
+        // family.
+        /// One `:contratos` equivalence case: a label, the per-axis
+        /// mutation applied to the canonical fixture's spec, and the
+        /// diagnostic both the per-slot gate and `validate` must
+        /// surface on it (`None` = clean pass).
+        type ContratoCase = (&'static str, fn(&mut AplicacaoSpec), Option<AplicacaoError>);
+
+        let cases: &[ContratoCase] = &[
+            (
+                ":de shape — empty",
+                |s| s.contratos[0].de = String::new(),
+                Some(AplicacaoError::ContratoCaixaEmpty {
+                    slot: crate::render::CONTRATO_AUTHOR_KEY_DE,
+                }),
+            ),
+            (
+                ":para shape — empty",
+                |s| s.contratos[0].para = String::new(),
+                Some(AplicacaoError::ContratoCaixaEmpty {
+                    slot: crate::render::CONTRATO_AUTHOR_KEY_PARA,
+                }),
+            ),
+            (
+                ":de membership — well-shaped phantom",
+                |s| s.contratos[0].de = "phantom".into(),
+                Some(AplicacaoError::ContratoMemberMissing {
+                    caixa: "phantom".into(),
+                }),
+            ),
+            (
+                ":para membership — well-shaped phantom",
+                |s| s.contratos[0].para = "phantom".into(),
+                Some(AplicacaoError::ContratoMemberMissing {
+                    caixa: "phantom".into(),
+                }),
+            ),
+            (
+                "structural self-loop",
+                |s| s.contratos[0].para = "cart".into(),
+                Some(AplicacaoError::ContratoSelfLoop {
+                    caixa: "cart".into(),
+                    wit: "wasi:http/proxy".into(),
+                }),
+            ),
+            (
+                ":wit emptiness",
+                |s| s.contratos[0].wit = String::new(),
+                Some(AplicacaoError::EmptyWit {
+                    de: "cart".into(),
+                    para: "catalog".into(),
+                }),
+            ),
+            ("clean pass — canonical fixture", |_| {}, None),
+        ];
+        for (label, mutate, expected) in cases {
+            let mut spec = three_member_spec();
+            mutate(&mut spec);
+            assert_eq!(
+                spec.validate_contratos().err(),
+                *expected,
+                "per-slot gate disagreed with the expected diagnostic on {label}",
+            );
+            assert_eq!(
+                spec.validate().err(),
+                *expected,
+                "`validate` disagreed with the per-slot gate on {label}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_contratos_matches_gate_on_reason_carrying_arms() {
+        // Companion pin to
+        // [`validate_contratos_matches_gate_on_every_per_axis_shape`]:
+        // the per-slot gate ≡ `validate` equivalence on the three
+        // `:contratos` refusal arms whose diagnostic carries a
+        // library-owned string ([`AplicacaoError::ContratoCaixaInvalid`]
+        // and [`AplicacaoError::ContratoWrongTarget`] via the paired
+        // `is_dns_1123_label` / `WitContract::target` shape helpers,
+        // and [`AplicacaoError::ContratoDuplicate`] via [`WitTarget::label`]'s
+        // library-formatted `target:` scalar). Value equality between
+        // the per-slot gate and `validate` outputs pins the full
+        // `Option<AplicacaoError>` (including reason-strings), and the
+        // per-arm `matches!` predicate pins the arm-discriminator
+        // identity on the specific `Contrato*` variant. Split from
+        // the primary equivalence pin so each pin body stays under
+        // [`clippy::too_many_lines`], the same shape the peer
+        // `validate_matches_gate_on_per_axis_and_phase_boundary_shapes`
+        // / `_on_cross_axis_and_clean_pass_shapes` split (f03a154)
+        // carries on the `:politicas` slot's compound entry gate.
+        type ContratoReasonCase = (
+            &'static str,
+            fn(&mut AplicacaoSpec),
+            fn(&AplicacaoError) -> bool,
+        );
+        let cases: &[ContratoReasonCase] = &[
+            (
+                ":de shape — DNS-1123 invalid",
+                |s| s.contratos[0].de = "Cart".into(),
+                |err| {
+                    matches!(
+                        err,
+                        AplicacaoError::ContratoCaixaInvalid { slot, caixa, .. }
+                            if *slot == crate::render::CONTRATO_AUTHOR_KEY_DE && caixa == "Cart"
+                    )
+                },
+            ),
+            (
+                ":wit target-shape mismatch — payload on capability arm",
+                |s| s.contratos[0].wit = "wasi:junk/nope".into(),
+                |err| {
+                    matches!(
+                        err,
+                        AplicacaoError::ContratoWrongTarget { de, para, wit, .. }
+                            if de == "cart" && para == "catalog" && wit == "wasi:junk/nope"
+                    )
+                },
+            ),
+            (
+                "whole-edge dedup — six-axis identity collision",
+                |s| {
+                    let dup = s.contratos[0].clone();
+                    s.contratos.push(dup);
+                },
+                |err| {
+                    matches!(
+                        err,
+                        AplicacaoError::ContratoDuplicate { de, para, wit, .. }
+                            if de == "cart" && para == "catalog" && wit == "wasi:http/proxy"
+                    )
+                },
+            ),
+        ];
+        for (label, mutate, arm_matches) in cases {
+            let mut spec = three_member_spec();
+            mutate(&mut spec);
+            let per_slot = spec.validate_contratos().err();
+            let gate = spec.validate().err();
+            assert_eq!(
+                per_slot, gate,
+                "per-slot gate and `validate` must return byte-equal \
+                 `Option<AplicacaoError>` on {label} (including \
+                 library-owned reason strings)",
+            );
+            let err = per_slot
+                .as_ref()
+                .unwrap_or_else(|| panic!("expected refusal on {label}, got clean pass"));
+            assert!(
+                arm_matches(err),
+                "per-slot gate surfaced the wrong arm on {label}: got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_contratos_resolves_membership_through_own_oracle() {
+        // Self-containment pin on the lifted per-slot gate:
+        // [`AplicacaoSpec::validate_contratos`] resolves each edge's
+        // `:de` / `:para` against the oracle *it* builds through
+        // [`AplicacaoSpec::membro_names`], not one threaded down from
+        // [`AplicacaoSpec::validate`]. A spec whose `:membros` no
+        // longer contains a `:contratos` edge's endpoint must trip
+        // `ContratoMemberMissing` when the per-slot gate is called
+        // directly — the shape a future single-slot re-validator
+        // (the M4 admission webhook re-checking `:contratos` after a
+        // per-`(:de, :para)` edge patch, the M4 per-edge policy
+        // resolver on the `:politicas` override axis) reaches the
+        // axis through, without re-walking `:membros` / `:entrada` /
+        // `:placement` / `:politicas` first. Same self-contained
+        // posture the peer per-slot gates
+        // [`AplicacaoSpec::detect_sync_cycles`] and
+        // [`AplicacaoSpec::validate_entrada`] already carry for the
+        // same M4 consumers.
+        let mut spec = three_member_spec();
+        spec.membros.retain(|m| m.nome() != "catalog");
+        assert_eq!(
+            spec.validate_contratos().unwrap_err(),
+            AplicacaoError::ContratoMemberMissing {
+                caixa: "catalog".into(),
+            },
+            "the per-slot gate must resolve `:de` / `:para` against \
+             the oracle it builds itself, with no membership set \
+             threaded in",
+        );
+        assert!(
+            !spec.membro_names().contains("catalog"),
+            "fixture must have dropped the `:contratos` edge's \
+             `:para` target from the graph's node set",
         );
     }
 
