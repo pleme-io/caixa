@@ -1987,17 +1987,78 @@ impl SupervisorSpec {
             )?;
         }
         // Route the per-child DNS-1123 / semver-requirement / duplicate-
-        // detection fan-out loop's traversal head through the lifted
-        // [`SupervisorSpec::children`] slice-return accessor rather than
-        // the raw `self.children` field access — the third production
-        // consumer of the per-`:supervisor` static-child-list surface
-        // now keys off exactly one typed dispatch on the substrate
-        // primitive. Paired with the sibling `SimpleOneForOne ↔
-        // non-SimpleOneForOne` partition-dispatch two-arm probe above
-        // to close the third and final open-coded `.children` field
-        // access in [`SupervisorSpec::validate`], so a future extension
-        // of the axis migrates as a single caixa-core edit rather than
-        // a coordinated rewrite of three call sites.
+        // detection fan-out loop through the lifted named per-slot gate
+        // [`SupervisorSpec::validate_children`] rather than an inline
+        // three-per-child cascade — every future consumer that wants to
+        // re-check only the `:children` slot's per-entry axes (the M4
+        // `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+        // admission webhook re-validating one added/renamed child, the
+        // future wasm-operator's per-child dynamic-add re-validator on
+        // the `SimpleOneForOne` runtime-add path once dynamic-children
+        // graduate to a typed slot, a future partial re-validator on a
+        // per-`:children`-entry patch) reaches every per-entry axis
+        // through one dispatch rather than re-inlining the three-arm
+        // cascade in lockstep with `validate` or paying the peer
+        // `:estrategia`/`:max-restarts`/`:restart-window` gates to
+        // reach one entry check. Sibling of the peer M3 mesh-slot
+        // per-slot gate family (`validate_membros` — the exact peer on
+        // the M3 side, [`crate::AplicacaoSpec::validate_membros`];
+        // `validate_contratos` — 906a5c6; `validate_entrada` — 20cd523;
+        // `validate_placement`; `validate_politicas` routing through
+        // `MeshPolicy::validate` — f03a154) — the M2 supervisor-slot
+        // per-slot gate discipline now spans both the M3 mesh-slot
+        // family and the M2 `:children` per-child-cascade axis on one
+        // shape: one named per-slot gate per typed per-entry loop.
+        self.validate_children()?;
+        Ok(())
+    }
+
+    /// Named per-slot gate on the M2 `:supervisor :children` per-entry
+    /// axis — folds the per-child DNS-1123 name gate, semver-requirement
+    /// gate, and duplicate-`:caixa` dedup arm into one call every
+    /// consumer that wants to re-validate one `:children` entry (or the
+    /// whole list) against the same accept-set [`SupervisorSpec::validate`]
+    /// admits reaches through.
+    ///
+    /// Peer of the M3 mesh-slot [`crate::AplicacaoSpec::validate_membros`]
+    /// per-slot gate on the analogous per-entry axis (`:membros`) — same
+    /// three-per-entry shape (DNS-1123 name + semver-requirement +
+    /// duplicate-`:caixa` dedup), lifted to one named substrate
+    /// primitive per slot. The M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+    /// materializer's admission webhook re-checking one added or renamed
+    /// child, the future wasm-operator's per-child dynamic-add
+    /// re-validator on the `SimpleOneForOne` runtime-add path once
+    /// dynamic-children graduate to a typed slot, a future partial
+    /// re-validator on a per-`:children`-entry patch — each reaches the
+    /// three per-entry axes through this one dispatch rather than
+    /// re-inlining the three-arm cascade in lockstep with `validate`
+    /// (the duplication the PRIME DIRECTIVE names as a bug) or paying
+    /// the peer `:estrategia`/`:max-restarts`/`:restart-window` gates to
+    /// reach one entry check.
+    ///
+    /// Self-contained on `&self` — resolves its own dedup `HashSet`
+    /// through [`SupervisorSpec::children`] rather than borrowing one
+    /// threaded down from `validate`, the same posture the peer M3
+    /// mesh-slot per-slot gates ([`crate::AplicacaoSpec::validate_membros`],
+    /// [`crate::AplicacaoSpec::validate_contratos`],
+    /// [`crate::AplicacaoSpec::validate_entrada`],
+    /// [`crate::AplicacaoSpec::validate_placement`]) each carry, so a
+    /// consumer that reaches this gate directly (without first calling
+    /// `validate`) still runs the full per-child cascade — pinned by
+    /// `validate_children_matches_gate_on_per_axis_refusal_shapes` +
+    /// `validate_children_matches_gate_on_versao_invalid_and_clean_pass`
+    /// + `validate_children_is_self_contained_on_children_slot`.
+    ///
+    /// The three per-entry arms run in the same canonical order the
+    /// pre-lift inline cascade encoded (DNS-1123 → semver → dedup), so
+    /// the diagnostic every author-declared per-`:children` entry surfaces
+    /// through `validate` is byte-equal to the diagnostic this gate
+    /// surfaces when called directly — the equivalence-pin pair
+    /// `validate_children_matches_gate_on_per_axis_refusal_shapes` +
+    /// `validate_children_matches_gate_on_versao_invalid_and_clean_pass`
+    /// asserts the two altitudes discriminate the same set on every
+    /// per-entry-covered input.
+    pub fn validate_children(&self) -> Result<(), SupervisorError> {
         let mut seen = std::collections::HashSet::new();
         for child in self.children() {
             // Every emitted cluster artifact's `metadata.name` for a
@@ -7593,6 +7654,184 @@ mod tests {
             2,
             "the per-child validate loop's traversal input must be a \
              two-element slice per the accessor's projection",
+        );
+    }
+
+    // Shared helper for the M2 per-`:children` per-slot-gate ≡
+    // `validate` equivalence pins: builds an `OneForOne`-estrategia
+    // one-cohort spec whose peer `:estrategia`↔`:children.is_empty()`
+    // partition, `:max-restarts` zero-floor/cap, and `:restart-window`
+    // bracket all pass cleanly so the sole failing surface is the
+    // per-child cascade [`SupervisorSpec::validate_children`] owns, and
+    // pins the two-altitude equivalence on the paired probe.
+    fn assert_validate_children_matches_gate(children: Vec<ChildSpec>, expected: &SupervisorError) {
+        let s = SupervisorSpec {
+            estrategia: RestartStrategy::OneForOne,
+            children,
+            ..SupervisorSpec::default()
+        };
+        let via_gate = s.validate_children().unwrap_err();
+        let via_validate = s.validate().unwrap_err();
+        assert_eq!(&via_gate, expected, "validate_children direct dispatch",);
+        assert_eq!(&via_validate, expected, "validate() end-to-end dispatch",);
+        assert_eq!(
+            via_gate, via_validate,
+            "per-slot gate ≡ validate() must discriminate the same \
+             refusal shape",
+        );
+    }
+
+    #[test]
+    fn validate_children_matches_gate_on_per_axis_refusal_shapes() {
+        // Fail-before-pass-after equivalence pin on the M2
+        // per-`:children` per-slot gate ≡ [`SupervisorSpec::validate`]
+        // convergence — sibling of the M3 mesh-slot
+        // `validate_membros_*` / `validate_contratos_*` /
+        // `validate_entrada_*` per-slot-gate ≡ `validate` pins on the
+        // peer per-entry axes. Sweeps four of the five refusal shapes
+        // the per-slot gate owns: (1) `EmptyChildName` on an empty-
+        // `:caixa` child, (2) `ChildCaixaInvalid` on a structurally
+        // invalid `:caixa` DNS-1123 label, (3) `EmptyChildVersion` on
+        // an empty-`:versao` child, (4) `DuplicateChildCaixa` on a
+        // duplicate-`:caixa` fan-out. Companion pin
+        // `validate_children_matches_gate_on_versao_invalid_and_clean_pass`
+        // covers `ChildVersaoInvalid` (whose parser-owned reason string
+        // needs pattern-matching, not equality) and the clean-pass
+        // canonical fixture; together the two pins guarantee the
+        // per-slot gate and `validate` discriminate the same set on
+        // every per-child-covered input.
+        assert_validate_children_matches_gate(
+            vec![child("", "^0.1", RestartPolicy::Permanent)],
+            &SupervisorError::EmptyChildName,
+        );
+        assert_validate_children_matches_gate(
+            vec![child("Worker", "^0.1", RestartPolicy::Permanent)],
+            &SupervisorError::ChildCaixaInvalid {
+                caixa: "Worker".into(),
+                reason: "contains uppercase character 'W' (K8s DNS-1123 label names are lowercase-only; use \"worker\")".into(),
+            },
+        );
+        assert_validate_children_matches_gate(
+            vec![child("worker", "", RestartPolicy::Permanent)],
+            &SupervisorError::EmptyChildVersion {
+                caixa: "worker".into(),
+            },
+        );
+        assert_validate_children_matches_gate(
+            vec![
+                child("worker", "^0.1", RestartPolicy::Permanent),
+                child("worker", "^0.2", RestartPolicy::Transient),
+            ],
+            &SupervisorError::DuplicateChildCaixa {
+                caixa: "worker".into(),
+            },
+        );
+    }
+
+    #[test]
+    fn validate_children_matches_gate_on_versao_invalid_and_clean_pass() {
+        // Second half of the two-altitude equivalence pin — covers the
+        // one refusal shape whose reason string is parser-owned
+        // (`ChildVersaoInvalid`, whose reason comes from the shared
+        // [`crate::version::parse_requirement`] impl and may drift) and
+        // the clean-pass canonical fixture. Sibling pin
+        // `validate_children_matches_gate_on_per_axis_refusal_shapes`
+        // covers the four equality-comparable refusal shapes.
+        let s_bad_versao = SupervisorSpec {
+            estrategia: RestartStrategy::OneForOne,
+            children: vec![child("worker", "not-a-req", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let via_gate = s_bad_versao.validate_children().unwrap_err();
+        let via_validate = s_bad_versao.validate().unwrap_err();
+        match (&via_gate, &via_validate) {
+            (
+                SupervisorError::ChildVersaoInvalid {
+                    caixa: cg,
+                    versao: vg,
+                    ..
+                },
+                SupervisorError::ChildVersaoInvalid {
+                    caixa: cv,
+                    versao: vv,
+                    ..
+                },
+            ) => {
+                assert_eq!(cg, "worker", "per-slot gate :caixa carrier");
+                assert_eq!(vg, "not-a-req", "per-slot gate :versao carrier");
+                assert_eq!(cv, "worker", "validate() :caixa carrier");
+                assert_eq!(vv, "not-a-req", "validate() :versao carrier");
+            }
+            other => panic!("expected ChildVersaoInvalid on both altitudes, got {other:?}"),
+        }
+        assert_eq!(
+            via_gate, via_validate,
+            "per-slot gate ≡ validate() on ChildVersaoInvalid full envelope",
+        );
+
+        let s_ok = SupervisorSpec {
+            estrategia: RestartStrategy::OneForOne,
+            children: vec![
+                child("worker-a", "^0.1", RestartPolicy::Permanent),
+                child("worker-b", "~0.2.3", RestartPolicy::Transient),
+                child("collector", "*", RestartPolicy::Temporary),
+            ],
+            ..SupervisorSpec::default()
+        };
+        s_ok.validate_children()
+            .expect("per-slot gate must accept the clean-pass fixture");
+        s_ok.validate()
+            .expect("validate() must accept the clean-pass fixture");
+    }
+
+    #[test]
+    fn validate_children_is_self_contained_on_children_slot() {
+        // Self-containment pin: [`SupervisorSpec::validate_children`]
+        // resolves the per-child cascade against `&self` alone, without
+        // depending on the peer `:estrategia`/`:max-restarts`/
+        // `:restart-window` gates having run first — same posture the M3
+        // peer per-slot gates carry (`validate_membros`,
+        // `validate_contratos`, `validate_entrada`, `validate_placement`,
+        // routing through their own oracles rather than borrowing state
+        // threaded down from `validate`). A future consumer that reaches
+        // the per-slot gate directly on a spec whose peer slots would
+        // fail `validate` still surfaces the per-child refusal, not the
+        // peer refusal.
+        //
+        // Construct a spec whose `:max-restarts` is `0` (which would
+        // trip [`SupervisorError::ZeroMaxRestarts`] at `validate` after
+        // the partition-dispatch) and whose `:children` carries a
+        // `DuplicateChildCaixa` shape: the per-slot gate called directly
+        // must surface `DuplicateChildCaixa`, proving it does not depend
+        // on the peer `:max-restarts` gate running first.
+        let s = SupervisorSpec {
+            estrategia: RestartStrategy::OneForOne,
+            max_restarts: 0,
+            restart_window: Some(Duration::from_secs(60)),
+            children: vec![
+                child("worker", "^0.1", RestartPolicy::Permanent),
+                child("worker", "^0.2", RestartPolicy::Transient),
+            ],
+        };
+        assert_eq!(
+            s.validate_children().unwrap_err(),
+            SupervisorError::DuplicateChildCaixa {
+                caixa: "worker".into(),
+            },
+            "per-slot gate must resolve per-child refusal directly against \
+             `&self` — a dependency on the peer `:max-restarts` gate \
+             running first would surface ZeroMaxRestarts here instead",
+        );
+        // The peer gate is still the surface `validate` reaches — pin
+        // the ordering to establish that `validate_children` truly runs
+        // last in `validate`'s dispatch, so a direct call bypasses the
+        // peer gates on any spec whose per-child cascade would fail.
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::ZeroMaxRestarts,
+            "validate() must surface the peer `:max-restarts` gate before \
+             reaching the per-child cascade — this pins the dispatch \
+             ordering the per-slot gate's self-containment complements",
         );
     }
 
