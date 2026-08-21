@@ -112,10 +112,7 @@ impl LayoutInvariants for StandardLayout {
         // / [`LayoutError::AplicacaoViolation`]).
         caixa
             .validate_nome()
-            .map_err(|err| LayoutError::NomeViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::nome_violation(caixa, err))?;
         // `:nome`-side joint-length budget on the canonical
         // `lareira-<nome>` chart-name shape — the second arm on the
         // shared `:nome` axis after the bare-DNS-1123 gate above. Runs
@@ -135,16 +132,10 @@ impl LayoutInvariants for StandardLayout {
         // structural property of every emitted artifact.
         caixa
             .validate_nome_chart_name_budget()
-            .map_err(|err| LayoutError::NomeViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::nome_violation(caixa, err))?;
         caixa
             .validate_versao()
-            .map_err(|err| LayoutError::VersaoViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::versao_violation(caixa, err))?;
 
         // `:deps` / `:deps-dev` per-entry shape gate. The third Caixa-
         // level orphan validator on the universal authoring surface (peer
@@ -237,10 +228,7 @@ impl LayoutInvariants for StandardLayout {
         // the two-dispatch cascade in lockstep with this wire-up.
         caixa
             .validate_deps()
-            .map_err(|err| LayoutError::DepsViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::deps_violation(caixa, err))?;
 
         // `:etiquetas` per-entry empty + cross-entry duplicate gate. The
         // fourth universal-axis Caixa-level value-shape gate (peer of
@@ -296,10 +284,7 @@ impl LayoutInvariants for StandardLayout {
         // entry, why" without re-shaping the per-arm reason.
         caixa
             .validate_etiquetas()
-            .map_err(|err| LayoutError::EtiquetasViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::etiquetas_violation(caixa, err))?;
 
         // `:autores` per-entry empty + cross-entry duplicate gate. The
         // fifth universal-axis Caixa-level value-shape gate (peer of
@@ -352,10 +337,7 @@ impl LayoutInvariants for StandardLayout {
         // entry, why" without re-shaping the per-arm reason.
         caixa
             .validate_autores()
-            .map_err(|err| LayoutError::AutoresViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::autores_violation(caixa, err))?;
 
         // `:repositorio` git-repo-URL shape gate. The sixth
         // universal-axis Caixa-level value-shape gate (peer of
@@ -426,10 +408,7 @@ impl LayoutInvariants for StandardLayout {
         // union, by construction.
         caixa
             .validate_repositorio()
-            .map_err(|err| LayoutError::RepositorioViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::repositorio_violation(caixa, err))?;
 
         // `:descricao` non-empty shape gate. The seventh universal-
         // axis Caixa-level value-shape gate (peer of
@@ -491,10 +470,7 @@ impl LayoutInvariants for StandardLayout {
         // "which axis, why" without re-shaping the per-arm reason.
         caixa
             .validate_descricao()
-            .map_err(|err| LayoutError::DescricaoViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::descricao_violation(caixa, err))?;
 
         // `:licenca` non-empty shape gate. The eighth universal-axis
         // Caixa-level value-shape gate (peer of [`Caixa::validate_nome`]
@@ -553,10 +529,7 @@ impl LayoutInvariants for StandardLayout {
         // "which axis, why" without re-shaping the per-arm reason.
         caixa
             .validate_licenca()
-            .map_err(|err| LayoutError::LicencaViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::licenca_violation(caixa, err))?;
 
         // `:edicao` non-empty shape gate. The ninth (and last
         // un-gated) universal-axis Caixa-level value-shape gate
@@ -627,10 +600,7 @@ impl LayoutInvariants for StandardLayout {
         // construction.
         caixa
             .validate_edicao()
-            .map_err(|err| LayoutError::EdicaoViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::edicao_violation(caixa, err))?;
 
         // Supervisors, Aplicacaos, and Acaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
@@ -821,10 +791,7 @@ impl LayoutInvariants for StandardLayout {
         // `ServicoOutsideDir` against the resolved sandbox-escape path).
         caixa
             .validate_code_paths()
-            .map_err(|err| LayoutError::CodePathViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::code_path_violation(caixa, err))?;
 
         if caixa.kind().requires_lib() && caixa.bibliotecas().is_empty() {
             let expected = root
@@ -935,10 +902,7 @@ impl LayoutInvariants for StandardLayout {
         // dispatch pattern in lockstep with this wire-up.
         caixa
             .validate_limits()
-            .map_err(|err| LayoutError::LimitsViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::limits_violation(caixa, err))?;
 
         // Compound per-Caixa entry gate on the M2 `:behavior` slot's
         // pure value-shape surface: the layout pipeline's
@@ -995,10 +959,7 @@ impl LayoutInvariants for StandardLayout {
         // lift for the same reason.
         caixa
             .validate_behavior()
-            .map_err(|err| LayoutError::BehaviorViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::behavior_violation(caixa, err))?;
         if let Some(b) = caixa.behavior() {
             for p in b.declared_paths() {
                 let full = root.join(p);
@@ -1061,10 +1022,7 @@ impl LayoutInvariants for StandardLayout {
         // the [`StandardLayout`] surface.
         caixa
             .validate_upgrade_from()
-            .map_err(|err| LayoutError::UpgradeViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            })?;
+            .map_err(|err| LayoutError::upgrade_violation(caixa, err))?;
         for entry in caixa.upgrade_from() {
             for instr in entry.instructions() {
                 if let Some(p) = instr.declared_path() {
@@ -1145,18 +1103,12 @@ impl LayoutInvariants for StandardLayout {
             // without re-shaping the parser-side reason.
             caixa
                 .validate_restart_window()
-                .map_err(|err| LayoutError::RestartWindowViolation {
-                    caixa: caixa.nome().to_string(),
-                    issue: err.to_string(),
-                })?;
+                .map_err(|err| LayoutError::restart_window_violation(caixa, err))?;
             let view = caixa
                 .supervisor_view()
                 .expect("Supervisor kind must have a supervisor_view");
             view.validate()
-                .map_err(|err| LayoutError::SupervisorViolation {
-                    caixa: caixa.nome().to_string(),
-                    issue: err.to_string(),
-                })?;
+                .map_err(|err| LayoutError::supervisor_violation(caixa, err))?;
             // Cross-slot coherence: `:children :caixa` must not name the
             // supervisor's own `:nome`. The typed `SupervisorSpec` view
             // carries the children but not the parent `:nome`, so this
@@ -1185,10 +1137,7 @@ impl LayoutInvariants for StandardLayout {
             // coerce, closing the raw `&caixa.nome` arg-passing axis at
             // this call site.
             crate::supervisor::validate_no_self_supervision(caixa.children(), caixa.nome())
-                .map_err(|err| LayoutError::SupervisorViolation {
-                    caixa: caixa.nome().to_string(),
-                    issue: err.to_string(),
-                })?;
+                .map_err(|err| LayoutError::supervisor_violation(caixa, err))?;
         }
 
         // Aplicacao invariants — typed graph composition. Like
@@ -1250,10 +1199,7 @@ impl LayoutInvariants for StandardLayout {
         if caixa.kind().is_aplicacao() {
             caixa
                 .validate_aplicacao_shape()
-                .map_err(|err| LayoutError::AplicacaoViolation {
-                    caixa: caixa.nome().to_string(),
-                    issue: err.to_string(),
-                })?;
+                .map_err(|err| LayoutError::aplicacao_violation(caixa, err))?;
         }
 
         Ok(())
@@ -1381,6 +1327,91 @@ pub enum LayoutError {
     CiOnNonAcao { caixa: String, kind: CaixaKind },
 }
 
+// Fold the layout-pipeline per-Caixa violation wrap onto one substrate
+// primitive per typed slot. Every `LayoutError::*Violation { caixa, issue }`
+// variant follows the same uniform shape — `caixa = layout-Caixa's :nome`,
+// `issue = the gate's per-arm Display` — and every wire-up in
+// [`StandardLayout::verify`] used to open-code the identical five-line
+// `.map_err(|err| LayoutError::XxxViolation { caixa: caixa.nome().to_string(),
+// issue: err.to_string() })` block, once per typed slot. Sixteen distinct
+// wrap-variants × eighteen wire-up sites is exactly the duplication the
+// PRIME DIRECTIVE names as a bug: every future consumer that wants to add a
+// new per-slot gate (the deferred `caixa.pleme.io/v1alpha1/Caixa` CR
+// materializer's admission webhook, a future per-slot `feira validate`
+// verb, a per-slot overlay resolver) had to re-inline the five-line block
+// in lockstep with the pre-existing wire-ups.
+//
+// The macro below generates one static constructor per variant of shape
+// `fn <slot>_violation(caixa: &Caixa, err: impl Display) -> LayoutError`,
+// so every wire-up site collapses onto one dispatch:
+// `caixa.validate_<slot>().map_err(|err| LayoutError::<slot>_violation(caixa,
+// err))?;`. The uniform two-slot construction (`caixa: caixa.nome()
+// .to_string()`, `issue: err.to_string()`) is spelled once — inside the
+// macro — rather than at every wire-up site. Every constructor is
+// `#[must_use]` so a caller who mistakenly discards the wrapped error
+// (rather than routing it through `?`) trips a compile warning at the
+// wire-up site.
+//
+// Peer with the per-slot compound entry gates every substrate primitive
+// on the M2/M3 typed-slot family already carries
+// ([`crate::Caixa::validate_deps`] b5dd55e, [`crate::Caixa::validate_limits`]
+// baa4688, [`crate::Caixa::validate_behavior`] 0d2877a,
+// [`crate::Caixa::validate_upgrade_from`] d6801df,
+// [`crate::Caixa::validate_aplicacao_shape`] 949a7a0,
+// [`crate::AplicacaoSpec::validate_contratos`],
+// [`crate::MeshPolicy::validate`],
+// [`crate::SupervisorSpec::validate_children`]): the author-time gates
+// fold onto one substrate primitive per typed slot; here the layout-side
+// error-wrap folds onto one substrate primitive per typed variant, so the
+// two sides of the layout pipeline's per-slot cascade (the gate, the
+// wrap) each route through one call rather than N open-coded block
+// repetitions.
+macro_rules! layout_violation_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl LayoutError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LayoutError::",
+                    stringify!($variant),
+                    "`] wrapping `err` under `caixa.nome()`. Folds the ",
+                    "uniform `{ caixa: caixa.nome().to_string(), issue: ",
+                    "err.to_string() }` two-slot construction onto one ",
+                    "substrate primitive so every ",
+                    "[`StandardLayout::verify`] wire-up on this variant ",
+                    "reads through one dispatch rather than the pre-lift ",
+                    "five-line open-coded block."
+                )]
+                #[must_use]
+                pub fn $ctor<E: std::fmt::Display>(caixa: &crate::Caixa, err: E) -> Self {
+                    Self::$variant {
+                        caixa: caixa.nome().to_string(),
+                        issue: err.to_string(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+layout_violation_ctors! {
+    nome_violation => NomeViolation,
+    versao_violation => VersaoViolation,
+    deps_violation => DepsViolation,
+    etiquetas_violation => EtiquetasViolation,
+    autores_violation => AutoresViolation,
+    repositorio_violation => RepositorioViolation,
+    descricao_violation => DescricaoViolation,
+    licenca_violation => LicencaViolation,
+    edicao_violation => EdicaoViolation,
+    code_path_violation => CodePathViolation,
+    limits_violation => LimitsViolation,
+    behavior_violation => BehaviorViolation,
+    upgrade_violation => UpgradeViolation,
+    restart_window_violation => RestartWindowViolation,
+    supervisor_violation => SupervisorViolation,
+    aplicacao_violation => AplicacaoViolation,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1428,6 +1459,272 @@ mod tests {
             .verify(&caixa(CaixaKind::Biblioteca), Path::new("/tmp/x"))
             .unwrap_err();
         assert!(matches!(err, LayoutError::MissingManifest(_)));
+    }
+
+    // ── LayoutError::*_violation constructor family ──────────────────────
+    //
+    // The [`layout_violation_ctors!`] macro (below the `LayoutError` enum
+    // definition) generates one static constructor per `*Violation { caixa,
+    // issue }` variant that folds the uniform `{ caixa: caixa.nome()
+    // .to_string(), issue: err.to_string() }` two-slot construction onto
+    // one substrate primitive. The per-variant equivalence pins below
+    // (fail-before-pass-after by construction — a byte-mismatched macro
+    // arm would trip its equivalence pin first) lock each generated
+    // constructor to its struct-literal peer under `PartialEq`, so every
+    // wire-up in [`StandardLayout::verify`] on that variant produces a
+    // byte-equal `LayoutError` to the pre-lift open-coded block. The
+    // fixture caixa fires under `caixa("demo")` so the `caixa: "demo"`
+    // half is pinned; the fixture error fires under a fixed `&str` so the
+    // `issue: <literal>` half is pinned; the two together pin every field
+    // of every generated variant.
+
+    fn layout_violation_ctor_fixture() -> (Caixa, &'static str) {
+        (caixa(CaixaKind::Biblioteca), "sample issue text")
+    }
+
+    // `assert_eq!` uses `PartialEq::eq(&self, &other)` under the hood, so
+    // `actual`/`expected` are only ever read, never moved into anything —
+    // the ergonomic tradeoff (owned + move-in vs. reference + &-borrow at
+    // every call site) favors the owned form for a test-only assertion
+    // helper called from 16 wire-up pins. The lint targets the general
+    // API-shape case where callers still have downstream uses for the
+    // moved value; the assertion helper terminates on the equality check.
+    #[allow(clippy::needless_pass_by_value)]
+    fn assert_violation_ctor_matches(actual: LayoutError, expected: LayoutError) {
+        assert_eq!(
+            actual, expected,
+            "generated constructor must produce byte-equal LayoutError to open-coded struct-literal wrap",
+        );
+    }
+
+    #[test]
+    fn nome_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::nome_violation(&c, issue),
+            LayoutError::NomeViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn versao_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::versao_violation(&c, issue),
+            LayoutError::VersaoViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn deps_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::deps_violation(&c, issue),
+            LayoutError::DepsViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn etiquetas_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::etiquetas_violation(&c, issue),
+            LayoutError::EtiquetasViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn autores_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::autores_violation(&c, issue),
+            LayoutError::AutoresViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn repositorio_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::repositorio_violation(&c, issue),
+            LayoutError::RepositorioViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn descricao_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::descricao_violation(&c, issue),
+            LayoutError::DescricaoViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn licenca_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::licenca_violation(&c, issue),
+            LayoutError::LicencaViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn edicao_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::edicao_violation(&c, issue),
+            LayoutError::EdicaoViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn code_path_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::code_path_violation(&c, issue),
+            LayoutError::CodePathViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn limits_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::limits_violation(&c, issue),
+            LayoutError::LimitsViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn behavior_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::behavior_violation(&c, issue),
+            LayoutError::BehaviorViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn upgrade_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::upgrade_violation(&c, issue),
+            LayoutError::UpgradeViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn restart_window_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::restart_window_violation(&c, issue),
+            LayoutError::RestartWindowViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn supervisor_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::supervisor_violation(&c, issue),
+            LayoutError::SupervisorViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn aplicacao_violation_ctor_matches_struct_literal_wrap() {
+        let (c, issue) = layout_violation_ctor_fixture();
+        assert_violation_ctor_matches(
+            LayoutError::aplicacao_violation(&c, issue),
+            LayoutError::AplicacaoViolation {
+                caixa: c.nome().to_string(),
+                issue: issue.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn violation_ctor_routes_issue_through_display_impl() {
+        // Pin the fold's `issue = err.to_string()` half against any type
+        // implementing `Display` — a per-arm error type from a foreign
+        // module (here, `std::io::Error`) threads through byte-equal to
+        // the struct-literal `.to_string()` construction, so the fold
+        // does not silently collapse onto `&str`-only inputs.
+        let c = caixa(CaixaKind::Biblioteca);
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "sample io display source");
+        let expected_issue = io_err.to_string();
+        let actual = LayoutError::deps_violation(&c, &io_err);
+        assert_eq!(
+            actual,
+            LayoutError::DepsViolation {
+                caixa: c.nome().to_string(),
+                issue: expected_issue,
+            },
+        );
+    }
+
+    #[test]
+    fn violation_ctor_routes_caixa_prefix_through_nome_accessor() {
+        // Pin the fold's `caixa = caixa.nome().to_string()` half against
+        // a non-default `:nome` — the accessor threads the caller's
+        // `:nome` verbatim into the wrap envelope, so the fold does not
+        // silently collapse onto the default `"demo"` fixture nome.
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "alt-nome".into();
+        let actual = LayoutError::behavior_violation(&c, "sample issue");
+        assert_eq!(
+            actual,
+            LayoutError::BehaviorViolation {
+                caixa: "alt-nome".to_string(),
+                issue: "sample issue".to_string(),
+            },
+        );
     }
 
     #[test]
