@@ -8053,44 +8053,6 @@ impl AplicacaoSpec {
         }
         let mut seen = std::collections::HashSet::new();
         for m in self.membros() {
-            // Route the `MembroCaixaEmpty` refusal-arm's per-member
-            // empty-`:caixa` shape-gate through the typed
-            // [`Membro::nome`] accessor rather than the raw `.caixa`
-            // field access — the last un-lifted `.caixa` production-
-            // code read site on the per-`:membros` member-caixa `:nome`
-            // axis, sibling to the six caixa-core validator read sites
-            // (member-set collector, per-member value-shape gate,
-            // duplicate dedup key, cycle-detector adjacency-map seed,
-            // self-loop gate) the 4a32abf lift already routed through
-            // the accessor and the peer 54bf2f3 caixa-mesh emit-side
-            // per-`programs[]` entry-`name:` `String`-carry converge.
-            // Prior to this converge the `MembroCaixaEmpty` refusal
-            // arm was the solitary consumer bypassing the typed
-            // dispatch — the same-loop iteration's very next call
-            // `validate_membro_caixa(m.nome())` already routed through
-            // the accessor, so an author landing an empty-`:caixa`
-            // entry hit the accessor on the shape-gate line but
-            // bypassed it on the emptiness line one line above. A
-            // future extension of the `:membros :caixa` axis to a
-            // richer author surface (a per-cluster alias table pinned
-            // through a future `:placement`-scoped slot, a namespace-
-            // qualified rewrite the M4 CR materializer applies per-CR,
-            // a per-member overlay from the future `:membros
-            // :nome-suffix` slot MESH-COMPOSITION §III.2 acknowledges)
-            // that lands on the accessor would silently disagree
-            // between the emptiness gate and every peer consumer —
-            // an author-declared `:caixa "checkout"` value the
-            // accessor rewrote to `""` under a future alias arm would
-            // pass the raw `.is_empty()` gate here while the peer
-            // `validate_membro_caixa(m.nome())` call one line below
-            // (and every downstream emit-side consumer routing through
-            // the accessor) tripped on the empty-value shape far from
-            // this diagnostic. Pinned by the drift-detection test
-            // [`validate_membros_empty_gate_routes_through_nome_accessor`]
-            // below.
-            if m.nome().is_empty() {
-                return Err(AplicacaoError::MembroCaixaEmpty);
-            }
             // Every emitted cluster artifact's `metadata.name` derives
             // from a `:membros :caixa` value verbatim — the rendered
             // programs.yaml entry's `name:` (caixa-mesh/src/lib.rs:133),
@@ -25587,15 +25549,15 @@ mod tests {
         // emptiness gate off `self.caixa.is_empty()` in `validate_membros`
         // instead of `self.nome().is_empty()`, silently disagreeing with
         // every peer consumer (the `validate_membro_caixa(m.nome())`
-        // call one line below, the dedup-key `insert_first_seen(&mut
-        // seen, m.nome(), …)` two lines below, the emit-side per-
-        // `programs[]` entry-`name:` at caixa-mesh/src/lib.rs:133),
-        // (b) accessor-side introduced a per-tenant alias arm the
-        // caller was unaware of, silently rewriting an author-declared
-        // `:caixa "checkout"` to `""` — the raw-field-access gate
-        // would fail-open while the accessor-routed peer consumers
-        // would fail-closed, splitting the diagnostic from the actual
-        // failure surface.
+        // per-slot helper — which now owns the emptiness arm outright —
+        // the dedup-key `insert_first_seen(&mut seen, m.nome(), …)`
+        // below, and the emit-side per-`programs[]` entry-`name:` at
+        // caixa-mesh/src/lib.rs:133), (b) accessor-side introduced a
+        // per-tenant alias arm the caller was unaware of, silently
+        // rewriting an author-declared `:caixa "checkout"` to `""` —
+        // the raw-field-access gate would fail-open while the
+        // accessor-routed peer consumers would fail-closed, splitting
+        // the diagnostic from the actual failure surface.
         //
         // Peer of the sibling
         // [`mesh_policy_is_empty_mtls_required_arm_routes_through_accessor`]
@@ -25628,6 +25590,78 @@ mod tests {
             AplicacaoError::MembroCaixaEmpty,
             "validate_membros' emptiness gate must fire MembroCaixaEmpty \
              on an entry whose accessor-projected `nome()` is empty",
+        );
+    }
+
+    #[test]
+    fn validate_membros_empty_arm_is_owned_by_validate_membro_caixa_alone() {
+        // Convergence pin, paired with the deletion of the redundant
+        // outer `if m.nome().is_empty() { return Err(MembroCaixaEmpty); }`
+        // guard formerly inline in [`AplicacaoSpec::validate_membros`]:
+        // after the collapse, the `MembroCaixaEmpty` refusal on every
+        // empty-`:caixa` per-member input is owned solely by the shared
+        // [`validate_membro_caixa`] helper — the same per-slot substrate
+        // primitive routing empty + shape arms uniformly onto
+        // [`crate::render::require_valid_dns_1123_label`] that every
+        // peer M3 mesh-slot per-slot gate ([`validate_placement_cluster`]
+        // on `:placement :clusters`, [`validate_entrada_para`] on
+        // `:entrada :para`, [`validate_contrato_caixa`] on `:contratos
+        // :de`/`:para`) already funnels its own empty arm through.
+        //
+        // Two arms pin the collapse:
+        //
+        //   (1) The per-slot helper called with the empty string returns
+        //       byte-equal to the previous inline arm's diagnostic — so
+        //       a future rebrand of [`validate_membro_caixa`] that
+        //       (accidentally) stopped returning [`MembroCaixaEmpty`] on
+        //       empty input (an inadvertent switch to
+        //       [`AplicacaoError::MembroCaixaInvalid`] via the parse-side
+        //       `on_invalid` arm, an accidental re-routing to a shared
+        //       `MembroError::Empty` under a future error-hierarchy
+        //       flattening) would silently split the drift from the
+        //       [`validate_membros`] caller and surface the wrong
+        //       diagnostic on the author-facing empty-`:caixa` footgun.
+        //
+        //   (2) The whole-spec equivalence: an empty-`:caixa` entry
+        //       anywhere in the `:membros` fan-out still trips
+        //       [`MembroCaixaEmpty`] end-to-end via [`validate`], with
+        //       no outer inline guard needed. Same shape as the
+        //       whole-spec arm on [`validate_placement_cluster`] /
+        //       [`validate_entrada_para`] / [`validate_contrato_caixa`]:
+        //       one substrate primitive per axis, folding empty + shape.
+        //
+        // Same PRIME DIRECTIVE convergence the peer per-slot gate lifts
+        // (906a5c6 validate_contratos, 20cd523 validate_entrada, f03a154
+        // MeshPolicy::validate) already extend across the M3 mesh-slot
+        // family — closes the last per-slot gate on the family carrying
+        // an inline empty guard duplicating its own helper.
+        assert_eq!(
+            validate_membro_caixa(""),
+            Err(AplicacaoError::MembroCaixaEmpty),
+            "validate_membro_caixa must own the empty arm outright — a \
+             regression here would silently split MembroCaixaEmpty from \
+             validate_membros' end-to-end refusal shape after the outer \
+             inline `if m.nome().is_empty()` guard collapse",
+        );
+        let mut s = three_member_spec();
+        s.membros[0].caixa = String::new();
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::MembroCaixaEmpty,
+            "an empty-`:caixa` :membros head entry must trip \
+             MembroCaixaEmpty end-to-end via validate() with the outer \
+             inline guard removed — the per-slot helper alone is now \
+             load-bearing",
+        );
+        let mut s = three_member_spec();
+        s.membros[2].caixa = String::new();
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::MembroCaixaEmpty,
+            "an empty-`:caixa` :membros tail entry must trip \
+             MembroCaixaEmpty end-to-end via validate() with the outer \
+             inline guard removed — the per-slot helper alone reaches \
+             every fan-out position",
         );
     }
 
