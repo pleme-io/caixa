@@ -201,61 +201,46 @@ impl LayoutInvariants for StandardLayout {
         // on the typed Caixa surface (`validate_restart_window` is the
         // remaining orphan, Supervisor-axis specific and wired into the
         // Supervisor branch below alongside `view.validate()`).
+        // Compound per-Caixa entry gate on the dep-graph axis: the
+        // layout pipeline's two-dispatch `:deps` / `:deps-dev` cascade
+        // — the per-entry + within-list duplicate-`:nome` gate (the
+        // [`crate::Dep::validate`] + [`crate::render::insert_first_seen`]
+        // cascade `Caixa::validate_deps` opened on, 359fba5) and the
+        // cross-slot self-edge gate
+        // ([`crate::dep::validate_no_self_dep`], ad4abf1) — folded
+        // onto the [`crate::Caixa::validate_deps`] substrate primitive.
+        // The two arms run in the same canonical order at the primitive
+        // (per-entry + cross-entry duplicate → cross-slot self-edge) so
+        // the fold is byte-for-byte equivalent to the pre-fold
+        // two-block cascade this call site formerly carried, pinned by
+        // the paired
+        // `validate_deps_folds_{per_entry,self_edge}_arm_matches_gate`
+        // equivalence pins and the
+        // `validate_deps_per_entry_arm_fires_before_self_edge_arm`
+        // ordering pin in the [`crate::Caixa::validate_deps`] pin
+        // family (`manifest.rs`).
+        //
+        // Same lift discipline the peer per-slot compound gates
+        // ([`crate::AplicacaoSpec::validate_contratos`] and its
+        // `:membros` / `:entrada` / `:placement` / `:politicas` peers,
+        // [`crate::MeshPolicy::validate`],
+        // [`crate::SupervisorSpec::validate_children`],
+        // [`crate::Caixa::validate_upgrade_from`] d6801df) each carry —
+        // one named substrate-primitive gate per typed slot folds every
+        // structural + cross-slot axis on that slot onto one call, so
+        // every future consumer that wants to re-check the dep-graph
+        // after a per-entry patch (the deferred
+        // `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission
+        // webhook, a future `feira validate --deps` per-caixa admission
+        // verb, a per-`:deps` overlay resolver) reaches the two-arm
+        // compound gate through one dispatch rather than re-inlining
+        // the two-dispatch cascade in lockstep with this wire-up.
         caixa
             .validate_deps()
             .map_err(|err| LayoutError::DepsViolation {
                 caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
-
-        // `:deps` / `:deps-dev` self-dep cross-slot coherence gate. A
-        // caixa whose `:deps` or `:deps-dev` lists its own `:nome` is a
-        // degenerate self-edge in the lacre closure's dep-graph — the
-        // closure is a DAG rooted at the caixa's `:nome`, and the
-        // caixa-resolver's traversal would otherwise be handed a node
-        // that is its own parent: a one-node cycle it either rejects
-        // far from the source `caixa.lisp` (the resolver detecting
-        // infinite recursion on the closure walk) or, worse, recurses
-        // on until it exhausts its stack. Until this gate landed the
-        // within-list duplicate-`:nome` arm of [`Caixa::validate_deps`]
-        // (359fba5) closed the multiset axis on each dep list, but the
-        // self-edge axis (one entry whose `:nome` happens to equal the
-        // parent caixa's `:nome`) silently passed validate. Both lists
-        // are walked (in declaration order: `:deps` → `:deps-dev`) so a
-        // caixa that self-references on both axes surfaces the `:deps`
-        // diagnostic first, peer with the canonical
-        // [`Caixa::validate_deps`] cascade and the
-        // [`crate::supervisor::validate_no_self_supervision`] /
-        // [`crate::aplicacao::validate_no_self_membership`] self-edge
-        // gates on the supervision-tree and Aplicacao-membership axes.
-        //
-        // Runs *after* `validate_deps` so the per-entry / cross-entry
-        // dep-shape diagnostics fire first — a self-referential `:deps`
-        // entry whose `:nome` is malformed (`:nome ""`, non-DNS-1123,
-        // duplicate within its list) surfaces the narrower per-entry
-        // diagnostic before the self-edge gate sees the entry. Same
-        // ordering posture every peer cross-slot gate uses
-        // ([`validate_no_self_supervision`] runs after
-        // `SupervisorSpec::validate`, [`validate_no_self_membership`]
-        // runs after `AplicacaoSpec::validate`,
-        // [`validate_upgrade_from_against_versao`] runs after
-        // `validate_upgrade_from`).
-        //
-        // Threads [`DepError`] Display through verbatim — the per-arm
-        // reason already names the offending dep's `:nome` and the
-        // list tag (`":deps"` / `":deps-dev"`), so the wrap envelope's
-        // `issue` carries a self-locating "which list, which entry,
-        // why" without re-shaping the parser-side reason. Closes the
-        // self-edge axis on the third typed-name-graph kind on the
-        // typed Caixa surface (`:children :caixa` ad4abf1,
-        // `:membros :caixa` and this dep-graph gate together cover
-        // every typed-name-graph axis the substrate carries).
-        crate::dep::validate_no_self_dep(caixa.deps(), caixa.deps_dev(), caixa.nome()).map_err(
-            |err| LayoutError::DepsViolation {
-                caixa: caixa.nome().to_string(),
-                issue: err.to_string(),
-            },
-        )?;
 
         // `:etiquetas` per-entry empty + cross-entry duplicate gate. The
         // fourth universal-axis Caixa-level value-shape gate (peer of
