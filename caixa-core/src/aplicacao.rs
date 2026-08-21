@@ -7600,8 +7600,7 @@ impl AplicacaoSpec {
     ///     omit the field instead to express "no policy on this axis")
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         self.validate_membros()?;
-        let names: std::collections::HashSet<&str> =
-            self.membros().iter().map(Membro::nome).collect();
+        let names = self.membro_names();
 
         // Identity key for the typed-edge duplicate gate below: every
         // field that distinguishes one contract from another. Two
@@ -7803,6 +7802,91 @@ impl AplicacaoSpec {
         // back to it.
         self.detect_sync_cycles()?;
 
+        self.validate_entrada()?;
+
+        self.validate_placement()?;
+
+        self.validate_politicas()?;
+
+        Ok(())
+    }
+
+    /// The `:membros` graph-node name set — the membership oracle every
+    /// per-Aplicacao name-reference axis resolves against.
+    ///
+    /// Three per-Aplicacao axes carry a Servico-name *reference* rather
+    /// than a Servico-name *declaration*: `:contratos :de`, `:contratos
+    /// :para`, and `:entrada :para`. Each must resolve to a declared
+    /// `:membros :caixa` (MESH-COMPOSITION §III.1 — the typed edges and
+    /// the external gateway both address graph nodes, so a reference to
+    /// a node the graph does not contain is a build error). All three
+    /// resolve against *this* set, so the set's construction is the one
+    /// shared substrate primitive underneath the whole reference-
+    /// resolution surface.
+    ///
+    /// Lifted out of [`AplicacaoSpec::validate`]'s inline
+    /// `self.membros().iter().map(Membro::nome).collect()` builder so
+    /// the two per-slot gates that consume it — the per-`:contratos`
+    /// membership arms still inline at `validate` and the lifted
+    /// [`AplicacaoSpec::validate_entrada`] below — reach the same
+    /// oracle through one dispatch rather than each open-coding the
+    /// projection. Every future consumer on the same axis (the M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+    /// reference resolver, the per-`:contratos`-edge `:politicas`
+    /// override MESH-COMPOSITION §III.2 #3 acknowledges — which
+    /// resolves an edge's endpoints against the same membership set
+    /// before it can key a per-edge policy off them) inherits the
+    /// projection through the same call, so a future rebrand of the
+    /// node-identity axis (a namespace-qualified member name the CR
+    /// materializer applies per-CR, the `:membros :nome-suffix`
+    /// overlay §III.2 acknowledges) lands at exactly one place rather
+    /// than at every reference-resolution site in lockstep. Peer of
+    /// the sibling per-slot substrate primitives
+    /// [`MeshPolicy::validate`] (f03a154) and
+    /// [`WitContract::identity`] on their own axes.
+    fn membro_names(&self) -> std::collections::HashSet<&str> {
+        self.membros().iter().map(Membro::nome).collect()
+    }
+
+    /// Reject `:entrada` values that are operationally meaningless,
+    /// structurally malformed, or reference a Servico outside the
+    /// graph.
+    ///
+    /// The `:entrada` slot is the Aplicacao's single external ingress
+    /// (MESH-COMPOSITION §III.1): `:host` + `:port` become a K8s
+    /// Gateway API v1 `Listener`, `:paths` become the paired
+    /// `HTTPRoute`'s `matches[].path.value` entries, and `:para` names
+    /// the member the route forwards to. Omitting the slot entirely is
+    /// the internal-only-mesh partition — an Aplicacao with no external
+    /// surface — so the `None` arm is a clean pass, not a refusal.
+    ///
+    /// Five axes are gated here, in the canonical order the paired
+    /// diagnostics already encode (reference-resolution before value
+    /// shape, per-axis emptiness before per-axis grammar):
+    ///
+    ///   - `:para` — DNS-1123 value shape, then membership against the
+    ///     [`AplicacaoSpec::membro_names`] oracle;
+    ///   - `:host` — emptiness, then the Gateway API hostname grammar;
+    ///   - `:port` — the [`SERVICO_PORT_MIN`] structural floor;
+    ///   - `:paths` — per-entry emptiness, leading-`/`, the Gateway API
+    ///     path grammar, and set-not-multiset uniqueness.
+    ///
+    /// Lifted out of [`AplicacaoSpec::validate`]'s inline `if let
+    /// Some(e) = self.entrada() { … }` block onto a named per-slot
+    /// gate, the shape the three peer M3 mesh slots already carry
+    /// ([`AplicacaoSpec::validate_membros`],
+    /// [`AplicacaoSpec::validate_placement`],
+    /// [`AplicacaoSpec::validate_politicas`]). Self-contained on
+    /// `&self` — it resolves its own membership oracle through
+    /// [`AplicacaoSpec::membro_names`] rather than borrowing one
+    /// threaded down from `validate` — so a future consumer that
+    /// re-validates *one* slot against a mutated spec (the M4 admission
+    /// webhook re-checking `:entrada` after a gateway-host patch
+    /// without re-walking the whole `:contratos` graph) reaches the
+    /// axis through one call, exactly as `detect_sync_cycles` is
+    /// already self-contained for the M4 per-edge policy resolver.
+    fn validate_entrada(&self) -> Result<(), AplicacaoError> {
+        let names = self.membro_names();
         if let Some(e) = self.entrada() {
             // Route the per-`:entrada` composite-reference read
             // through the lifted [`AplicacaoSpec::entrada`] accessor
@@ -7972,10 +8056,6 @@ impl AplicacaoSpec {
                 })?;
             }
         }
-
-        self.validate_placement()?;
-
-        self.validate_politicas()?;
 
         Ok(())
     }
@@ -27453,6 +27533,165 @@ mod tests {
             spec.entrada().is_some(),
             "the outer accessor's reference projection must be the \
              canonical `:entrada` fixture's composite",
+        );
+    }
+
+    #[test]
+    fn membro_names_matches_inline_membros_projection() {
+        // Substrate-primitive ≡ inline-projection pin on
+        // [`AplicacaoSpec::membro_names`]: the lifted membership oracle
+        // must be byte-for-byte the set the pre-lift inline
+        // `self.membros().iter().map(Membro::nome).collect()` builder
+        // produced, on every membership shape the three
+        // Servico-name-*reference* axes (`:contratos :de`, `:contratos
+        // :para`, `:entrada :para`) resolve against. Pins the
+        // projection so a future rebrand of the node-identity axis
+        // lands at the primitive rather than diverging between the
+        // per-`:contratos` membership arms still inline at `validate`
+        // and the lifted `validate_entrada` gate.
+        for membros in [
+            vec![],
+            vec![membro("cart", "^0.1")],
+            vec![
+                membro("catalog", "^0.1"),
+                membro("cart", "^0.1"),
+                membro("payment", "^0.2"),
+            ],
+        ] {
+            let mut spec = three_member_spec();
+            spec.membros = membros;
+            let inline: std::collections::HashSet<&str> =
+                spec.membros().iter().map(Membro::nome).collect();
+            assert_eq!(
+                spec.membro_names(),
+                inline,
+                "the lifted membership oracle must discriminate the \
+                 same node set as the pre-lift inline projection",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_entrada_matches_gate_on_every_per_axis_shape() {
+        // Per-slot-gate ≡ validate equivalence pin on the lifted
+        // [`AplicacaoSpec::validate_entrada`]: the named per-slot gate
+        // must discriminate the same set as [`AplicacaoSpec::validate`]
+        // on every `:entrada`-covered input, so a future consumer that
+        // re-validates the one slot (the M4 admission webhook
+        // re-checking `:entrada` after a gateway-host patch) accepts
+        // exactly what `feira build` accepts and surfaces the same
+        // diagnostic on the same input. Covers each of the five gated
+        // axes plus the two clean-pass shapes (`None` — the
+        // internal-only-mesh partition — and the canonical fixture).
+        //
+        // Peer of the sibling per-slot equivalence pins
+        // `validate_matches_gate_on_per_axis_and_phase_boundary_shapes`
+        // / `_on_cross_axis_and_clean_pass_shapes` (f03a154) on the
+        // `:politicas` slot's compound entry gate, extended here onto
+        // the `:entrada` slot's newly-named per-slot gate.
+        /// One `:entrada` equivalence case: a label, the per-axis
+        /// mutation applied to the canonical fixture's composite, and
+        /// the diagnostic both the per-slot gate and `validate` must
+        /// surface on it (`None` = clean pass).
+        type EntradaCase = (&'static str, fn(&mut Entrada), Option<AplicacaoError>);
+
+        let cases: &[EntradaCase] = &[
+            (
+                ":para shape — empty",
+                |e| e.para = String::new(),
+                Some(AplicacaoError::EntradaParaEmpty),
+            ),
+            (
+                ":para membership — well-shaped phantom",
+                |e| e.para = "phantom".into(),
+                Some(AplicacaoError::EntradaMemberMissing {
+                    para: "phantom".into(),
+                }),
+            ),
+            (
+                ":host emptiness",
+                |e| e.host = String::new(),
+                Some(AplicacaoError::EmptyEntradaHost),
+            ),
+            (
+                ":port structural floor",
+                |e| e.port = 0,
+                Some(AplicacaoError::EntradaPortZero),
+            ),
+            (
+                ":paths per-entry emptiness",
+                |e| e.paths = vec![String::new()],
+                Some(AplicacaoError::EntradaPathEmpty),
+            ),
+            (
+                ":paths leading-slash grammar",
+                |e| e.paths = vec!["api/cart".into()],
+                Some(AplicacaoError::EntradaPathNotAbsolute {
+                    path: "api/cart".into(),
+                }),
+            ),
+            (
+                ":paths set-not-multiset",
+                |e| e.paths = vec!["/api/cart".into(), "/api/cart".into()],
+                Some(AplicacaoError::EntradaPathDuplicate {
+                    path: "/api/cart".into(),
+                }),
+            ),
+            ("clean pass — canonical fixture", |_| {}, None),
+        ];
+        for (label, mutate, expected) in cases {
+            let mut spec = three_member_spec();
+            mutate(spec.entrada.as_mut().expect("fixture carries :entrada"));
+            assert_eq!(
+                spec.validate_entrada().err(),
+                *expected,
+                "per-slot gate disagreed with the expected diagnostic on {label}",
+            );
+            assert_eq!(
+                spec.validate().err(),
+                *expected,
+                "`validate` disagreed with the per-slot gate on {label}",
+            );
+        }
+
+        // The `None` arm is the internal-only-mesh partition: a clean
+        // pass through both the per-slot gate and `validate`, not a
+        // refusal.
+        let mut spec = three_member_spec();
+        spec.entrada = None;
+        assert_eq!(spec.validate_entrada().err(), None);
+        assert_eq!(spec.validate().err(), None);
+    }
+
+    #[test]
+    fn validate_entrada_resolves_membership_through_own_oracle() {
+        // Self-containment pin on the lifted per-slot gate:
+        // [`AplicacaoSpec::validate_entrada`] resolves `:entrada :para`
+        // against the oracle *it* builds through
+        // [`AplicacaoSpec::membro_names`], not one threaded down from
+        // [`AplicacaoSpec::validate`]. A spec whose `:membros` no
+        // longer contains the `:entrada :para` target must trip
+        // `EntradaMemberMissing` when the per-slot gate is called
+        // directly — the shape a future single-slot re-validator
+        // (the M4 admission webhook) reaches the axis through, without
+        // re-walking `:membros` / `:contratos` / the sync-cycle
+        // detector first. Same self-contained posture
+        // [`AplicacaoSpec::detect_sync_cycles`] already carries for
+        // the M4 per-edge policy resolver.
+        let mut spec = three_member_spec();
+        spec.membros.retain(|m| m.nome() != "cart");
+        assert_eq!(
+            spec.validate_entrada().unwrap_err(),
+            AplicacaoError::EntradaMemberMissing {
+                para: "cart".into(),
+            },
+            "the per-slot gate must resolve `:para` against the oracle \
+             it builds itself, with no membership set threaded in",
+        );
+        assert!(
+            !spec.membro_names().contains("cart"),
+            "fixture must have dropped the `:entrada :para` target \
+             from the graph's node set",
         );
     }
 
