@@ -4860,6 +4860,78 @@ impl Caixa {
         Ok(())
     }
 
+    /// Compound per-`Caixa` entry gate on the Supervisor-kind
+    /// supervision-tree slot family — folds the paired
+    /// [`crate::SupervisorSpec::validate`] typed-shape cascade
+    /// (`:estrategia` ↔ `:children` invariants, `:max-restarts` /
+    /// `:restart-window` bounds, per-child DNS-1123 `:caixa` names,
+    /// semver-valid `:versao` constraints, the set-not-multiset
+    /// duplicate-child gate) plus the cross-slot self-edge gate
+    /// ([`crate::supervisor::validate_no_self_supervision`], the
+    /// `:children :caixa` ≠ `:nome` invariant the typed view cannot
+    /// enforce on its own because it carries the children but not the
+    /// parent `:nome`) onto one substrate primitive on [`Caixa`]. On
+    /// non-Supervisor kinds the fold is the identity element — the paired
+    /// [`Self::supervisor_view`] accessor returns `None` off the
+    /// Supervisor arm (peer with the [`Self::validate_limits`] /
+    /// [`Self::validate_behavior`] M2 `Option`-arm identity element and
+    /// the sibling per-Aplicacao [`Self::validate_aplicacao_shape`]),
+    /// so the gate passes trivially without touching the supervision-tree
+    /// slots.
+    ///
+    /// Prior to this lift the paired cascade lived only wired open-coded
+    /// at the layout wire-up site
+    /// ([`crate::layout::StandardLayout::verify`], caixa-core/src/layout.rs),
+    /// as the three-line `let view = caixa.supervisor_view().expect(...);
+    /// view.validate() … validate_no_self_supervision(...) …` pattern
+    /// paired with two `.map_err(|err| LayoutError::SupervisorViolation
+    /// { caixa, issue })` wraps — every future consumer that wanted to
+    /// gate the Supervisor-shape cascade as a whole (the wasm-operator's
+    /// hierarchical reconciliation scheduler re-checking `:children` /
+    /// `:estrategia` after a per-slot patch, the M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+    /// webhook, a future `feira validate --supervisor` per-caixa
+    /// admission verb, a per-Supervisor overlay resolver) was structurally
+    /// forced to either re-inline the two-dispatch cascade in lockstep
+    /// with the layout wire-up (the duplication the PRIME DIRECTIVE
+    /// names as a bug) or call the whole
+    /// [`crate::layout::StandardLayout::verify`] pipeline and pay every
+    /// peer per-Caixa gate to re-check one slot family. Post-fold each
+    /// such consumer reaches the two-arm compound gate through one call
+    /// on the substrate primitive.
+    ///
+    /// Peer to the [`crate::render::require_supervisor_view`] compound
+    /// entry gate every per-Supervisor *renderer* would route through
+    /// (which already folds the same `spec.validate()` +
+    /// `validate_no_self_supervision` two-arm cascade behind its
+    /// `require_kind` + `validate_restart_window` prelude) — this gate
+    /// mirrors the same fold on the *layout* path, so the two consumers
+    /// of the Supervisor-shape cascade (the author-time gate and every
+    /// per-Supervisor renderer) share one substrate primitive rather
+    /// than two open-coded cascades kept in lockstep. Same lift
+    /// discipline the peer per-slot compound gates
+    /// ([`Self::validate_aplicacao_shape`] 949a7a0,
+    /// [`Self::validate_upgrade_from`] d6801df,
+    /// [`Self::validate_deps`] b5dd55e, [`Self::validate_limits`]
+    /// baa4688, [`Self::validate_behavior`] 0d2877a) each carry.
+    ///
+    /// # Errors
+    ///
+    /// Returns every [`crate::SupervisorError`] variant on the present-
+    /// kind arm — the typed-shape cascade's per-slot arms first
+    /// (matching [`crate::SupervisorSpec::validate`]'s declared order),
+    /// then the cross-slot self-edge arm
+    /// ([`crate::SupervisorError::ChildSupervisesSelf`]). Passes
+    /// trivially on non-Supervisor kinds (the fold's identity element).
+    pub fn validate_supervisor_shape(&self) -> Result<(), crate::SupervisorError> {
+        let Some(view) = self.supervisor_view() else {
+            return Ok(());
+        };
+        view.validate()?;
+        crate::supervisor::validate_no_self_supervision(self.children(), self.nome())?;
+        Ok(())
+    }
+
     /// Reject per-entry values on the three Caixa-level code-surface
     /// path lists (`:bibliotecas`, `:exe`, `:servicos`) that the
     /// layout checker's `root.join(p)` sandbox would silently subvert.
@@ -20355,5 +20427,257 @@ mod tests {
         let c = aplicacao_fixture("demo");
         c.validate_aplicacao_shape()
             .expect("clean Aplicacao fixture must pass the compound gate");
+    }
+
+    // ── Caixa::validate_supervisor_shape — compound per-Caixa gate ───────
+
+    /// Build a minimal well-formed Supervisor fixture on top of the
+    /// canonical template. Every arm of the compound gate then patches
+    /// exactly one axis away from clean so its per-arm diagnostic
+    /// surfaces without collateral noise from a peer slot. Peer of
+    /// [`aplicacao_fixture`] on the sibling per-Aplicacao compound
+    /// gate's pin family.
+    fn supervisor_fixture(nome: &str) -> Caixa {
+        use crate::supervisor::{ChildSpec, RestartPolicy, RestartStrategy};
+        let mut c = Caixa::from_lisp(&Caixa::template(nome)).unwrap();
+        c.kind = CaixaKind::Supervisor;
+        // Supervisors don't run code — clear the biblioteca slot the
+        // template seeds so the fold's per-arm diagnostics surface
+        // without the peer `SupervisorOwnsCode` kind-coherence gate
+        // firing upstream at the layout altitude.
+        c.bibliotecas = vec![];
+        // `:estrategia` defaults to `OneForOne` at the typed view level,
+        // and `OneForOne` requires at least one `:children` entry — pin
+        // a single-child `Permanent` worker so the typed-shape cascade
+        // passes cleanly and the per-arm fixtures below can each patch
+        // exactly one axis.
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        c
+    }
+
+    #[test]
+    fn validate_supervisor_shape_folds_view_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // typed-shape cascade arm: a fixture whose typed
+        // [`crate::SupervisorSpec`] view fails
+        // [`crate::SupervisorSpec::validate`] (here — a duplicate
+        // `:children` `:caixa` entry, which
+        // [`crate::SupervisorSpec::validate`]'s set-not-multiset gate
+        // rejects as [`crate::SupervisorError::DuplicateChildCaixa`])
+        // surfaces the same [`crate::SupervisorError`] diagnostic
+        // through both the compound gate
+        // [`Caixa::validate_supervisor_shape`] and the standalone
+        // [`crate::SupervisorSpec::validate`] on the same folded view.
+        // Pins the fold — a silent regression that de-folded the
+        // typed-shape arm would surface here as a mismatch between the
+        // two dispatches. Sibling in shape to the peer
+        // `validate_aplicacao_shape_folds_view_arm_matches_gate`
+        // (949a7a0) on the sibling per-Aplicacao compound gate.
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        let mut c = supervisor_fixture("demo");
+        c.children = vec![
+            ChildSpec {
+                caixa: "worker".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+            ChildSpec {
+                caixa: "worker".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+        ];
+        let via_method = c.validate_supervisor_shape().unwrap_err();
+        let via_standalone = c.supervisor_view().unwrap().validate().unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_supervisor_shape must surface the typed-\
+             shape arm's diagnostic byte-equal to the standalone \
+             `SupervisorSpec::validate` on the same folded view",
+        );
+        assert!(
+            matches!(
+                via_method,
+                crate::SupervisorError::DuplicateChildCaixa { ref caixa }
+                    if caixa == "worker"
+            ),
+            "expected DuplicateChildCaixa on the duplicate 'worker' \
+             child, got {via_method:?}",
+        );
+    }
+
+    #[test]
+    fn validate_supervisor_shape_folds_self_supervision_arm_matches_gate() {
+        // Per-arm equivalence pin on the cross-slot self-edge axis: a
+        // fixture whose `:children :caixa` names the Supervisor's own
+        // `:nome` (which
+        // [`crate::supervisor::validate_no_self_supervision`] rejects
+        // as [`crate::SupervisorError::ChildSupervisesSelf`], a
+        // one-node reconciliation cycle in the supervisor's
+        // supervision-tree) surfaces the same
+        // [`crate::SupervisorError::ChildSupervisesSelf`] through both
+        // the compound gate and the standalone
+        // [`crate::supervisor::validate_no_self_supervision`] keyed
+        // off the same `(children, nome)` pair. Pins the fold's
+        // second arm — reaching this arm through the compound gate
+        // requires the typed-shape cascade to pass first, which itself
+        // pins one cross-arm ordering step. Sibling in shape to the
+        // peer
+        // `validate_aplicacao_shape_folds_self_membership_arm_matches_gate`
+        // (949a7a0) cross-slot equivalence pin on the sibling
+        // per-Aplicacao compound gate.
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        let mut c = supervisor_fixture("demo");
+        c.children = vec![ChildSpec {
+            caixa: "demo".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let via_method = c.validate_supervisor_shape().unwrap_err();
+        let via_standalone =
+            crate::supervisor::validate_no_self_supervision(c.children(), c.nome()).unwrap_err();
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_supervisor_shape must surface the cross-\
+             slot self-edge diagnostic byte-equal to the standalone \
+             `supervisor::validate_no_self_supervision` on the same \
+             (children, nome) pair",
+        );
+        assert!(
+            matches!(
+                via_method,
+                crate::SupervisorError::ChildSupervisesSelf { ref caixa } if caixa == "demo"
+            ),
+            "expected ChildSupervisesSelf carrying (caixa=\"demo\"), \
+             got {via_method:?}",
+        );
+    }
+
+    #[test]
+    fn validate_supervisor_shape_view_arm_fires_before_self_supervision_arm() {
+        // Cross-arm ordering pin between the two arms of the fold: a
+        // fixture carrying BOTH a typed-shape violation (a per-child
+        // empty `:caixa` name — rejected by
+        // [`crate::SupervisorSpec::validate`] as
+        // [`crate::SupervisorError::EmptyChildName`]) AND a would-be
+        // self-edge violation (a `:children` entry naming the
+        // supervisor's own `:nome`) surfaces the typed-shape
+        // diagnostic first through the compound gate. Sanity
+        // assertion: the self-referential `:children` entry alone
+        // under the same parent `:nome` trips the self-edge arm on
+        // its own via the standalone
+        // [`crate::supervisor::validate_no_self_supervision`], so the
+        // typed-shape-first surfacing is a real ordering property, not
+        // a case where the self-edge arm silently accepts the fixture.
+        // Pins the pre-fold layout wire-up's canonical dispatch order
+        // (typed-shape cascade → cross-slot self-edge) as a property
+        // of the substrate primitive rather than a convention of the
+        // layout call site. Sibling in shape to
+        // `validate_aplicacao_shape_view_arm_fires_before_self_membership_arm`
+        // (949a7a0) on the sibling per-Aplicacao compound gate.
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        let mut c = supervisor_fixture("demo");
+        c.children = vec![
+            ChildSpec {
+                caixa: String::new(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+            ChildSpec {
+                caixa: "demo".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+        ];
+        let err = c.validate_supervisor_shape().unwrap_err();
+        assert!(
+            matches!(err, crate::SupervisorError::EmptyChildName),
+            "typed-shape arm must fire before self-edge arm — expected \
+             EmptyChildName on the empty :caixa child, got {err:?}",
+        );
+        // Sanity: the self-referential `:children` entry alone under
+        // the same parent `:nome` trips the self-edge arm on its own
+        // — proves the typed-shape-first surfacing above is a real
+        // ordering property, not a case where the self-edge arm
+        // silently accepts the fixture.
+        let sanity = crate::supervisor::validate_no_self_supervision(
+            &[ChildSpec {
+                caixa: "demo".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            }],
+            "demo",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                sanity,
+                crate::SupervisorError::ChildSupervisesSelf { ref caixa } if caixa == "demo"
+            ),
+            "sanity: the self-referential :children entry alone must \
+             trip the self-edge arm — got {sanity:?}",
+        );
+    }
+
+    #[test]
+    fn validate_supervisor_shape_accepts_non_supervisor_kind() {
+        // Positive control on the identity-element arm: every non-
+        // Supervisor kind passes the compound gate trivially — the
+        // paired [`Caixa::supervisor_view`] accessor returns `None`
+        // off the Supervisor arm (by construction, keyed on
+        // `caixa.kind().is_supervisor()`), so the fold short-circuits
+        // to `Ok(())` without touching the supervision-tree slots.
+        // Pins the identity element on every non-Supervisor kind — a
+        // future refactor that made the supervision-tree cascade fire
+        // on the wrong kind (say, on a `Servico` whose supervision
+        // slots happen to be populated in a mis-authored manifest,
+        // which the peer
+        // [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+        // kind-coherence gate would refuse upstream anyway) surfaces
+        // here as a test failure first. Peer with the
+        // `validate_aplicacao_shape_accepts_non_aplicacao_kind`
+        // (949a7a0) / `validate_limits_accepts_none` /
+        // `validate_behavior_accepts_none` identity-element pins on
+        // the sibling per-Caixa compound gates.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = kind;
+            assert!(
+                c.supervisor_view().is_none(),
+                "supervisor_view must return None off the Supervisor \
+                 arm for kind {kind:?}",
+            );
+            c.validate_supervisor_shape().expect(
+                "non-Supervisor kinds must pass the compound gate as the fold's identity element",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_supervisor_shape_accepts_clean_fixture() {
+        // Positive control: a well-formed Supervisor (single
+        // DNS-1123-valid `Permanent` worker child under the
+        // `OneForOne` strategy — the OTP MaxIntensity/Period defaults
+        // accept the vacuous `:max-restarts` / `:restart-window`
+        // arms) passes the compound gate cleanly. A future tightening
+        // of either arm's accepted set surfaces here as a test
+        // failure first. Mirrors the peer
+        // `validate_aplicacao_shape_accepts_clean_fixture` (949a7a0)
+        // positive-control posture on the sibling per-Caixa compound
+        // gate.
+        let c = supervisor_fixture("demo");
+        c.validate_supervisor_shape()
+            .expect("clean Supervisor fixture must pass the compound gate");
     }
 }

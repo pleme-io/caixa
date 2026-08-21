@@ -1094,39 +1094,73 @@ impl LayoutInvariants for StandardLayout {
             caixa
                 .validate_restart_window()
                 .map_err(|err| LayoutError::restart_window_violation(caixa, err))?;
-            let view = caixa
-                .supervisor_view()
-                .expect("Supervisor kind must have a supervisor_view");
-            view.validate()
-                .map_err(|err| LayoutError::supervisor_violation(caixa, err))?;
-            // Cross-slot coherence: `:children :caixa` must not name the
-            // supervisor's own `:nome`. The typed `SupervisorSpec` view
-            // carries the children but not the parent `:nome`, so this
-            // self-parent gate reads one slot against another here, the
-            // same wire-up shape `validate_upgrade_from_against_versao`
-            // uses for the `:from`/`:versao` precedence gate. Runs after
-            // `view.validate()` so the per-child shape + duplicate
-            // diagnostics surface first; a self-referential child is
-            // always a valid DNS-1123 label (it equals the already-valid
-            // `:nome`), so this ordering never masks a narrower defect.
+            // Compound per-Caixa entry gate on the Supervisor-kind
+            // supervision-tree slot family: the layout pipeline's paired
+            // `let view = caixa.supervisor_view().expect(...);
+            // view.validate() … validate_no_self_supervision(...) …`
+            // cascade — the typed-shape cascade
+            // ([`crate::SupervisorSpec::validate`]'s per-slot gates on
+            // `:estrategia` ↔ `:children` invariants, `:max-restarts` /
+            // `:restart-window` bounds, per-child DNS-1123 `:caixa`
+            // names, semver-valid `:versao` constraints, the
+            // set-not-multiset duplicate-child gate) and the cross-slot
+            // self-edge gate
+            // ([`crate::supervisor::validate_no_self_supervision`], the
+            // `:children :caixa` ≠ `:nome` invariant the typed view
+            // cannot enforce on its own because it carries the children
+            // but not the parent `:nome`) — folded onto the
+            // [`crate::Caixa::validate_supervisor_shape`] substrate
+            // primitive. The two arms run in the same canonical order at
+            // the primitive (typed-shape cascade → cross-slot self-edge)
+            // so the fold is byte-for-byte equivalent to the pre-fold
+            // two-block cascade this call site formerly carried, pinned
+            // by the paired
+            // `validate_supervisor_shape_folds_{view,self_supervision}_arm_matches_gate`
+            // equivalence pins and the
+            // `validate_supervisor_shape_view_arm_fires_before_self_supervision_arm`
+            // ordering pin in the
+            // [`crate::Caixa::validate_supervisor_shape`] pin family
+            // (`manifest.rs`).
             //
-            // Routes the `parent_nome` arg through the typed
-            // [`Caixa::nome`] accessor (`caixa.nome()`) rather than
-            // the raw `&caixa.nome` `&String`-borrow of the underlying
-            // field — same one-typed-dispatch-per-`:nome`-consumer
-            // discipline the sibling caixa-mesh (980c059) / caixa-helm
-            // (22461ef) / caixa-flux (162e2e2) / caixa-crd (61d3429) /
-            // caixa-feira (ef83332) `caixa.nome`-arg raw-borrow converges
-            // established on the peer renderer / CR-materializer / CLI
-            // crates, extended here onto the substrate's own
-            // [`LayoutInvariants::verify`] cross-slot self-edge gate
-            // wire-up on the supervisor-tree kind arm — the
-            // [`crate::supervisor::validate_no_self_supervision`] helper
-            // accepts `parent_nome: &str`, so the accessor's `&str`
-            // return threads through without an intermediate deref-
-            // coerce, closing the raw `&caixa.nome` arg-passing axis at
-            // this call site.
-            crate::supervisor::validate_no_self_supervision(caixa.children(), caixa.nome())
+            // Same lift discipline the peer per-Caixa compound gates
+            // ([`crate::Caixa::validate_aplicacao_shape`] 949a7a0,
+            // [`crate::Caixa::validate_upgrade_from`] d6801df,
+            // [`crate::Caixa::validate_deps`] b5dd55e,
+            // [`crate::Caixa::validate_limits`] baa4688,
+            // [`crate::Caixa::validate_behavior`] 0d2877a) each carry —
+            // one named substrate-primitive gate folds every structural +
+            // cross-slot axis on that slot family onto one call, so every
+            // future consumer that wants to re-check the Supervisor shape
+            // after a per-slot patch (the wasm-operator's hierarchical
+            // reconciliation scheduler, the M4
+            // `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+            // admission webhook, a future `feira validate --supervisor`
+            // per-caixa admission verb, a per-Supervisor overlay
+            // resolver) reaches the two-arm compound gate through one
+            // dispatch rather than re-inlining the two-dispatch cascade
+            // in lockstep with this wire-up. Peer with the
+            // [`crate::render::require_supervisor_view`] compound entry
+            // gate every per-Supervisor renderer would route through
+            // (which already folds the same `spec.validate()` +
+            // `validate_no_self_supervision` two-arm cascade behind its
+            // `require_kind` + `validate_restart_window` prelude): the
+            // two consumers of the Supervisor-shape cascade now share
+            // one substrate primitive on each side of the
+            // author-time-vs-renderer split, rather than two open-coded
+            // cascades kept in lockstep.
+            //
+            // `:restart-window` stays wired above through its own
+            // per-axis `LayoutError::RestartWindowViolation` envelope
+            // (the raw-string parse gate on the flat
+            // `Caixa::restart_window: Option<String>` axis, distinct
+            // from the typed view's `Duration`-shape gate) — the fold
+            // covers the two arms that share the
+            // `LayoutError::SupervisorViolation` envelope; the
+            // parse-gate arm keeps its self-locating envelope so a
+            // malformed `:restart-window` surfaces the raw-value
+            // diagnostic rather than the laundered-to-`None` soft-pass.
+            caixa
+                .validate_supervisor_shape()
                 .map_err(|err| LayoutError::supervisor_violation(caixa, err))?;
         }
 
