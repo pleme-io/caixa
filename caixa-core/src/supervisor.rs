@@ -2118,9 +2118,7 @@ impl SupervisorSpec {
             // are now structurally equivalent by construction.
             crate::render::require_valid_versao_requirement(
                 child.versao_requirement(),
-                || SupervisorError::EmptyChildVersion {
-                    caixa: child.nome().to_string(),
-                },
+                || SupervisorError::empty_child_version(child.nome()),
                 |reason| SupervisorError::ChildVersaoInvalid {
                     caixa: child.nome().to_string(),
                     versao: child.versao_requirement().to_string(),
@@ -2128,9 +2126,7 @@ impl SupervisorSpec {
                 },
             )?;
             crate::render::insert_first_seen(&mut seen, child.nome(), || {
-                SupervisorError::DuplicateChildCaixa {
-                    caixa: child.nome().to_string(),
-                }
+                SupervisorError::duplicate_child_caixa(child.nome())
             })?;
         }
         Ok(())
@@ -2164,9 +2160,7 @@ pub fn validate_no_self_supervision(
 ) -> Result<(), SupervisorError> {
     for child in children {
         if child.nome() == parent_nome {
-            return Err(SupervisorError::ChildSupervisesSelf {
-                caixa: parent_nome.to_string(),
-            });
+            return Err(SupervisorError::child_supervises_self(parent_nome));
         }
     }
     Ok(())
@@ -2280,6 +2274,90 @@ pub enum SupervisorError {
          self-referential :children entry or rename it to the actual child caixa."
     )]
     ChildSupervisesSelf { caixa: String },
+}
+
+// Fold the three `SupervisorError::<Variant> { caixa: <&str>.to_string() }`
+// caixa-only struct-variant wire-up sites at [`SupervisorSpec::validate_children`]
+// and [`validate_no_self_supervision`] onto one substrate primitive per
+// typed variant — the sibling on `SupervisorError` of the four uniform-shape
+// `LayoutError`-envelope constructor families the peer
+// [`crate::layout::layout_violation_ctors!`] macro closed (131ca0d, 16
+// variants on `{ caixa, issue }`), the [`crate::layout::layout_slot_kind_ctors!`]
+// macro closed (0419438, 4 variants on `{ caixa, kind, slots }`), the
+// [`crate::LayoutError::missing_entry`] one-variant ctor closed (1b09f9d,
+// on `{ kind, path }`), and the [`crate::layout::layout_nome_only_ctors!`]
+// macro closed (3fe3dd7, 6 variants on `<Variant>(String)`), plus the
+// [`crate::AplicacaoError::entrada_host_invalid`] one-variant ctor
+// (17dd504, `{ host, reason }`), the [`crate::aplicacao::contrato_target_ctors!`]
+// macro (14b81d5, 2 variants on `{ de, para, wit, expected }`), and the
+// [`crate::aplicacao::contrato_empty_pair_ctors!`] macro (8580068, 4
+// variants on `{ de, para }`) already at that discipline on the peer
+// `AplicacaoError` envelopes.
+//
+// Each of the three wire-up sites on this shape (`EmptyChildVersion` at
+// the per-`:children` semver-requirement empty-first arm, `DuplicateChildCaixa`
+// at the per-`:children` dedup arm, `ChildSupervisesSelf` at the cross-slot
+// self-supervision arm) opened the identical
+// `SupervisorError::<Variant> { caixa: <&str>.to_string() }` struct-literal —
+// the exact "same block re-inlined at every consumer" shape the PRIME
+// DIRECTIVE names as a bug, on the same altitude the peer `LayoutError` /
+// `AplicacaoError` families each closed on their sibling envelopes. The
+// three variants share one `{ caixa: String }` shape, so the fold routes
+// each wire-up site through one dispatch per typed variant.
+//
+// The macro below generates one static constructor per variant of shape
+// `fn <slot>(caixa: &str) -> SupervisorError`, so every wire-up site
+// collapses onto one dispatch:
+// `SupervisorError::<slot>(<&str>)`, byte-equal to the pre-lift
+// struct-literal on the same `&str` fixture. The uniform one-field
+// construction (`caixa: caixa.to_string()`) is spelled once — inside the
+// macro — rather than at every wire-up site. Every constructor is
+// `#[must_use]` so a caller who mistakenly discards the constructed error
+// trips a compile warning at the wire-up site.
+//
+// Every future consumer that wants to construct one of these three
+// variants outside `SupervisorSpec::validate_children` /
+// `validate_no_self_supervision` — a deferred
+// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+// webhook re-checking one added/renamed child, a future
+// `feira validate --supervisor` per-caixa admission verb, a per-child
+// dynamic-add re-validator on the `SimpleOneForOne` runtime-add path
+// once dynamic-children graduate to a typed slot, a per-Supervisor
+// overlay resolver rejecting a duplicate/self-supervising child against
+// a cluster-local snapshot — now reaches each variant through one call
+// rather than re-inlining the three-line struct-literal in lockstep
+// with the three in-crate wire-up sites.
+macro_rules! supervisor_caixa_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl SupervisorError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`SupervisorError::",
+                    stringify!($variant),
+                    "`] naming the offending `:children :caixa` (or ",
+                    "supervisor `:nome`, on the self-supervision arm). ",
+                    "Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { caixa: caixa.to_string() }` one-field ",
+                    "struct-literal onto one substrate primitive so ",
+                    "every [`SupervisorSpec::validate_children`] / ",
+                    "[`validate_no_self_supervision`] wire-up on this ",
+                    "variant reads through one dispatch rather than the ",
+                    "pre-lift open-coded struct-literal block."
+                )]
+                #[must_use]
+                pub fn $ctor(caixa: &str) -> Self {
+                    Self::$variant { caixa: caixa.to_string() }
+                }
+            )*
+        }
+    };
+}
+
+supervisor_caixa_only_ctors! {
+    empty_child_version => EmptyChildVersion,
+    duplicate_child_caixa => DuplicateChildCaixa,
+    child_supervises_self => ChildSupervisesSelf,
 }
 
 /// Shared duration string codec for the typed slots that take a
@@ -7969,5 +8047,111 @@ mod tests {
                  copy)",
             );
         }
+    }
+
+    // Per-variant equivalence pins for the [`supervisor_caixa_only_ctors!`]
+    // macro definition (see the paired doc-block above the macro
+    // definition) — every generated `<ctor>(caixa: &str) -> Self`
+    // constructor folds the uniform `Self::<Variant> { caixa:
+    // caixa.to_string() }` one-field struct-literal onto one substrate
+    // primitive. The three per-variant equivalence pins below
+    // (fail-before-pass-after by construction — a byte-mismatched macro
+    // arm would trip its equivalence pin first) lock each generated
+    // constructor to its struct-literal peer under `PartialEq`, so
+    // every wire-up in [`SupervisorSpec::validate_children`] and
+    // [`validate_no_self_supervision`] on that variant produces a
+    // byte-equal `SupervisorError` to the pre-lift open-coded
+    // struct-literal. The cross-axis pin that follows (non-default
+    // caixa name) routes the sole constructor input axis through
+    // `.to_string()`, so the fold does not silently collapse onto a
+    // fixed name.
+    //
+    // Peer of the sibling `<slot>_ctor_matches_tuple_literal_wrap` /
+    // `<slot>_violation_ctor_matches_struct_literal_wrap` /
+    // `<slot>_slots_on_non_<owner>_ctor_matches_struct_literal_wrap` /
+    // `missing_entry_ctor_matches_struct_literal_wrap` /
+    // `entrada_host_invalid_ctor_matches_struct_literal_wrap` /
+    // `contrato_wrong_target_ctor_matches_struct_literal_wrap` /
+    // `contrato_missing_target_ctor_matches_struct_literal_wrap` /
+    // `<variant>_ctor_matches_struct_literal_wrap` equivalence pins
+    // on the six sibling ctor families the recent trajectory closed
+    // on the peer `LayoutError` / `AplicacaoError` envelopes.
+
+    #[test]
+    fn empty_child_version_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            SupervisorError::empty_child_version("worker"),
+            SupervisorError::EmptyChildVersion {
+                caixa: "worker".to_string(),
+            },
+            "generated empty_child_version ctor must produce byte-equal \
+             SupervisorError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn duplicate_child_caixa_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            SupervisorError::duplicate_child_caixa("worker"),
+            SupervisorError::DuplicateChildCaixa {
+                caixa: "worker".to_string(),
+            },
+            "generated duplicate_child_caixa ctor must produce byte-equal \
+             SupervisorError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn child_supervises_self_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            SupervisorError::child_supervises_self("orquestra"),
+            SupervisorError::ChildSupervisesSelf {
+                caixa: "orquestra".to_string(),
+            },
+            "generated child_supervises_self ctor must produce byte-equal \
+             SupervisorError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn supervisor_caixa_only_ctors_route_caixa_through_to_string() {
+        // Cross-axis pin: sweep the sole constructor input axis (`caixa:
+        // &str`) through a non-default fixture name against every
+        // generated arm in the [`supervisor_caixa_only_ctors!`] macro,
+        // so any wrapper-side lowercase / trim / truncate / re-order on
+        // the `caixa.to_string()` sole-field construction surfaces
+        // here rather than at a downstream diagnostic-shape mismatch.
+        // Peer of the sibling `nome_only_ctor_routes_caixa_through_
+        // nome_accessor` / `entrada_host_invalid_ctor_routes_host_
+        // through_to_string` / `contrato_target_ctors_route_edge_
+        // triple_through_verbatim` / `contrato_empty_pair_ctors_
+        // route_edge_pair_through_verbatim` cross-axis routing pins on
+        // the peer `LayoutError` / `AplicacaoError` envelopes; extended
+        // here onto the `SupervisorError` `{ caixa: String }` envelope
+        // so every substrate-primitive ctor family in caixa-core
+        // guarantees the sole-field construction routes the caller's
+        // `&str` through `.to_string()` verbatim.
+        let name = "cache-v2";
+        assert_eq!(
+            SupervisorError::empty_child_version(name),
+            SupervisorError::EmptyChildVersion {
+                caixa: name.to_string(),
+            },
+        );
+        assert_eq!(
+            SupervisorError::duplicate_child_caixa(name),
+            SupervisorError::DuplicateChildCaixa {
+                caixa: name.to_string(),
+            },
+        );
+        assert_eq!(
+            SupervisorError::child_supervises_self(name),
+            SupervisorError::ChildSupervisesSelf {
+                caixa: name.to_string(),
+            },
+        );
     }
 }
