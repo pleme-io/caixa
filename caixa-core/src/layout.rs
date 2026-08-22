@@ -145,6 +145,66 @@ impl StandardLayout {
         }
         Ok(full)
     }
+
+    /// Probe every path yielded by `paths` against the injected oracle
+    /// under `root`; on the first miss return the paired
+    /// [`LayoutError::MissingEntry`] naming the offending entry with the
+    /// caller-provided canonical `kind` label (via the sibling
+    /// [`Self::probe_declared_entry`] primitive), and on empty / all-hit
+    /// arms return `Ok(())`.
+    ///
+    /// Folds the three self-similar per-slot existence-probe *loop*
+    /// blocks at [`Self::verify`] onto one substrate primitive on
+    /// [`StandardLayout`]:
+    ///
+    /// - `:bibliotecas` iteration — `for p in caixa.bibliotecas() { self.
+    ///   probe_declared_entry(p, root, LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA)?; }`,
+    /// - `:behavior` on-disk callback-path iteration — `for p in
+    ///   b.declared_paths() { self.probe_declared_entry(p, root,
+    ///   LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK)?; }`,
+    /// - `:upgrade-from` per-instruction script-path iteration — the
+    ///   `for entry in caixa.upgrade_from() { for instr in entry.
+    ///   instructions() { if let Some(p) = instr.declared_path() { self.
+    ///   probe_declared_entry(p, root, LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT)?;
+    ///   } } }` nested cascade, flattened at the wire-up site through
+    ///   `.iter().flat_map(_::instructions).filter_map(_::declared_path)`.
+    ///
+    /// Three consumers, three identical `for … { self.probe_declared_entry
+    /// (…, kind)?; }` loop shapes, one substrate primitive on
+    /// [`StandardLayout`] closing the duplication the PRIME DIRECTIVE
+    /// names as a bug — sibling to the peer per-arm-probe
+    /// [`Self::probe_declared_entry`] (fda1e35) and the two-arm-sandboxed
+    /// [`Self::probe_sandboxed_declared_entry`] (4940d55) primitives on
+    /// the same layout-pipeline existence-probe axis. Diagnostic order
+    /// preserved: iteration proceeds in the caller-supplied iterator
+    /// order and short-circuits on the first miss, byte-equal to the
+    /// pre-lift `for … { … ? }` loop's first-error return semantics.
+    /// Every future consumer that wants to sweep a per-slot declared-
+    /// path list against an out-of-band filesystem oracle (a per-slot
+    /// admission webhook probing an entire `:bibliotecas` / `:behavior`
+    /// / `:upgrade-from` slot as a unit against a mounted cluster-local
+    /// filesystem snapshot, a `feira validate --exists` per-caixa
+    /// admission verb, the deferred `caixa.pleme.io/v1alpha1/Caixa` CR
+    /// materializer's admission-webhook floor, a per-cluster overlay
+    /// resolver re-probing a slot-of-paths after a patch) reaches the
+    /// per-slot batch through one call rather than re-inlining the
+    /// three-line loop body in lockstep with the three `verify` wire-up
+    /// sites.
+    fn probe_declared_entries<I, P>(
+        &self,
+        paths: I,
+        root: &Path,
+        kind: &'static str,
+    ) -> Result<(), LayoutError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        for p in paths {
+            self.probe_declared_entry(p, root, kind)?;
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for StandardLayout {
@@ -920,25 +980,26 @@ impl LayoutInvariants for StandardLayout {
 
         // On-disk existence probe on the three Caixa-level code-surface
         // path lists (`:bibliotecas`, `:exe`, `:servicos`): every declared
-        // entry must resolve on disk. Routed through the
-        // [`Self::probe_declared_entry`] substrate primitive so each
-        // iteration's `root.join(p) + self.exists + missing_entry-wrap`
-        // block reaches one dispatch rather than re-inlining the three-
-        // line existence-probe block in lockstep with the peer wire-up
-        // sites on `:behavior` on-disk callback-path iteration and
-        // `:upgrade-from` per-instruction script-path iteration below.
-        // The `:exe` / `:servicos` per-iteration sandbox-directory-
-        // containment check consumes the resolved `full` returned by the
-        // primitive on hit, so the fold preserves the pre-lift diagnostic
-        // order — `MissingEntry` fires before `ExeOutsideDir` /
-        // `ServicoOutsideDir` on the same iteration.
-        for p in caixa.bibliotecas() {
-            self.probe_declared_entry(
-                p,
-                root,
-                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
-            )?;
-        }
+        // entry must resolve on disk. The `:bibliotecas` sweep folds onto
+        // the [`Self::probe_declared_entries`] per-slot batch primitive so
+        // the iteration + per-iteration `probe_declared_entry` dispatch
+        // reads through one call rather than a three-line `for … { self.
+        // probe_declared_entry(…)?; }` loop kept in lockstep with the
+        // peer `:behavior` / `:upgrade-from` batch wire-ups below. The
+        // `:exe` / `:servicos` peers stay open-coded at this altitude
+        // (routed through the sibling sandboxed
+        // [`Self::probe_sandboxed_declared_entry`] primitive rather than
+        // the bare per-arm probe) because their per-iteration sandbox-
+        // directory-containment follow-up consumes the resolved `full`
+        // returned by the sandboxed primitive on hit — the two arms
+        // together preserve the pre-lift diagnostic order: `MissingEntry`
+        // fires before `ExeOutsideDir` / `ServicoOutsideDir` on the same
+        // iteration.
+        self.probe_declared_entries(
+            caixa.bibliotecas(),
+            root,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+        )?;
 
         let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
         for p in caixa.exe() {
@@ -1054,13 +1115,11 @@ impl LayoutInvariants for StandardLayout {
         // lift for the same reason.
         caixa.run_layout_gate(Caixa::validate_behavior, LayoutError::behavior_violation)?;
         if let Some(b) = caixa.behavior() {
-            for p in b.declared_paths() {
-                self.probe_declared_entry(
-                    p,
-                    root,
-                    crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
-                )?;
-            }
+            self.probe_declared_entries(
+                b.declared_paths(),
+                root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+            )?;
         }
 
         // Compound per-Caixa entry gate on `:upgrade-from`: the layout
@@ -1112,17 +1171,15 @@ impl LayoutInvariants for StandardLayout {
         // the per-Caixa surface, the on-disk existence check fires on
         // the [`StandardLayout`] surface.
         caixa.run_layout_gate(Caixa::validate_upgrade_from, LayoutError::upgrade_violation)?;
-        for entry in caixa.upgrade_from() {
-            for instr in entry.instructions() {
-                if let Some(p) = instr.declared_path() {
-                    self.probe_declared_entry(
-                        p,
-                        root,
-                        crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
-                    )?;
-                }
-            }
-        }
+        self.probe_declared_entries(
+            caixa
+                .upgrade_from()
+                .iter()
+                .flat_map(crate::UpgradeFromEntry::instructions)
+                .filter_map(crate::upgrade::UpgradeInstruction::declared_path),
+            root,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+        )?;
 
         // Supervisor invariants (typed shape — children, restart strategy).
         // The "supervisor doesn't own code" check is at the top of verify()
@@ -2914,6 +2971,284 @@ mod tests {
              probe_declared_entry primitive's miss arm byte-equal — pins that the \
              sandboxed primitive routes through the substrate primitive rather than \
              re-inlining the `root.join` + `exists` + `missing_entry` cascade",
+        );
+    }
+
+    // ── StandardLayout::probe_declared_entries substrate primitive ───────
+    //
+    // The [`StandardLayout::probe_declared_entries`] method (`layout.rs`)
+    // folds the three self-similar per-slot existence-probe *loop* blocks
+    // at [`StandardLayout::verify`] (`:bibliotecas` iteration,
+    // `:behavior` on-disk callback-path iteration, `:upgrade-from` per-
+    // instruction script-path iteration) onto one substrate primitive.
+    // The pins below (fail-before-pass-after by construction — a byte-
+    // mismatched primitive body would trip its equivalence pin first)
+    // lock the fold to its pre-lift open-coded shape under `PartialEq`,
+    // so every wire-up in [`StandardLayout::verify`] on this primitive
+    // produces a byte-equal `LayoutError` on miss (via the sibling
+    // [`StandardLayout::probe_declared_entry`] miss arm) and a byte-
+    // equal `Ok(())` on the empty / all-hit arms (the fold's identity
+    // element on an empty slot list; the pre-lift `for … { … }` loop's
+    // vacuous pass-through).
+    //
+    // Sibling of the peer per-arm-probe [`StandardLayout::probe_declared_entry`]
+    // (fda1e35) and two-arm-sandboxed [`StandardLayout::
+    // probe_sandboxed_declared_entry`] (4940d55) primitive test blocks
+    // — same substrate-primitive discipline extended onto the per-slot
+    // batch axis these two per-path primitives compose under.
+
+    #[test]
+    fn probe_declared_entries_folds_empty_iterator_returns_ok() {
+        // Per-primitive identity-element pin on the empty-iterator arm —
+        // the fold's `Ok(())` return on an empty `IntoIterator` is byte-
+        // equal to the pre-lift `for _ in <empty> { … }` loop's vacuous
+        // pass-through. Peer of the peer-primitive `Option::None →
+        // Ok(())` identity elements the sibling per-Caixa compound
+        // gates ([`crate::Caixa::validate_limits`] baa4688,
+        // [`crate::Caixa::validate_behavior`] 0d2877a) each carry on
+        // the sibling per-slot compound-gate axis.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let empty: [&Path; 0] = [];
+        layout
+            .probe_declared_entries(
+                empty,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .expect(
+                "probe_declared_entries must return Ok(()) on an empty iterator \
+                 — the fold's identity element on an empty per-slot batch",
+            );
+    }
+
+    #[test]
+    fn probe_declared_entries_folds_all_hits_returns_ok() {
+        // Per-primitive equivalence pin on the all-hit arm — a
+        // [`StandardLayout`] whose oracle admits every path in the batch
+        // yields `Ok(())` byte-equal to the pre-lift `for p in … {
+        // self.probe_declared_entry(p, root, kind)?; }` loop's full-
+        // consumption pass-through.
+        let root = PathBuf::from("/tmp/x");
+        let a = root.join("lib/a.lisp");
+        let b = root.join("lib/b.lisp");
+        let a_probe = a.clone();
+        let b_probe = b.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == a_probe || p == b_probe);
+        layout
+            .probe_declared_entries(
+                [Path::new("lib/a.lisp"), Path::new("lib/b.lisp")],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .expect(
+                "probe_declared_entries must return Ok(()) when every path in the \
+                 batch is admitted by the oracle",
+            );
+    }
+
+    #[test]
+    fn probe_declared_entries_folds_first_miss_short_circuits_via_probe_declared_entry() {
+        // Per-primitive equivalence pin on the first-miss arm — a
+        // [`StandardLayout`] whose oracle admits the first path and
+        // rejects the second yields a `MissingEntry` byte-equal under
+        // `PartialEq` to the sibling [`StandardLayout::
+        // probe_declared_entry`] primitive's miss wrap on the *second*
+        // path (the pre-lift `for … { … ? }` loop's first-error return
+        // semantics), *not* on the first (admitted) path.
+        let root = PathBuf::from("/tmp/x");
+        let hit = root.join("lib/a.lisp");
+        let hit_probe = hit.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == hit_probe);
+        let miss = Path::new("lib/b.lisp");
+        let err = layout
+            .probe_declared_entries(
+                [Path::new("lib/a.lisp"), miss],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                root.join(miss),
+            ),
+            "probe_declared_entries must short-circuit on the first missing entry \
+             with a `MissingEntry` byte-equal to the sibling probe_declared_entry \
+             primitive's miss wrap on that entry — the pre-lift `for … {{ … ? }}` \
+             loop's first-error return semantics",
+        );
+    }
+
+    #[test]
+    fn probe_declared_entries_folds_first_miss_short_circuits_before_later_paths() {
+        // Diagnostic-order pin — the primitive must return on the *first*
+        // miss in iterator order rather than probing every path and
+        // returning the last miss (which would silently drop the pre-
+        // lift `for … { … ? }` loop's first-error contract). Fixture:
+        // the oracle rejects both paths, so a byte-equal `MissingEntry`
+        // on the *first* path in the iterator distinguishes the two
+        // return-order shapes.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let first = Path::new("lib/first.lisp");
+        let second = Path::new("lib/second.lisp");
+        let err = layout
+            .probe_declared_entries(
+                [first, second],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                root.join(first),
+            ),
+            "probe_declared_entries must return on the *first* miss in iterator order \
+             — a `MissingEntry` on the second path would silently drop the pre-lift \
+             `for … {{ … ? }}` loop's first-error contract",
+        );
+    }
+
+    #[test]
+    fn probe_declared_entries_threads_kind_through_arg_verbatim() {
+        // Cross-axis pin — sweep every canonical
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_*`] label the three
+        // batch wire-up sites in [`StandardLayout::verify`] pass through
+        // this primitive (`:bibliotecas`, `:behavior` callback,
+        // `:upgrade-from` script). Each miss must return a `MissingEntry`
+        // whose `kind:` field byte-equals the caller-provided arg, so
+        // the fold does not silently collapse onto one hard-coded label.
+        // Sibling of the peer `probe_declared_entry_threads_kind_through_arg_verbatim`
+        // pin's five-label sweep on the per-arm primitive.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("some/entry");
+        for kind in [
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+        ] {
+            let err = layout
+                .probe_declared_entries([path], &root, kind)
+                .unwrap_err();
+            assert_eq!(
+                err,
+                LayoutError::missing_entry(kind, root.join(path)),
+                "probe_declared_entries must thread `kind` verbatim on every canonical \
+                 batch label",
+            );
+        }
+    }
+
+    #[test]
+    fn probe_declared_entries_accepts_asref_path_shape_wire_up_sites_pass() {
+        // Cross-axis pin — the primitive's `P: AsRef<Path>` bound must
+        // admit every concrete iterator element type the three
+        // [`StandardLayout::verify`] wire-up sites pass:
+        // - `&String` (from `caixa.bibliotecas(): &[String]`),
+        // - `&Path` (from `b.declared_paths(): impl Iterator<Item = &Path>`),
+        // - `&PathBuf` (from the flattened `.filter_map(_::declared_path)`
+        //   on `:upgrade-from` instructions, whose `declared_path`
+        //   returns `Option<&PathBuf>`).
+        //
+        // Byte-parity assertion: on a shared `/tmp/x/lib/demo.lisp`
+        // fixture the miss-arm return must be byte-equal across all
+        // three element-type flavors, so a future re-shape of the
+        // bound (a narrower `P: Into<PathBuf>` collapse, a stricter
+        // `&Path`-only signature) would surface here rather than at
+        // the caller wire-up site.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let literal = "lib/demo.lisp";
+        let expected = LayoutError::missing_entry(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            root.join(Path::new(literal)),
+        );
+
+        let via_string_slice: Vec<String> = vec![literal.to_string()];
+        let via_string_err = layout
+            .probe_declared_entries(
+                via_string_slice.iter(),
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_string_err, expected,
+            "probe_declared_entries must accept `&String` items (the `caixa.bibliotecas() \
+             : &[String]` wire-up shape)",
+        );
+
+        let via_path_slice: [&Path; 1] = [Path::new(literal)];
+        let via_path_err = layout
+            .probe_declared_entries(
+                via_path_slice,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_path_err, expected,
+            "probe_declared_entries must accept `&Path` items (the `b.declared_paths() \
+             : impl Iterator<Item = &Path>` wire-up shape)",
+        );
+
+        let via_pathbuf_slice: Vec<PathBuf> = vec![PathBuf::from(literal)];
+        let via_pathbuf_err = layout
+            .probe_declared_entries(
+                via_pathbuf_slice.iter(),
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_pathbuf_err, expected,
+            "probe_declared_entries must accept `&PathBuf` items (the `.filter_map( \
+             _::declared_path)` on `:upgrade-from` instructions wire-up shape)",
+        );
+    }
+
+    #[test]
+    fn probe_declared_entries_routes_miss_arm_through_probe_declared_entry() {
+        // Cross-primitive pin — the batch primitive must route its miss
+        // arm through the sibling [`StandardLayout::probe_declared_entry`]
+        // primitive rather than re-inlining the `root.join` + `exists`
+        // + `missing_entry` cascade, so a future edit to the miss-arm
+        // shape on either primitive lands in exactly one place. Byte-
+        // parity assertion: on a fixture that misses the oracle, the
+        // batch primitive's `Err` arm must equal the peer per-arm
+        // [`StandardLayout::probe_declared_entry`] primitive's `Err` arm
+        // on the same fixture — otherwise the batch fold has drifted
+        // from the substrate primitive. Same discipline the peer
+        // `probe_sandboxed_declared_entry_routes_miss_arm_through_probe_declared_entry`
+        // pin establishes on the sibling sandboxed-primitive axis.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("lib/demo.lisp");
+        let via_batch = layout
+            .probe_declared_entries(
+                [path],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        let via_probe = layout
+            .probe_declared_entry(
+                path,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_batch, via_probe,
+            "probe_declared_entries's miss arm must equal the sibling probe_declared_entry \
+             primitive's miss arm byte-equal — pins that the batch primitive routes \
+             through the substrate primitive rather than re-inlining the `root.join` + \
+             `exists` + `missing_entry` cascade",
         );
     }
 
