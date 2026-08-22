@@ -540,10 +540,10 @@ impl UpgradeFromEntry {
             if instr.is_load_module() {
                 loaded = true;
             } else if !loaded && let Some(script) = instr.declared_path() {
-                return Err(UpgradeError::StateChangeWithoutPriorLoad {
-                    from: self.prior_versao().to_string(),
-                    script: script.clone(),
-                });
+                return Err(UpgradeError::state_change_without_prior_load(
+                    self.prior_versao(),
+                    script,
+                ));
             }
         }
         Ok(())
@@ -1268,10 +1268,10 @@ impl UpgradeFromEntry {
             };
             let script = script.as_path();
             if seen.contains(&script) {
-                return Err(UpgradeError::DuplicateStateChange {
-                    from: self.prior_versao().to_string(),
-                    script: script.to_path_buf(),
-                });
+                return Err(UpgradeError::duplicate_state_change(
+                    self.prior_versao(),
+                    script,
+                ));
             }
             seen.push(script);
         }
@@ -1606,10 +1606,10 @@ pub fn validate_upgrade_from_against_behavior(
         // closed.
         for instr in entry.instructions() {
             if let Some(script) = instr.declared_path() {
-                return Err(UpgradeError::StateChangeWithoutOnStateChangeCallback {
-                    from: entry.prior_versao().to_string(),
-                    script: script.clone(),
-                });
+                return Err(UpgradeError::state_change_without_on_state_change_callback(
+                    entry.prior_versao(),
+                    script,
+                ));
             }
         }
     }
@@ -2194,6 +2194,114 @@ pub enum UpgradeError {
         script.display()
     )]
     StateChangeWithoutOnStateChangeCallback { from: String, script: PathBuf },
+}
+
+// Fold the three `UpgradeError::{StateChangeWithoutPriorLoad,
+// DuplicateStateChange, StateChangeWithoutOnStateChangeCallback}
+// { from: <prior-versao>.to_string(), script: <script>.to_path_buf() }`
+// two-slot struct-variant wire-up sites at
+// [`UpgradeFromEntry::validate_state_change_ordering`] (`self.prior_versao()`
+// / `script` from `instr.declared_path()`),
+// [`UpgradeFromEntry::validate_state_change_uniqueness`]
+// (`self.prior_versao()` / `script.as_path()` from
+// `instr.declared_path()`), and
+// [`validate_state_change_on_state_change_callback`] (`entry.prior_versao()`
+// / `script` from `instr.declared_path()`) onto one substrate primitive
+// per typed variant — the paired `{ from: String, script: PathBuf }`
+// two-slot sibling on [`UpgradeError`] of the peer
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] (db09650, 3
+// variants on `{ caixa: String }`) on the sibling `SupervisorError`
+// envelope, the peer [`crate::aplicacao::contrato_empty_pair_ctors!`]
+// (8580068, 4 variants on `{ de, para }`),
+// [`crate::aplicacao::contrato_target_ctors!`] (14b81d5, 2 variants on
+// `{ de, para, wit, expected }`),
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b, 7
+// variants on `{ <field>: String, reason: String }`), and
+// [`crate::aplicacao::contrato_pair_value_reason_ctors!`] (14e13f1, 3
+// variants on `{ de, para, <field>: String, reason: String }`) on the
+// sibling `AplicacaoError` envelopes, and the peer
+// [`crate::layout::layout_violation_ctors!`] (131ca0d, 16 variants on
+// `{ caixa, issue }`), [`crate::layout::layout_slot_kind_ctors!`]
+// (0419438, 4 variants on `{ caixa, kind, slots }`),
+// [`crate::LayoutError::missing_entry`] (1b09f9d, one variant on
+// `{ kind, path }`), and [`crate::layout::layout_nome_only_ctors!`]
+// (3fe3dd7, 6 variants on `<Variant>(String)`) on the sibling
+// `LayoutError` envelopes, plus the peer
+// [`crate::limits::limits_codec_value_only_ctors!`] /
+// [`crate::limits::limits_codec_value_byte_ctors!`] /
+// [`crate::limits::limits_codec_value_char_ctors!`] (81c856c, 12 codec
+// wire-ups) on the sibling `LimitsError` envelopes.
+//
+// Each of the three wire-up sites on this shape opens the identical
+// `UpgradeError::<Variant> { from: <prior-versao>.to_string(),
+// script: <script>.to_path_buf() }` struct-literal against a local
+// `prior_versao()` and `declared_path()` accessor pair — the exact
+// "same block re-inlined at every consumer" shape the PRIME DIRECTIVE
+// names as a bug, on the same altitude the peer `SupervisorError` /
+// `AplicacaoError` / `LayoutError` / `LimitsError` families each
+// closed on their sibling envelopes. The three variants share one
+// `{ from: String, script: PathBuf }` shape, so the fold routes each
+// wire-up site through one dispatch per typed variant.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(from: &str, script: &std::path::Path) ->
+// Self`, so every wire-up site collapses onto one dispatch:
+// `UpgradeError::<ctor>(<prior-versao>, <script>)`, byte-equal to the
+// pre-lift struct-literal on the same `(&str, &Path)` fixture. The
+// uniform two-field construction (`from.to_string()` /
+// `script.to_path_buf()`) is spelled once — inside the macro — rather
+// than at every wire-up site. The `&Path` parameter accepts both
+// `&Path` (from `script.as_path()` at the uniqueness gate) and
+// `&PathBuf` (from `instr.declared_path()` at the ordering /
+// callback-declaration gates, via Deref coercion), so every existing
+// wire-up threads through the ctor without a pre-conversion.
+//
+// Every future consumer that wants to construct one of these three
+// variants outside the three in-crate `UpgradeFromEntry` /
+// `validate_state_change_on_state_change_callback` gates (a deferred
+// wasm-operator's `install_release/1` per-entry ordering / uniqueness
+// re-checker at hot-upgrade dispatch time, a future
+// `feira validate --upgrade-from` per-caixa admission verb re-checking
+// the three axes, a per-`Caixa` overlay resolver rejecting an
+// ordering / uniqueness / callback-declaration invariant against a
+// cluster-local snapshot) now reaches each variant through one call
+// rather than re-inlining the three-line struct-literal in lockstep
+// with the three in-crate wire-up sites.
+macro_rules! upgrade_from_script_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl UpgradeError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`UpgradeError::",
+                    stringify!($variant),
+                    "`] naming the offending `(:from <prior-versao>)` and ",
+                    "`(:state-change <script>)` pair. Folds the uniform ",
+                    "`Self::",
+                    stringify!($variant),
+                    " { from: from.to_string(), script: script.to_path_buf() }` ",
+                    "two-field struct-literal onto one substrate primitive so ",
+                    "every wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift three-line open-coded block. The ",
+                    "`from` string threads verbatim from ",
+                    "[`UpgradeFromEntry::prior_versao`] and the `script` path ",
+                    "from [`UpgradeInstruction::declared_path`] at the call site."
+                )]
+                #[must_use]
+                pub fn $ctor(from: &str, script: &std::path::Path) -> Self {
+                    Self::$variant {
+                        from: from.to_string(),
+                        script: script.to_path_buf(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+upgrade_from_script_ctors! {
+    state_change_without_prior_load => StateChangeWithoutPriorLoad,
+    duplicate_state_change => DuplicateStateChange,
+    state_change_without_on_state_change_callback => StateChangeWithoutOnStateChangeCallback,
 }
 
 #[cfg(test)]
@@ -7601,5 +7709,130 @@ mod tests {
         // Path::new suppresses the unused-import warning if the
         // outer module trims `use std::path::Path;` in a future edit.
         let _ = Path::new("lib/m.lisp");
+    }
+
+    // Per-variant equivalence pins for the [`upgrade_from_script_ctors!`]
+    // macro definition (see the paired doc-block above the macro
+    // definition) — every generated `<ctor>(from: &str, script: &Path)
+    // -> Self` constructor folds the uniform `Self::<Variant> { from:
+    // from.to_string(), script: script.to_path_buf() }` two-field
+    // struct-literal onto one substrate primitive. The three per-variant
+    // equivalence pins below (fail-before-pass-after by construction — a
+    // byte-mismatched macro arm would trip its equivalence pin first)
+    // lock each generated constructor to its struct-literal peer under
+    // `PartialEq`, so every wire-up in
+    // [`UpgradeFromEntry::validate_state_change_ordering`],
+    // [`UpgradeFromEntry::validate_state_change_uniqueness`], and
+    // [`validate_state_change_on_state_change_callback`] on that
+    // variant produces a byte-equal `UpgradeError` to the pre-lift
+    // open-coded struct-literal. The cross-axis pin that follows
+    // (non-default `(from, script)` pair) routes both constructor input
+    // axes through `.to_string()` / `.to_path_buf()`, so the fold does
+    // not silently collapse onto a fixed `from` / `script` value.
+    //
+    // Peer of the sibling `empty_child_version_ctor_matches_struct_
+    // literal_wrap` / `duplicate_child_caixa_ctor_matches_struct_
+    // literal_wrap` / `child_supervises_self_ctor_matches_struct_
+    // literal_wrap` / `supervisor_caixa_only_ctors_route_caixa_through_
+    // to_string` equivalence + cross-axis pins the sibling
+    // [`crate::supervisor::supervisor_caixa_only_ctors!`] family (db09650)
+    // established on the peer `SupervisorError` envelope; extended
+    // here onto the `UpgradeError` `{ from: String, script: PathBuf }`
+    // two-slot envelope so every substrate-primitive ctor family in
+    // caixa-core guarantees the same-shape fold every wire-up on the
+    // family reads through one dispatch.
+
+    #[test]
+    fn state_change_without_prior_load_ctor_matches_struct_literal_wrap() {
+        let from = "0.1.0";
+        let script = Path::new("lib/migrations/v01-to-v02.lisp");
+        assert_eq!(
+            UpgradeError::state_change_without_prior_load(from, script),
+            UpgradeError::StateChangeWithoutPriorLoad {
+                from: from.to_string(),
+                script: script.to_path_buf(),
+            },
+            "generated state_change_without_prior_load ctor must produce \
+             byte-equal UpgradeError to the open-coded struct-literal \
+             wrap on the same (&str, &Path) fixture",
+        );
+    }
+
+    #[test]
+    fn duplicate_state_change_ctor_matches_struct_literal_wrap() {
+        let from = "0.1.0";
+        let script = Path::new("lib/migrations/v01-to-v02.lisp");
+        assert_eq!(
+            UpgradeError::duplicate_state_change(from, script),
+            UpgradeError::DuplicateStateChange {
+                from: from.to_string(),
+                script: script.to_path_buf(),
+            },
+            "generated duplicate_state_change ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same (&str, &Path) fixture",
+        );
+    }
+
+    #[test]
+    fn state_change_without_on_state_change_callback_ctor_matches_struct_literal_wrap() {
+        let from = "0.1.0";
+        let script = Path::new("lib/migrations/v01-to-v02.lisp");
+        assert_eq!(
+            UpgradeError::state_change_without_on_state_change_callback(from, script),
+            UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                from: from.to_string(),
+                script: script.to_path_buf(),
+            },
+            "generated state_change_without_on_state_change_callback ctor \
+             must produce byte-equal UpgradeError to the open-coded \
+             struct-literal wrap on the same (&str, &Path) fixture",
+        );
+    }
+
+    #[test]
+    fn upgrade_from_script_ctors_route_from_and_script_verbatim() {
+        // Cross-axis pin: sweep both constructor input axes (`from:
+        // &str`, `script: &Path`) through non-default fixtures against
+        // every generated arm in the [`upgrade_from_script_ctors!`]
+        // macro, so any wrapper-side lowercase / trim / truncate /
+        // re-order / fixed-path substitution on the two-field
+        // construction surfaces here rather than at a downstream
+        // diagnostic-shape mismatch. Also exercises the `&Path`
+        // parameter under both `&Path` (direct `Path::new`) and
+        // `&PathBuf` (via Deref coercion), matching the two shapes the
+        // three wire-up sites thread through — the ordering /
+        // callback-declaration gates hand a `&PathBuf` from
+        // `instr.declared_path()`; the uniqueness gate hands a `&Path`
+        // from `script.as_path()`. Peer of the sibling
+        // `supervisor_caixa_only_ctors_route_caixa_through_to_string`
+        // cross-axis pin on the peer `SupervisorError` `{ caixa:
+        // String }` envelope.
+        let from = "1.2.3-rc.1";
+        let script_owned = PathBuf::from("lib/migrations/v02-to-v03.lisp");
+        let script_ref: &Path = script_owned.as_path();
+        for script in [script_ref, &script_owned as &Path] {
+            assert_eq!(
+                UpgradeError::state_change_without_prior_load(from, script),
+                UpgradeError::StateChangeWithoutPriorLoad {
+                    from: from.to_string(),
+                    script: script.to_path_buf(),
+                },
+            );
+            assert_eq!(
+                UpgradeError::duplicate_state_change(from, script),
+                UpgradeError::DuplicateStateChange {
+                    from: from.to_string(),
+                    script: script.to_path_buf(),
+                },
+            );
+            assert_eq!(
+                UpgradeError::state_change_without_on_state_change_callback(from, script),
+                UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                    from: from.to_string(),
+                    script: script.to_path_buf(),
+                },
+            );
+        }
     }
 }
