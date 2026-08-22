@@ -795,25 +795,56 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
-        if caixa.kind().requires_exe() && caixa.exe().is_empty() {
-            return Err(LayoutError::binario_without_exe(caixa));
-        }
-
-        if caixa.kind().requires_servicos() && caixa.servicos().is_empty() {
-            return Err(LayoutError::servico_without_servicos(caixa));
-        }
-
-        // Required-slot gate on the fifth [`CaixaKind`] arm — mirror of
-        // the `BinarioWithoutExe` / `ServicoWithoutServicos` pair above.
-        // An `Acao`'s sole payload is its `:ci` slot; an `Acao` caixa
-        // that doesn't declare one has no CI run to decompose or
-        // validate, so `feira build` refuses it here rather than
-        // letting a downstream `caixa-actions::validate` call fail with
-        // a less-helpful "no :ci" surprise far from the source
-        // caixa.lisp.
-        if caixa.kind().requires_ci() && caixa.ci().is_none() {
-            return Err(LayoutError::missing_ci(caixa));
-        }
+        // Required-slot gate on the three [`CaixaKind`] arms whose
+        // sole payload is a canonical typed slot — folded onto one
+        // substrate primitive at
+        // [`crate::Caixa::validate_required_kind_slot`]. Pre-lift each
+        // of the three arms lived as a self-similar
+        // `if caixa.kind().requires_<slot>() && caixa.<slot>().is_<empty>() {
+        // return Err(LayoutError::<kind>_without_<slot>(caixa)); }` block
+        // at this call site — three consumers, three identical shapes,
+        // one substrate primitive on [`Caixa`] closing the duplication
+        // the PRIME DIRECTIVE names as a bug. Diagnostic order at the
+        // primitive matches the pre-fold canonical sequence — `:exe` →
+        // `:servicos` → `:ci` — the same three-arm sweep the peer
+        // [`CaixaKind`] discriminator carries at its `requires_*`
+        // accessors; the three arms are mutually exclusive by
+        // construction (`:kind` is a single-valued discriminator so at
+        // most one arm can fire per caixa) so no cross-arm ordering
+        // pin is meaningful.
+        //
+        // The paired `Biblioteca`-arm required-slot check
+        // ([`LayoutError::MissingLib`], immediately above) stays
+        // open-coded at this altitude by design: it needs the
+        // [`LayoutInvariants::exists`] filesystem oracle to check the
+        // default `lib/<nome>.lisp` fallback path, which the pure
+        // per-`Caixa` typed-shape surface the fold rides on has no
+        // reference to. Same posture the peer
+        // [`crate::Caixa::validate_no_code_kind_coherence`] fold
+        // (3bbf6a2) takes on the on-disk existence loops.
+        //
+        // Peer with the per-slot and per-kind compound entry gates
+        // every substrate primitive on the M2/M3 typed-slot family
+        // already carries ([`crate::Caixa::validate_deps`] b5dd55e,
+        // [`crate::Caixa::validate_limits`] baa4688,
+        // [`crate::Caixa::validate_behavior`] 0d2877a,
+        // [`crate::Caixa::validate_upgrade_from`] d6801df,
+        // [`crate::Caixa::validate_aplicacao_shape`] 949a7a0,
+        // [`crate::Caixa::validate_supervisor_shape`] 4c70105,
+        // [`crate::Caixa::validate_acao_shape`] 5d6df54,
+        // [`crate::Caixa::validate_kind_slot_coherence`] f0d286e,
+        // [`crate::Caixa::validate_no_code_kind_coherence`] 3bbf6a2,
+        // [`crate::Caixa::validate_ci_kind_coherence`] 9b55beb): the
+        // layout pipeline routes the three self-similar required-slot
+        // gates through one substrate primitive rather than three
+        // open-coded blocks, and every future required-slot arm (a
+        // per-Aplicacao required-`:membros` gate, a per-Supervisor
+        // required-`:children` gate — both already carried at
+        // [`CaixaKind::requires_membros`] / [`CaixaKind::requires_children`]
+        // without a paired layout-side wire-up) folds onto this
+        // compound gate as one arm addition rather than a fourth
+        // open-coded block at the wire-up site.
+        caixa.validate_required_kind_slot()?;
 
         for p in caixa.bibliotecas() {
             let full = root.join(p);

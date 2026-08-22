@@ -5367,6 +5367,108 @@ impl Caixa {
         Ok(())
     }
 
+    /// Compound per-`Caixa` required-slot gate on the three
+    /// [`crate::CaixaKind`] arms whose sole payload is a canonical
+    /// typed slot: `Binario`'s `:exe`, `Servico`'s `:servicos`,
+    /// `Acao`'s `:ci`. Each arm refuses a caixa on its owner kind
+    /// that declares no value in the corresponding required slot,
+    /// so `feira build` (the canonical author-time gate) surfaces the
+    /// self-locating "this kind needs this slot" diagnostic at the
+    /// source `caixa.lisp` rather than deferring the failure to a
+    /// downstream consumer (a nix build with no `:exe` to build, a
+    /// programs.yaml fan-out with no `:servicos` to enumerate, a
+    /// `caixa-actions` decompose with no `:ci` to walk).
+    ///
+    /// Pre-lift each of the three arms lived as a self-similar
+    /// `if caixa.kind().requires_<slot>() && caixa.<slot>().is_<empty>() {
+    /// return Err(LayoutError::<kind>_without_<slot>(caixa)); }`
+    /// block at [`crate::layout::StandardLayout::verify`] — three
+    /// consumers, three identical shapes, one substrate primitive on
+    /// [`Caixa`] closing the duplication the PRIME DIRECTIVE names as
+    /// a bug. Each of the three inner ctors
+    /// ([`crate::LayoutError::binario_without_exe`] /
+    /// [`crate::LayoutError::servico_without_servicos`] /
+    /// [`crate::LayoutError::missing_ci`]) was already lifted onto
+    /// the substrate by the peer [`crate::layout::layout_nome_only_ctors!`]
+    /// macro, so the primitive routes through the same
+    /// `Self::<variant>(caixa.nome().to_string())` tuple-literal
+    /// wrap per arm as the pre-lift open-coded blocks.
+    ///
+    /// The paired `Biblioteca`-arm required-slot check
+    /// ([`crate::LayoutError::MissingLib`]) stays open-coded at the
+    /// layout wire-up site by design: it needs the filesystem oracle
+    /// on [`crate::layout::LayoutInvariants`] to check the default
+    /// `lib/<nome>.lisp` fallback path, which the pure per-`Caixa`
+    /// typed-shape surface this fold rides on has no reference to.
+    /// Same posture the peer [`Self::validate_no_code_kind_coherence`]
+    /// fold takes on the on-disk existence loops.
+    ///
+    /// Diagnostic order at the primitive matches the pre-fold layout
+    /// wire-up canonical sequence — `:exe` → `:servicos` → `:ci` —
+    /// the same three-arm sweep the peer [`crate::CaixaKind`]
+    /// discriminator carries at its `requires_*` accessors. Unlike
+    /// the sibling cross-family [`Self::validate_kind_slot_coherence`]
+    /// fold, the three arms of this fold are mutually exclusive by
+    /// construction — `:kind` is a single-valued [`crate::CaixaKind`]
+    /// discriminator so at most one arm can fire per caixa — and no
+    /// cross-arm ordering pin is meaningful (the pre-fold three-block
+    /// cascade at the wire-up site was already unreachable past the
+    /// first matching arm).
+    ///
+    /// Peer to the per-kind and per-slot compound entry gates every
+    /// substrate primitive on the M2/M3 typed-slot family already
+    /// carries ([`Self::validate_deps`] b5dd55e,
+    /// [`Self::validate_limits`] baa4688,
+    /// [`Self::validate_behavior`] 0d2877a,
+    /// [`Self::validate_upgrade_from`] d6801df,
+    /// [`Self::validate_aplicacao_shape`] 949a7a0,
+    /// [`Self::validate_supervisor_shape`] 4c70105,
+    /// [`Self::validate_acao_shape`] 5d6df54,
+    /// [`Self::validate_kind_slot_coherence`] f0d286e,
+    /// [`Self::validate_no_code_kind_coherence`] 3bbf6a2,
+    /// [`Self::validate_ci_kind_coherence`] 9b55beb): every
+    /// author-time coherence axis on the typed [`Caixa`] surface
+    /// now routes through one substrate primitive per axis rather
+    /// than an open-coded block at the layout wire-up site.
+    ///
+    /// The gate carries two identity elements:
+    /// - **Non-owner kinds** — each per-arm predicate is
+    ///   `self.kind().requires_<slot>()`, which returns `true` only
+    ///   for the owning kind ([`crate::CaixaKind::Binario`] on `:exe`,
+    ///   [`crate::CaixaKind::Servico`] on `:servicos`,
+    ///   [`crate::CaixaKind::Acao`] on `:ci`). Every non-owner kind
+    ///   passes each per-arm dispatch trivially.
+    /// - **Owner kinds with the required slot present** — a
+    ///   [`crate::CaixaKind::Binario`] with a non-empty `:exe`, a
+    ///   [`crate::CaixaKind::Servico`] with a non-empty `:servicos`,
+    ///   an [`crate::CaixaKind::Acao`] with `ci = Some(_)` — passes
+    ///   its arm's `is_empty` / `is_none` short-circuit.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`crate::LayoutError`] variant naming the
+    /// offending owner kind:
+    /// [`crate::LayoutError::BinarioWithoutExe`] on a
+    /// [`crate::CaixaKind::Binario`] caixa with no declared `:exe`,
+    /// [`crate::LayoutError::ServicoWithoutServicos`] on a
+    /// [`crate::CaixaKind::Servico`] caixa with no declared
+    /// `:servicos`, [`crate::LayoutError::MissingCi`] on a
+    /// [`crate::CaixaKind::Acao`] caixa with no declared `:ci`.
+    /// Passes trivially on every non-owner kind and on every owner
+    /// kind with its required slot present.
+    pub fn validate_required_kind_slot(&self) -> Result<(), crate::LayoutError> {
+        if self.kind().requires_exe() && self.exe().is_empty() {
+            return Err(crate::LayoutError::binario_without_exe(self));
+        }
+        if self.kind().requires_servicos() && self.servicos().is_empty() {
+            return Err(crate::LayoutError::servico_without_servicos(self));
+        }
+        if self.kind().requires_ci() && self.ci().is_none() {
+            return Err(crate::LayoutError::missing_ci(self));
+        }
+        Ok(())
+    }
+
     /// Reject per-entry values on the three Caixa-level code-surface
     /// path lists (`:bibliotecas`, `:exe`, `:servicos`) that the
     /// layout checker's `root.join(p)` sandbox would silently subvert.
@@ -21970,6 +22072,165 @@ mod tests {
                     "a :kind {kind:?} caixa with no declared :ci must pass \
                      the compound coherence gate — the fold's second identity \
                      element is the paired ci().is_some() short-circuit, got \
+                     {err:?}",
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn validate_required_kind_slot_folds_binario_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // `Binario` required-`:exe` arm of the required-slot fold:
+        // a `:kind Binario` caixa carrying no declared `:exe` entry
+        // surfaces the same
+        // [`crate::LayoutError::BinarioWithoutExe`] variant through
+        // both the compound gate
+        // [`Caixa::validate_required_kind_slot`] and the standalone
+        // constructor [`crate::LayoutError::binario_without_exe`].
+        // Pins the fold — a silent regression that de-folded the
+        // `Binario` arm would surface here as a mismatch between
+        // the two dispatches. Sibling in shape to the peer
+        // `validate_no_code_kind_coherence_folds_supervisor_arm_matches_gate`
+        // per-arm equivalence pin on the reciprocal code-surface
+        // fold.
+        let mut c = Caixa::from_lisp(&Caixa::template("bin")).unwrap();
+        c.kind = CaixaKind::Binario;
+        c.bibliotecas = vec![];
+        c.exe = vec![];
+        let via_method = c.validate_required_kind_slot().unwrap_err();
+        let via_standalone = crate::LayoutError::binario_without_exe(&c);
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_required_kind_slot must surface the \
+             Binario arm's diagnostic byte-equal to the standalone \
+             LayoutError::binario_without_exe ctor",
+        );
+    }
+
+    #[test]
+    fn validate_required_kind_slot_folds_servico_arm_matches_gate() {
+        // Per-arm equivalence pin on the `Servico` required-
+        // `:servicos` arm — the sibling of the Binario arm on the
+        // required-slot fold. A `:kind Servico` caixa carrying no
+        // declared `:servicos` entry surfaces the same
+        // [`crate::LayoutError::ServicoWithoutServicos`] variant
+        // through both dispatches.
+        let mut c = Caixa::from_lisp(&Caixa::template("svc")).unwrap();
+        c.kind = CaixaKind::Servico;
+        c.bibliotecas = vec![];
+        c.servicos = vec![];
+        let via_method = c.validate_required_kind_slot().unwrap_err();
+        let via_standalone = crate::LayoutError::servico_without_servicos(&c);
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_required_kind_slot must surface the \
+             Servico arm's diagnostic byte-equal to the standalone \
+             LayoutError::servico_without_servicos ctor",
+        );
+    }
+
+    #[test]
+    fn validate_required_kind_slot_folds_acao_arm_matches_gate() {
+        // Per-arm equivalence pin on the `Acao` required-`:ci` arm
+        // — the third and last arm on the required-slot fold. A
+        // `:kind Acao` caixa carrying no declared `:ci` slot
+        // surfaces the same [`crate::LayoutError::MissingCi`]
+        // variant through both dispatches. The three per-arm pins
+        // collectively cover every required-slot axis and every
+        // owner kind of the arm dispatch.
+        let mut c = Caixa::from_lisp(&Caixa::template("acao")).unwrap();
+        c.kind = CaixaKind::Acao;
+        c.bibliotecas = vec![];
+        c.ci = None;
+        let via_method = c.validate_required_kind_slot().unwrap_err();
+        let via_standalone = crate::LayoutError::missing_ci(&c);
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_required_kind_slot must surface the \
+             Acao arm's diagnostic byte-equal to the standalone \
+             LayoutError::missing_ci ctor",
+        );
+    }
+
+    #[test]
+    fn validate_required_kind_slot_accepts_owner_kind_with_required_slot_present() {
+        // Positive control on the owner-kind-with-slot-present
+        // identity element: each of the three owner kinds
+        // (`Binario` with a non-empty `:exe`, `Servico` with a
+        // non-empty `:servicos`, `Acao` with `ci = Some(_)`)
+        // passes the compound gate cleanly when it declares its
+        // required slot. Pins the fold's second identity element
+        // — the paired `is_empty` / `is_none` short-circuit fires
+        // on every owner kind whose required slot is present, so
+        // a caixa with its native required slot surfaces no
+        // diagnostic. A silent regression that dropped the paired
+        // `is_empty` / `is_none` short-circuit guard on any arm
+        // would surface here as a false-positive rejection of the
+        // corresponding owner kind. Peer with the
+        // `validate_no_code_kind_coherence_accepts_owner_kind_on_every_code_axis`
+        // identity-element pin on the sibling code-surface fold.
+        let mut bin = Caixa::from_lisp(&Caixa::template("bin")).unwrap();
+        bin.kind = CaixaKind::Binario;
+        bin.bibliotecas = vec![];
+        bin.exe = vec!["exe/bin".into()];
+        bin.validate_required_kind_slot().expect(
+            "a :kind Binario caixa with declared :exe must pass the \
+             required-slot gate — Binario's required slot is present",
+        );
+
+        let svc = bare_servico_fixture("svc");
+        svc.validate_required_kind_slot().expect(
+            "a :kind Servico caixa with declared :servicos must pass \
+             the required-slot gate — Servico's required slot is present",
+        );
+
+        let acao = acao_fixture("acao");
+        acao.validate_required_kind_slot().expect(
+            "a :kind Acao caixa with declared :ci must pass the \
+             required-slot gate — Acao's required slot is present",
+        );
+    }
+
+    #[test]
+    fn validate_required_kind_slot_accepts_non_owner_kinds() {
+        // Positive control on the non-owner-kind identity element:
+        // every kind that is not one of the three owner kinds
+        // (`Binario` / `Servico` / `Acao`) passes the compound gate
+        // trivially — each per-arm predicate is
+        // `self.kind().requires_<slot>()`, which returns `true`
+        // only for the owner kind of that arm, so a non-owner kind
+        // short-circuits every per-arm dispatch. Bibliotheca,
+        // Supervisor, and Aplicacao are the three non-owner kinds
+        // this pin exercises — none of them owns a required slot in
+        // this fold (`Biblioteca`'s `:bibliotecas` default-file
+        // fallback stays on the layout-side `MissingLib` fs-oracle
+        // gate outside this fold; `Supervisor`'s `:children` and
+        // `Aplicacao`'s `:membros` are carried by
+        // [`CaixaKind::requires_children`] /
+        // [`CaixaKind::requires_membros`] without a paired
+        // layout-side wire-up). A silent regression that swapped a
+        // per-arm predicate for a non-`requires_*` guard would
+        // surface here as a false-positive rejection of the
+        // corresponding non-owner kind. Peer with the
+        // `validate_ci_kind_coherence_accepts_absent_ci_on_every_kind`
+        // identity-element pin on the sibling `:ci` fold.
+        for kind in CaixaKind::ALL {
+            if kind.requires_exe() || kind.requires_servicos() || kind.requires_ci() {
+                continue;
+            }
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = *kind;
+            c.bibliotecas = vec![];
+            c.exe = vec![];
+            c.servicos = vec![];
+            c.ci = None;
+            c.validate_required_kind_slot().unwrap_or_else(|err| {
+                panic!(
+                    "a :kind {kind:?} caixa (a non-owner kind on every \
+                     required-slot arm) must pass the compound gate — the \
+                     fold's identity element is the paired \
+                     `self.kind().requires_<slot>()` short-circuit, got \
                      {err:?}",
                 )
             });
