@@ -5443,6 +5443,141 @@ impl Caixa {
         Ok(())
     }
 
+    /// Compound per-`Caixa` kind ↔ code-surface coherence gate on the
+    /// two exclusive code-surface slots — `:exe` (owned only by
+    /// [`crate::CaixaKind::Binario`], the nix-built executable surface)
+    /// and `:servicos` (owned only by [`crate::CaixaKind::Servico`],
+    /// the wasm-component + `ComputeUnit` daemon surface). The
+    /// `caixa-helm` / `caixa-flux` / `caixa-flake` renderers gate
+    /// emission on [`crate::render::require_kind`]`(_, <owning-kind>)`
+    /// and only emit the slot for its owning kind — so on any *other*
+    /// code-running kind a declared `:exe` / `:servicos` is the
+    /// manifest field's documented "ignored otherwise": the path is
+    /// validated by the per-kind path-existence loops in
+    /// [`crate::layout::StandardLayout::verify`], but the value is
+    /// never rendered into a build target or programs.yaml entry —
+    /// it silently passes `feira build` and then vanishes, far from
+    /// the source `caixa.lisp`, with no field naming which slot is
+    /// foreign.
+    ///
+    /// Pre-lift the arm lived as a self-similar four-line `let
+    /// foreign_code_slots = caixa.declared_foreign_code_slots(); if
+    /// !foreign_code_slots.is_empty() { return
+    /// Err(LayoutError::foreign_code_slot(caixa, foreign_code_slots));
+    /// }` block at [`crate::layout::StandardLayout::verify`] — one
+    /// consumer today but every future consumer that wanted to gate
+    /// the code-surface coherence axis as a unit (the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission
+    /// webhook re-checking after a per-slot patch, a future
+    /// `feira validate --foreign-code` per-caixa admission verb, a
+    /// per-`Caixa` overlay resolver rejecting a kind-foreign code-
+    /// slot patch) was structurally forced to either re-inline the
+    /// two-condition guard in lockstep with the layout wire-up (the
+    /// duplication the PRIME DIRECTIVE names as a bug) or call the
+    /// whole [`crate::layout::StandardLayout::verify`] pipeline.
+    /// Post-fold each such consumer reaches the arm through one call.
+    ///
+    /// Peer of the sibling three-arm
+    /// [`Self::validate_kind_slot_coherence`] fold (f0d286e) — that
+    /// gate carries the M3 mesh / supervisor-tree / M2 Servico-runtime
+    /// axes under the uniform `{ caixa, kind, slots }` envelope
+    /// ([`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`]); this gate
+    /// carries the code-surface axis under the same
+    /// `{ caixa, kind, slots }` envelope
+    /// ([`crate::LayoutError::ForeignCodeSlot`]). The two folds share
+    /// the envelope shape but stay separate primitives because the
+    /// per-arm predicate differs: the cross-family fold rides on the
+    /// outer `!self.kind().is_<owner>()` guard *paired* with a
+    /// per-family `declared_<family>_slots` accumulator, while this
+    /// fold's per-arm kind-check is baked into
+    /// [`Self::declared_foreign_code_slots`] itself (each arm's
+    /// `!self.kind().requires_<slot>()` guard fires inside the
+    /// accumulator, not around it) — so a `:kind Binario` declaring
+    /// `:servicos` and a `:kind Servico` declaring `:exe` are both
+    /// caught by one accumulator sweep rather than by two independent
+    /// arm dispatches. Peer with [`Self::validate_ci_kind_coherence`]
+    /// (9b55beb) which carries the `:ci` axis on its own primitive
+    /// for the same "distinct per-arm predicate shape, shared
+    /// diagnostic altitude" reason.
+    ///
+    /// Peer to the per-kind and per-slot compound entry gates every
+    /// substrate primitive on the M2/M3 typed-slot family already
+    /// carries ([`Self::validate_deps`] b5dd55e,
+    /// [`Self::validate_limits`] baa4688,
+    /// [`Self::validate_behavior`] 0d2877a,
+    /// [`Self::validate_upgrade_from`] d6801df,
+    /// [`Self::validate_aplicacao_shape`] 949a7a0,
+    /// [`Self::validate_supervisor_shape`] 4c70105,
+    /// [`Self::validate_acao_shape`] 5d6df54,
+    /// [`Self::validate_kind_slot_coherence`] f0d286e,
+    /// [`Self::validate_no_code_kind_coherence`] 3bbf6a2,
+    /// [`Self::validate_ci_kind_coherence`] 9b55beb): every
+    /// author-time coherence axis on the typed [`Caixa`] surface now
+    /// routes through one substrate primitive per axis rather than an
+    /// open-coded block at the layout wire-up site. This closes the
+    /// last open-coded kind ↔ slot coherence gate at the layout
+    /// altitude — every kind-coherence diagnostic is now a substrate
+    /// primitive.
+    ///
+    /// The gate carries three identity elements:
+    /// - **Code-owning kinds on their native slot** — a
+    ///   [`crate::CaixaKind::Binario`] declaring `:exe`, a
+    ///   [`crate::CaixaKind::Servico`] declaring `:servicos` — each
+    ///   arm's `!requires_<slot>()` predicate short-circuits inside
+    ///   [`Self::declared_foreign_code_slots`], so the accumulator
+    ///   returns an empty `Vec` and the outer `is_empty` short-
+    ///   circuits before the wrap fires.
+    /// - **Bare caixas** — a caixa with no declared code on any kind
+    ///   passes the same accumulator's `is_empty` short-circuit on
+    ///   every arm.
+    /// - **No-code kinds** ([`crate::CaixaKind::Supervisor`] /
+    ///   [`crate::CaixaKind::Aplicacao`] / [`crate::CaixaKind::Acao`])
+    ///   declaring code — dominated upstream by the sibling
+    ///   [`Self::validate_no_code_kind_coherence`] (3bbf6a2) which
+    ///   surfaces [`crate::LayoutError::SupervisorOwnsCode`] /
+    ///   [`crate::LayoutError::AplicacaoOwnsCode`] /
+    ///   [`crate::LayoutError::AcaoOwnsCode`] first at the layout
+    ///   wire-up site, so this gate never fires on a no-code kind
+    ///   through the layout pipeline. A standalone caller reaching
+    ///   this primitive without the sibling `_no_code_` gate first
+    ///   would see a no-code kind's declared `:exe` / `:servicos`
+    ///   surface `ForeignCodeSlot` here (the two folds partition the
+    ///   diagnostic responsibility along the "declared no-code slot"
+    ///   axis: no-code kinds get `OwnsCode`, code-running kinds get
+    ///   `ForeignCodeSlot`), and the layout wire-up's canonical
+    ///   `_no_code_` → `_foreign_code_` ordering keeps the
+    ///   [`crate::LayoutError::SupervisorOwnsCode`] / … arm the one
+    ///   that surfaces in the composed pipeline.
+    ///
+    /// Diagnostic order within the arm matches the pre-fold layout
+    /// wire-up canonical sequence — `:exe` → `:servicos` — pinned by
+    /// [`Self::declared_foreign_code_slots`]'s per-arm push order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::LayoutError::ForeignCodeSlot`] naming the
+    /// offending caixa's nome + kind + declared foreign-code slot
+    /// list on any code-running kind ([`crate::CaixaKind::Biblioteca`]
+    /// / [`crate::CaixaKind::Binario`] / [`crate::CaixaKind::Servico`])
+    /// declaring another code-running kind's exclusive code surface.
+    /// Passes trivially on every native-slot declaration (Binario
+    /// with `:exe`, Servico with `:servicos`), on every bare caixa,
+    /// and on every no-code kind (dominated upstream by the sibling
+    /// [`Self::validate_no_code_kind_coherence`] `OwnsCode` gates —
+    /// see the identity-element notes above).
+    pub fn validate_foreign_code_kind_coherence(&self) -> Result<(), crate::LayoutError> {
+        let foreign_code_slots = self.declared_foreign_code_slots();
+        if !foreign_code_slots.is_empty() {
+            return Err(crate::LayoutError::foreign_code_slot(
+                self,
+                foreign_code_slots,
+            ));
+        }
+        Ok(())
+    }
+
     /// Compound per-`Caixa` required-slot gate on the three
     /// [`crate::CaixaKind`] arms whose sole payload is a canonical
     /// typed slot: `Binario`'s `:exe`, `Servico`'s `:servicos`,
@@ -22151,6 +22286,148 @@ mod tests {
                      {err:?}",
                 )
             });
+        }
+    }
+
+    #[test]
+    fn validate_foreign_code_kind_coherence_folds_arm_matches_gate() {
+        // Fail-before-pass-after equivalence pin on the compound
+        // foreign-code-slot coherence fold: a `:kind Servico` caixa
+        // carrying a declared `:exe` entry (the smallest possible
+        // foreign-code-slot declaration on a code-running kind that
+        // is not its owner — Servico owns `:servicos`, not `:exe`)
+        // surfaces the same [`crate::LayoutError::ForeignCodeSlot`]
+        // variant through both the compound gate
+        // [`Caixa::validate_foreign_code_kind_coherence`] and the
+        // standalone constructor
+        // [`crate::LayoutError::foreign_code_slot`] dispatched on the
+        // same `declared_foreign_code_slots` list. Pins the fold — a
+        // silent regression that de-folded the arm would surface here
+        // as a mismatch between the two dispatches. Sibling in shape
+        // to the peer
+        // `validate_kind_slot_coherence_folds_mesh_arm_matches_gate`
+        // / `validate_ci_kind_coherence_folds_arm_matches_gate` /
+        // `validate_no_code_kind_coherence_folds_supervisor_arm_matches_gate`
+        // per-arm equivalence pins on the sibling kind-coherence folds.
+        let mut c = bare_servico_fixture("demo");
+        c.exe = vec!["exe/foreign".into()];
+        let via_method = c.validate_foreign_code_kind_coherence().unwrap_err();
+        let via_standalone =
+            crate::LayoutError::foreign_code_slot(&c, c.declared_foreign_code_slots());
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_foreign_code_kind_coherence must surface the \
+             foreign-code-slot diagnostic byte-equal to the standalone \
+             LayoutError::foreign_code_slot ctor on the same \
+             declared_foreign_code_slots list",
+        );
+    }
+
+    #[test]
+    fn validate_foreign_code_kind_coherence_exe_arm_precedes_servicos_arm() {
+        // Cross-arm ordering pin on the fold's accumulator: a fixture
+        // carrying BOTH a declared `:exe` AND a declared `:servicos`
+        // on a kind foreign to both (a `:kind Biblioteca` here —
+        // foreign to both the Binario arm and the Servico arm)
+        // surfaces `:exe` first in the `ForeignCodeSlot`'s slots
+        // list. Pins the canonical `:exe` → `:servicos` diagnostic
+        // order [`Caixa::declared_foreign_code_slots`] establishes,
+        // as a property of the substrate primitive rather than an
+        // implicit accumulator convention. A silent reordering
+        // regression at the accumulator would surface here as a
+        // wrong-first-slot list before landing at a downstream
+        // consumer's diagnostic-ordering expectation.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Biblioteca;
+        c.exe = vec!["exe/demo".into()];
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        let err = c.validate_foreign_code_kind_coherence().unwrap_err();
+        let crate::LayoutError::ForeignCodeSlot { slots, .. } = &err else {
+            panic!("expected ForeignCodeSlot variant, got {err:?}");
+        };
+        assert!(
+            slots.starts_with(":exe"),
+            "expected the :exe arm to precede the :servicos arm in the \
+             ForeignCodeSlot slots list under the canonical :exe → :servicos \
+             order, got slots = {slots:?}",
+        );
+        assert!(
+            slots.contains(":servicos"),
+            "expected the :servicos arm to also fire in the ForeignCodeSlot \
+             slots list on a fixture carrying both foreign code surfaces, \
+             got slots = {slots:?}",
+        );
+    }
+
+    #[test]
+    fn validate_foreign_code_kind_coherence_accepts_native_slot_on_owner_kind() {
+        // Positive control on the native-slot identity element: each
+        // code-surface slot's owner kind passes the fold trivially
+        // when it declares only its native code surface. `:kind
+        // Binario` with a declared `:exe` and no `:servicos` passes
+        // (the `!requires_exe()` guard short-circuits the arm inside
+        // [`Caixa::declared_foreign_code_slots`], so the accumulator
+        // returns empty); `:kind Servico` with a declared `:servicos`
+        // and no `:exe` passes for the mirror reason. Pins the fold's
+        // native-slot identity element on both arms — a silent
+        // regression that dropped either per-arm `!requires_<slot>()`
+        // predicate would surface here as a false-positive rejection
+        // of every native-slot declaration on its owner kind. Peer
+        // with the
+        // `validate_kind_slot_coherence_accepts_owner_kind_on_every_arm`
+        // identity-element pin on the sibling cross-family fold.
+        let mut bin = Caixa::from_lisp(&Caixa::template("bin")).unwrap();
+        bin.kind = CaixaKind::Binario;
+        bin.bibliotecas = vec![];
+        bin.exe = vec!["exe/bin".into()];
+        bin.servicos = vec![];
+        bin.validate_foreign_code_kind_coherence().expect(
+            "a :kind Binario caixa with a declared native :exe and no \
+             :servicos must pass the compound coherence gate — Binario is \
+             the :exe slot's owner kind and the fold's native-slot identity \
+             element on that arm",
+        );
+
+        let mut svc = bare_servico_fixture("svc");
+        svc.exe = vec![];
+        svc.validate_foreign_code_kind_coherence().expect(
+            "a :kind Servico caixa with a declared native :servicos and no \
+             :exe must pass the compound coherence gate — Servico is the \
+             :servicos slot's owner kind and the fold's native-slot identity \
+             element on that arm",
+        );
+    }
+
+    #[test]
+    fn validate_foreign_code_kind_coherence_accepts_bare_caixa_on_every_kind() {
+        // Positive control on the empty-slot identity element: a
+        // bare caixa (no declared `:exe` and no declared `:servicos`)
+        // passes the compound gate on every kind. Pins the fold's
+        // identity element on the empty-accumulator axis — the outer
+        // `is_empty` short-circuit fires before the wrap dispatch on
+        // every kind, so a bare caixa of any kind surfaces no
+        // foreign-code-slot diagnostic. A silent regression that
+        // dropped the emptiness guard would surface here as a
+        // false-positive rejection of every no-code-slot caixa
+        // across the whole kind axis. Peer with the
+        // `validate_kind_slot_coherence_accepts_bare_caixa_on_every_kind`
+        // identity-element pin on the sibling cross-family fold.
+        for kind in CaixaKind::ALL {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = *kind;
+            c.bibliotecas = vec![];
+            c.exe = vec![];
+            c.servicos = vec![];
+            c.validate_foreign_code_kind_coherence()
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "a bare :kind {kind:?} caixa (no declared :exe / \
+                         :servicos) must pass the compound coherence gate — \
+                         the fold's identity element on the empty-accumulator \
+                         axis is the outer Vec::is_empty short-circuit, got \
+                         {err:?}",
+                    )
+                });
         }
     }
 
