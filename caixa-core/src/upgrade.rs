@@ -1684,15 +1684,9 @@ impl UpgradeInstruction {
             crate::render::require_sandboxed_lisp_path(
                 script,
                 || UpgradeError::EmptyScript,
-                || UpgradeError::AbsoluteScript {
-                    script: script.clone(),
-                },
-                || UpgradeError::ParentEscapeScript {
-                    script: script.clone(),
-                },
-                || UpgradeError::NonLispExtensionScript {
-                    script: script.clone(),
-                },
+                || UpgradeError::absolute_script(script),
+                || UpgradeError::parent_escape_script(script),
+                || UpgradeError::non_lisp_extension_script(script),
             )?;
         }
         // `Restart` (the only variant with no `Option<&…>`-carrying
@@ -2302,6 +2296,120 @@ upgrade_from_script_ctors! {
     state_change_without_prior_load => StateChangeWithoutPriorLoad,
     duplicate_state_change => DuplicateStateChange,
     state_change_without_on_state_change_callback => StateChangeWithoutOnStateChangeCallback,
+}
+
+// Fold the three `UpgradeError::{AbsoluteScript, ParentEscapeScript,
+// NonLispExtensionScript} { script: <script>.clone() }` single-slot
+// struct-variant wire-up sites at [`UpgradeInstruction::validate`]'s
+// three closures passed to [`crate::render::require_sandboxed_lisp_path`]
+// onto one substrate primitive per typed variant — the paired
+// `{ script: PathBuf }` single-slot sibling on [`UpgradeError`] of the
+// sibling [`upgrade_from_script_ctors!`] (8e67041, 3 variants on
+// `{ from: String, script: PathBuf }`) two-slot family on the same
+// envelope, and of the peer
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] (db09650, 3
+// variants on `{ caixa: String }`) and
+// [`crate::dep::dep_nome_only_ctors!`] (792aa92, 5 variants on
+// `{ nome: String }`) single-slot families on the sibling
+// `SupervisorError` / `DepError` envelopes, and of the peer
+// [`crate::aplicacao::contrato_empty_pair_ctors!`] (8580068, 4 variants
+// on `{ de, para }`), [`crate::aplicacao::contrato_target_ctors!`]
+// (14b81d5, 2 variants on `{ de, para, wit, expected }`),
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b, 7
+// variants on `{ <field>: String, reason: String }`), and
+// [`crate::aplicacao::contrato_pair_value_reason_ctors!`] (14e13f1, 3
+// variants on `{ de, para, <field>: String, reason: String }`) on the
+// sibling `AplicacaoError` envelopes, plus the peer four `LayoutError`
+// families ([`crate::layout::layout_violation_ctors!`] 131ca0d;
+// [`crate::layout::layout_slot_kind_ctors!`] 0419438;
+// [`crate::LayoutError::missing_entry`] 1b09f9d;
+// [`crate::layout::layout_nome_only_ctors!`] 3fe3dd7), the three
+// `LimitsError` codec families (81c856c), and the sibling
+// [`crate::dep::fonte_caminho_ctors!`] (f85f145, 11 variants on
+// `{ nome, caminho }`) two-slot family.
+//
+// The three wire-up sites this fold closes are the three closures
+// (`|| UpgradeError::AbsoluteScript { script: script.clone() }`,
+// `|| UpgradeError::ParentEscapeScript { script: script.clone() }`,
+// `|| UpgradeError::NonLispExtensionScript { script: script.clone() }`)
+// passed to [`crate::render::require_sandboxed_lisp_path`] at
+// [`UpgradeInstruction::validate`] — each opens the identical
+// `UpgradeError::<Variant> { script: script.clone() }` three-line
+// struct-literal against the same `script: &PathBuf` local threaded
+// from [`UpgradeInstruction::declared_path`], the exact "same block
+// re-inlined at every consumer" shape the PRIME DIRECTIVE names as a
+// bug. The three variants share one `{ script: PathBuf }` shape, so
+// the fold routes each closure through one dispatch per typed variant.
+// The sibling `EmptyScript` unit-variant on the same envelope stays on
+// its pre-lift open-coded shape — it carries no `script` field (the
+// offending `:script` value *is* the empty path this variant catches),
+// so the uniform `fn(script: &Path) -> Self` signature this macro
+// promises does not apply, and the peer helper's `|| Self::EmptyScript`
+// closure is already a one-liner. This is the second fold family on
+// the `UpgradeError` envelope (sibling of the [`upgrade_from_script_ctors!`]
+// two-slot family established in 8e67041, which explicitly named this
+// `{ script: PathBuf }` single-slot family as the next fold to land
+// on the envelope; per that commit's coverage roster, both of the two
+// most-populated shapes on `UpgradeError` — the two-slot
+// `{ from, script }` and the one-slot `{ script }` — are now closed.)
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(script: &std::path::Path) -> Self`, so
+// every closure collapses onto one dispatch:
+// `UpgradeError::<ctor>(script)`, byte-equal to the pre-lift
+// struct-literal on the same `&Path` fixture. The uniform one-field
+// construction (`script.to_path_buf()`) is spelled once — inside the
+// macro — rather than at every wire-up site. The `&Path` parameter
+// accepts both `&Path` (direct `Path::new(…)`) and `&PathBuf` (from
+// `instr.declared_path()` at the three closures, via Deref coercion),
+// so every existing closure threads through the ctor without a
+// pre-conversion.
+//
+// Every future consumer that wants to construct one of these three
+// variants outside the three in-crate closures (a deferred
+// wasm-operator's `install_release/1` per-instruction script-shape
+// re-checker at hot-upgrade dispatch time, a future
+// `feira validate --upgrade-from` per-caixa admission verb re-checking
+// the same script-shape axis, a per-`Caixa` overlay resolver rejecting
+// an author-supplied `:state-change :script` against a cluster-local
+// snapshot) now reaches each variant through one call rather than
+// re-inlining the three-line struct-literal in lockstep with the three
+// in-crate closure sites.
+macro_rules! upgrade_script_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl UpgradeError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`UpgradeError::",
+                    stringify!($variant),
+                    "`] naming the offending `(:state-change <script>)`. ",
+                    "Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { script: script.to_path_buf() }` one-field ",
+                    "struct-literal onto one substrate primitive so every ",
+                    "closure passed to ",
+                    "[`crate::render::require_sandboxed_lisp_path`] at ",
+                    "[`UpgradeInstruction::validate`] on this variant reads ",
+                    "through one dispatch rather than the pre-lift three-line ",
+                    "open-coded block. The `script` path threads verbatim ",
+                    "from [`UpgradeInstruction::declared_path`] at the call ",
+                    "site."
+                )]
+                #[must_use]
+                pub fn $ctor(script: &std::path::Path) -> Self {
+                    Self::$variant {
+                        script: script.to_path_buf(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+upgrade_script_only_ctors! {
+    absolute_script => AbsoluteScript,
+    parent_escape_script => ParentEscapeScript,
+    non_lisp_extension_script => NonLispExtensionScript,
 }
 
 #[cfg(test)]
@@ -7830,6 +7938,124 @@ mod tests {
                 UpgradeError::state_change_without_on_state_change_callback(from, script),
                 UpgradeError::StateChangeWithoutOnStateChangeCallback {
                     from: from.to_string(),
+                    script: script.to_path_buf(),
+                },
+            );
+        }
+    }
+
+    // Per-variant equivalence pins for the [`upgrade_script_only_ctors!`]
+    // macro definition (see the paired doc-block above the macro
+    // definition) — every generated `<ctor>(script: &Path) -> Self`
+    // constructor folds the uniform `Self::<Variant> { script:
+    // script.to_path_buf() }` one-field struct-literal onto one substrate
+    // primitive. The three per-variant equivalence pins below
+    // (fail-before-pass-after by construction — a byte-mismatched macro
+    // arm would trip its equivalence pin first) lock each generated
+    // constructor to its struct-literal peer under `PartialEq`, so every
+    // closure passed to [`crate::render::require_sandboxed_lisp_path`]
+    // at [`UpgradeInstruction::validate`] on that variant produces a
+    // byte-equal `UpgradeError` to the pre-lift open-coded
+    // struct-literal. The cross-axis pin that follows (non-default
+    // `script` path, both `&Path` and `&PathBuf` shapes) routes the
+    // constructor input axis through `.to_path_buf()`, so the fold does
+    // not silently collapse onto a fixed `script` value or drop the
+    // Deref-coercion arm the wire-up sites depend on.
+    //
+    // Peer of the sibling
+    // `state_change_without_prior_load_ctor_matches_struct_literal_wrap`
+    // / `duplicate_state_change_ctor_matches_struct_literal_wrap` /
+    // `state_change_without_on_state_change_callback_ctor_matches_struct_literal_wrap`
+    // / `upgrade_from_script_ctors_route_from_and_script_verbatim`
+    // equivalence + cross-axis pins the sibling
+    // [`upgrade_from_script_ctors!`] family (8e67041) established on the
+    // peer `{ from: String, script: PathBuf }` two-slot envelope shape;
+    // extended here onto the `{ script: PathBuf }` one-slot envelope
+    // shape so every substrate-primitive ctor family on `UpgradeError`
+    // guarantees the same-shape fold every wire-up on the family reads
+    // through one dispatch.
+
+    #[test]
+    fn absolute_script_ctor_matches_struct_literal_wrap() {
+        let script = Path::new("/etc/nope.lisp");
+        assert_eq!(
+            UpgradeError::absolute_script(script),
+            UpgradeError::AbsoluteScript {
+                script: script.to_path_buf(),
+            },
+            "generated absolute_script ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same &Path fixture",
+        );
+    }
+
+    #[test]
+    fn parent_escape_script_ctor_matches_struct_literal_wrap() {
+        let script = Path::new("../oops.lisp");
+        assert_eq!(
+            UpgradeError::parent_escape_script(script),
+            UpgradeError::ParentEscapeScript {
+                script: script.to_path_buf(),
+            },
+            "generated parent_escape_script ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same &Path fixture",
+        );
+    }
+
+    #[test]
+    fn non_lisp_extension_script_ctor_matches_struct_literal_wrap() {
+        let script = Path::new("lib/migrations.rs");
+        assert_eq!(
+            UpgradeError::non_lisp_extension_script(script),
+            UpgradeError::NonLispExtensionScript {
+                script: script.to_path_buf(),
+            },
+            "generated non_lisp_extension_script ctor must produce \
+             byte-equal UpgradeError to the open-coded struct-literal \
+             wrap on the same &Path fixture",
+        );
+    }
+
+    #[test]
+    fn upgrade_script_only_ctors_route_script_through_to_path_buf() {
+        // Cross-axis pin: sweep the constructor input axis (`script:
+        // &Path`) through a non-default fixture against every generated
+        // arm in the [`upgrade_script_only_ctors!`] macro, so any
+        // wrapper-side lowercase / trim / truncate / re-order /
+        // fixed-path substitution on the one-field construction
+        // surfaces here rather than at a downstream diagnostic-shape
+        // mismatch. Also exercises the `&Path` parameter under both
+        // `&Path` (direct `Path::new`) and `&PathBuf` (via Deref
+        // coercion), matching the shape the three closures at
+        // [`UpgradeInstruction::validate`] thread through — the
+        // wire-ups hand a `&PathBuf` from `instr.declared_path()` into
+        // each closure, so the Deref-coercion arm the ctor advertises
+        // must actually route through `.to_path_buf()` and not
+        // silently swap in a fixed path.
+        //
+        // Peer of the sibling
+        // `upgrade_from_script_ctors_route_from_and_script_verbatim`
+        // cross-axis pin on the sibling `{ from, script }` two-slot
+        // envelope shape.
+        let script_owned = PathBuf::from("lib/migrations/v02-to-v03.lisp");
+        let script_ref: &Path = script_owned.as_path();
+        for script in [script_ref, &script_owned as &Path] {
+            assert_eq!(
+                UpgradeError::absolute_script(script),
+                UpgradeError::AbsoluteScript {
+                    script: script.to_path_buf(),
+                },
+            );
+            assert_eq!(
+                UpgradeError::parent_escape_script(script),
+                UpgradeError::ParentEscapeScript {
+                    script: script.to_path_buf(),
+                },
+            );
+            assert_eq!(
+                UpgradeError::non_lisp_extension_script(script),
+                UpgradeError::NonLispExtensionScript {
                     script: script.to_path_buf(),
                 },
             );
