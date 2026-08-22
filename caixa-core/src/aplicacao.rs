@@ -4641,10 +4641,7 @@ fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
     crate::render::require_valid_dns_1123_label(
         caixa,
         || AplicacaoError::MembroCaixaEmpty,
-        |reason| AplicacaoError::MembroCaixaInvalid {
-            caixa: caixa.to_string(),
-            reason,
-        },
+        |reason| AplicacaoError::membro_caixa_invalid(caixa, reason),
     )
 }
 
@@ -4685,10 +4682,7 @@ fn validate_placement_cluster(cluster: &str) -> Result<(), AplicacaoError> {
     crate::render::require_valid_dns_1123_label(
         cluster,
         || AplicacaoError::PlacementClusterEmpty,
-        |reason| AplicacaoError::PlacementClusterInvalid {
-            cluster: cluster.to_string(),
-            reason,
-        },
+        |reason| AplicacaoError::placement_cluster_invalid(cluster, reason),
     )
 }
 
@@ -4751,10 +4745,7 @@ fn validate_placement_affinity(affinity: &str) -> Result<(), AplicacaoError> {
     crate::render::require_valid_dns_1123_label(
         affinity,
         || AplicacaoError::PlacementAffinityEmpty,
-        |reason| AplicacaoError::PlacementAffinityInvalid {
-            affinity: affinity.to_string(),
-            reason,
-        },
+        |reason| AplicacaoError::placement_affinity_invalid(affinity, reason),
     )
 }
 
@@ -4854,9 +4845,9 @@ fn validate_placement_shard_key(key: &str) -> Result<(), AplicacaoError> {
         return Err(AplicacaoError::ShardedKeyEmpty);
     }
     if key.len() > PLACEMENT_SHARD_KEY_MAX_LEN {
-        return Err(AplicacaoError::ShardKeyInvalid {
-            shard_key: key.to_string(),
-            reason: format!(
+        return Err(AplicacaoError::shard_key_invalid(
+            key,
+            format!(
                 "exceeds :shard-key max length of {PLACEMENT_SHARD_KEY_MAX_LEN} bytes \
                  (got {} bytes; realistic Akka-style entity-id extractor expressions \
                  — `tenantId`, `$tenantId`, `metadata.tenantId`, `${{tenant}}` — sit \
@@ -4865,7 +4856,7 @@ fn validate_placement_shard_key(key: &str) -> Result<(), AplicacaoError> {
                  extractor expression)",
                 key.len()
             ),
-        });
+        ));
     }
     for &b in key.as_bytes() {
         if (0x21..=0x7E).contains(&b) {
@@ -4911,10 +4902,7 @@ fn validate_placement_shard_key(key: &str) -> Result<(), AplicacaoError> {
                  `$tenantId`, or `metadata.tenantId`)"
             )
         };
-        return Err(AplicacaoError::ShardKeyInvalid {
-            shard_key: key.to_string(),
-            reason,
-        });
+        return Err(AplicacaoError::shard_key_invalid(key, reason));
     }
     Ok(())
 }
@@ -5023,10 +5011,7 @@ fn validate_entrada_para(para: &str) -> Result<(), AplicacaoError> {
     crate::render::require_valid_dns_1123_label(
         para,
         || AplicacaoError::EntradaParaEmpty,
-        |reason| AplicacaoError::EntradaParaInvalid {
-            para: para.to_string(),
-            reason,
-        },
+        |reason| AplicacaoError::entrada_para_invalid(para, reason),
     )
 }
 
@@ -5384,12 +5369,8 @@ fn validate_entrada_path(path: &str) -> Result<(), AplicacaoError> {
             path: path.to_string(),
         });
     }
-    crate::render::is_gateway_api_http_path(path).map_err(|reason| {
-        AplicacaoError::EntradaPathInvalid {
-            path: path.to_string(),
-            reason,
-        }
-    })
+    crate::render::is_gateway_api_http_path(path)
+        .map_err(|reason| AplicacaoError::entrada_path_invalid(path, reason))
 }
 
 mod rate_limit_codec {
@@ -9254,64 +9235,18 @@ pub enum AplicacaoError {
     PolicyRateLimitCannotAdmitRetryBurst { retries: u32, rate: u32 },
 }
 
-// Fold the `AplicacaoError::EntradaHostInvalid { host: host.to_string(),
-// reason: <expr> }` wire-up sites at [`validate_entrada_host`] onto one
-// substrate primitive per typed variant — the sibling on
-// [`AplicacaoError`] of the four `LayoutError` constructor families
-// [`layout_violation_ctors!`] (131ca0d), [`layout_slot_kind_ctors!`]
-// (0419438), [`LayoutError::missing_entry`] (1b09f9d), and
-// [`layout_nome_only_ctors!`] (3fe3dd7) each carry on
-// [`crate::LayoutError`]. Every one of the fourteen wire-up sites in
-// [`validate_entrada_host`] (the total-length gate, `://` scheme prefix,
-// `/` path suffix, `:` port / IPv6 arm, ASCII / non-ASCII whitespace
-// arms, wildcard shape / inner `*` / trailing-`.` arms, IPv4-literal
-// arm, per-label empty / cap / boundary-`-` / per-byte
-// `[a-z0-9-]`-violation arms) opened the identical four-line
-// `AplicacaoError::EntradaHostInvalid { host: host.to_string(),
-// reason: <expr> }` struct-literal — the exact "same block re-inlined at
-// every consumer" shape the PRIME DIRECTIVE names as a bug, on the same
-// altitude the peer `LayoutError` constructor families each closed on
-// the sibling layout-pipeline envelopes.
-//
-// The `#[must_use]` inherent constructor below collapses the fourteen
-// sites onto one dispatch:
-// `return Err(AplicacaoError::entrada_host_invalid(host, <reason>));`,
-// byte-equal to the pre-lift struct-literal. The uniform two-slot
-// construction (`host: host.to_string()`, `reason: reason.into()`) is
-// spelled once — inside the ctor — rather than at every wire-up site.
-// The `reason: impl Into<String>` bound accepts both `&str` literals
-// (with or without a trailing `.to_string()` at the caller) and
-// `format!(…)` outputs verbatim so no wire-up site changes its per-arm
-// diagnostic shape at the lift. `#[must_use]` fires a compile warning
-// at any wire-up that mistakenly discards the constructed error rather
-// than routing it through `return Err(…)`.
-//
-// Every future consumer that wants to construct
-// [`AplicacaoError::EntradaHostInvalid`] outside [`validate_entrada_host`]
-// (the deferred `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
-// per-`:entrada :host` admission validator, a future `feira validate
-// --entrada` per-caixa admission verb, a per-`Certificate` SAN
-// pre-emitter for cert-manager, the multi-`:entrada` host-collision gate
-// when M4 lands `:entrada` as a `Vec`) reaches the variant through one
-// call rather than re-inlining the four-line struct-literal in lockstep
-// with the fourteen in-crate wire-up sites.
-impl AplicacaoError {
-    /// Construct an [`AplicacaoError::EntradaHostInvalid`] naming the
-    /// offending `host` under the given `reason`. Folds the uniform
-    /// `{ host: host.to_string(), reason: reason.into() }` two-slot
-    /// construction onto one substrate primitive so every wire-up in
-    /// [`validate_entrada_host`] reads through one dispatch rather than
-    /// the pre-lift four-line struct-literal block. `reason` accepts both
-    /// `&str` literals and `format!(…)` outputs through the
-    /// `impl Into<String>` bound.
-    #[must_use]
-    pub fn entrada_host_invalid(host: &str, reason: impl Into<String>) -> Self {
-        Self::EntradaHostInvalid {
-            host: host.to_string(),
-            reason: reason.into(),
-        }
-    }
-}
+// The `AplicacaoError::EntradaHostInvalid { host, reason }` variant's
+// ctor `entrada_host_invalid` is folded onto the sibling
+// [`aplicacao_field_reason_ctors!`] macro below alongside the six peer
+// `{ <field>: String, reason: String }` variants
+// (`MembroCaixaInvalid` / `EntradaParaInvalid` / `EntradaPathInvalid` /
+// `PlacementClusterInvalid` / `PlacementAffinityInvalid` /
+// `ShardKeyInvalid`), so every variant on the uniform two-slot
+// `{ <field>: String, reason: String }` envelope on [`AplicacaoError`]
+// reads through one substrate-primitive family rather than one macro
+// closing six sites plus a hand-written seventh ctor closing the
+// paired site alone. Prior separate-ctor rationale (17dd504) migrates
+// verbatim to the macro's outer doc block.
 
 // Fold the seven `AplicacaoError::Contrato{Wrong,Missing}Target { de, para,
 // wit, expected }` wire-up sites at [`WitContract::target`] onto one
@@ -9464,6 +9399,114 @@ contrato_empty_pair_ctors! {
     contrato_endpoint_empty => ContratoEndpointEmpty,
     contrato_subject_empty => ContratoSubjectEmpty,
     contrato_slot_empty => ContratoSlotEmpty,
+}
+
+// Fold the seven `AplicacaoError::{MembroCaixa, EntradaPara, EntradaHost,
+// EntradaPath, PlacementCluster, PlacementAffinity, ShardKey}Invalid
+// { <field>: <val>.to_string(), reason: <expr> }` wire-up sites onto one
+// substrate-primitive family per typed variant — the paired
+// `{ <field>: String, reason: String }` two-slot sibling on
+// [`AplicacaoError`] of the peer four-slot [`contrato_target_ctors!`]
+// (14b81d5, `{ de, para, wit, expected }` on `ContratoWrongTarget` /
+// `ContratoMissingTarget`) and the peer two-slot
+// [`contrato_empty_pair_ctors!`] (8580068, `{ de, para }` on `EmptyWit` /
+// `ContratoEndpointEmpty` / `ContratoSubjectEmpty` / `ContratoSlotEmpty`)
+// on the sibling per-`:contratos` envelopes, plus the peer four-family
+// `LayoutError` ctor set ([`layout_violation_ctors!`] 131ca0d — 16
+// variants on `{ caixa, issue }`, [`layout_slot_kind_ctors!`] 0419438 —
+// 4 variants on `{ caixa, kind, slots }`, [`LayoutError::missing_entry`]
+// 1b09f9d — 1 variant on `{ kind, path }`, [`layout_nome_only_ctors!`]
+// 3fe3dd7 — 6 variants on `<Variant>(String)`) each carry on the
+// sibling layout-side envelope.
+//
+// Every one of the seven wire-up sites — six under the per-axis
+// `validate_*` wrappers around [`crate::render::require_valid_dns_1123_label`]
+// (`validate_membro_caixa` on `MembroCaixaInvalid`, `validate_entrada_para`
+// on `EntradaParaInvalid`, `validate_placement_cluster` on
+// `PlacementClusterInvalid`, `validate_placement_affinity` on
+// `PlacementAffinityInvalid`) plus [`crate::render::is_gateway_api_http_path`]
+// (`validate_entrada_path` on `EntradaPathInvalid`), and two under
+// [`validate_placement_shard_key`] (the length-cap arm and the per-byte
+// printable-ASCII arm on `ShardKeyInvalid`) — plus the fourteen wire-up
+// sites at [`validate_entrada_host`] (17dd504 already folded onto the
+// pre-macro standalone `entrada_host_invalid` ctor, now converged onto
+// the macro-generated ctor of the same name), opened the identical
+// four-line `AplicacaoError::<Variant>Invalid
+// { <field>: <val>.to_string(), reason: <expr> }` struct-literal against
+// the local `<field>: &str` argument — the exact "same block re-inlined
+// at every consumer" shape the PRIME DIRECTIVE names as a bug, on the
+// same altitude the peer three `AplicacaoError` constructor families
+// and the four peer `LayoutError` constructor families each closed on
+// their sibling envelopes.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(<field>: &str, reason: impl Into<String>)
+// -> AplicacaoError`, collapsing every site onto one dispatch per arm:
+// `return Err(AplicacaoError::<ctor>(<val>, <reason>));` /
+// `|reason| AplicacaoError::<ctor>(<val>, reason)`, byte-equal to the
+// pre-lift struct-literal on the same `(<field>, reason)` pair. The
+// uniform two-field construction (`<field>: <val>.to_string()`,
+// `reason: reason.into()`) is spelled once — inside the macro — rather
+// than at every wire-up site. The `reason: impl Into<String>` bound
+// accepts both `&str` literals (with or without a trailing
+// `.to_string()` at the caller) and `format!(…)` outputs verbatim so no
+// wire-up site changes its per-arm diagnostic shape at the lift.
+// `#[must_use]` fires a compile warning at any wire-up that mistakenly
+// discards the constructed error rather than routing it through
+// `return Err(…)` / `.map_err(…)` / a closure return.
+//
+// Every future consumer that wants to construct one of these seven
+// variants outside the current in-crate wire-up sites (the deferred
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-slot
+// admission validators, a future `feira validate --<axis>` per-caixa
+// admission verb, a per-`Certificate` SAN pre-emitter for cert-manager
+// on `:entrada :host`, an M4 typed placement-engine per-cluster /
+// per-affinity / per-shard-key pre-emitter, an M4 typed Gateway API
+// per-path pre-emitter) reaches the variant through one call rather
+// than re-inlining the four-line struct-literal block in lockstep with
+// the current in-crate wire-up sites.
+macro_rules! aplicacao_field_reason_ctors {
+    ($($ctor:ident => $variant:ident { $field:ident }),* $(,)?) => {
+        impl AplicacaoError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`AplicacaoError::",
+                    stringify!($variant),
+                    "`] naming the offending `",
+                    stringify!($field),
+                    "` under the given `reason`. Folds the uniform ",
+                    "`{ ",
+                    stringify!($field),
+                    ": ",
+                    stringify!($field),
+                    ".to_string(), reason: reason.into() }` two-slot ",
+                    "construction onto one substrate primitive so every ",
+                    "wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift four-line struct-literal ",
+                    "block. `reason` accepts both `&str` literals and ",
+                    "`format!(…)` outputs through the `impl Into<String>` ",
+                    "bound."
+                )]
+                #[must_use]
+                pub fn $ctor($field: &str, reason: impl Into<String>) -> Self {
+                    Self::$variant {
+                        $field: $field.to_string(),
+                        reason: reason.into(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+aplicacao_field_reason_ctors! {
+    membro_caixa_invalid => MembroCaixaInvalid { caixa },
+    entrada_para_invalid => EntradaParaInvalid { para },
+    entrada_host_invalid => EntradaHostInvalid { host },
+    entrada_path_invalid => EntradaPathInvalid { path },
+    placement_cluster_invalid => PlacementClusterInvalid { cluster },
+    placement_affinity_invalid => PlacementAffinityInvalid { affinity },
+    shard_key_invalid => ShardKeyInvalid { shard_key },
 }
 
 #[cfg(test)]
@@ -16570,6 +16613,145 @@ mod tests {
         // sites' mixed per-arm shapes fold onto one canonical form.
         assert_eq!(from_literal, from_format);
         assert_eq!(from_literal, from_to_string);
+    }
+
+    // Equivalence pins for the six sibling
+    // [`aplicacao_field_reason_ctors!`]-generated constructors that
+    // fold the peer `{ <field>: String, reason: String }` variants
+    // onto the same substrate-primitive family
+    // `entrada_host_invalid` (17dd504) already carries pins for.
+    // Each ctor's fixture pair (a fixed `&'static str` value and a
+    // fixed `&'static str` reason) pins both fields verbatim so any
+    // future regression on the macro (an extra field introduced
+    // without updating the macro, a diverging string conversion at
+    // either arm, a field-name typo on one variant that dropped it
+    // off the shared shape) surfaces at the affected variant's pin
+    // rather than at a per-wire-up struct-literal reintroduction. Peer
+    // discipline of the sixteen `LayoutError` _violation ctor pins in
+    // `layout::tests::*_ctor_matches_struct_literal_wrap` (131ca0d)
+    // and the paired
+    // `contrato_wrong_target_ctor_matches_struct_literal_wrap` /
+    // `contrato_missing_target_ctor_matches_struct_literal_wrap`
+    // (14b81d5) / `contrato_endpoint_empty_ctor_matches_struct_literal_wrap`
+    // (8580068) equivalence pins on the sibling `AplicacaoError`
+    // ctor macros.
+    #[test]
+    fn membro_caixa_invalid_ctor_matches_struct_literal_wrap() {
+        let caixa = "cart-svc";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::membro_caixa_invalid(caixa, reason),
+            AplicacaoError::MembroCaixaInvalid {
+                caixa: caixa.to_string(),
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn entrada_para_invalid_ctor_matches_struct_literal_wrap() {
+        let para = "checkout";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::entrada_para_invalid(para, reason),
+            AplicacaoError::EntradaParaInvalid {
+                para: para.to_string(),
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn entrada_path_invalid_ctor_matches_struct_literal_wrap() {
+        let path = "/api/cart";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::entrada_path_invalid(path, reason),
+            AplicacaoError::EntradaPathInvalid {
+                path: path.to_string(),
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn placement_cluster_invalid_ctor_matches_struct_literal_wrap() {
+        let cluster = "rio";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::placement_cluster_invalid(cluster, reason),
+            AplicacaoError::PlacementClusterInvalid {
+                cluster: cluster.to_string(),
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn placement_affinity_invalid_ctor_matches_struct_literal_wrap() {
+        let affinity = "data-locality";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::placement_affinity_invalid(affinity, reason),
+            AplicacaoError::PlacementAffinityInvalid {
+                affinity: affinity.to_string(),
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn shard_key_invalid_ctor_matches_struct_literal_wrap() {
+        let shard_key = "tenantId";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::shard_key_invalid(shard_key, reason),
+            AplicacaoError::ShardKeyInvalid {
+                shard_key: shard_key.to_string(),
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    // Cross-family invariance pin — the six sibling ctors and
+    // `entrada_host_invalid` all route `reason: impl Into<String>` +
+    // `<field>: &str` verbatim onto their respective typed variants
+    // through the shared [`aplicacao_field_reason_ctors!`] macro.
+    // Sweeps a fixture pair (`&str` literal, `format!` output) against
+    // every ctor to pin that no per-arm wrapper transformation drifted
+    // in against the uniform macro-generated body.
+    #[test]
+    fn aplicacao_field_reason_ctors_route_reason_through_into_uniformly() {
+        let via_literal = "literal reason text";
+        let via_format = format!("{} reason text", "literal");
+        assert_eq!(
+            AplicacaoError::membro_caixa_invalid("m", via_literal),
+            AplicacaoError::membro_caixa_invalid("m", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::entrada_para_invalid("p", via_literal),
+            AplicacaoError::entrada_para_invalid("p", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::entrada_path_invalid("/a", via_literal),
+            AplicacaoError::entrada_path_invalid("/a", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::placement_cluster_invalid("c", via_literal),
+            AplicacaoError::placement_cluster_invalid("c", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::placement_affinity_invalid("a", via_literal),
+            AplicacaoError::placement_affinity_invalid("a", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::shard_key_invalid("k", via_literal),
+            AplicacaoError::shard_key_invalid("k", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::entrada_host_invalid("h", via_literal),
+            AplicacaoError::entrada_host_invalid("h", via_format),
+        );
     }
 
     #[test]
