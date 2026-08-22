@@ -5088,10 +5088,12 @@ impl Caixa {
     /// [`crate::LayoutError::CiOnNonAcao`] gate on the `:ci` axis
     /// carries a distinct `{ caixa, kind }` wrap shape (no `slots`
     /// field — `:ci` is a single `Option` not a `Vec`-of-named-slots)
-    /// that a future symmetry lift closing the Acao axis onto this
-    /// same fold would need to reshape into the sibling
-    /// `AcaoSlotsOnNonAcao { caixa, kind, slots }` shape before
-    /// joining.
+    /// and rides on its own peer substrate primitive
+    /// [`Self::validate_ci_kind_coherence`] (the direct sibling to
+    /// this fold on the `:ci` axis) — the two folds share the same
+    /// altitude and diagnostic order at the layout wire-up site but
+    /// keep their distinct envelope shapes, so no consumer of
+    /// `CiOnNonAcao` sees a variant rename.
     ///
     /// Peer to the per-kind compound entry gates every substrate
     /// primitive on the M2/M3 typed-slot family already carries
@@ -5270,6 +5272,97 @@ impl Caixa {
         }
         if self.kind().is_acao() {
             return Err(crate::LayoutError::acao_owns_code(self));
+        }
+        Ok(())
+    }
+
+    /// Compound per-`Caixa` kind ↔ `:ci` coherence gate — the `Acao`
+    /// axis-only companion to the sibling three-arm
+    /// [`Self::validate_kind_slot_coherence`] fold (f0d286e) on the
+    /// M3 mesh / supervisor-tree / M2 Servico-runtime typed-slot
+    /// families. `:ci` carries a typed CI run
+    /// ([`canteiro_types::CiRun`], CANTEIRO §7.1-C) that only the
+    /// `caixa-actions` renderer decomposes + validates and only for a
+    /// `:kind Acao`. On any *other* kind a declared `:ci` is the
+    /// manifest field's documented "ignored otherwise" — it silently
+    /// passes verify and then vanishes (never decomposed, never
+    /// rendered), far from the source `caixa.lisp`.
+    ///
+    /// Pre-lift the arm lived as a self-similar
+    /// `if caixa.ci().is_some() && !caixa.kind().is_acao() { return
+    /// Err(LayoutError::CiOnNonAcao { caixa: caixa.nome().to_string(),
+    /// kind: caixa.kind() }); }` block at
+    /// [`crate::layout::StandardLayout::verify`] — one consumer today
+    /// but every future consumer that wanted to gate the `:ci`
+    /// coherence axis as a unit (the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission
+    /// webhook re-checking after a per-slot patch, a future
+    /// `feira validate --ci-coherence` per-caixa admission verb, a
+    /// per-`Caixa` overlay resolver rejecting a kind-foreign `:ci`
+    /// patch) was structurally forced to either re-inline the
+    /// two-condition guard in lockstep with the layout wire-up (the
+    /// duplication the PRIME DIRECTIVE names as a bug) or call the
+    /// whole [`crate::layout::StandardLayout::verify`] pipeline.
+    /// Post-fold each such consumer reaches the arm through one call.
+    ///
+    /// Peer of the sibling three-arm
+    /// [`Self::validate_kind_slot_coherence`] fold (f0d286e) — that
+    /// gate carries the M3 mesh / supervisor-tree / M2 Servico-runtime
+    /// axes under a uniform `{ caixa, kind, slots }` envelope
+    /// ([`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`]). The `:ci`
+    /// axis stays on its own primitive because
+    /// [`crate::LayoutError::CiOnNonAcao`] carries a distinct
+    /// `{ caixa, kind }` wrap shape (no `slots` field — `:ci` is a
+    /// single `Option` not a `Vec`-of-named-slots) whose reshape
+    /// onto the sibling `{ caixa, kind, slots }` envelope would
+    /// force a variant rename touching every consumer of
+    /// `CiOnNonAcao`; the two folds share the same
+    /// author-time-vs-renderer split and diagnostic altitude, and
+    /// route through peer substrate primitives on the same
+    /// [`Caixa`] surface.
+    ///
+    /// Peer to the per-kind compound entry gates every substrate
+    /// primitive on the M2/M3 typed-slot family already carries
+    /// ([`Self::validate_deps`] b5dd55e, [`Self::validate_limits`]
+    /// baa4688, [`Self::validate_behavior`] 0d2877a,
+    /// [`Self::validate_upgrade_from`] d6801df,
+    /// [`Self::validate_aplicacao_shape`] 949a7a0,
+    /// [`Self::validate_supervisor_shape`] 4c70105,
+    /// [`Self::validate_acao_shape`] 5d6df54,
+    /// [`Self::validate_kind_slot_coherence`] f0d286e,
+    /// [`Self::validate_no_code_kind_coherence`] 3bbf6a2): every
+    /// author-time coherence axis on the typed [`Caixa`] surface now
+    /// routes through one substrate primitive per axis rather than
+    /// an open-coded block at the layout wire-up site.
+    ///
+    /// The gate carries two identity elements:
+    /// - **`ci().is_none()`** — a caixa that declares no `:ci`
+    ///   passes the first short-circuit before every per-arm
+    ///   dispatch, on every kind. The canonical shape of the four
+    ///   non-`Acao` kinds (`Biblioteca` / `Binario` / `Servico` /
+    ///   `Supervisor` / `Aplicacao`) is `ci = None` — the arm
+    ///   never fires on a well-shaped fixture.
+    /// - **`:kind Acao`** — the owner-kind arm short-circuits on
+    ///   every `Acao` caixa regardless of its `:ci` shape; a
+    ///   malformed `:ci` on an `Acao` surfaces through the peer
+    ///   [`Self::validate_acao_shape`] compound decompose gate
+    ///   (5d6df54), not through this coherence gate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::LayoutError::CiOnNonAcao`] naming the
+    /// offending caixa's nome + kind on any non-`Acao` caixa with
+    /// `:ci` declared. Passes trivially on every kind that declares
+    /// no `:ci` and on every `:kind Acao` caixa regardless of
+    /// declared `:ci` (the fold's two identity-element arms).
+    pub fn validate_ci_kind_coherence(&self) -> Result<(), crate::LayoutError> {
+        if self.ci().is_some() && !self.kind().is_acao() {
+            return Err(crate::LayoutError::CiOnNonAcao {
+                caixa: self.nome().to_string(),
+                kind: self.kind(),
+            });
         }
         Ok(())
     }
@@ -21729,6 +21822,155 @@ mod tests {
                     "a bare :kind {kind:?} caixa (no declared code) must pass \
                      the compound gate — the fold's first identity element is \
                      the paired !has_code short-circuit, got {err:?}",
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn validate_ci_kind_coherence_folds_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // `:ci`-on-non-`Acao` arm: a `:kind Biblioteca` caixa
+        // (the smallest non-`Acao` kind) carrying a declared
+        // `:ci` slot surfaces the same
+        // [`crate::LayoutError::CiOnNonAcao`] variant through the
+        // compound gate [`Caixa::validate_ci_kind_coherence`] and
+        // an inlined struct-literal wrap carrying `caixa.nome()`
+        // + `caixa.kind()` verbatim. Pins the fold — a silent
+        // regression that de-folded the arm would surface here as
+        // a mismatch between the two dispatches. Sibling in shape
+        // to the peer
+        // `validate_no_code_kind_coherence_folds_supervisor_arm_matches_gate`
+        // per-arm equivalence pin on the reciprocal
+        // code-surface fold.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Biblioteca;
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![],
+        });
+        let via_method = c.validate_ci_kind_coherence().unwrap_err();
+        let via_standalone = crate::LayoutError::CiOnNonAcao {
+            caixa: c.nome().to_string(),
+            kind: c.kind(),
+        };
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_ci_kind_coherence must surface the \
+             :ci-on-non-Acao arm's diagnostic byte-equal to a \
+             LayoutError::CiOnNonAcao struct literal carrying the \
+             caixa's nome + kind",
+        );
+    }
+
+    #[test]
+    fn validate_ci_kind_coherence_fold_names_offending_kind_on_every_non_acao_kind() {
+        // Exhaustive per-kind sweep on the non-`Acao` arm: for each
+        // of the five non-`Acao` kinds
+        // (`Biblioteca` / `Binario` / `Servico` / `Supervisor` /
+        // `Aplicacao`), a caixa carrying a declared `:ci` slot
+        // surfaces the [`crate::LayoutError::CiOnNonAcao`]
+        // variant naming the offending kind verbatim. A silent
+        // regression that mistyped one arm's kind-projection
+        // (e.g. always threading `CaixaKind::Biblioteca` regardless
+        // of the caixa's actual kind) would surface here as a
+        // mismatch on every kind past the first. Peer of the
+        // `validate_no_code_kind_coherence_accepts_bare_caixa_on_every_kind`
+        // exhaustive-sweep pin on the sibling code-surface fold.
+        for kind in CaixaKind::ALL {
+            if kind.is_acao() {
+                continue;
+            }
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = *kind;
+            c.ci = Some(canteiro_types::CiRun {
+                workspace: "pleme-io".into(),
+                repo: "caixa".into(),
+                nodes: vec![],
+            });
+            let err = c.validate_ci_kind_coherence().unwrap_err();
+            match err {
+                crate::LayoutError::CiOnNonAcao {
+                    caixa: got_caixa,
+                    kind: got_kind,
+                } => {
+                    assert_eq!(
+                        got_caixa,
+                        c.nome(),
+                        "CiOnNonAcao must name the offending caixa's nome verbatim on kind {kind:?}",
+                    );
+                    assert_eq!(
+                        got_kind, *kind,
+                        "CiOnNonAcao must name the offending kind verbatim on kind {kind:?}",
+                    );
+                }
+                other => panic!(
+                    "expected CiOnNonAcao on :kind {kind:?} with declared :ci, got {other:?}",
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn validate_ci_kind_coherence_accepts_acao_on_every_ci_shape() {
+        // Positive control on the owner-kind identity element: an
+        // `:kind Acao` caixa passes the coherence gate cleanly on
+        // every `:ci` shape — the arm's paired
+        // `!kind().is_acao()` short-circuit fires before the
+        // dispatch, so the fold surfaces no diagnostic even on
+        // fixtures whose `:ci` would fail the peer
+        // [`Self::validate_acao_shape`] decompose gate (a
+        // duplicate-node fixture, an unknown-dep fixture, a
+        // cyclic fixture). Pins the fold's first identity element
+        // — a silent regression that dropped the paired
+        // `!kind().is_acao()` short-circuit guard would surface
+        // here as a false-positive rejection of every `Acao`
+        // caixa. Peer with the
+        // `validate_no_code_kind_coherence_accepts_owner_kind_on_every_code_axis`
+        // identity-element pin on the sibling code-surface fold.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Acao;
+        c.bibliotecas = vec![];
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![],
+        });
+        c.validate_ci_kind_coherence().expect(
+            "a :kind Acao caixa with declared :ci must pass the compound \
+             coherence gate — Acao is the :ci-owning kind (a malformed \
+             :ci on Acao surfaces via validate_acao_shape's decompose gate, \
+             not via this kind-coherence gate)",
+        );
+    }
+
+    #[test]
+    fn validate_ci_kind_coherence_accepts_absent_ci_on_every_kind() {
+        // Positive control on the absent-`:ci` identity element:
+        // a caixa with `ci = None` passes the coherence gate on
+        // every kind — including `Acao`, whose absent `:ci`
+        // fails a separate presence gate ([`crate::LayoutError::MissingCi`])
+        // downstream at the layout altitude, not this coherence
+        // gate. Pins the fold's second identity element — the
+        // paired `ci().is_some()` short-circuit fires before every
+        // per-arm dispatch, so a caixa with no declared `:ci`
+        // surfaces no coherence diagnostic. A silent regression
+        // that dropped the paired `ci().is_some()` short-circuit
+        // would surface here as a false-positive rejection on
+        // every non-`Acao` kind. Peer with the
+        // `validate_no_code_kind_coherence_accepts_bare_caixa_on_every_kind`
+        // identity-element pin on the sibling code-surface fold.
+        for kind in CaixaKind::ALL {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = *kind;
+            c.ci = None;
+            c.validate_ci_kind_coherence().unwrap_or_else(|err| {
+                panic!(
+                    "a :kind {kind:?} caixa with no declared :ci must pass \
+                     the compound coherence gate — the fold's second identity \
+                     element is the paired ci().is_some() short-circuit, got \
+                     {err:?}",
                 )
             });
         }
