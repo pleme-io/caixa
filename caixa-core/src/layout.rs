@@ -966,10 +966,25 @@ impl LayoutInvariants for StandardLayout {
         // legitimate cross-kind authoring shape); on Biblioteca it is
         // the native slot, and on Supervisor / Aplicacao the OwnCode
         // gates above already close it.
-        let foreign_code_slots = caixa.declared_foreign_code_slots();
-        if !foreign_code_slots.is_empty() {
-            return Err(LayoutError::foreign_code_slot(caixa, foreign_code_slots));
-        }
+        //
+        // Folded onto [`crate::Caixa::validate_foreign_code_kind_coherence`]
+        // — the fourth and last kind ↔ slot coherence primitive on the
+        // typed [`Caixa`] surface, peer of
+        // [`crate::Caixa::validate_kind_slot_coherence`] (f0d286e,
+        // the cross-family M3/supervisor/M2 fold on the sibling
+        // `{ caixa, kind, slots }` envelope),
+        // [`crate::Caixa::validate_no_code_kind_coherence`] (3bbf6a2,
+        // the reciprocal no-code-kind fold on `SupervisorOwnsCode` /
+        // `AplicacaoOwnsCode` / `AcaoOwnsCode`), and
+        // [`crate::Caixa::validate_ci_kind_coherence`] (9b55beb, the
+        // `:ci` axis fold on the `{ caixa, kind }` envelope). With
+        // this lift every kind-coherence axis at the layout altitude
+        // routes through one substrate primitive per axis rather than
+        // an open-coded block, closing the last open-coded gap the
+        // sibling [`crate::Caixa::validate_kind_slot_coherence`]
+        // doc-comment's "ForeignCodeSlot … stays open-coded downstream"
+        // note flagged.
+        caixa.validate_foreign_code_kind_coherence()?;
 
         // Per-entry path-shape gate on the three Caixa-level code-surface
         // path lists (`:bibliotecas`, `:exe`, `:servicos`): each entry must
