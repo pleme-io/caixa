@@ -57,6 +57,46 @@ impl StandardLayout {
             .as_ref()
             .map_or_else(|| p.exists(), |f| f(p))
     }
+
+    /// Probe an authored path's resolved on-disk location under `root`
+    /// and, on absence, return the paired [`LayoutError::MissingEntry`]
+    /// naming the missing entry at that resolved location with the
+    /// caller-provided canonical `kind` label (from the
+    /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_*`] const family).
+    /// Returns the resolved [`PathBuf`] on hit so callers that need to
+    /// run a follow-up per-path gate (the `:exe` /
+    /// `:servicos` sandbox-directory-containment check the peer
+    /// wire-up sites carry) reach it without re-computing
+    /// `root.join(path)`.
+    ///
+    /// Folds the five self-similar
+    /// `let full = root.join(p); if !self.exists(&full) { return
+    /// Err(LayoutError::missing_entry(<kind>, full)); }` existence-probe
+    /// blocks at [`Self::verify`] (`:bibliotecas` iteration, `:exe`
+    /// iteration, `:servicos` iteration, `:behavior` on-disk callback-
+    /// path iteration, `:upgrade-from` per-instruction script-path
+    /// iteration) onto one substrate primitive on [`StandardLayout`].
+    /// Every future consumer that wants to probe a declared path
+    /// against an out-of-band filesystem oracle (a per-slot admission
+    /// webhook, a `feira validate --paths` per-caixa admission verb,
+    /// the deferred `caixa.pleme.io/v1alpha1/Caixa` CR materializer's
+    /// admission-webhook floor, a per-cluster overlay resolver
+    /// re-probing a declared path against a cluster-local filesystem
+    /// snapshot) reaches the two-step `root.join` + `exists` + wrap
+    /// dispatch through one call rather than re-inlining the three-
+    /// line block in lockstep with the five wire-up sites.
+    fn probe_declared_entry<P: AsRef<Path>>(
+        &self,
+        path: P,
+        root: &Path,
+        kind: &'static str,
+    ) -> Result<PathBuf, LayoutError> {
+        let full = root.join(path.as_ref());
+        if !self.exists(&full) {
+            return Err(LayoutError::missing_entry(kind, full));
+        }
+        Ok(full)
+    }
 }
 
 impl std::fmt::Debug for StandardLayout {
@@ -846,25 +886,32 @@ impl LayoutInvariants for StandardLayout {
         // open-coded block at the wire-up site.
         caixa.validate_required_kind_slot()?;
 
+        // On-disk existence probe on the three Caixa-level code-surface
+        // path lists (`:bibliotecas`, `:exe`, `:servicos`): every declared
+        // entry must resolve on disk. Routed through the
+        // [`Self::probe_declared_entry`] substrate primitive so each
+        // iteration's `root.join(p) + self.exists + missing_entry-wrap`
+        // block reaches one dispatch rather than re-inlining the three-
+        // line existence-probe block in lockstep with the peer wire-up
+        // sites on `:behavior` on-disk callback-path iteration and
+        // `:upgrade-from` per-instruction script-path iteration below.
+        // The `:exe` / `:servicos` per-iteration sandbox-directory-
+        // containment check consumes the resolved `full` returned by the
+        // primitive on hit, so the fold preserves the pre-lift diagnostic
+        // order — `MissingEntry` fires before `ExeOutsideDir` /
+        // `ServicoOutsideDir` on the same iteration.
         for p in caixa.bibliotecas() {
-            let full = root.join(p);
-            if !self.exists(&full) {
-                return Err(LayoutError::missing_entry(
-                    crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
-                    full,
-                ));
-            }
+            self.probe_declared_entry(
+                p,
+                root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )?;
         }
 
         let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
         for p in caixa.exe() {
-            let full = root.join(p);
-            if !self.exists(&full) {
-                return Err(LayoutError::missing_entry(
-                    crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
-                    full,
-                ));
-            }
+            let full =
+                self.probe_declared_entry(p, root, crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE)?;
             if !full.starts_with(&exe_dir) {
                 return Err(LayoutError::ExeOutsideDir(full));
             }
@@ -872,13 +919,11 @@ impl LayoutInvariants for StandardLayout {
 
         let servicos_dir = root.join(crate::render::LAYOUT_DIR_SERVICOS);
         for p in caixa.servicos() {
-            let full = root.join(p);
-            if !self.exists(&full) {
-                return Err(LayoutError::missing_entry(
-                    crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
-                    full,
-                ));
-            }
+            let full = self.probe_declared_entry(
+                p,
+                root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            )?;
             if !full.starts_with(&servicos_dir) {
                 return Err(LayoutError::ServicoOutsideDir(full));
             }
@@ -981,13 +1026,11 @@ impl LayoutInvariants for StandardLayout {
             .map_err(|err| LayoutError::behavior_violation(caixa, err))?;
         if let Some(b) = caixa.behavior() {
             for p in b.declared_paths() {
-                let full = root.join(p);
-                if !self.exists(&full) {
-                    return Err(LayoutError::missing_entry(
-                        crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
-                        full,
-                    ));
-                }
+                self.probe_declared_entry(
+                    p,
+                    root,
+                    crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+                )?;
             }
         }
 
@@ -1045,13 +1088,11 @@ impl LayoutInvariants for StandardLayout {
         for entry in caixa.upgrade_from() {
             for instr in entry.instructions() {
                 if let Some(p) = instr.declared_path() {
-                    let full = root.join(p);
-                    if !self.exists(&full) {
-                        return Err(LayoutError::missing_entry(
-                            crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
-                            full,
-                        ));
-                    }
+                    self.probe_declared_entry(
+                        p,
+                        root,
+                        crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+                    )?;
                 }
             }
         }
@@ -2333,6 +2374,196 @@ mod tests {
                 kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
                 path,
             },
+        );
+    }
+
+    // ── StandardLayout::probe_declared_entry substrate primitive ─────────
+    //
+    // The [`StandardLayout::probe_declared_entry`] method
+    // (`layout.rs`) folds the five self-similar
+    // `let full = root.join(p); if !self.exists(&full) { return
+    // Err(LayoutError::missing_entry(<kind>, full)); }` existence-probe
+    // blocks at [`StandardLayout::verify`] (`:bibliotecas` iteration,
+    // `:exe` iteration, `:servicos` iteration, `:behavior` on-disk
+    // callback-path iteration, `:upgrade-from` per-instruction script-
+    // path iteration) onto one substrate primitive. The pins below
+    // (fail-before-pass-after by construction — a byte-mismatched
+    // primitive body would trip its equivalence pin first) lock the
+    // fold to its pre-lift open-coded shape under `PartialEq`, so every
+    // wire-up in [`StandardLayout::verify`] on this primitive produces
+    // a byte-equal `LayoutError` on miss and a byte-equal `PathBuf` on
+    // hit.
+
+    #[test]
+    fn probe_declared_entry_folds_miss_returns_missing_entry() {
+        // Per-primitive equivalence pin on the miss arm — a
+        // [`StandardLayout`] whose oracle returns `false` for every
+        // path yields a `MissingEntry` byte-equal under `PartialEq` to
+        // the open-coded `LayoutError::missing_entry(<kind>,
+        // root.join(path))` wrap the pre-lift block carried at each of
+        // the five wire-up sites. Peer of the sibling
+        // `missing_entry_ctor_matches_struct_literal_wrap` pin on the
+        // constructor's own byte-equal shape.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("lib/demo.lisp");
+        let err = layout
+            .probe_declared_entry(
+                path,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                root.join(path),
+            ),
+            "probe_declared_entry miss arm must produce byte-equal LayoutError to \
+             open-coded `missing_entry(<kind>, root.join(path))` wrap",
+        );
+    }
+
+    #[test]
+    fn probe_declared_entry_folds_hit_returns_resolved_full() {
+        // Per-primitive equivalence pin on the hit arm — a
+        // [`StandardLayout`] whose oracle returns `true` for the probed
+        // resolved path yields `Ok(root.join(path))` byte-equal under
+        // `PartialEq`. The pre-lift `:exe` / `:servicos` wire-up sites
+        // needed the resolved `full` for the follow-up sandbox-directory-
+        // containment check; the fold preserves that hand-off through
+        // the primitive's `Ok(PathBuf)` return arm rather than
+        // re-computing `root.join(path)` at the follow-up gate.
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("exe/tool.lisp");
+        let full = root.join(path);
+        let full_probe = full.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == full_probe);
+        let resolved = layout
+            .probe_declared_entry(path, &root, crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE)
+            .expect("probe_declared_entry must return Ok(root.join(path)) when the oracle hits");
+        assert_eq!(
+            resolved, full,
+            "probe_declared_entry hit arm must return the resolved `root.join(path)` \
+             byte-equal so the `:exe` / `:servicos` sandbox-containment follow-up \
+             reads it verbatim without re-computing",
+        );
+    }
+
+    #[test]
+    fn probe_declared_entry_threads_kind_through_arg_verbatim() {
+        // Cross-axis pin — sweep every canonical
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_*`] label the five
+        // wire-up sites in [`StandardLayout::verify`] pass. Each miss
+        // must return a `MissingEntry` whose `kind:` field byte-equals
+        // the caller-provided arg, so the fold does not silently
+        // collapse onto one hard-coded label. Sweep matches the arm
+        // set the peer
+        // `missing_entry_ctor_routes_kind_through_arg_verbatim` pin
+        // covers on the constructor arg.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("some/entry");
+        for kind in [
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+        ] {
+            let err = layout.probe_declared_entry(path, &root, kind).unwrap_err();
+            assert_eq!(
+                err,
+                LayoutError::missing_entry(kind, root.join(path)),
+                "probe_declared_entry must thread `kind` verbatim on every canonical label",
+            );
+        }
+    }
+
+    #[test]
+    fn probe_declared_entry_threads_path_through_arg_verbatim() {
+        // Cross-axis pin — the primitive must compose the `path` arg
+        // through `root.join` verbatim on the miss arm's `MissingEntry
+        // { path: … }` field, so the fold does not silently collapse
+        // onto a fixed component prefix, a canonicalized form, or a
+        // hand-authored `root.join(<literal>)`. Sweep two multi-
+        // component `Path` fixtures (one under `servicos/`, one under
+        // `lib/`) so a byte-drifted composition on either axis would
+        // trip.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/alt/root");
+        for path in [
+            Path::new("servicos/hello-rio.computeunit.yaml"),
+            Path::new("lib/demo.lisp"),
+        ] {
+            let err = layout
+                .probe_declared_entry(
+                    path,
+                    &root,
+                    crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                )
+                .unwrap_err();
+            assert_eq!(
+                err,
+                LayoutError::missing_entry(
+                    crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                    root.join(path),
+                ),
+                "probe_declared_entry must compose `path` through `root.join` verbatim",
+            );
+        }
+    }
+
+    #[test]
+    fn probe_declared_entry_routes_through_configurable_exists_oracle() {
+        // Cross-axis pin — the primitive must consult the injected
+        // [`StandardLayout::with_path_exists`] oracle, not the ambient
+        // `Path::exists` filesystem probe. Configure a per-path
+        // discriminator that returns `true` only for one canonical
+        // resolved path and assert both arms:
+        // - the "hit" path resolves to `Ok(full)` byte-equal
+        // - every other path resolves to `MissingEntry` on the same
+        //   [`StandardLayout`] instance
+        // The pin traps a regression that reroutes the primitive off
+        // the injected oracle onto the ambient `Path::exists` (which
+        // would silently return `false` for every path in `/tmp/x/…`
+        // and mask the miss-arm hand-off on the hit fixture, or
+        // silently return `true` for a real system path and mask the
+        // hit-arm hand-off on the miss fixture).
+        let root = PathBuf::from("/tmp/x");
+        let hit_path = Path::new("servicos/keep.computeunit.yaml");
+        let miss_path = Path::new("servicos/drop.computeunit.yaml");
+        let hit_full = root.join(hit_path);
+        let hit_full_probe = hit_full.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == hit_full_probe);
+
+        let resolved = layout
+            .probe_declared_entry(
+                hit_path,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            )
+            .expect("probe_declared_entry must consult the injected oracle on the hit arm");
+        assert_eq!(
+            resolved, hit_full,
+            "probe_declared_entry hit arm must return the oracle-approved resolved path",
+        );
+
+        let err = layout
+            .probe_declared_entry(
+                miss_path,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                root.join(miss_path),
+            ),
+            "probe_declared_entry miss arm must fire when the injected oracle rejects the path",
         );
     }
 
