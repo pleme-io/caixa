@@ -2093,10 +2093,7 @@ impl SupervisorSpec {
             crate::render::require_valid_dns_1123_label(
                 child.nome(),
                 || SupervisorError::EmptyChildName,
-                |reason| SupervisorError::ChildCaixaInvalid {
-                    caixa: child.nome().to_string(),
-                    reason,
-                },
+                |reason| SupervisorError::child_caixa_invalid(child.nome(), reason),
             )?;
             // The author surface for `:children :versao` is the same
             // Cargo-shaped semver requirement string `:deps :versao` and
@@ -2119,10 +2116,12 @@ impl SupervisorSpec {
             crate::render::require_valid_versao_requirement(
                 child.versao_requirement(),
                 || SupervisorError::empty_child_version(child.nome()),
-                |reason| SupervisorError::ChildVersaoInvalid {
-                    caixa: child.nome().to_string(),
-                    versao: child.versao_requirement().to_string(),
-                    reason,
+                |reason| {
+                    SupervisorError::child_versao_invalid(
+                        child.nome(),
+                        child.versao_requirement(),
+                        reason,
+                    )
                 },
             )?;
             crate::render::insert_first_seen(&mut seen, child.nome(), || {
@@ -2358,6 +2357,96 @@ supervisor_caixa_only_ctors! {
     empty_child_version => EmptyChildVersion,
     duplicate_child_caixa => DuplicateChildCaixa,
     child_supervises_self => ChildSupervisesSelf,
+}
+
+// Fold the two `SupervisorError::{ChildCaixaInvalid, ChildVersaoInvalid}`
+// struct-variant wire-up sites at [`SupervisorSpec::validate_children`] onto
+// one substrate primitive per typed variant — the M2 supervisor-side siblings
+// of the peer [`crate::AplicacaoError::membro_caixa_invalid`] two-slot ctor
+// already lifted through the sibling
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] macro (981060b) on the
+// peer `AplicacaoError { caixa: String, reason: String }` envelope. The
+// `ChildCaixaInvalid` variant carries the same `{ <name>: String, reason:
+// String }` two-slot shape the peer seven-variant
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] fold closed on the
+// `AplicacaoError` envelope (`MembroCaixaInvalid`, `EntradaParaInvalid`,
+// `EntradaHostInvalid`, `EntradaPathInvalid`, `PlacementClusterInvalid`,
+// `PlacementAffinityInvalid`, `ShardKeyInvalid`); the `ChildVersaoInvalid`
+// variant carries the `{ caixa: String, versao: String, reason: String }`
+// three-slot shape the sibling `AplicacaoError::MembroVersaoInvalid` axis
+// carries on the same `:versao` value-shape.
+//
+// Each of the two wire-up sites opened the same closure-shaped
+// `|reason| SupervisorError::<Variant> { caixa: child.nome().to_string(),
+// [versao: child.versao_requirement().to_string(),] reason }` block inside
+// the paired [`crate::render::require_valid_dns_1123_label`] and
+// [`crate::render::require_valid_versao_requirement`] callbacks — the exact
+// "same block re-inlined at every consumer" shape the PRIME DIRECTIVE names
+// as a bug, on the same altitude the peer `AplicacaoError` /
+// `SupervisorError` / `LayoutError` / `DepError` / `LimitsError` ctor
+// families already closed on their sibling envelopes.
+//
+// The two `#[must_use]` inherent constructors below fold each wire-up onto
+// one dispatch: `SupervisorError::child_caixa_invalid(<name>, <reason>)`
+// and `SupervisorError::child_versao_invalid(<name>, <versao>, <reason>)`,
+// byte-equal to the pre-lift struct-literal on the same scalar fixtures.
+// The uniform per-field `.to_string()` / `.into()` construction is spelled
+// once — inside each ctor body — rather than at every wire-up site. The
+// `reason: impl Into<String>` bound accepts both `&str` literals and
+// `format!(…)` outputs verbatim so no wire-up site changes its per-arm
+// diagnostic shape at the lift, matching the peer
+// [`aplicacao_field_reason_ctors!`] and
+// [`crate::aplicacao::contrato_pair_value_reason_ctors!`] bounds on the
+// sibling envelopes.
+//
+// Every future consumer that wants to construct one of these two variants
+// outside `SupervisorSpec::validate_children` — a deferred
+// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission webhook
+// re-checking one added/renamed child's `:caixa` or `:versao`, a future
+// `feira validate --supervisor` per-caixa admission verb, a per-child
+// dynamic-add re-validator on the `SimpleOneForOne` runtime-add path once
+// dynamic-children graduate to a typed slot, a per-Supervisor overlay
+// resolver rejecting a shape-invalid child `:caixa`/`:versao` against a
+// cluster-local snapshot — now reaches each variant through one call rather
+// than re-inlining the per-shape struct-literal block in lockstep with the
+// two in-crate wire-up sites.
+impl SupervisorError {
+    /// Construct a [`SupervisorError::ChildCaixaInvalid`] naming the
+    /// offending `:children :caixa` value under the given `reason`. Folds
+    /// the uniform `Self::ChildCaixaInvalid { caixa: caixa.to_string(),
+    /// reason: reason.into() }` two-slot struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one
+    /// dispatch, matching the peer
+    /// [`crate::AplicacaoError::membro_caixa_invalid`] ctor's shape on the
+    /// sibling `AplicacaoError { caixa: String, reason: String }`
+    /// envelope. `reason` accepts both `&str` literals and `format!(…)`
+    /// outputs through the `impl Into<String>` bound.
+    #[must_use]
+    pub fn child_caixa_invalid(caixa: &str, reason: impl Into<String>) -> Self {
+        Self::ChildCaixaInvalid {
+            caixa: caixa.to_string(),
+            reason: reason.into(),
+        }
+    }
+
+    /// Construct a [`SupervisorError::ChildVersaoInvalid`] naming the
+    /// offending `:children :caixa` and its `:versao` requirement under
+    /// the given `reason`. Folds the uniform `Self::ChildVersaoInvalid {
+    /// caixa: caixa.to_string(), versao: versao.to_string(), reason:
+    /// reason.into() }` three-slot struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one
+    /// dispatch, matching the sibling `AplicacaoError::MembroVersaoInvalid
+    /// { caixa, versao, reason }` three-slot axis on the peer
+    /// `AplicacaoError` envelope. `reason` accepts both `&str` literals
+    /// and `format!(…)` outputs through the `impl Into<String>` bound.
+    #[must_use]
+    pub fn child_versao_invalid(caixa: &str, versao: &str, reason: impl Into<String>) -> Self {
+        Self::ChildVersaoInvalid {
+            caixa: caixa.to_string(),
+            versao: versao.to_string(),
+            reason: reason.into(),
+        }
+    }
 }
 
 /// Shared duration string codec for the typed slots that take a
@@ -8113,6 +8202,76 @@ mod tests {
             "generated child_supervises_self ctor must produce byte-equal \
              SupervisorError to the open-coded struct-literal wrap on the \
              same &str fixture",
+        );
+    }
+
+    // Per-variant equivalence pins for the two lifted
+    // [`SupervisorError::child_caixa_invalid`] /
+    // [`SupervisorError::child_versao_invalid`] inherent constructors
+    // (fail-before-pass-after by construction — a byte-mismatched ctor body
+    // would trip its equivalence pin first). Each pins the ctor output to
+    // its pre-lift struct-literal peer under `PartialEq`, so every wire-up
+    // in [`SupervisorSpec::validate_children`] on the two variants
+    // produces a byte-equal `SupervisorError` to the pre-lift open-coded
+    // struct-literal on the same scalar fixtures. Peers of the sibling
+    // `membro_caixa_invalid_ctor_matches_struct_literal_wrap` /
+    // `entrada_para_invalid_ctor_matches_struct_literal_wrap` / … pins on
+    // the peer `AplicacaoError` envelope's
+    // [`crate::aplicacao::aplicacao_field_reason_ctors!`] fold.
+
+    #[test]
+    fn child_caixa_invalid_ctor_matches_struct_literal_wrap() {
+        let caixa = "Worker";
+        let reason = "sample reason text";
+        assert_eq!(
+            SupervisorError::child_caixa_invalid(caixa, reason),
+            SupervisorError::ChildCaixaInvalid {
+                caixa: caixa.to_string(),
+                reason: reason.to_string(),
+            },
+            "lifted child_caixa_invalid ctor must produce byte-equal \
+             SupervisorError to the open-coded struct-literal wrap on the \
+             same (&str, reason) fixture",
+        );
+    }
+
+    #[test]
+    fn child_versao_invalid_ctor_matches_struct_literal_wrap() {
+        let caixa = "worker";
+        let versao = "not-a-req";
+        let reason = "sample reason text";
+        assert_eq!(
+            SupervisorError::child_versao_invalid(caixa, versao, reason),
+            SupervisorError::ChildVersaoInvalid {
+                caixa: caixa.to_string(),
+                versao: versao.to_string(),
+                reason: reason.to_string(),
+            },
+            "lifted child_versao_invalid ctor must produce byte-equal \
+             SupervisorError to the open-coded struct-literal wrap on the \
+             same (&str, &str, reason) fixture",
+        );
+    }
+
+    #[test]
+    fn supervisor_child_reason_ctors_route_reason_through_into_uniformly() {
+        // Cross-axis pin: sweep the two lifted `{ …, reason }` ctors
+        // against a `&str`-literal vs. `format!(…)` reason input to pin
+        // both constructors accept the `impl Into<String>` bound
+        // uniformly, so neither wire-up site drifts under a per-arm
+        // wrapper transformation on the caller-side `reason` axis. Peer
+        // of the sibling
+        // `aplicacao_field_reason_ctors_route_reason_through_into_uniformly`
+        // sweep on the peer `AplicacaoError` envelope.
+        let via_literal = "literal reason text";
+        let via_format = format!("{} reason text", "literal");
+        assert_eq!(
+            SupervisorError::child_caixa_invalid("Worker", via_literal),
+            SupervisorError::child_caixa_invalid("Worker", via_format.clone()),
+        );
+        assert_eq!(
+            SupervisorError::child_versao_invalid("worker", "not-a-req", via_literal),
+            SupervisorError::child_versao_invalid("worker", "not-a-req", via_format),
         );
     }
 
