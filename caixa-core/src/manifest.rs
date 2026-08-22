@@ -5156,6 +5156,124 @@ impl Caixa {
         Ok(())
     }
 
+    /// Compound per-`Caixa` kind ↔ code-surface coherence gate on
+    /// the three no-code kinds — `Supervisor` (supervises other
+    /// caixas, INSPIRATIONS §II.2), `Aplicacao` (composes Servicos,
+    /// MESH-COMPOSITION §III.1), and `Acao` (owns a typed CI run,
+    /// CANTEIRO §7.1-C). Each carries no code of its own, so
+    /// declaring any of `:bibliotecas` / `:exe` / `:servicos`
+    /// silently passes the layout's path-existence loops (the paths
+    /// still resolve on disk) and then vanishes downstream — the
+    /// per-kind renderers gate emission on
+    /// [`crate::render::require_kind`] and only emit the code
+    /// surface for its owning kind, so a declared code slot on a
+    /// no-code kind is the manifest field's documented "ignored
+    /// otherwise" footgun.
+    ///
+    /// Pre-lift each of the three arms lived as a self-similar
+    /// `if !caixa.kind().is_<no-code-kind>() { … } else if has_code
+    /// { return Err(LayoutError::<kind>_owns_code(caixa)); }` block
+    /// at [`crate::layout::StandardLayout::verify`] — three
+    /// consumers, three identical shapes. Every future consumer
+    /// that wanted to gate the whole code-surface coherence cascade
+    /// as a unit (the deferred `caixa.pleme.io/v1alpha1/Caixa` CR
+    /// materializer's admission webhook re-checking after a
+    /// per-slot patch, a future `feira validate --no-code-kind`
+    /// per-caixa admission verb, a per-`Caixa` overlay resolver
+    /// rejecting a kind-foreign patch) was structurally forced to
+    /// either re-inline the three-block cascade in lockstep with
+    /// the layout wire-up (the duplication the PRIME DIRECTIVE
+    /// names as a bug) or call the whole
+    /// [`crate::layout::StandardLayout::verify`] pipeline. Post-fold
+    /// each such consumer reaches the three-arm cascade through
+    /// one call.
+    ///
+    /// Mirror of the sibling [`Self::validate_kind_slot_coherence`]
+    /// fold (f0d286e) on the author-time typed-slot coherence axis:
+    /// that gate closes the "non-owner kind declares owner-only
+    /// typed slots" three-arm cascade on the M2 / supervisor-tree /
+    /// M3 slot families; this gate closes the reciprocal
+    /// "no-code kind declares code" three-arm cascade on the
+    /// `:bibliotecas` / `:exe` / `:servicos` code surface. Together
+    /// the two folds route every kind ↔ author-shape coherence
+    /// diagnostic at the layout altitude through one substrate
+    /// primitive per axis.
+    ///
+    /// The gate carries two identity elements:
+    /// - **`has_code == false`** — any kind (including the three
+    ///   no-code kinds) that declares no code passes the paired
+    ///   `!has_code` short-circuit before every per-arm dispatch.
+    /// - **Code-owning kinds** (`Biblioteca` owning
+    ///   `:bibliotecas`, `Binario` owning `:exe`, `Servico` owning
+    ///   `:servicos`) — the three no-code arm-firing predicates
+    ///   short-circuit on every code-owning kind, so the gate
+    ///   passes trivially regardless of what code they declare.
+    ///   Foreign-code-slot violations on a code-owning kind (e.g.
+    ///   `:kind Servico` declaring `:exe`) surface through the
+    ///   sibling [`crate::LayoutError::ForeignCodeSlot`] gate on
+    ///   [`Self::declared_foreign_code_slots`], not through this
+    ///   gate.
+    ///
+    /// Unlike the sibling cross-family
+    /// [`Self::validate_kind_slot_coherence`], the three arms of
+    /// this fold are mutually exclusive by construction — `:kind`
+    /// is a single-valued [`CaixaKind`] discriminator so at most
+    /// one arm can fire per caixa — and no cross-arm ordering pin
+    /// is meaningful (the pre-fold three-block cascade at the
+    /// wire-up site was already unreachable past the first
+    /// matching arm).
+    ///
+    /// Peer to the per-kind compound entry gates every substrate
+    /// primitive on the M2/M3 typed-slot family already carries
+    /// ([`Self::validate_deps`] b5dd55e, [`Self::validate_limits`]
+    /// baa4688, [`Self::validate_behavior`] 0d2877a,
+    /// [`Self::validate_upgrade_from`] d6801df,
+    /// [`Self::validate_aplicacao_shape`] 949a7a0,
+    /// [`Self::validate_supervisor_shape`] 4c70105,
+    /// [`Self::validate_acao_shape`] 5d6df54,
+    /// [`Self::validate_kind_slot_coherence`] f0d286e): the
+    /// author-time gate axis on the *per-slot* and *cross-family
+    /// typed-slot* algebras each share one substrate primitive per
+    /// compound gate, and this lift closes the third axis on the
+    /// *code-surface* algebra so the layout pipeline routes all
+    /// three coherence axes through one substrate primitive rather
+    /// than nine open-coded blocks. Every future no-code kind
+    /// (an `Actor` virtual-actor arm the M5 Orleans-inspired kind
+    /// reaches through if it lands as a no-code composer, a future
+    /// `Namespace` grouping kind) folds onto this compound gate
+    /// as one arm addition rather than a fourth open-coded block
+    /// at the wire-up site.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`crate::LayoutError`] variant naming the
+    /// offending no-code kind:
+    /// [`crate::LayoutError::SupervisorOwnsCode`] on a `:kind
+    /// Supervisor` caixa with any declared code,
+    /// [`crate::LayoutError::AplicacaoOwnsCode`] on a `:kind
+    /// Aplicacao` caixa with any declared code,
+    /// [`crate::LayoutError::AcaoOwnsCode`] on a `:kind Acao` caixa
+    /// with any declared code. Passes trivially on every kind with
+    /// no declared code and on every code-owning kind regardless
+    /// of declared code (the fold's two identity-element arms).
+    pub fn validate_no_code_kind_coherence(&self) -> Result<(), crate::LayoutError> {
+        let has_code =
+            !self.bibliotecas().is_empty() || !self.exe().is_empty() || !self.servicos().is_empty();
+        if !has_code {
+            return Ok(());
+        }
+        if self.kind().is_supervisor() {
+            return Err(crate::LayoutError::supervisor_owns_code(self));
+        }
+        if self.kind().is_aplicacao() {
+            return Err(crate::LayoutError::aplicacao_owns_code(self));
+        }
+        if self.kind().is_acao() {
+            return Err(crate::LayoutError::acao_owns_code(self));
+        }
+        Ok(())
+    }
+
     /// Reject per-entry values on the three Caixa-level code-surface
     /// path lists (`:bibliotecas`, `:exe`, `:servicos`) that the
     /// layout checker's `root.join(p)` sandbox would silently subvert.
@@ -21456,6 +21574,161 @@ mod tests {
                      must pass the compound gate — the fold's identity \
                      element on the empty-slot axis is the paired \
                      Vec::is_empty short-circuit guard, got {err:?}",
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn validate_no_code_kind_coherence_folds_supervisor_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the
+        // Supervisor no-code arm of the reciprocal code-surface
+        // fold: a `:kind Supervisor` caixa carrying a declared
+        // `:bibliotecas` entry (the smallest possible code-surface
+        // declaration on a no-code kind) surfaces the same
+        // [`crate::LayoutError::SupervisorOwnsCode`] variant
+        // through both the compound gate
+        // [`Caixa::validate_no_code_kind_coherence`] and the
+        // standalone constructor
+        // [`crate::LayoutError::supervisor_owns_code`]. Pins the
+        // fold — a silent regression that de-folded the Supervisor
+        // arm would surface here as a mismatch between the two
+        // dispatches. Sibling in shape to the peer
+        // `validate_kind_slot_coherence_folds_supervisor_arm_matches_gate`
+        // per-arm equivalence pin on the cross-family
+        // typed-slot-coherence fold.
+        let mut c = Caixa::from_lisp(&Caixa::template("sup")).unwrap();
+        c.kind = CaixaKind::Supervisor;
+        c.bibliotecas = vec!["lib/sup.lisp".into()];
+        let via_method = c.validate_no_code_kind_coherence().unwrap_err();
+        let via_standalone = crate::LayoutError::supervisor_owns_code(&c);
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_no_code_kind_coherence must surface the \
+             Supervisor arm's diagnostic byte-equal to the standalone \
+             LayoutError::supervisor_owns_code ctor",
+        );
+    }
+
+    #[test]
+    fn validate_no_code_kind_coherence_folds_aplicacao_arm_matches_gate() {
+        // Per-arm equivalence pin on the Aplicacao no-code arm —
+        // the sibling of the Supervisor arm on the code-surface
+        // fold. A `:kind Aplicacao` caixa carrying a declared
+        // `:exe` entry surfaces the same
+        // [`crate::LayoutError::AplicacaoOwnsCode`] variant through
+        // both dispatches. Uses the `:exe` code-surface axis (a
+        // second axis distinct from the Supervisor arm's
+        // `:bibliotecas` fixture) so the three per-arm pins
+        // collectively exercise every arm of the `has_code`
+        // disjunction (`:bibliotecas || :exe || :servicos`).
+        let mut c = Caixa::from_lisp(&Caixa::template("app")).unwrap();
+        c.kind = CaixaKind::Aplicacao;
+        c.bibliotecas = vec![];
+        c.exe = vec!["exe/app".into()];
+        let via_method = c.validate_no_code_kind_coherence().unwrap_err();
+        let via_standalone = crate::LayoutError::aplicacao_owns_code(&c);
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_no_code_kind_coherence must surface the \
+             Aplicacao arm's diagnostic byte-equal to the standalone \
+             LayoutError::aplicacao_owns_code ctor",
+        );
+    }
+
+    #[test]
+    fn validate_no_code_kind_coherence_folds_acao_arm_matches_gate() {
+        // Per-arm equivalence pin on the Acao no-code arm — the
+        // third and last arm on the code-surface fold. A `:kind
+        // Acao` caixa carrying a declared `:servicos` entry
+        // surfaces the same [`crate::LayoutError::AcaoOwnsCode`]
+        // variant through both dispatches. Uses the `:servicos`
+        // code-surface axis (the third distinct axis of the
+        // `has_code` disjunction) so the three per-arm pins
+        // collectively cover every arm of the code-surface
+        // disjunction plus every no-code kind of the arm
+        // dispatch.
+        let mut c = Caixa::from_lisp(&Caixa::template("acao")).unwrap();
+        c.kind = CaixaKind::Acao;
+        c.bibliotecas = vec![];
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        let via_method = c.validate_no_code_kind_coherence().unwrap_err();
+        let via_standalone = crate::LayoutError::acao_owns_code(&c);
+        assert_eq!(
+            via_method, via_standalone,
+            "Caixa::validate_no_code_kind_coherence must surface the \
+             Acao arm's diagnostic byte-equal to the standalone \
+             LayoutError::acao_owns_code ctor",
+        );
+    }
+
+    #[test]
+    fn validate_no_code_kind_coherence_accepts_owner_kind_on_every_code_axis() {
+        // Positive control on the code-owning-kind identity
+        // element: each of the three code-owning kinds
+        // (`Biblioteca` owning `:bibliotecas`, `Binario` owning
+        // `:exe`, `Servico` owning `:servicos`) passes the
+        // compound gate cleanly when it declares its native code
+        // surface. Pins the fold's second identity element — the
+        // paired per-arm `is_<no-code-kind>()` short-circuit
+        // fires on every code-owning kind, so a caixa with any
+        // native code declaration on its owner kind surfaces no
+        // diagnostic. A silent regression that dropped the paired
+        // `is_<no-code-kind>()` short-circuit guard on any arm
+        // would surface here as a false-positive rejection of the
+        // corresponding owner kind. Peer with the
+        // `validate_kind_slot_coherence_accepts_owner_kind_on_every_arm`
+        // identity-element pin on the sibling cross-family fold.
+        let mut bib = Caixa::from_lisp(&Caixa::template("bib")).unwrap();
+        bib.kind = CaixaKind::Biblioteca;
+        bib.bibliotecas = vec!["lib/bib.lisp".into()];
+        bib.validate_no_code_kind_coherence().expect(
+            "a :kind Biblioteca caixa with declared :bibliotecas must pass \
+             the compound gate — Biblioteca owns the :bibliotecas code surface",
+        );
+
+        let mut bin = Caixa::from_lisp(&Caixa::template("bin")).unwrap();
+        bin.kind = CaixaKind::Binario;
+        bin.bibliotecas = vec![];
+        bin.exe = vec!["exe/bin".into()];
+        bin.validate_no_code_kind_coherence().expect(
+            "a :kind Binario caixa with declared :exe must pass the compound \
+             gate — Binario owns the :exe code surface",
+        );
+
+        let svc = bare_servico_fixture("svc");
+        svc.validate_no_code_kind_coherence().expect(
+            "a :kind Servico caixa with declared :servicos must pass the \
+             compound gate — Servico owns the :servicos code surface",
+        );
+    }
+
+    #[test]
+    fn validate_no_code_kind_coherence_accepts_bare_caixa_on_every_kind() {
+        // Positive control on the has-no-code identity element:
+        // a bare caixa (no declared code) passes the compound
+        // gate on every kind — including the three no-code kinds
+        // that would otherwise fire an OwnsCode diagnostic. Pins
+        // the fold's first identity element — the paired
+        // `!has_code` short-circuit fires before every per-arm
+        // wrap dispatch, so a bare caixa of any kind surfaces no
+        // diagnostic. A silent regression that dropped the
+        // has_code guard would surface here as a false-positive
+        // rejection of every no-code kind that declares no code.
+        // Peer with the
+        // `validate_kind_slot_coherence_accepts_bare_caixa_on_every_kind`
+        // identity-element pin on the sibling cross-family fold.
+        for kind in CaixaKind::ALL {
+            let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+            c.kind = *kind;
+            c.bibliotecas = vec![];
+            c.exe = vec![];
+            c.servicos = vec![];
+            c.validate_no_code_kind_coherence().unwrap_or_else(|err| {
+                panic!(
+                    "a bare :kind {kind:?} caixa (no declared code) must pass \
+                     the compound gate — the fold's first identity element is \
+                     the paired !has_code short-circuit, got {err:?}",
                 )
             });
         }
