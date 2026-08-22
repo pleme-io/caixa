@@ -1378,14 +1378,10 @@ impl WitContract {
         names: &std::collections::HashSet<&str>,
     ) -> Result<(), AplicacaoError> {
         if !names.contains(self.source()) {
-            return Err(AplicacaoError::ContratoMemberMissing {
-                caixa: self.source().to_string(),
-            });
+            return Err(AplicacaoError::contrato_member_missing(self.source()));
         }
         if !names.contains(self.destination()) {
-            return Err(AplicacaoError::ContratoMemberMissing {
-                caixa: self.destination().to_string(),
-            });
+            return Err(AplicacaoError::contrato_member_missing(self.destination()));
         }
         Ok(())
     }
@@ -8175,9 +8171,7 @@ impl AplicacaoSpec {
             // predicate.
             crate::render::require_valid_versao_requirement(
                 m.versao_requirement(),
-                || AplicacaoError::MembroVersaoEmpty {
-                    caixa: m.nome().to_string(),
-                },
+                || AplicacaoError::membro_versao_empty(m.nome()),
                 |reason| AplicacaoError::MembroVersaoInvalid {
                     caixa: m.nome().to_string(),
                     versao: m.versao_requirement().to_string(),
@@ -8185,9 +8179,7 @@ impl AplicacaoSpec {
                 },
             )?;
             crate::render::insert_first_seen(&mut seen, m.nome(), || {
-                AplicacaoError::MembroDuplicate {
-                    caixa: m.nome().to_string(),
-                }
+                AplicacaoError::membro_duplicate(m.nome())
             })?;
         }
         Ok(())
@@ -8725,9 +8717,7 @@ pub fn validate_no_self_membership(
 ) -> Result<(), AplicacaoError> {
     for m in membros {
         if m.nome() == parent_nome {
-            return Err(AplicacaoError::MembroIsSelfAplicacao {
-                caixa: parent_nome.to_string(),
-            });
+            return Err(AplicacaoError::membro_is_self_aplicacao(parent_nome));
         }
     }
     Ok(())
@@ -9611,6 +9601,114 @@ contrato_pair_value_reason_ctors! {
     contrato_endpoint_invalid => ContratoEndpointInvalid { endpoint },
     contrato_subject_invalid => ContratoSubjectInvalid { subject },
     contrato_slot_invalid => ContratoSlotInvalid { slot },
+}
+
+// Fold the five `AplicacaoError::{ContratoMemberMissing, MembroVersaoEmpty,
+// MembroDuplicate, MembroIsSelfAplicacao} { caixa: <&str>.to_string() }`
+// caixa-only struct-variant wire-up sites at
+// [`WitContract::require_endpoints_in`] (two sites, the `:contratos :de` and
+// `:contratos :para` arms of `ContratoMemberMissing`),
+// [`AplicacaoSpec::validate_membros`] (two sites, the empty-`:versao` arm of
+// `MembroVersaoEmpty` and the per-`:membros` dedup arm of `MembroDuplicate`),
+// and [`validate_no_self_membership`] (one site, the parent-`:nome`
+// self-membership arm of `MembroIsSelfAplicacao`) onto one substrate primitive
+// per typed variant — the sibling on the M3 mesh `AplicacaoError` envelope of
+// the peer [`crate::supervisor::supervisor_caixa_only_ctors!`] macro (db09650,
+// three variants on `{ caixa: String }` at
+// [`crate::SupervisorSpec::validate_children`] and
+// [`crate::supervisor::validate_no_self_supervision`]) on the sibling M2
+// `SupervisorError` envelope, extending the same "one substrate primitive per
+// typed variant on the single-slot `{ <ident>: String }` envelope shape" fold
+// discipline onto the M3 mesh side. Peers on peer envelopes: the M2 sibling
+// [`crate::behavior::behavior_slot_path_ctors!`] (67c31ec, 3 variants on
+// `{ slot: &'static str, path: PathBuf }`) two-slot fold on the `:behavior`
+// envelope; the M2 sibling [`crate::upgrade::upgrade_from_script_ctors!`]
+// (8e67041, 3 variants on `{ from: String, script: PathBuf }`) and
+// [`crate::upgrade::upgrade_script_only_ctors!`] (7468ca9, 3 variants on
+// `{ script: PathBuf }`) two folds on the sibling `:upgrade-from` envelope;
+// the sibling [`crate::dep::dep_nome_only_ctors!`] (792aa92, 5 variants on
+// `{ nome: String }`), [`crate::dep::fonte_caminho_ctors!`] (f85f145, 11
+// variants on `{ nome, caminho }`), and
+// [`crate::dep::fonte_caminho_byte_ctors!`] (0e35793, 12 variants on
+// `{ nome, caminho, byte }`) folds on the sibling `DepError` envelope; the
+// peer three `AplicacaoError` sub-family folds already lifted here
+// ([`contrato_target_ctors!`] 14b81d5, [`contrato_empty_pair_ctors!`] 8580068,
+// [`aplicacao_field_reason_ctors!`] 981060b,
+// [`contrato_pair_value_reason_ctors!`] 14e13f1); the peer four `LayoutError`
+// families ([`crate::layout::layout_violation_ctors!`] 131ca0d,
+// [`crate::layout::layout_slot_kind_ctors!`] 0419438,
+// [`crate::LayoutError::missing_entry`] 1b09f9d,
+// [`crate::layout::layout_nome_only_ctors!`] 3fe3dd7); and the three
+// [`crate::limits::limits_codec_value_*_ctors!`] codec families (81c856c).
+//
+// Each of the five wire-up sites on this shape (two on `ContratoMemberMissing`
+// at the per-`:contratos :de`/`:para` unknown-member arms, one on
+// `MembroVersaoEmpty` at the per-`:membros` empty-semver-requirement arm, one
+// on `MembroDuplicate` at the per-`:membros` dedup arm, one on
+// `MembroIsSelfAplicacao` at the parent-`:nome` self-membership arm) opened
+// the identical `AplicacaoError::<Variant> { caixa: <&str>.to_string() }`
+// three-line struct-literal against a caller-side `&str` — the exact "same
+// block re-inlined at every consumer" shape the PRIME DIRECTIVE names as a
+// bug, on the same altitude the peer `SupervisorError` /
+// `AplicacaoError` (three prior sub-families) / `DepError` / `LayoutError` /
+// `UpgradeError` / `BehaviorError` / `LimitsError` families each closed on
+// their sibling envelopes. The four variants share one `{ caixa: String }`
+// shape, so the fold routes each wire-up site through one dispatch per typed
+// variant.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(caixa: &str) -> AplicacaoError`, so every
+// wire-up site collapses onto one dispatch:
+// `AplicacaoError::<ctor>(<&str>)`, byte-equal to the pre-lift struct-literal
+// on the same `&str` fixture. The uniform one-field construction
+// (`caixa: caixa.to_string()`) is spelled once — inside the macro — rather
+// than at every wire-up site. Every constructor is `#[must_use]` so a caller
+// who mistakenly discards the constructed error trips a compile warning at
+// the wire-up site.
+//
+// Every future consumer that wants to construct one of these four variants
+// outside the current in-crate wire-up sites — a deferred
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission webhook
+// re-checking one added/renamed `:membros` entry against the sibling
+// `:contratos` graph, a future `feira validate --membros` per-caixa admission
+// verb re-checking each declared `:membros` entry's `:caixa` name against the
+// same axes, a per-tenant per-`Aplicacao` overlay resolver rejecting a
+// duplicate / self-referencing / unknown-membered `:contratos` entry against
+// a cluster-local snapshot the M4 CR materializer projects — now reaches each
+// variant through one call rather than re-inlining the three-line
+// struct-literal in lockstep with the five in-crate wire-up sites.
+macro_rules! aplicacao_caixa_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl AplicacaoError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`AplicacaoError::",
+                    stringify!($variant),
+                    "`] naming the offending `:membros :caixa` (or ",
+                    "parent `:nome`, on the self-membership arm; or ",
+                    "`:contratos :de`/`:para`, on the unknown-member ",
+                    "arm). Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { caixa: caixa.to_string() }` one-field ",
+                    "struct-literal onto one substrate primitive so ",
+                    "every wire-up on this variant reads through one ",
+                    "dispatch rather than the pre-lift three-line ",
+                    "open-coded struct-literal block."
+                )]
+                #[must_use]
+                pub fn $ctor(caixa: &str) -> Self {
+                    Self::$variant { caixa: caixa.to_string() }
+                }
+            )*
+        }
+    };
+}
+
+aplicacao_caixa_only_ctors! {
+    contrato_member_missing => ContratoMemberMissing,
+    membro_versao_empty => MembroVersaoEmpty,
+    membro_duplicate => MembroDuplicate,
+    membro_is_self_aplicacao => MembroIsSelfAplicacao,
 }
 
 #[cfg(test)]
@@ -32368,6 +32466,128 @@ mod tests {
         assert_eq!(
             AplicacaoError::contrato_slot_invalid(edge(), "k/v", via_literal),
             AplicacaoError::contrato_slot_invalid(edge(), "k/v", via_format),
+        );
+    }
+
+    // Per-variant equivalence pins for the [`aplicacao_caixa_only_ctors!`]
+    // macro definition (see the paired doc-block above the macro definition)
+    // — every generated `<ctor>(caixa: &str) -> Self` constructor folds the
+    // uniform `Self::<Variant> { caixa: caixa.to_string() }` one-field
+    // struct-literal onto one substrate primitive. The four per-variant
+    // equivalence pins below (fail-before-pass-after by construction — a
+    // byte-mismatched macro arm would trip its equivalence pin first) lock
+    // each generated constructor to its struct-literal peer under
+    // `PartialEq`, so every wire-up in [`WitContract::require_endpoints_in`],
+    // [`AplicacaoSpec::validate_membros`], and
+    // [`validate_no_self_membership`] on that variant produces a byte-equal
+    // `AplicacaoError` to the pre-lift open-coded struct-literal. The
+    // cross-axis pin that follows (non-default caixa name) routes the sole
+    // constructor input axis through `.to_string()`, so the fold does not
+    // silently collapse onto a fixed name.
+    //
+    // Peer of the sibling per-variant `<ctor>_matches_struct_literal_wrap`
+    // and cross-axis `<macro>_route_caixa_through_to_string` pins on the
+    // sibling `SupervisorError` `{ caixa: String }` envelope (db09650,
+    // `supervisor_caixa_only_ctors!`), sibling of the peer per-variant +
+    // cross-axis pins on the peer three `AplicacaoError` sub-family folds
+    // (14b81d5 / 8580068 / 981060b / 14e13f1), sibling of the peer four
+    // `LayoutError` families (131ca0d / 0419438 / 1b09f9d / 3fe3dd7), sibling
+    // of the peer M2 `:behavior` envelope fold (67c31ec,
+    // `behavior_slot_path_ctors!` `{ slot, path }`), sibling of the peer M2
+    // `:upgrade-from` envelope folds (8e67041 / 7468ca9), and sibling of the
+    // peer `DepError` envelope folds (792aa92 / f85f145 / 0e35793).
+
+    #[test]
+    fn contrato_member_missing_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            AplicacaoError::contrato_member_missing("cart"),
+            AplicacaoError::ContratoMemberMissing {
+                caixa: "cart".to_string(),
+            },
+            "generated contrato_member_missing ctor must produce byte-equal \
+             AplicacaoError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn membro_versao_empty_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            AplicacaoError::membro_versao_empty("cart"),
+            AplicacaoError::MembroVersaoEmpty {
+                caixa: "cart".to_string(),
+            },
+            "generated membro_versao_empty ctor must produce byte-equal \
+             AplicacaoError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn membro_duplicate_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            AplicacaoError::membro_duplicate("cart"),
+            AplicacaoError::MembroDuplicate {
+                caixa: "cart".to_string(),
+            },
+            "generated membro_duplicate ctor must produce byte-equal \
+             AplicacaoError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn membro_is_self_aplicacao_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            AplicacaoError::membro_is_self_aplicacao("checkout"),
+            AplicacaoError::MembroIsSelfAplicacao {
+                caixa: "checkout".to_string(),
+            },
+            "generated membro_is_self_aplicacao ctor must produce byte-equal \
+             AplicacaoError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn aplicacao_caixa_only_ctors_route_caixa_through_to_string() {
+        // Cross-axis pin: sweep the sole constructor input axis (`caixa:
+        // &str`) through a non-default fixture name against every generated
+        // arm in the [`aplicacao_caixa_only_ctors!`] macro, so any
+        // wrapper-side lowercase / trim / truncate / re-order on the
+        // `caixa.to_string()` sole-field construction surfaces here rather
+        // than at a downstream diagnostic-shape mismatch. Peer of the
+        // sibling `supervisor_caixa_only_ctors_route_caixa_through_to_string`
+        // cross-axis pin on the sibling `SupervisorError` `{ caixa: String }`
+        // envelope (db09650), extended here onto the peer `AplicacaoError`
+        // `{ caixa: String }` envelope so every substrate-primitive ctor
+        // family in caixa-core carrying a single-slot `{ caixa: String }`
+        // shape guarantees the sole-field construction routes the caller's
+        // `&str` through `.to_string()` verbatim.
+        let name = "cache-v2";
+        assert_eq!(
+            AplicacaoError::contrato_member_missing(name),
+            AplicacaoError::ContratoMemberMissing {
+                caixa: name.to_string(),
+            },
+        );
+        assert_eq!(
+            AplicacaoError::membro_versao_empty(name),
+            AplicacaoError::MembroVersaoEmpty {
+                caixa: name.to_string(),
+            },
+        );
+        assert_eq!(
+            AplicacaoError::membro_duplicate(name),
+            AplicacaoError::MembroDuplicate {
+                caixa: name.to_string(),
+            },
+        );
+        assert_eq!(
+            AplicacaoError::membro_is_self_aplicacao(name),
+            AplicacaoError::MembroIsSelfAplicacao {
+                caixa: name.to_string(),
+            },
         );
     }
 }
