@@ -3173,8 +3173,8 @@ impl MeshPolicy {
                 t,
                 POLICY_TIMEOUT_MAX,
                 || AplicacaoError::PolicyTimeoutZero,
-                |timeout| AplicacaoError::PolicyTimeoutNotCanonical { timeout },
-                |timeout| AplicacaoError::PolicyTimeoutExceedsCap { timeout },
+                AplicacaoError::policy_timeout_not_canonical,
+                AplicacaoError::policy_timeout_exceeds_cap,
             )?;
         }
         if let Some(r) = self.retries() {
@@ -3182,7 +3182,7 @@ impl MeshPolicy {
                 r,
                 POLICY_RETRIES_MAX,
                 || AplicacaoError::PolicyRetriesZero,
-                |retries| AplicacaoError::PolicyRetriesExceedsCap { retries },
+                AplicacaoError::policy_retries_exceeds_cap,
             )?;
         }
         if let Some(cb) = self.circuit_breaker() {
@@ -3190,14 +3190,14 @@ impl MeshPolicy {
                 cb.max_failures(),
                 POLICY_BREAKER_MAX_FAILURES_MAX,
                 || AplicacaoError::PolicyBreakerZeroFailures,
-                |max_failures| AplicacaoError::PolicyBreakerMaxFailuresExceedsCap { max_failures },
+                AplicacaoError::policy_breaker_max_failures_exceeds_cap,
             )?;
             crate::render::require_positive_canonical_bounded_duration(
                 cb.window(),
                 POLICY_BREAKER_WINDOW_MAX,
                 || AplicacaoError::PolicyBreakerZeroWindow,
-                |window| AplicacaoError::PolicyBreakerWindowNotCanonical { window },
-                |window| AplicacaoError::PolicyBreakerWindowExceedsCap { window },
+                AplicacaoError::policy_breaker_window_not_canonical,
+                AplicacaoError::policy_breaker_window_exceeds_cap,
             )?;
         }
         if let Some(rl) = self.rate_limit() {
@@ -3205,12 +3205,12 @@ impl MeshPolicy {
                 rl.rate(),
                 POLICY_RATE_LIMIT_MAX,
                 || AplicacaoError::PolicyRateLimitZero,
-                |rate| AplicacaoError::PolicyRateLimitExceedsCap { rate },
+                AplicacaoError::policy_rate_limit_exceeds_cap,
             )?;
             if rl.canonical_unit().is_none() {
-                return Err(AplicacaoError::PolicyRateLimitWindowNotCanonical {
-                    window: rl.window(),
-                });
+                return Err(AplicacaoError::policy_rate_limit_window_not_canonical(
+                    rl.window(),
+                ));
             }
         }
         if let Some(err) = self.first_cross_axis_violation() {
@@ -9791,6 +9791,134 @@ macro_rules! aplicacao_path_only_ctors {
 aplicacao_path_only_ctors! {
     entrada_path_not_absolute => EntradaPathNotAbsolute,
     entrada_path_duplicate => EntradaPathDuplicate,
+}
+
+// Fold the eight `AplicacaoError::Policy<Slot><Axis> { <field>: <val> }`
+// one-slot `Copy`-scalar wire-up sites at [`MeshPolicy::validate`] onto one
+// substrate-primitive family per typed variant — the per-`:politicas` copy-
+// scalar `{ timeout | retries | max_failures | window | rate: Duration | u32 }`
+// sibling of the peer per-`:membros :caixa` [`aplicacao_caixa_only_ctors!`]
+// (d9f6867, `{ caixa: String }` on `ContratoMemberMissing` /
+// `MembroVersaoEmpty` / `MembroDuplicate` / `MembroIsSelfAplicacao`) and the
+// peer per-`:entrada :paths` [`aplicacao_path_only_ctors!`] (3ba8de6,
+// `{ path: String }` on `EntradaPathNotAbsolute` / `EntradaPathDuplicate`) on
+// the `String`-slot axis, and the peer per-`:politicas` cross-axis
+// [`AplicacaoError::Policy*`] cascade [`MeshPolicy::first_cross_axis_violation`]
+// carries at line 3064 on the same M3 mesh envelope.
+//
+// The eight wire-up sites inside [`MeshPolicy::validate`] at lines 3170-3218
+// each opened the identical `|<slot>| AplicacaoError::Policy<Slot><Axis>
+// { <slot> }` one-line struct-literal closure against the caller-side
+// `<slot>: <ty>` argument that the shared
+// [`crate::render::require_positive_bounded_u32`] /
+// [`crate::render::require_positive_canonical_bounded_duration`] gate rebinds
+// verbatim under the `impl FnOnce(u32) -> AplicacaoError` /
+// `impl FnOnce(Duration) -> AplicacaoError` bracket-closure slots (plus one
+// direct `return Err(AplicacaoError::PolicyRateLimitWindowNotCanonical
+// { window: rl.window() })` at the `:rate-limit :window` canonical-form arm
+// on line 3211) — the exact "same one-line struct-literal re-inlined at every
+// consumer" shape the PRIME DIRECTIVE names as a bug, on the last remaining
+// per-`:politicas` per-axis `AplicacaoError` variant family that had not yet
+// been folded onto a substrate primitive.
+//
+// The macro below generates one `#[must_use] pub const fn <ctor>(<field>: <ty>)
+// -> AplicacaoError` per variant of shape `Self::<variant> { <field> }`,
+// collapsing every wire-up onto either one direct dispatch
+// (`return Err(AplicacaoError::<ctor>(<val>))`, byte-equal to the pre-lift
+// struct-literal on the same `Copy`-`<ty>` fixture) or one bare function
+// pointer at the `impl FnOnce(<ty>) -> AplicacaoError` bracket-closure slot
+// (`AplicacaoError::<ctor>` in the position where every pre-lift site spelled
+// `|<slot>| AplicacaoError::<Variant> { <slot> }`) — Rust's function-pointer-
+// to-`FnOnce` coercion on any `fn(<ty>) -> AplicacaoError` inherent
+// constructor with matching arity and signature. The `const fn` qualifier
+// preserves the pre-lift `Copy`-pass-through's zero-runtime-work property
+// verbatim (no `.to_string()` / `.into()` allocation, no branching); the
+// per-variant `$field:ident` axis re-uses the enum's canonical field name so
+// the generated ctor's parameter name matches every wire-up's local binding
+// (`|timeout|` calls `policy_timeout_not_canonical(timeout)`, etc.), matching
+// the peer [`aplicacao_field_reason_ctors!`] / [`aplicacao_caixa_only_ctors!`]
+// / [`aplicacao_path_only_ctors!`] convention. `#[must_use]` fires a compile
+// warning at any wire-up that mistakenly discards the constructed error, on
+// the same footing as every sibling `AplicacaoError` / `DepError` /
+// `SupervisorError` / `LayoutError` / `LimitsError` / `BehaviorError` /
+// `UpgradeError` ctor macro (14b81d5 / 8580068 / 981060b / 14e13f1 / 81c856c
+// / 8e67041 / 7468ca9 / 67c31ec / d2ef2ec / f85f145 / 0e35793 / 792aa92 /
+// 6f5e0cd / 3fe3dd7 / 1b09f9d / 131ca0d / 0419438).
+//
+// Every future consumer that wants to construct one of these eight variants
+// outside [`MeshPolicy::validate`] — a deferred
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission webhook re-
+// checking each `:politicas` axis against a cluster-local `:politicas` cap
+// overlay, a future per-`:contratos`-edge `:politicas` override the
+// MESH-COMPOSITION §III.2 #3 roadmap acknowledges resolving an *effective*
+// per-edge [`MeshPolicy`] and emitting the same per-axis diagnostic on the
+// same input as `feira build`, an M4 per-cluster `:politicas`-cap resolver
+// projecting a per-tenant per-axis ceiling into the same diagnostic shape,
+// a future `feira validate --politicas` per-caixa admission verb re-checking
+// each declared per-axis value against the same bounds — now reaches each
+// variant through one call rather than re-inlining the one-line struct-
+// literal in lockstep with the seven `MeshPolicy::validate` wire-up sites,
+// which is exactly the invariant every prior ctor-macro lift already closed
+// on its sibling envelope. Closes the last remaining per-`:politicas`
+// per-axis `AplicacaoError` variant family that had not yet been folded onto
+// a substrate primitive; the compound cross-axis variants
+// ([`AplicacaoError::PolicyBreakerWindowBelowTimeout`] / `*RateLimit` /
+// `*RetriesBurst`) each carry a distinct multi-slot field shape and are folded
+// on a separate axis by [`MeshPolicy::first_cross_axis_violation`].
+macro_rules! aplicacao_policy_scalar_ctors {
+    ($($ctor:ident => $variant:ident { $field:ident: $ty:ty }),* $(,)?) => {
+        impl AplicacaoError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`AplicacaoError::",
+                    stringify!($variant),
+                    "`] naming the offending per-`:politicas` `",
+                    stringify!($field),
+                    "` scalar. Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { ",
+                    stringify!($field),
+                    " }` one-field `Copy`-pass-through struct-literal onto ",
+                    "one substrate primitive so every per-axis wire-up on ",
+                    "this variant reads through one dispatch — as a direct ",
+                    "call (`AplicacaoError::",
+                    stringify!($ctor),
+                    "(<val>)`, byte-equal to the pre-lift struct-literal on ",
+                    "the same `Copy`-`",
+                    stringify!($ty),
+                    "` fixture) or as a bare function pointer in the ",
+                    "`impl FnOnce(",
+                    stringify!($ty),
+                    ") -> AplicacaoError` bracket-closure slot every ",
+                    "`crate::render::require_positive_bounded_*` / ",
+                    "`crate::render::require_positive_canonical_bounded_*` ",
+                    "gate carries — rather than the pre-lift open-coded ",
+                    "one-line closure over the same one-field struct-",
+                    "literal. `const fn` preserves the `Copy`-pass-through's ",
+                    "zero-runtime-work property verbatim."
+                )]
+                #[must_use]
+                pub const fn $ctor($field: $ty) -> Self {
+                    Self::$variant { $field }
+                }
+            )*
+        }
+    };
+}
+
+aplicacao_policy_scalar_ctors! {
+    policy_timeout_not_canonical => PolicyTimeoutNotCanonical { timeout: Duration },
+    policy_timeout_exceeds_cap => PolicyTimeoutExceedsCap { timeout: Duration },
+    policy_retries_exceeds_cap => PolicyRetriesExceedsCap { retries: u32 },
+    policy_breaker_max_failures_exceeds_cap =>
+        PolicyBreakerMaxFailuresExceedsCap { max_failures: u32 },
+    policy_breaker_window_not_canonical =>
+        PolicyBreakerWindowNotCanonical { window: Duration },
+    policy_breaker_window_exceeds_cap =>
+        PolicyBreakerWindowExceedsCap { window: Duration },
+    policy_rate_limit_exceeds_cap => PolicyRateLimitExceedsCap { rate: u32 },
+    policy_rate_limit_window_not_canonical =>
+        PolicyRateLimitWindowNotCanonical { window: Duration },
 }
 
 #[cfg(test)]
@@ -32727,5 +32855,256 @@ mod tests {
                 path: path.to_string(),
             },
         );
+    }
+
+    // ── aplicacao_policy_scalar_ctors! per-variant + cross-axis pins ────────
+    //
+    // Per-variant byte-equality pins guaranteeing every generated ctor arm in
+    // the [`aplicacao_policy_scalar_ctors!`] macro produces an `AplicacaoError`
+    // structurally identical to the pre-lift `Self::<variant> { <field>: <val> }`
+    // one-line struct-literal on the same `Copy`-`Duration | u32` fixture, plus
+    // one cross-axis sweep that routes each per-variant `<field>: <ty>` scalar
+    // through the sole `$field:ident: $ty:ty` axis the macro exposes so any
+    // wrapper-side truncation / re-order / silent `.into()` / silent constant-
+    // substitution on any one variant surfaces here rather than at a downstream
+    // per-`:politicas` diagnostic-shape drift. Peer of the sibling per-variant
+    // pins on `aplicacao_field_reason_ctors!` (981060b),
+    // `aplicacao_caixa_only_ctors!` (d9f6867), `aplicacao_path_only_ctors!`
+    // (3ba8de6), `contrato_pair_value_reason_ctors!` (14e13f1),
+    // `contrato_empty_pair_ctors!` (8580068), `contrato_target_ctors!`
+    // (14b81d5), plus the sibling `DepError` / `SupervisorError` /
+    // `LayoutError` / `LimitsError` / `BehaviorError` / `UpgradeError`
+    // per-envelope ctor-macro pins.
+
+    #[test]
+    fn policy_timeout_not_canonical_ctor_matches_struct_literal_wrap() {
+        let timeout = Duration::from_micros(1_500);
+        assert_eq!(
+            AplicacaoError::policy_timeout_not_canonical(timeout),
+            AplicacaoError::PolicyTimeoutNotCanonical { timeout },
+            "generated policy_timeout_not_canonical ctor must produce byte-equal \
+             `AplicacaoError::PolicyTimeoutNotCanonical` to the pre-lift \
+             struct-literal wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn policy_timeout_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let timeout = Duration::from_secs(3_601);
+        assert_eq!(
+            AplicacaoError::policy_timeout_exceeds_cap(timeout),
+            AplicacaoError::PolicyTimeoutExceedsCap { timeout },
+            "generated policy_timeout_exceeds_cap ctor must produce byte-equal \
+             `AplicacaoError::PolicyTimeoutExceedsCap` to the pre-lift \
+             struct-literal wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn policy_retries_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let retries = 47_u32;
+        assert_eq!(
+            AplicacaoError::policy_retries_exceeds_cap(retries),
+            AplicacaoError::PolicyRetriesExceedsCap { retries },
+            "generated policy_retries_exceeds_cap ctor must produce byte-equal \
+             `AplicacaoError::PolicyRetriesExceedsCap` to the pre-lift \
+             struct-literal wrap on the same `Copy`-`u32` fixture",
+        );
+    }
+
+    #[test]
+    fn policy_breaker_max_failures_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let max_failures = 1_337_u32;
+        assert_eq!(
+            AplicacaoError::policy_breaker_max_failures_exceeds_cap(max_failures),
+            AplicacaoError::PolicyBreakerMaxFailuresExceedsCap { max_failures },
+            "generated policy_breaker_max_failures_exceeds_cap ctor must produce \
+             byte-equal `AplicacaoError::PolicyBreakerMaxFailuresExceedsCap` to \
+             the pre-lift struct-literal wrap on the same `Copy`-`u32` fixture",
+        );
+    }
+
+    #[test]
+    fn policy_breaker_window_not_canonical_ctor_matches_struct_literal_wrap() {
+        let window = Duration::from_micros(500);
+        assert_eq!(
+            AplicacaoError::policy_breaker_window_not_canonical(window),
+            AplicacaoError::PolicyBreakerWindowNotCanonical { window },
+            "generated policy_breaker_window_not_canonical ctor must produce \
+             byte-equal `AplicacaoError::PolicyBreakerWindowNotCanonical` to the \
+             pre-lift struct-literal wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn policy_breaker_window_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let window = Duration::from_secs(3_700);
+        assert_eq!(
+            AplicacaoError::policy_breaker_window_exceeds_cap(window),
+            AplicacaoError::PolicyBreakerWindowExceedsCap { window },
+            "generated policy_breaker_window_exceeds_cap ctor must produce \
+             byte-equal `AplicacaoError::PolicyBreakerWindowExceedsCap` to the \
+             pre-lift struct-literal wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn policy_rate_limit_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let rate = 1_000_001_u32;
+        assert_eq!(
+            AplicacaoError::policy_rate_limit_exceeds_cap(rate),
+            AplicacaoError::PolicyRateLimitExceedsCap { rate },
+            "generated policy_rate_limit_exceeds_cap ctor must produce byte-equal \
+             `AplicacaoError::PolicyRateLimitExceedsCap` to the pre-lift \
+             struct-literal wrap on the same `Copy`-`u32` fixture",
+        );
+    }
+
+    #[test]
+    fn policy_rate_limit_window_not_canonical_ctor_matches_struct_literal_wrap() {
+        let window = Duration::from_secs(15);
+        assert_eq!(
+            AplicacaoError::policy_rate_limit_window_not_canonical(window),
+            AplicacaoError::PolicyRateLimitWindowNotCanonical { window },
+            "generated policy_rate_limit_window_not_canonical ctor must produce \
+             byte-equal `AplicacaoError::PolicyRateLimitWindowNotCanonical` to \
+             the pre-lift struct-literal wrap on the same `Copy`-`Duration` \
+             fixture",
+        );
+    }
+
+    #[test]
+    fn aplicacao_policy_scalar_ctors_route_field_through_copy_uniformly() {
+        // Cross-axis routing pin: sweep each generated `<field>: <ty>`
+        // constructor input axis through a non-default `Copy` fixture against
+        // every arm in the [`aplicacao_policy_scalar_ctors!`] macro, so any
+        // wrapper-side silent `.into()` / silent constant-substitution / silent
+        // field re-name away from the canonical `timeout | retries |
+        // max_failures | window | rate` axes on any one variant, or a
+        // `Duration | u32` axis silently rerouted through some other `Copy`
+        // coercion, surfaces here rather than at a downstream per-`:politicas`
+        // diagnostic-shape drift. Peer of the sibling
+        // `aplicacao_caixa_only_ctors_route_caixa_through_to_string`
+        // (d9f6867), `aplicacao_path_only_ctors_route_path_through_to_string`
+        // (3ba8de6), `dep_nome_list_ctors_route_nome_and_list_through_uniformly`
+        // (6f5e0cd), and `supervisor_child_reason_ctors_route_reason_through_into_uniformly`
+        // (d2ef2ec) cross-axis routing pins on the peer per-envelope ctor
+        // families, extended here onto the last M3 per-`:politicas` per-axis
+        // `AplicacaoError` variant family folded onto a substrate primitive.
+        //
+        // Fixtures picked out of each variant's accept-set boundary rather
+        // than the default value so a silent constant-substitution to `0` /
+        // `Duration::ZERO` / any per-variant sentinel surfaces here on the
+        // structural-equality assertion. The two `Duration` fixtures pick the
+        // sub-millisecond and above-cap ends respectively; the three `u32`
+        // fixtures pick above-cap magnitudes for `retries` / `max_failures` /
+        // `rate` respectively (each variant's cap sits well below the fixture
+        // so the pre-lift struct-literal wrap the fixture is compared against
+        // is the same shape the pre-lift wire-up produced).
+        let sub_ms = Duration::from_micros(1_500);
+        let above_hour = Duration::from_secs(3_700);
+        let non_canonical_rl_window = Duration::from_secs(15);
+        assert_eq!(
+            AplicacaoError::policy_timeout_not_canonical(sub_ms),
+            AplicacaoError::PolicyTimeoutNotCanonical { timeout: sub_ms },
+        );
+        assert_eq!(
+            AplicacaoError::policy_timeout_exceeds_cap(above_hour),
+            AplicacaoError::PolicyTimeoutExceedsCap {
+                timeout: above_hour,
+            },
+        );
+        assert_eq!(
+            AplicacaoError::policy_retries_exceeds_cap(47),
+            AplicacaoError::PolicyRetriesExceedsCap { retries: 47 },
+        );
+        assert_eq!(
+            AplicacaoError::policy_breaker_max_failures_exceeds_cap(1_337),
+            AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
+                max_failures: 1_337,
+            },
+        );
+        assert_eq!(
+            AplicacaoError::policy_breaker_window_not_canonical(sub_ms),
+            AplicacaoError::PolicyBreakerWindowNotCanonical { window: sub_ms },
+        );
+        assert_eq!(
+            AplicacaoError::policy_breaker_window_exceeds_cap(above_hour),
+            AplicacaoError::PolicyBreakerWindowExceedsCap { window: above_hour },
+        );
+        assert_eq!(
+            AplicacaoError::policy_rate_limit_exceeds_cap(1_000_001),
+            AplicacaoError::PolicyRateLimitExceedsCap { rate: 1_000_001 },
+        );
+        assert_eq!(
+            AplicacaoError::policy_rate_limit_window_not_canonical(non_canonical_rl_window),
+            AplicacaoError::PolicyRateLimitWindowNotCanonical {
+                window: non_canonical_rl_window,
+            },
+        );
+    }
+
+    #[test]
+    fn aplicacao_policy_scalar_ctors_are_const_zero_runtime_work() {
+        // Const-eval pin: the [`aplicacao_policy_scalar_ctors!`] macro spells
+        // every generated ctor `const fn` so a caller can pin an
+        // `AplicacaoError` at compile time — the same zero-runtime-work
+        // property the pre-lift `|<slot>| AplicacaoError::<Variant> { <slot> }`
+        // closure carried on its `Copy`-pass-through construction path (no
+        // `.to_string()` / `.into()` allocation, no branching). If any future
+        // edit silently drops the `const` qualifier from the macro body the
+        // per-arm `const` bindings below fail to compile, which surfaces the
+        // regression at the substrate-primitive definition rather than at
+        // some downstream consumer that had come to rely on the `const`-
+        // constructibility. Peer of the sibling per-variant
+        // `_ctor_matches_struct_literal_wrap` pins above on the runtime-
+        // equality axis; this pin closes the compile-time-const axis on the
+        // same generated family.
+        const TIMEOUT_NC: AplicacaoError =
+            AplicacaoError::policy_timeout_not_canonical(Duration::from_micros(1));
+        const TIMEOUT_CAP: AplicacaoError =
+            AplicacaoError::policy_timeout_exceeds_cap(Duration::from_secs(3_601));
+        const RETRIES_CAP: AplicacaoError = AplicacaoError::policy_retries_exceeds_cap(11);
+        const MAX_FAIL_CAP: AplicacaoError =
+            AplicacaoError::policy_breaker_max_failures_exceeds_cap(1_001);
+        const CB_WIN_NC: AplicacaoError =
+            AplicacaoError::policy_breaker_window_not_canonical(Duration::from_micros(1));
+        const CB_WIN_CAP: AplicacaoError =
+            AplicacaoError::policy_breaker_window_exceeds_cap(Duration::from_secs(3_601));
+        const RATE_CAP: AplicacaoError = AplicacaoError::policy_rate_limit_exceeds_cap(1_000_001);
+        const RL_WIN_NC: AplicacaoError =
+            AplicacaoError::policy_rate_limit_window_not_canonical(Duration::from_secs(15));
+        assert!(matches!(
+            TIMEOUT_NC,
+            AplicacaoError::PolicyTimeoutNotCanonical { .. }
+        ));
+        assert!(matches!(
+            TIMEOUT_CAP,
+            AplicacaoError::PolicyTimeoutExceedsCap { .. }
+        ));
+        assert!(matches!(
+            RETRIES_CAP,
+            AplicacaoError::PolicyRetriesExceedsCap { .. }
+        ));
+        assert!(matches!(
+            MAX_FAIL_CAP,
+            AplicacaoError::PolicyBreakerMaxFailuresExceedsCap { .. }
+        ));
+        assert!(matches!(
+            CB_WIN_NC,
+            AplicacaoError::PolicyBreakerWindowNotCanonical { .. }
+        ));
+        assert!(matches!(
+            CB_WIN_CAP,
+            AplicacaoError::PolicyBreakerWindowExceedsCap { .. }
+        ));
+        assert!(matches!(
+            RATE_CAP,
+            AplicacaoError::PolicyRateLimitExceedsCap { .. }
+        ));
+        assert!(matches!(
+            RL_WIN_NC,
+            AplicacaoError::PolicyRateLimitWindowNotCanonical { .. }
+        ));
     }
 }
