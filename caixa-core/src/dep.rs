@@ -502,10 +502,7 @@ impl DepSource {
         // a future codec round-trip ever produces an empty
         // string that probes as absolute).
         if std::path::Path::new(caminho).is_absolute() {
-            return Err(DepError::FonteCaminhoAbsolute {
-                nome: nome.to_string(),
-                caminho: caminho.to_string(),
-            });
+            return Err(DepError::fonte_caminho_absolute(nome, caminho));
         }
         // Reproducibility gate's tilde-expansion arm. The b94fd83
         // `FonteCaminhoAbsolute` closes the leading-`/`
@@ -569,10 +566,7 @@ impl DepSource {
         // level if a future codec round-trip ever produces a
         // value that probes as both absolute and tilde-prefixed.
         if caminho.starts_with('~') {
-            return Err(DepError::FonteCaminhoTildeExpansion {
-                nome: nome.to_string(),
-                caminho: caminho.to_string(),
-            });
+            return Err(DepError::fonte_caminho_tilde_expansion(nome, caminho));
         }
         // Reproducibility gate's shell-variable-expansion arm.
         // The b94fd83 `FonteCaminhoAbsolute` closes the leading-`/`
@@ -646,10 +640,7 @@ impl DepSource {
         // shapes route through the same `caminho.starts_with('$')`
         // byte check.
         if caminho.starts_with('$') {
-            return Err(DepError::FonteCaminhoVarExpansion {
-                nome: nome.to_string(),
-                caminho: caminho.to_string(),
-            });
+            return Err(DepError::fonte_caminho_var_expansion(nome, caminho));
         }
         // Reproducibility gate's leading-space arm. The b94fd83 / a5c248e /
         // f4efe9c arms closed the leading-byte host-layout-leak shapes
@@ -711,10 +702,7 @@ impl DepSource {
         // `:caminho` axis was the last typed string surface still
         // admitting a leading space byte).
         if caminho.starts_with(' ') {
-            return Err(DepError::FonteCaminhoLeadingWhitespace {
-                nome: nome.to_string(),
-                caminho: caminho.to_string(),
-            });
+            return Err(DepError::fonte_caminho_leading_whitespace(nome, caminho));
         }
         // Reproducibility gate's leading-`-` CLI-argument-injection arm.
         // The b94fd83 + a5c248e + f4efe9c + LeadingWhitespace arms closed
@@ -805,10 +793,7 @@ impl DepSource {
         // gated typed surface (the `:caminho` axis was the last typed
         // string surface still admitting a leading `-` byte).
         if caminho.starts_with('-') {
-            return Err(DepError::FonteCaminhoLeadingHyphen {
-                nome: nome.to_string(),
-                caminho: caminho.to_string(),
-            });
+            return Err(DepError::fonte_caminho_leading_hyphen(nome, caminho));
         }
         // Reproducibility gate's embedded-control-byte arm. The
         // b94fd83 + a5c248e + f4efe9c arms closed the three
@@ -941,10 +926,7 @@ impl DepSource {
         // every prior arm and lands here.
         for &b in caminho.as_bytes() {
             if b == b'\\' {
-                return Err(DepError::FonteCaminhoBackslash {
-                    nome: nome.to_string(),
-                    caminho: caminho.to_string(),
-                });
+                return Err(DepError::fonte_caminho_backslash(nome, caminho));
             }
         }
         // Reproducibility gate's shell-redirection arm. The 3a4e1d7 backslash
@@ -1066,10 +1048,7 @@ impl DepSource {
         // tab-strip the trailing separator).
         for &b in caminho.as_bytes() {
             if b == b'|' {
-                return Err(DepError::FonteCaminhoShellPipe {
-                    nome: nome.to_string(),
-                    caminho: caminho.to_string(),
-                });
+                return Err(DepError::fonte_caminho_shell_pipe(nome, caminho));
             }
         }
         // Reproducibility gate's shell-command-separator arm. The 124106f
@@ -1129,10 +1108,7 @@ impl DepSource {
         // separator).
         for &b in caminho.as_bytes() {
             if b == b';' {
-                return Err(DepError::FonteCaminhoShellSemicolon {
-                    nome: nome.to_string(),
-                    caminho: caminho.to_string(),
-                });
+                return Err(DepError::fonte_caminho_shell_semicolon(nome, caminho));
             }
         }
         // Reproducibility gate's shell-background / logical-AND arm. The
@@ -1204,10 +1180,7 @@ impl DepSource {
         // also tab-strip the trailing separator).
         for &b in caminho.as_bytes() {
             if b == b'&' {
-                return Err(DepError::FonteCaminhoShellBackground {
-                    nome: nome.to_string(),
-                    caminho: caminho.to_string(),
-                });
+                return Err(DepError::fonte_caminho_shell_background(nome, caminho));
             }
         }
         // Reproducibility gate's shell-command-substitution arm. The
@@ -1286,10 +1259,9 @@ impl DepSource {
         // separator).
         for &b in caminho.as_bytes() {
             if b == b'`' {
-                return Err(DepError::FonteCaminhoShellCommandSubstitution {
-                    nome: nome.to_string(),
-                    caminho: caminho.to_string(),
-                });
+                return Err(DepError::fonte_caminho_shell_command_substitution(
+                    nome, caminho,
+                ));
             }
         }
         // Reproducibility gate's shell-glob arm. The c4d62b3 shell-command-
@@ -2440,10 +2412,7 @@ impl DepSource {
         // and the consecutive-`//` (where every prior arm passes on the
         // bytes other than the trailing `/`).
         if caminho.as_bytes().last() == Some(&b'/') {
-            return Err(DepError::FonteCaminhoTrailingSlash {
-                nome: nome.to_string(),
-                caminho: caminho.to_string(),
-            });
+            return Err(DepError::fonte_caminho_trailing_slash(nome, caminho));
         }
         Ok(())
     }
@@ -4384,6 +4353,126 @@ pub enum DepError {
          referencing the caixa's own code surface) instead."
     )]
     DepIsSelf { nome: String, list: &'static str },
+}
+
+// Fold the eleven `DepError::FonteCaminho<Variant> { nome: nome.to_string(),
+// caminho: caminho.to_string() }` two-slot struct-variant wire-up sites at
+// [`DepSource::validate_caminho`] onto one substrate primitive per typed
+// variant — the paired `{ nome: String, caminho: String }` two-slot family
+// on [`DepError`], sibling of the peer
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] (db09650, 3 variants
+// on `{ caixa: String }`) on the `SupervisorError` envelope, the peer
+// [`crate::aplicacao::contrato_empty_pair_ctors!`] (8580068, 4 variants on
+// `{ de, para }`), [`crate::aplicacao::aplicacao_field_reason_ctors!`]
+// (981060b, 7 variants on `{ <field>: String, reason: String }`),
+// [`crate::aplicacao::contrato_target_ctors!`] (14b81d5, 2 variants on
+// `{ de, para, wit, expected }`), and
+// [`crate::aplicacao::contrato_pair_value_reason_ctors!`] (14e13f1, 3
+// variants on `{ de, para, <field>: String, reason: String }`) on the
+// `AplicacaoError` envelopes, the peer
+// [`crate::layout::layout_violation_ctors!`] (131ca0d, 16 variants on
+// `{ caixa, issue }`), [`crate::layout::layout_slot_kind_ctors!`]
+// (0419438, 4 variants on `{ caixa, kind, slots }`),
+// [`crate::LayoutError::missing_entry`] (1b09f9d, one variant on
+// `{ kind, path }`), and [`crate::layout::layout_nome_only_ctors!`]
+// (3fe3dd7, 6 variants on `<Variant>(String)`) on the `LayoutError`
+// envelopes, the peer three [`crate::limits::limits_codec_value_*_ctors!`]
+// codec-family macros (81c856c, 12 wire-ups) on the `LimitsError`
+// envelope, and the peer [`crate::upgrade::upgrade_from_script_ctors!`]
+// (8e67041, 3 variants on `{ from: String, script: PathBuf }`) on the
+// `UpgradeError` envelope. First fold family on this `DepError` envelope.
+//
+// Each of the eleven wire-up sites on this shape (the leading-byte cascade
+// closing the seven `FonteCaminho{Absolute, TildeExpansion, VarExpansion,
+// LeadingWhitespace, LeadingHyphen}` arms; the orthogonal single-metachar
+// cascade closing `FonteCaminhoBackslash` on `\`; the shell-lexer-metachar
+// cascade closing `FonteCaminhoShell{Pipe, Semicolon, Background,
+// CommandSubstitution}` on the four single-byte shell operators; and the
+// trailing-`/` reproducibility arm closing `FonteCaminhoTrailingSlash`)
+// opened the identical `DepError::FonteCaminho<Variant> { nome:
+// nome.to_string(), caminho: caminho.to_string() }` four-line
+// struct-literal against the same `(nome: &str, caminho: &str)` local pair
+// — the exact "same block re-inlined at every consumer" shape the PRIME
+// DIRECTIVE names as a bug, on the same altitude the peer `LayoutError` /
+// `AplicacaoError` / `SupervisorError` / `LimitsError` / `UpgradeError`
+// families each closed on their sibling envelopes. The eleven variants
+// share one `{ nome: String, caminho: String }` shape, so the fold routes
+// each wire-up site through one dispatch per typed variant.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(nome: &str, caminho: &str) -> Self`, so every
+// wire-up site collapses onto one dispatch:
+// `DepError::<ctor>(nome, caminho)`, byte-equal to the pre-lift
+// struct-literal on the same `(&str, &str)` fixture. The uniform two-field
+// construction (`nome.to_string()` / `caminho.to_string()`) is spelled
+// once — inside the macro — rather than at every wire-up site.
+//
+// The three sibling shapes on this envelope carrying additional payload
+// (the `FonteCaminhoEmpty` one-field `{ nome }` shape at the empty-first
+// arm, the twelve `FonteCaminho<Variant> { nome, caminho, byte }`
+// three-field shapes at the per-byte-classification arms, and the
+// per-arm `FonteCaminho{ControlChar,ShellRedirection,ShellGlob,
+// ShellSubshellGrouping,ShellBraceExpansion,ShellBracketExpansion,
+// ShellQuoteGrouping,ShellComment,UrlPercentEncoding,
+// ShellVariableExpansion,ShellHistoryExpansion,ShellHistorySubstitution}`
+// cluster) stay on their pre-lift open-coded shape — each carries a
+// distinct field set (`byte: u8` naming the offending byte) that would
+// break the uniform-two-field routing this macro promises. Each is one
+// wire-up per variant already, so extending the fold to a per-shape
+// sibling macro is future compounding work rather than duplication this
+// lift needs to close.
+//
+// Every future consumer that wants to construct one of these eleven
+// variants outside the current in-crate [`DepSource::validate_caminho`]
+// wire-up sites (a deferred `caixa-resolver` per-`:caminho` re-validator
+// at lacre-resolve time re-checking the same value-shape axes the resolver
+// consumes, a future `feira validate --deps` per-caixa admission verb
+// re-checking the `:fonte :caminho` axis, a per-lacre overlay resolver
+// rejecting a `:caminho` value against a cluster-local snapshot) now
+// reaches each variant through one call rather than re-inlining the
+// four-line struct-literal in lockstep with the eleven in-crate wire-up
+// sites.
+macro_rules! fonte_caminho_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl DepError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`DepError::",
+                    stringify!($variant),
+                    "`] naming the offending `:deps :nome` + `:fonte ",
+                    "(:tipo path …) :caminho` pair. Folds the uniform ",
+                    "`Self::",
+                    stringify!($variant),
+                    " { nome: nome.to_string(), caminho: caminho.to_string() }` ",
+                    "two-slot struct-literal onto one substrate primitive so ",
+                    "every [`DepSource::validate_caminho`] wire-up on this ",
+                    "variant reads through one dispatch rather than the ",
+                    "pre-lift four-line open-coded block."
+                )]
+                #[must_use]
+                pub fn $ctor(nome: &str, caminho: &str) -> Self {
+                    Self::$variant {
+                        nome: nome.to_string(),
+                        caminho: caminho.to_string(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+fonte_caminho_ctors! {
+    fonte_caminho_absolute => FonteCaminhoAbsolute,
+    fonte_caminho_tilde_expansion => FonteCaminhoTildeExpansion,
+    fonte_caminho_var_expansion => FonteCaminhoVarExpansion,
+    fonte_caminho_leading_whitespace => FonteCaminhoLeadingWhitespace,
+    fonte_caminho_leading_hyphen => FonteCaminhoLeadingHyphen,
+    fonte_caminho_backslash => FonteCaminhoBackslash,
+    fonte_caminho_shell_pipe => FonteCaminhoShellPipe,
+    fonte_caminho_shell_semicolon => FonteCaminhoShellSemicolon,
+    fonte_caminho_shell_background => FonteCaminhoShellBackground,
+    fonte_caminho_shell_command_substitution => FonteCaminhoShellCommandSubstitution,
+    fonte_caminho_trailing_slash => FonteCaminhoTrailingSlash,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -15905,6 +15994,258 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    // Fail-before-pass-after pins on the eleven
+    // [`fonte_caminho_ctors!`]-generated `DepError::fonte_caminho_*`
+    // constructors folded from the [`DepSource::validate_caminho`]
+    // wire-up sites. Each pins the generated ctor's output to the
+    // pre-lift struct-literal on the same `(&str, &str)` fixture, so
+    // any wrapper-side lowercase / trim / re-order / silent-field-swap
+    // regression on the two-field `{ nome: nome.to_string(), caminho:
+    // caminho.to_string() }` construction surfaces here rather than at
+    // a downstream diagnostic-shape mismatch. Peer of the sibling
+    // `empty_child_version_ctor_matches_struct_literal_wrap` /
+    // `contrato_endpoint_empty_ctor_matches_struct_literal_wrap` /
+    // `entrada_host_invalid_ctor_matches_struct_literal_wrap` /
+    // `nome_only_ctor_routes_caixa_through_nome_accessor` equivalence
+    // pins on the peer `SupervisorError` / `AplicacaoError` /
+    // `LayoutError` / `LimitsError` / `UpgradeError` envelopes.
+
+    #[test]
+    fn fonte_caminho_absolute_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_absolute("caixa-teia", "/home/me/work/caixa-teia"),
+            DepError::FonteCaminhoAbsolute {
+                nome: "caixa-teia".to_string(),
+                caminho: "/home/me/work/caixa-teia".to_string(),
+            },
+            "generated fonte_caminho_absolute ctor must produce byte-equal \
+             DepError to the open-coded struct-literal wrap on the same \
+             (&str, &str) fixture",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_tilde_expansion_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_tilde_expansion("caixa-teia", "~/work/caixa-teia"),
+            DepError::FonteCaminhoTildeExpansion {
+                nome: "caixa-teia".to_string(),
+                caminho: "~/work/caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_var_expansion("caixa-teia", "$HOME/work/caixa-teia"),
+            DepError::FonteCaminhoVarExpansion {
+                nome: "caixa-teia".to_string(),
+                caminho: "$HOME/work/caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_leading_whitespace_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_leading_whitespace("caixa-teia", " ../caixa-teia"),
+            DepError::FonteCaminhoLeadingWhitespace {
+                nome: "caixa-teia".to_string(),
+                caminho: " ../caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_leading_hyphen_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_leading_hyphen("caixa-teia", "-rf"),
+            DepError::FonteCaminhoLeadingHyphen {
+                nome: "caixa-teia".to_string(),
+                caminho: "-rf".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_backslash("caixa-teia", "..\\caixa-teia"),
+            DepError::FonteCaminhoBackslash {
+                nome: "caixa-teia".to_string(),
+                caminho: "..\\caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_shell_pipe("caixa-teia", "../caixa-teia|evil"),
+            DepError::FonteCaminhoShellPipe {
+                nome: "caixa-teia".to_string(),
+                caminho: "../caixa-teia|evil".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_shell_semicolon("caixa-teia", "../caixa-teia;evil"),
+            DepError::FonteCaminhoShellSemicolon {
+                nome: "caixa-teia".to_string(),
+                caminho: "../caixa-teia;evil".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_shell_background("caixa-teia", "../caixa-teia&"),
+            DepError::FonteCaminhoShellBackground {
+                nome: "caixa-teia".to_string(),
+                caminho: "../caixa-teia&".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_shell_command_substitution(
+                "caixa-teia",
+                "../caixa-teia`whoami`",
+            ),
+            DepError::FonteCaminhoShellCommandSubstitution {
+                nome: "caixa-teia".to_string(),
+                caminho: "../caixa-teia`whoami`".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_trailing_slash_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_trailing_slash("caixa-teia", "../caixa-teia/"),
+            DepError::FonteCaminhoTrailingSlash {
+                nome: "caixa-teia".to_string(),
+                caminho: "../caixa-teia/".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_ctors_route_nome_and_caminho_through_to_string() {
+        // Cross-axis pin: sweep the two constructor input axes
+        // (`nome: &str`, `caminho: &str`) through a non-default fixture
+        // pair against every generated arm in the
+        // [`fonte_caminho_ctors!`] macro, so any wrapper-side lowercase
+        // / trim / truncate / re-order on the two-field
+        // `{ nome, caminho }` construction — or a silent field swap
+        // between the two axes at codegen time — surfaces here rather
+        // than at a downstream diagnostic-shape mismatch. Peer of the
+        // sibling `supervisor_caixa_only_ctors_route_caixa_through_
+        // to_string` cross-axis routing pin on the peer
+        // `SupervisorError` envelope, extended here onto the
+        // `DepError` `{ nome: String, caminho: String }` envelope so
+        // every substrate-primitive ctor family in caixa-core
+        // guarantees each `&str`-field construction routes the
+        // caller's `&str` verbatim through `.to_string()`.
+        let nome = "sibling-teia";
+        let caminho = "../workspace/sibling";
+        let cases: [(DepError, DepError); 11] = [
+            (
+                DepError::fonte_caminho_absolute(nome, caminho),
+                DepError::FonteCaminhoAbsolute {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_tilde_expansion(nome, caminho),
+                DepError::FonteCaminhoTildeExpansion {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_var_expansion(nome, caminho),
+                DepError::FonteCaminhoVarExpansion {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_leading_whitespace(nome, caminho),
+                DepError::FonteCaminhoLeadingWhitespace {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_leading_hyphen(nome, caminho),
+                DepError::FonteCaminhoLeadingHyphen {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_backslash(nome, caminho),
+                DepError::FonteCaminhoBackslash {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_shell_pipe(nome, caminho),
+                DepError::FonteCaminhoShellPipe {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_shell_semicolon(nome, caminho),
+                DepError::FonteCaminhoShellSemicolon {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_shell_background(nome, caminho),
+                DepError::FonteCaminhoShellBackground {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_shell_command_substitution(nome, caminho),
+                DepError::FonteCaminhoShellCommandSubstitution {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_trailing_slash(nome, caminho),
+                DepError::FonteCaminhoTrailingSlash {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                },
+            ),
+        ];
+        for (via_ctor, via_struct_literal) in cases {
+            assert_eq!(
+                via_ctor, via_struct_literal,
+                "fonte_caminho_ctors!-generated ctor must route (nome, caminho) \
+                 through `.to_string()` in declared field order — a field-swap or \
+                 silent-conversion regression surfaces here rather than at a \
+                 downstream diagnostic-shape mismatch",
+            );
         }
     }
 }
