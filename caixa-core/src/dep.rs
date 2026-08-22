@@ -250,9 +250,7 @@ impl DepSource {
                 branch,
             } => {
                 if repo.is_empty() {
-                    return Err(DepError::FonteRepoEmpty {
-                        nome: nome.to_string(),
-                    });
+                    return Err(DepError::fonte_repo_empty(nome));
                 }
                 // The `:repo` value flows verbatim into the caixa-resolver's
                 // `git clone <repo>` subprocess invocation. Until this gate
@@ -295,9 +293,7 @@ impl DepSource {
                     pins.iter().filter_map(|(n, v)| v.map(|_| *n)).collect();
                 match set.len() {
                     0 => {
-                        return Err(DepError::FontePinMissing {
-                            nome: nome.to_string(),
-                        });
+                        return Err(DepError::fonte_pin_missing(nome));
                     }
                     1 => {
                         for (pin, value) in pins {
@@ -438,9 +434,7 @@ impl DepSource {
     )]
     fn validate_caminho(nome: &str, caminho: &str) -> Result<(), DepError> {
         if caminho.is_empty() {
-            return Err(DepError::FonteCaminhoEmpty {
-                nome: nome.to_string(),
-            });
+            return Err(DepError::fonte_caminho_empty(nome));
         }
         // Reproducibility gate on the `:fonte (:tipo path …)`
         // `:caminho` axis. The lacre pipeline embeds the value
@@ -3047,9 +3041,7 @@ impl Dep {
         // parse yields an implicit `*`) lives in exactly one predicate.
         crate::render::require_valid_versao_requirement(
             self.versao_requirement(),
-            || DepError::VersaoEmpty {
-                nome: self.nome.clone(),
-            },
+            || DepError::versao_empty(&self.nome),
             |reason| DepError::VersaoInvalid {
                 nome: self.nome.clone(),
                 versao: self.versao_requirement().to_string(),
@@ -3148,9 +3140,7 @@ impl Dep {
         let mut seen = std::collections::HashSet::new();
         for c in self.caracteristicas() {
             if c.is_empty() {
-                return Err(DepError::CaracteristicaEmpty {
-                    nome: self.nome.clone(),
-                });
+                return Err(DepError::caracteristica_empty(&self.nome));
             }
             if let Err(reason) = crate::render::is_cargo_feature_name(c) {
                 return Err(DepError::CaracteristicaInvalid {
@@ -4473,6 +4463,85 @@ fonte_caminho_ctors! {
     fonte_caminho_shell_background => FonteCaminhoShellBackground,
     fonte_caminho_shell_command_substitution => FonteCaminhoShellCommandSubstitution,
     fonte_caminho_trailing_slash => FonteCaminhoTrailingSlash,
+}
+
+// Fold the five `DepError::<Variant> { nome: <owner>.clone_or_to_string() }`
+// single-slot struct-variant wire-up sites scattered across
+// [`Dep::validate`] / [`Dep::validate_caracteristicas`] /
+// [`DepSource::validate`] / [`DepSource::validate_caminho`] onto one
+// substrate primitive per typed variant — the paired `{ nome: String }`
+// single-slot family on [`DepError`], sibling of the peer
+// [`fonte_caminho_ctors!`] (f85f145, 11 variants on
+// `{ nome: String, caminho: String }`) on the sibling two-slot envelope of
+// the same enum, and of the peer
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] (db09650, 3 variants
+// on `{ caixa: String }`) on the `SupervisorError` envelope's single-slot
+// axis. Second fold family on this `DepError` envelope, and the first on
+// the single-`{ nome }` shape.
+//
+// The five wire-up sites this fold closes each opened the identical
+// `DepError::<Variant> { nome: <owner>.to_string_or_clone() }` three-line
+// struct-literal against the same `nome: &str` (or `self.nome: &String`)
+// local — the exact "same block re-inlined at every consumer" shape the
+// PRIME DIRECTIVE names as a bug. The five variants share one
+// `{ nome: String }` shape, so the fold routes each wire-up site through
+// one dispatch per typed variant.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(nome: &str) -> Self`, so every wire-up site
+// collapses onto one dispatch: `DepError::<ctor>(nome)`, byte-equal to the
+// pre-lift struct-literal on the same `&str` fixture. The uniform
+// one-field construction (`nome.to_string()`) is spelled once — inside
+// the macro — rather than at every wire-up site. Callers that hold a
+// `String` (`self.nome`) pass `&self.nome`, which auto-derefs to `&str`
+// and lets the macro-owned `.to_string()` produce the fresh owning copy
+// the enum variant needs; the semantics collapse onto the same
+// `.clone()`-equivalent one this fold replaces at every site.
+//
+// The sibling `NomeEmpty` unit-variant (`enum DepError { NomeEmpty, … }`)
+// on the same envelope stays on its pre-lift open-coded wire-up shape —
+// it carries no `nome` field (the offending `:nome` value *is* the empty
+// string this variant catches) so the uniform `fn(nome: &str) -> Self`
+// signature this macro promises does not apply. Every future consumer
+// that wants to construct one of these five variants outside the current
+// in-crate wire-up sites (a deferred `caixa-resolver` per-`:versao` /
+// `:caracteristicas` / `:fonte :repo` / `:fonte :pin` / `:fonte :caminho`
+// re-validator at lacre-resolve time, a future `feira validate --deps`
+// per-caixa admission verb, a per-lacre overlay resolver rejecting one of
+// these empty-value shapes against a cluster-local snapshot) now reaches
+// each variant through one call rather than re-inlining the three-line
+// struct-literal in lockstep with the five in-crate wire-up sites.
+macro_rules! dep_nome_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl DepError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`DepError::",
+                    stringify!($variant),
+                    "`] naming the offending `:deps :nome`. Folds the ",
+                    "uniform `Self::",
+                    stringify!($variant),
+                    " { nome: nome.to_string() }` one-field ",
+                    "struct-literal onto one substrate primitive so every ",
+                    "in-crate wire-up on this variant reads through one ",
+                    "dispatch rather than the pre-lift three-line ",
+                    "open-coded block."
+                )]
+                #[must_use]
+                pub fn $ctor(nome: &str) -> Self {
+                    Self::$variant { nome: nome.to_string() }
+                }
+            )*
+        }
+    };
+}
+
+dep_nome_only_ctors! {
+    versao_empty => VersaoEmpty,
+    fonte_repo_empty => FonteRepoEmpty,
+    fonte_pin_missing => FontePinMissing,
+    fonte_caminho_empty => FonteCaminhoEmpty,
+    caracteristica_empty => CaracteristicaEmpty,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -16245,6 +16314,120 @@ mod tests {
                  through `.to_string()` in declared field order — a field-swap or \
                  silent-conversion regression surfaces here rather than at a \
                  downstream diagnostic-shape mismatch",
+            );
+        }
+    }
+
+    // ── `dep_nome_only_ctors!` — the paired `{ nome: String }` single-slot
+    //    envelope on `DepError`, sibling of the peer `fonte_caminho_ctors!`
+    //    (f85f145) on the `{ nome, caminho }` two-slot envelope of the same
+    //    enum, and of `supervisor_caixa_only_ctors!` (db09650) on the peer
+    //    `SupervisorError` envelope's `{ caixa: String }` single-slot axis.
+
+    #[test]
+    fn versao_empty_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::versao_empty("caixa-teia"),
+            DepError::VersaoEmpty {
+                nome: "caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_repo_empty_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_repo_empty("caixa-teia"),
+            DepError::FonteRepoEmpty {
+                nome: "caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_pin_missing_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_pin_missing("caixa-teia"),
+            DepError::FontePinMissing {
+                nome: "caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_empty_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_caminho_empty("caixa-teia"),
+            DepError::FonteCaminhoEmpty {
+                nome: "caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn caracteristica_empty_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::caracteristica_empty("caixa-teia"),
+            DepError::CaracteristicaEmpty {
+                nome: "caixa-teia".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn dep_nome_only_ctors_route_nome_through_to_string() {
+        // Cross-axis routing pin: sweep the single constructor input
+        // axis (`nome: &str`) through a non-default fixture against
+        // every generated arm in the [`dep_nome_only_ctors!`] macro, so
+        // any wrapper-side lowercase / trim / truncate at codegen time
+        // — or a silent field re-name away from the canonical `nome`
+        // axis on any one variant — surfaces here rather than at a
+        // downstream diagnostic-shape mismatch. Peer of the sibling
+        // `fonte_caminho_ctors_route_nome_and_caminho_through_
+        // to_string` cross-axis routing pin on the same envelope's
+        // two-slot family (f85f145) and of the peer
+        // `supervisor_caixa_only_ctors_route_caixa_through_to_string`
+        // pin on the `SupervisorError` single-slot family (db09650).
+        let nome = "sibling-teia";
+        let cases: [(DepError, DepError); 5] = [
+            (
+                DepError::versao_empty(nome),
+                DepError::VersaoEmpty {
+                    nome: nome.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_repo_empty(nome),
+                DepError::FonteRepoEmpty {
+                    nome: nome.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_pin_missing(nome),
+                DepError::FontePinMissing {
+                    nome: nome.to_string(),
+                },
+            ),
+            (
+                DepError::fonte_caminho_empty(nome),
+                DepError::FonteCaminhoEmpty {
+                    nome: nome.to_string(),
+                },
+            ),
+            (
+                DepError::caracteristica_empty(nome),
+                DepError::CaracteristicaEmpty {
+                    nome: nome.to_string(),
+                },
+            ),
+        ];
+        for (via_ctor, via_struct_literal) in cases {
+            assert_eq!(
+                via_ctor, via_struct_literal,
+                "dep_nome_only_ctors!-generated ctor must route `nome` \
+                 through `.to_string()` onto the canonical `nome` field \
+                 — a field-rename or silent-conversion regression surfaces \
+                 here rather than at a downstream diagnostic-shape mismatch",
             );
         }
     }
