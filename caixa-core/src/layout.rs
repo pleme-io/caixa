@@ -602,27 +602,37 @@ impl LayoutInvariants for StandardLayout {
             .validate_edicao()
             .map_err(|err| LayoutError::edicao_violation(caixa, err))?;
 
-        // Supervisors, Aplicacaos, and Acaos don't run code; reject
-        // bibliotecas/exe/servicos declarations BEFORE checking those
-        // paths exist (which would otherwise produce a less-helpful
-        // "missing entry" error first).
-        let has_code = !caixa.bibliotecas().is_empty()
-            || !caixa.exe().is_empty()
-            || !caixa.servicos().is_empty();
-        if caixa.kind().is_supervisor() && has_code {
-            return Err(LayoutError::supervisor_owns_code(caixa));
-        }
-        if caixa.kind().is_aplicacao() && has_code {
-            return Err(LayoutError::aplicacao_owns_code(caixa));
-        }
-        // An Acao's sole payload is its `:ci` slot (CANTEIRO §7.1-C) —
-        // like Supervisor/Aplicacao it runs no code of its own, so a
-        // declared :bibliotecas/:exe/:servicos is the same "silently
-        // ignored" footgun the two gates above already close for the
-        // other two no-code kinds.
-        if caixa.kind().is_acao() && has_code {
-            return Err(LayoutError::acao_owns_code(caixa));
-        }
+        // Kind ↔ code-surface coherence on the three no-code kinds
+        // (Supervisor / Aplicacao / Acao) — folded onto one substrate
+        // primitive at [`crate::Caixa::validate_no_code_kind_coherence`].
+        // Pre-lift each of the three arms lived as a self-similar
+        // `if caixa.kind().is_<no-code-kind>() && has_code { return
+        // Err(LayoutError::<kind>_owns_code(caixa)); }` block at this
+        // call site — three consumers, three identical shapes, one
+        // substrate primitive on [`Caixa`] closing the duplication the
+        // PRIME DIRECTIVE names as a bug. Mirror of the sibling
+        // [`crate::Caixa::validate_kind_slot_coherence`] fold f0d286e
+        // on the author-time typed-slot coherence axis: this wire-up
+        // closes the same three-arm cascade on the reciprocal
+        // code-surface axis, so the layout pipeline now routes both
+        // "no-code kind declares typed slots" and "no-code kind
+        // declares code" author-time footgun families through one
+        // substrate primitive per axis rather than six open-coded
+        // blocks. Each of the three inner ctors
+        // ([`crate::LayoutError::supervisor_owns_code`] /
+        // [`crate::LayoutError::aplicacao_owns_code`] /
+        // [`crate::LayoutError::acao_owns_code`]) was already lifted
+        // onto the substrate by the peer [`layout_nome_only_ctors!`]
+        // macro, so the primitive routes through the same
+        // `Self::<variant>(caixa.nome().to_string())` tuple-literal
+        // wrap per arm as the pre-lift open-coded blocks. Runs
+        // BEFORE the path-existence loops below so a no-code kind
+        // that declares code surfaces the self-locating OwnsCode
+        // diagnostic naming the offending kind rather than a
+        // downstream `MissingEntry` / `ExeOutsideDir` /
+        // `ServicoOutsideDir` against the resolved path far from the
+        // source `caixa.lisp`.
+        caixa.validate_no_code_kind_coherence()?;
 
         // Kind ↔ typed-slot coherence on the M3 mesh / supervisor-tree /
         // M2 Servico-runtime slot families — folded onto one substrate
