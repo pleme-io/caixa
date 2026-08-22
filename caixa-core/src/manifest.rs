@@ -2315,10 +2315,7 @@ impl Caixa {
             crate::dep::DepList::Dev => &mut self.deps_dev,
         };
         if target.iter().any(|d| d.nome() == dep.nome()) {
-            return Err(DepError::DuplicateNome {
-                nome: dep.nome().to_string(),
-                list: list.as_str(),
-            });
+            return Err(DepError::duplicate_nome(dep.nome(), list.as_str()));
         }
         target.push(dep);
         Ok(())
@@ -4214,10 +4211,7 @@ impl Caixa {
             for dep in self.deps_of(list) {
                 dep.validate()?;
                 crate::render::insert_first_seen(&mut seen, dep.nome(), || {
-                    DepError::DuplicateNome {
-                        nome: dep.nome().to_string(),
-                        list: list.as_str(),
-                    }
+                    DepError::duplicate_nome(dep.nome(), list.as_str())
                 })?;
             }
         }
