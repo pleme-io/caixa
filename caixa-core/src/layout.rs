@@ -205,6 +205,78 @@ impl StandardLayout {
         }
         Ok(())
     }
+
+    /// Probe every path yielded by `paths` against the injected oracle
+    /// under `root` and, on presence, verify the resolved path lives
+    /// inside `sandbox_dir` (via the sibling
+    /// [`Self::probe_sandboxed_declared_entry`] primitive); on the first
+    /// miss return the paired [`LayoutError::MissingEntry`] naming the
+    /// offending entry with the caller-provided canonical `kind` label,
+    /// on the first sandbox-escape return `outside_ctor(full)` naming
+    /// the offending resolved path, and on empty / all-hit arms return
+    /// `Ok(())`.
+    ///
+    /// Folds the two self-similar per-slot sandboxed-existence-probe
+    /// *loop* blocks at [`Self::verify`] onto one substrate primitive on
+    /// [`StandardLayout`]:
+    ///
+    /// - `:exe` iteration — `let exe_dir = root.join(LAYOUT_DIR_EXE); for
+    ///   p in caixa.exe() { self.probe_sandboxed_declared_entry(p, root,
+    ///   LAYOUT_MISSING_ENTRY_KIND_EXE, &exe_dir, LayoutError::ExeOutsideDir)?; }`,
+    /// - `:servicos` iteration — `let servicos_dir = root.join(
+    ///   LAYOUT_DIR_SERVICOS); for p in caixa.servicos() {
+    ///   self.probe_sandboxed_declared_entry(p, root,
+    ///   LAYOUT_MISSING_ENTRY_KIND_SERVICO, &servicos_dir,
+    ///   LayoutError::ServicoOutsideDir)?; }`.
+    ///
+    /// Two consumers, two identical `for … { self.probe_sandboxed_declared_entry
+    /// (…, kind, &sandbox_dir, outside_ctor)?; }` loop shapes, one
+    /// substrate primitive on [`StandardLayout`] closing the duplication
+    /// the PRIME DIRECTIVE names as a bug — sibling to the peer per-slot
+    /// batch [`Self::probe_declared_entries`] (d1ccb0b) primitive on the
+    /// non-sandboxed axis and the per-arm [`Self::probe_declared_entry`]
+    /// (fda1e35) / [`Self::probe_sandboxed_declared_entry`] (4940d55)
+    /// primitives on the per-path axis. The four together close the
+    /// layout-pipeline existence-probe algebra: every wire-up on the
+    /// (per-arm | per-slot batch) × (bare | sandboxed) product now
+    /// routes through one substrate primitive rather than N open-coded
+    /// blocks.
+    ///
+    /// Diagnostic order preserved: iteration proceeds in the caller-
+    /// supplied iterator order and short-circuits on the first miss or
+    /// sandbox-escape, byte-equal to the pre-lift `for … { … ? }` loop's
+    /// first-error return semantics. Within each iteration
+    /// [`LayoutError::MissingEntry`] fires before `outside_ctor` (the
+    /// order the peer [`Self::probe_sandboxed_declared_entry`] primitive
+    /// docstring documents). Every future consumer that wants to sweep a
+    /// per-slot declared-path list against an out-of-band filesystem
+    /// oracle *and* gate each resolved path on a sandbox sub-tree (a
+    /// per-slot admission webhook probing an entire `:exe` / `:servicos`
+    /// slot as a unit against a mounted cluster-local filesystem
+    /// snapshot, a `feira validate --exists --sandbox` per-caixa
+    /// admission verb, the deferred `caixa.pleme.io/v1alpha1/Caixa` CR
+    /// materializer's admission-webhook floor, a per-cluster overlay
+    /// resolver re-probing a slot-of-sandboxed-paths after a patch)
+    /// reaches the per-slot batch through one call rather than
+    /// re-inlining the three-line loop body in lockstep with the two
+    /// `verify` wire-up sites.
+    fn probe_sandboxed_declared_entries<I, P>(
+        &self,
+        paths: I,
+        root: &Path,
+        kind: &'static str,
+        sandbox_dir: &Path,
+        outside_ctor: fn(PathBuf) -> LayoutError,
+    ) -> Result<(), LayoutError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        for p in paths {
+            self.probe_sandboxed_declared_entry(p, root, kind, sandbox_dir, outside_ctor)?;
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for StandardLayout {
@@ -981,20 +1053,23 @@ impl LayoutInvariants for StandardLayout {
         // On-disk existence probe on the three Caixa-level code-surface
         // path lists (`:bibliotecas`, `:exe`, `:servicos`): every declared
         // entry must resolve on disk. The `:bibliotecas` sweep folds onto
-        // the [`Self::probe_declared_entries`] per-slot batch primitive so
-        // the iteration + per-iteration `probe_declared_entry` dispatch
-        // reads through one call rather than a three-line `for … { self.
-        // probe_declared_entry(…)?; }` loop kept in lockstep with the
-        // peer `:behavior` / `:upgrade-from` batch wire-ups below. The
-        // `:exe` / `:servicos` peers stay open-coded at this altitude
-        // (routed through the sibling sandboxed
-        // [`Self::probe_sandboxed_declared_entry`] primitive rather than
-        // the bare per-arm probe) because their per-iteration sandbox-
-        // directory-containment follow-up consumes the resolved `full`
-        // returned by the sandboxed primitive on hit — the two arms
-        // together preserve the pre-lift diagnostic order: `MissingEntry`
-        // fires before `ExeOutsideDir` / `ServicoOutsideDir` on the same
-        // iteration.
+        // the [`Self::probe_declared_entries`] per-slot batch primitive
+        // so the iteration + per-iteration `probe_declared_entry`
+        // dispatch reads through one call rather than a three-line
+        // `for … { self.probe_declared_entry(…)?; }` loop kept in
+        // lockstep with the peer `:behavior` / `:upgrade-from` batch
+        // wire-ups below. The `:exe` / `:servicos` peers fold onto the
+        // sibling [`Self::probe_sandboxed_declared_entries`] per-slot
+        // batch primitive on the sandboxed axis so the iteration +
+        // per-iteration `probe_sandboxed_declared_entry` dispatch reads
+        // through one call rather than a three-line `for … { self.
+        // probe_sandboxed_declared_entry(…)?; }` loop kept in lockstep
+        // with each other and with the peer `:bibliotecas` bare-batch
+        // wire-up above. All three preserve the pre-lift diagnostic
+        // order: `MissingEntry` fires before `ExeOutsideDir` /
+        // `ServicoOutsideDir` on the same iteration, and iteration
+        // proceeds in the caller-supplied iterator order (short-
+        // circuiting on the first miss).
         self.probe_declared_entries(
             caixa.bibliotecas(),
             root,
@@ -1002,26 +1077,22 @@ impl LayoutInvariants for StandardLayout {
         )?;
 
         let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
-        for p in caixa.exe() {
-            self.probe_sandboxed_declared_entry(
-                p,
-                root,
-                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
-                &exe_dir,
-                LayoutError::ExeOutsideDir,
-            )?;
-        }
+        self.probe_sandboxed_declared_entries(
+            caixa.exe(),
+            root,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+            &exe_dir,
+            LayoutError::ExeOutsideDir,
+        )?;
 
         let servicos_dir = root.join(crate::render::LAYOUT_DIR_SERVICOS);
-        for p in caixa.servicos() {
-            self.probe_sandboxed_declared_entry(
-                p,
-                root,
-                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
-                &servicos_dir,
-                LayoutError::ServicoOutsideDir,
-            )?;
-        }
+        self.probe_sandboxed_declared_entries(
+            caixa.servicos(),
+            root,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            &servicos_dir,
+            LayoutError::ServicoOutsideDir,
+        )?;
 
         // ── M2 typed-substrate invariants ────────────────────────────────
 
@@ -3249,6 +3320,450 @@ mod tests {
              primitive's miss arm byte-equal — pins that the batch primitive routes \
              through the substrate primitive rather than re-inlining the `root.join` + \
              `exists` + `missing_entry` cascade",
+        );
+    }
+
+    // ── StandardLayout::probe_sandboxed_declared_entries substrate primitive ─
+    //
+    // The [`StandardLayout::probe_sandboxed_declared_entries`] method
+    // (`layout.rs`) folds the two self-similar per-slot sandboxed-
+    // existence-probe *loop* blocks at [`StandardLayout::verify`]
+    // (`:exe` iteration, `:servicos` iteration) onto one substrate
+    // primitive. The pins below (fail-before-pass-after by construction
+    // — a byte-mismatched primitive body would trip its equivalence pin
+    // first) lock the fold to its pre-lift open-coded shape under
+    // `PartialEq`, so every wire-up in [`StandardLayout::verify`] on
+    // this primitive produces a byte-equal `LayoutError` on miss / on
+    // sandbox-escape (via the sibling
+    // [`StandardLayout::probe_sandboxed_declared_entry`] arms) and a
+    // byte-equal `Ok(())` on the empty / all-hit arms (the fold's
+    // identity element on an empty slot list; the pre-lift `for … {
+    // … }` loop's vacuous pass-through).
+    //
+    // Sibling of the peer per-slot batch bare-probe
+    // [`StandardLayout::probe_declared_entries`] (d1ccb0b), per-arm
+    // bare-probe [`StandardLayout::probe_declared_entry`] (fda1e35), and
+    // per-arm sandboxed-probe
+    // [`StandardLayout::probe_sandboxed_declared_entry`] (4940d55)
+    // primitive test blocks — same substrate-primitive discipline
+    // extended onto the fourth and last quadrant of the
+    // (per-arm | per-slot batch) × (bare | sandboxed) existence-probe
+    // algebra.
+
+    #[test]
+    fn probe_sandboxed_declared_entries_folds_empty_iterator_returns_ok() {
+        // Per-primitive identity-element pin on the empty-iterator arm —
+        // the fold's `Ok(())` return on an empty `IntoIterator` is byte-
+        // equal to the pre-lift `for _ in <empty> { … }` loop's vacuous
+        // pass-through. Peer of the sibling
+        // `probe_declared_entries_folds_empty_iterator_returns_ok` pin
+        // on the bare-batch axis and the `Option::None → Ok(())`
+        // identity elements the per-Caixa compound gates
+        // ([`crate::Caixa::validate_limits`] baa4688,
+        // [`crate::Caixa::validate_behavior`] 0d2877a) each carry on the
+        // per-slot compound-gate axis.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let empty: [&Path; 0] = [];
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
+        layout
+            .probe_sandboxed_declared_entries(
+                empty,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .expect(
+                "probe_sandboxed_declared_entries must return Ok(()) on an empty iterator \
+                 — the fold's identity element on an empty per-slot sandboxed batch",
+            );
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_folds_all_hits_returns_ok() {
+        // Per-primitive equivalence pin on the all-hit arm — a
+        // [`StandardLayout`] whose oracle admits every path in the batch
+        // *and* whose resolved paths live inside `sandbox_dir` yields
+        // `Ok(())` byte-equal to the pre-lift `for p in … {
+        // self.probe_sandboxed_declared_entry(p, root, kind,
+        // &sandbox_dir, outside_ctor)?; }` loop's full-consumption
+        // pass-through.
+        let root = PathBuf::from("/tmp/x");
+        let a = root.join("exe/a");
+        let b = root.join("exe/b");
+        let a_probe = a.clone();
+        let b_probe = b.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == a_probe || p == b_probe);
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
+        layout
+            .probe_sandboxed_declared_entries(
+                [Path::new("exe/a"), Path::new("exe/b")],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .expect(
+                "probe_sandboxed_declared_entries must return Ok(()) when every path in \
+                 the batch is admitted by the oracle and lives inside sandbox_dir",
+            );
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_folds_first_miss_short_circuits_via_probe_sandboxed_declared_entry()
+     {
+        // Per-primitive equivalence pin on the first-miss arm — a
+        // [`StandardLayout`] whose oracle admits the first path (inside
+        // sandbox_dir) and rejects the second yields a `MissingEntry`
+        // byte-equal under `PartialEq` to the sibling
+        // [`StandardLayout::probe_sandboxed_declared_entry`] primitive's
+        // miss wrap on the *second* path (the pre-lift `for … { … ? }`
+        // loop's first-error return semantics), *not* on the first
+        // (admitted) path.
+        let root = PathBuf::from("/tmp/x");
+        let hit = root.join("exe/a");
+        let hit_probe = hit.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == hit_probe);
+        let miss = Path::new("exe/b");
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
+        let err = layout
+            .probe_sandboxed_declared_entries(
+                [Path::new("exe/a"), miss],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                root.join(miss),
+            ),
+            "probe_sandboxed_declared_entries must short-circuit on the first missing \
+             entry with a `MissingEntry` byte-equal to the sibling \
+             probe_sandboxed_declared_entry primitive's miss wrap on that entry — the \
+             pre-lift `for … {{ … ? }}` loop's first-error return semantics",
+        );
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_folds_first_miss_short_circuits_before_later_paths() {
+        // Diagnostic-order pin — the primitive must return on the *first*
+        // miss in iterator order rather than probing every path and
+        // returning the last miss (which would silently drop the pre-
+        // lift `for … { … ? }` loop's first-error contract). Fixture:
+        // the oracle rejects both paths, so a byte-equal `MissingEntry`
+        // on the *first* path in the iterator distinguishes the two
+        // return-order shapes. Sibling of the peer
+        // `probe_declared_entries_folds_first_miss_short_circuits_before_later_paths`
+        // pin on the bare-batch axis.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let first = Path::new("exe/first");
+        let second = Path::new("exe/second");
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
+        let err = layout
+            .probe_sandboxed_declared_entries(
+                [first, second],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::missing_entry(
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                root.join(first),
+            ),
+            "probe_sandboxed_declared_entries must return on the *first* miss in iterator \
+             order — a `MissingEntry` on the second path would silently drop the pre-lift \
+             `for … {{ … ? }}` loop's first-error contract",
+        );
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_folds_sandbox_escape_via_outside_ctor() {
+        // Per-primitive equivalence pin on the sandbox-escape arm — a
+        // [`StandardLayout`] whose oracle admits the probed resolved
+        // path (so the miss arm passes) but whose resolved path lies
+        // outside the caller-provided `sandbox_dir` yields the paired
+        // `outside_ctor(full)` byte-equal under `PartialEq`. The
+        // primitive threads the resolved `full` through the caller-
+        // supplied `fn(PathBuf) -> LayoutError` constructor rather than
+        // a hard-coded variant, so the fold does not silently collapse
+        // onto one of the two `:exe` / `:servicos` outside-dir variants.
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("lib/tool");
+        let full = root.join(path);
+        let full_probe = full.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == full_probe);
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
+        let err = layout
+            .probe_sandboxed_declared_entries(
+                [path],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::ExeOutsideDir(full),
+            "probe_sandboxed_declared_entries sandbox-escape arm must route the resolved \
+             `full` through the caller-supplied outside_ctor byte-equal to the pre-lift \
+             `LayoutError::ExeOutsideDir(full)` tuple-literal",
+        );
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_threads_outside_ctor_through_arg_verbatim() {
+        // Cross-axis pin — the primitive must thread the caller-supplied
+        // `outside_ctor` verbatim into the sandbox-escape arm's
+        // `LayoutError` return, so the fold does not silently collapse
+        // onto one hard-coded variant. Sweep both [`LayoutError`]
+        // tuple-variants the two wire-up sites in
+        // [`StandardLayout::verify`] pass — [`LayoutError::ExeOutsideDir`]
+        // and [`LayoutError::ServicoOutsideDir`] — so a byte-drifted
+        // ctor-routing on either axis would trip. Sibling of the peer
+        // `probe_sandboxed_declared_entry_threads_outside_ctor_through_arg_verbatim`
+        // pin on the per-arm sandboxed-primitive axis.
+        let root = PathBuf::from("/tmp/x");
+        let outside_dir = root.join(crate::render::LAYOUT_DIR_LIB);
+        for (kind, sandbox_component, ctor) in [
+            (
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                crate::render::LAYOUT_DIR_EXE,
+                LayoutError::ExeOutsideDir as fn(PathBuf) -> LayoutError,
+            ),
+            (
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                crate::render::LAYOUT_DIR_SERVICOS,
+                LayoutError::ServicoOutsideDir as fn(PathBuf) -> LayoutError,
+            ),
+        ] {
+            let path = outside_dir.strip_prefix(&root).unwrap().join("tool");
+            let full = root.join(&path);
+            let full_probe = full.clone();
+            let layout = StandardLayout::new().with_path_exists(move |p| p == full_probe);
+            let sandbox_dir = root.join(sandbox_component);
+            let err = layout
+                .probe_sandboxed_declared_entries([&path], &root, kind, &sandbox_dir, ctor)
+                .unwrap_err();
+            assert_eq!(
+                err,
+                ctor(full),
+                "probe_sandboxed_declared_entries must thread `outside_ctor` verbatim on \
+                 every canonical `<Slot>OutsideDir` variant the two wire-up sites pass",
+            );
+        }
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_threads_kind_through_arg_verbatim() {
+        // Cross-axis pin — sweep every canonical
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_*`] label the two
+        // sandboxed-batch wire-up sites in [`StandardLayout::verify`]
+        // pass through this primitive (`:exe`, `:servicos`). Each miss
+        // must return a `MissingEntry` whose `kind:` field byte-equals
+        // the caller-provided arg, so the fold does not silently
+        // collapse onto one hard-coded label. Sibling of the peer
+        // `probe_declared_entries_threads_kind_through_arg_verbatim`
+        // pin's label sweep on the bare-batch axis.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("some/entry");
+        for (kind, sandbox_component, ctor) in [
+            (
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                crate::render::LAYOUT_DIR_EXE,
+                LayoutError::ExeOutsideDir as fn(PathBuf) -> LayoutError,
+            ),
+            (
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                crate::render::LAYOUT_DIR_SERVICOS,
+                LayoutError::ServicoOutsideDir as fn(PathBuf) -> LayoutError,
+            ),
+        ] {
+            let sandbox_dir = root.join(sandbox_component);
+            let err = layout
+                .probe_sandboxed_declared_entries([path], &root, kind, &sandbox_dir, ctor)
+                .unwrap_err();
+            assert_eq!(
+                err,
+                LayoutError::missing_entry(kind, root.join(path)),
+                "probe_sandboxed_declared_entries must thread `kind` verbatim on every \
+                 canonical sandboxed-batch label",
+            );
+        }
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_accepts_asref_path_shape_wire_up_sites_pass() {
+        // Cross-axis pin — the primitive's `P: AsRef<Path>` bound must
+        // admit every concrete iterator element type the two
+        // [`StandardLayout::verify`] wire-up sites pass:
+        // - `&String` (from `caixa.exe(): &[String]`),
+        // - `&String` (from `caixa.servicos(): &[String]`).
+        //
+        // Byte-parity assertion: on a shared `/tmp/x/lib/demo`
+        // fixture the miss-arm return must be byte-equal across
+        // `&String` and the ergonomic `&Path` / `&PathBuf` element-type
+        // flavors, so a future re-shape of the bound (a narrower `P:
+        // Into<PathBuf>` collapse, a stricter `&Path`-only signature)
+        // would surface here rather than at the caller wire-up site.
+        // Sibling of the peer
+        // `probe_declared_entries_accepts_asref_path_shape_wire_up_sites_pass`
+        // pin on the bare-batch axis.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let literal = "exe/demo";
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
+        let expected = LayoutError::missing_entry(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+            root.join(Path::new(literal)),
+        );
+
+        let via_string_slice: Vec<String> = vec![literal.to_string()];
+        let via_string_err = layout
+            .probe_sandboxed_declared_entries(
+                via_string_slice.iter(),
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_string_err, expected,
+            "probe_sandboxed_declared_entries must accept `&String` items (the `caixa.exe() \
+             : &[String]` / `caixa.servicos(): &[String]` wire-up shape)",
+        );
+
+        let via_path_slice: [&Path; 1] = [Path::new(literal)];
+        let via_path_err = layout
+            .probe_sandboxed_declared_entries(
+                via_path_slice,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_path_err, expected,
+            "probe_sandboxed_declared_entries must accept `&Path` items",
+        );
+
+        let via_pathbuf_slice: Vec<PathBuf> = vec![PathBuf::from(literal)];
+        let via_pathbuf_err = layout
+            .probe_sandboxed_declared_entries(
+                via_pathbuf_slice.iter(),
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_pathbuf_err, expected,
+            "probe_sandboxed_declared_entries must accept `&PathBuf` items",
+        );
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_routes_miss_arm_through_probe_sandboxed_declared_entry() {
+        // Cross-primitive pin — the batch primitive must route its miss
+        // arm through the sibling
+        // [`StandardLayout::probe_sandboxed_declared_entry`] primitive
+        // rather than re-inlining the `probe_declared_entry` +
+        // `starts_with` cascade, so a future edit to the miss-arm shape
+        // on either primitive lands in exactly one place. Byte-parity
+        // assertion: on a fixture that misses the oracle, the batch
+        // primitive's `Err` arm must equal the peer per-arm
+        // [`StandardLayout::probe_sandboxed_declared_entry`] primitive's
+        // `Err` arm on the same fixture — otherwise the batch fold has
+        // drifted from the substrate primitive. Same discipline the peer
+        // `probe_declared_entries_routes_miss_arm_through_probe_declared_entry`
+        // pin establishes on the sibling bare-batch axis.
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("servicos/hello-rio.computeunit.yaml");
+        let sandbox_dir = root.join(crate::render::LAYOUT_DIR_SERVICOS);
+        let via_batch = layout
+            .probe_sandboxed_declared_entries(
+                [path],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                &sandbox_dir,
+                LayoutError::ServicoOutsideDir,
+            )
+            .unwrap_err();
+        let via_probe = layout
+            .probe_sandboxed_declared_entry(
+                path,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+                &sandbox_dir,
+                LayoutError::ServicoOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_batch, via_probe,
+            "probe_sandboxed_declared_entries's miss arm must equal the sibling \
+             probe_sandboxed_declared_entry primitive's miss arm byte-equal — pins that \
+             the batch primitive routes through the substrate primitive rather than \
+             re-inlining the `probe_declared_entry` + `starts_with` cascade",
+        );
+    }
+
+    #[test]
+    fn probe_sandboxed_declared_entries_routes_sandbox_escape_arm_through_probe_sandboxed_declared_entry()
+     {
+        // Cross-primitive pin — the batch primitive's sandbox-escape arm
+        // must equal the sibling
+        // [`StandardLayout::probe_sandboxed_declared_entry`] primitive's
+        // sandbox-escape arm on the same fixture. Byte-parity assertion:
+        // on a fixture where the oracle admits the probed path but the
+        // resolved path lies outside sandbox_dir, both primitives must
+        // return the same `outside_ctor(full)` byte-equal under
+        // `PartialEq` — otherwise the batch fold has drifted from the
+        // per-arm primitive on the second-arm dispatch.
+        let root = PathBuf::from("/tmp/x");
+        let path = Path::new("lib/escape");
+        let full = root.join(path);
+        let full_probe = full.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == full_probe);
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
+        let via_batch = layout
+            .probe_sandboxed_declared_entries(
+                [path],
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        let via_probe = layout
+            .probe_sandboxed_declared_entry(
+                path,
+                &root,
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+                &exe_dir,
+                LayoutError::ExeOutsideDir,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_batch, via_probe,
+            "probe_sandboxed_declared_entries's sandbox-escape arm must equal the sibling \
+             probe_sandboxed_declared_entry primitive's sandbox-escape arm byte-equal — \
+             pins that the batch primitive routes through the substrate primitive on both \
+             the miss and sandbox-escape arms rather than re-inlining either cascade",
         );
     }
 
