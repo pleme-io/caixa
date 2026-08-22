@@ -1194,15 +1194,8 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // independent paired-arm re-inlines diverging over time.
     crate::render::reject_whitespace(
         s,
-        |byte| LimitsError::WhitespaceInByteSize {
-            value: s.into(),
-            byte,
-        },
-        |ch| LimitsError::NonAsciiWhitespaceInByteSize {
-            value: s.into(),
-            ch,
-            codepoint: ch as u32,
-        },
+        |byte| LimitsError::whitespace_in_byte_size(s, byte),
+        |ch| LimitsError::non_ascii_whitespace_in_byte_size(s, ch),
     )?;
     let s = s.trim();
     if s.is_empty() {
@@ -1285,9 +1278,7 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
         // `NonIntegerByteMagnitude` regardless of sign or fractionality.
         let numeric = num_trim.parse::<f64>().is_ok() || num_trim.parse::<i64>().is_ok();
         if numeric {
-            return Err(LimitsError::NonIntegerByteMagnitude {
-                value: num_trim.into(),
-            });
+            return Err(LimitsError::non_integer_byte_magnitude(num_trim));
         }
         return Err(LimitsError::BadByteMagnitude(num_part.into()));
     }
@@ -1327,9 +1318,7 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // [`crate::render::find_non_ascii_whitespace_char`]) carry on
     // their strictly-complementary axes.
     if crate::render::is_leading_zero_padded_magnitude(num_trim) {
-        return Err(LimitsError::LeadingZeroByteMagnitude {
-            value: num_trim.into(),
-        });
+        return Err(LimitsError::leading_zero_byte_magnitude(num_trim));
     }
     // `digit_only` guarantees every byte is `[0-9]`, so the only way
     // u64::from_str can fail here is overflow (the magnitude exceeds
@@ -1427,15 +1416,8 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // typed-magnitude codec in caixa-core shares.
     crate::render::reject_whitespace(
         s,
-        |byte| LimitsError::WhitespaceInDuration {
-            value: s.into(),
-            byte,
-        },
-        |ch| LimitsError::NonAsciiWhitespaceInDuration {
-            value: s.into(),
-            ch,
-            codepoint: ch as u32,
-        },
+        |byte| LimitsError::whitespace_in_duration(s, byte),
+        |ch| LimitsError::non_ascii_whitespace_in_duration(s, ch),
     )?;
     let s = s.trim();
     if s.is_empty() {
@@ -1485,9 +1467,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     if !digit_only {
         let numeric = num_trim.parse::<f64>().is_ok() || num_trim.parse::<i64>().is_ok();
         if numeric {
-            return Err(LimitsError::NonIntegerDurationMagnitude {
-                value: num_trim.into(),
-            });
+            return Err(LimitsError::non_integer_duration_magnitude(num_trim));
         }
         return Err(LimitsError::BadDurationMagnitude(num_part.into()));
     }
@@ -1517,9 +1497,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // the same source of truth the four peer typed-magnitude codec
     // sites share.
     if crate::render::is_leading_zero_padded_magnitude(num_trim) {
-        return Err(LimitsError::LeadingZeroDurationMagnitude {
-            value: num_trim.into(),
-        });
+        return Err(LimitsError::leading_zero_duration_magnitude(num_trim));
     }
     // The digit-only gate guarantees every byte is `[0-9]`, and the
     // leading-zero arm above guarantees the magnitude is either the
@@ -1615,15 +1593,8 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // typed-magnitude codec in caixa-core shares.
     crate::render::reject_whitespace(
         s,
-        |byte| LimitsError::WhitespaceInMillicores {
-            value: s.into(),
-            byte,
-        },
-        |ch| LimitsError::NonAsciiWhitespaceInMillicores {
-            value: s.into(),
-            ch,
-            codepoint: ch as u32,
-        },
+        |byte| LimitsError::whitespace_in_millicores(s, byte),
+        |ch| LimitsError::non_ascii_whitespace_in_millicores(s, ch),
     )?;
     let s_trim = s.trim();
     if s_trim.is_empty() {
@@ -1687,9 +1658,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     if !digit_only {
         let numeric = magnitude.parse::<f64>().is_ok() || magnitude.parse::<i64>().is_ok();
         if numeric {
-            return Err(LimitsError::NonIntegerMillicoreMagnitude {
-                value: magnitude.into(),
-            });
+            return Err(LimitsError::non_integer_millicore_magnitude(magnitude));
         }
         return Err(LimitsError::BadMillicores(s.into()));
     }
@@ -1722,9 +1691,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // the same source of truth the four peer typed-magnitude codec
     // sites share.
     if crate::render::is_leading_zero_padded_magnitude(magnitude) {
-        return Err(LimitsError::LeadingZeroMillicoreMagnitude {
-            value: magnitude.into(),
-        });
+        return Err(LimitsError::leading_zero_millicore_magnitude(magnitude));
     }
     // The digit-only gate guarantees every byte is `[0-9]`, and the
     // leading-zero arm above guarantees the magnitude is either the
@@ -1773,6 +1740,206 @@ fn de_millicores<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Erro
     // Route through the canonical [`crate::render::deserialize_option_via_str`]
     // — see peer `de_byte_size` / `de_duration` routing notes above.
     crate::render::deserialize_option_via_str(d, parse_millicores)
+}
+
+// Fold the six `LimitsError::{NonInteger,LeadingZero}<Kind>Magnitude
+// { value: <val>.into() }` wire-up sites on the three typed-magnitude
+// codec surfaces (`parse_byte_size` / `parse_duration` /
+// `parse_millicores`) onto one substrate-primitive family per typed
+// variant — the paired `{ value: String }` single-slot family on
+// [`LimitsError`]. First fold family on [`LimitsError`], peer of the
+// four `LayoutError` ctor macro families (`layout_violation_ctors!`
+// 131ca0d — 16 `{ caixa, issue }` variants; `layout_slot_kind_ctors!`
+// 0419438 — 4 `{ caixa, kind, slots }` variants;
+// `LayoutError::missing_entry` 1b09f9d — 1 `{ kind, path }` variant;
+// `layout_nome_only_ctors!` 3fe3dd7 — 6 `<Variant>(String)` variants)
+// on the sibling layout-side envelopes, and of the four `AplicacaoError`
+// ctor macro families (`aplicacao_field_reason_ctors!` 981060b — 7
+// `{ <field>, reason }` variants; `contrato_target_ctors!` 14b81d5 — 2
+// `{ de, para, wit, expected }` variants; `contrato_empty_pair_ctors!`
+// 8580068 — 4 `{ de, para }` variants; `contrato_pair_value_reason_ctors!`
+// 14e13f1 — 3 `{ de, para, <field>, reason }` variants) on the sibling
+// mesh-side envelopes.
+//
+// Every one of the six wire-up sites — the `NonInteger` / `LeadingZero`
+// arms inside [`parse_byte_size`], [`parse_duration`], and
+// [`parse_millicores`] — opened the identical three-line
+// `return Err(LimitsError::<Variant> { value: <val>.into() });` block
+// against the per-codec local magnitude binding (`num_trim` on the two
+// alpha-unit codecs, `magnitude` on the millicores codec) — the exact
+// "same block re-inlined at every consumer" shape the PRIME DIRECTIVE
+// names as a bug, on the same altitude the peer four `LayoutError` and
+// four `AplicacaoError` constructor families each closed on their
+// sibling envelopes.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(value: &str) -> LimitsError`, collapsing
+// the six sites onto one dispatch per arm:
+// `return Err(LimitsError::<ctor>(<val>));`, byte-equal to the pre-lift
+// struct-literal on the same `value` argument. The uniform single-field
+// construction (`value: value.to_string()`) is spelled once — inside the
+// macro — rather than at every wire-up site. `#[must_use]` fires a
+// compile warning at any wire-up that mistakenly discards the
+// constructed error.
+//
+// Every future consumer that wants to construct one of these six
+// variants outside the three current codec surfaces (a deferred
+// `feira lint --canonical-magnitudes` per-caixa admission verb probing
+// each authored `:memory` / `:wall-clock` / `:cpu` value against the
+// same canonical-form gate, an M4 typed `mesh.pleme.io/v1alpha1/Servico`
+// CR materializer's per-`:limits` admission validators, a per-
+// `computeunit.yaml` value-shape pre-emitter probing each declared
+// magnitude ahead of the operator's admit-cycle) reaches the variant
+// through one call rather than re-inlining the three-line struct-literal
+// in lockstep with the pre-existing six sites.
+macro_rules! limits_codec_value_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl LimitsError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LimitsError::",
+                    stringify!($variant),
+                    "`] naming the offending magnitude `value`. Folds the ",
+                    "uniform `{ value: value.to_string() }` single-slot ",
+                    "construction onto one substrate primitive so every ",
+                    "wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift three-line struct-literal ",
+                    "block."
+                )]
+                #[must_use]
+                pub fn $ctor(value: &str) -> Self {
+                    Self::$variant { value: value.to_string() }
+                }
+            )*
+        }
+    };
+}
+
+limits_codec_value_only_ctors! {
+    non_integer_byte_magnitude => NonIntegerByteMagnitude,
+    leading_zero_byte_magnitude => LeadingZeroByteMagnitude,
+    non_integer_duration_magnitude => NonIntegerDurationMagnitude,
+    leading_zero_duration_magnitude => LeadingZeroDurationMagnitude,
+    non_integer_millicore_magnitude => NonIntegerMillicoreMagnitude,
+    leading_zero_millicore_magnitude => LeadingZeroMillicoreMagnitude,
+}
+
+// Fold the three `LimitsError::WhitespaceIn<Kind> { value: <val>.into(),
+// byte }` wire-up sites on the three typed-magnitude codec surfaces
+// (`parse_byte_size` / `parse_duration` / `parse_millicores`) onto one
+// substrate-primitive family per typed variant — the paired
+// `{ value: String, byte: u8 }` two-slot family on [`LimitsError`].
+// Sibling of the peer [`limits_codec_value_only_ctors!`] single-slot
+// family on the same three codec surfaces, and of the peer
+// [`limits_codec_value_char_ctors!`] three-slot family on the
+// strictly-complementary non-ASCII whitespace class.
+//
+// Every one of the three wire-up sites — the ASCII-whitespace-rejection
+// arm of the paired [`crate::render::reject_whitespace`] closure at
+// each codec — opened the identical four-line
+// `|byte| LimitsError::WhitespaceIn<Kind> { value: <s>.into(), byte }`
+// block against the codec-scoped `<s>: &str` binding.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(value: &str, byte: u8) -> LimitsError`,
+// collapsing the three sites onto one dispatch per arm:
+// `|byte| LimitsError::<ctor>(s, byte)`, byte-equal to the pre-lift
+// struct-literal on the same `(value, byte)` pair. The uniform two-field
+// construction (`value: value.to_string()`, `byte`) is spelled once —
+// inside the macro — rather than at every wire-up site.
+macro_rules! limits_codec_value_byte_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl LimitsError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LimitsError::",
+                    stringify!($variant),
+                    "`] naming the offending magnitude `value` and the ",
+                    "raw ASCII-whitespace `byte` that fell inside it. ",
+                    "Folds the uniform `{ value: value.to_string(), byte }` ",
+                    "two-slot construction onto one substrate primitive so ",
+                    "every wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift four-line struct-literal block."
+                )]
+                #[must_use]
+                pub fn $ctor(value: &str, byte: u8) -> Self {
+                    Self::$variant { value: value.to_string(), byte }
+                }
+            )*
+        }
+    };
+}
+
+limits_codec_value_byte_ctors! {
+    whitespace_in_byte_size => WhitespaceInByteSize,
+    whitespace_in_duration => WhitespaceInDuration,
+    whitespace_in_millicores => WhitespaceInMillicores,
+}
+
+// Fold the three `LimitsError::NonAsciiWhitespaceIn<Kind>
+// { value: <val>.into(), ch, codepoint: ch as u32 }` wire-up sites on
+// the three typed-magnitude codec surfaces (`parse_byte_size` /
+// `parse_duration` / `parse_millicores`) onto one substrate-primitive
+// family per typed variant — the paired `{ value: String, ch: char,
+// codepoint: u32 }` three-slot family on [`LimitsError`]. Sibling of
+// the peer [`limits_codec_value_only_ctors!`] single-slot family on the
+// same three codec surfaces, and of the peer
+// [`limits_codec_value_byte_ctors!`] two-slot family on the strictly-
+// complementary ASCII whitespace class.
+//
+// Every one of the three wire-up sites — the Unicode-`White_Space`-
+// rejection arm of the paired [`crate::render::reject_whitespace`]
+// closure at each codec — opened the identical five-line
+// `|ch| LimitsError::NonAsciiWhitespaceIn<Kind> { value: <s>.into(),
+// ch, codepoint: ch as u32 }` block against the codec-scoped
+// `<s>: &str` binding, with the load-bearing `codepoint: ch as u32`
+// derivation open-coded at every wire-up. The macro pulls the
+// derivation inside the ctor body so every wire-up now reads
+// `|ch| LimitsError::<ctor>(s, ch)` and every future consumer of the
+// variant is guaranteed to carry the derivation through one canonical
+// path rather than re-open-coding it in lockstep with the pre-existing
+// three sites.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(value: &str, ch: char) -> LimitsError`,
+// collapsing the three sites onto one dispatch per arm:
+// `|ch| LimitsError::<ctor>(s, ch)`, byte-equal to the pre-lift
+// struct-literal on the same `(value, ch, ch as u32)` triple.
+macro_rules! limits_codec_value_char_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl LimitsError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LimitsError::",
+                    stringify!($variant),
+                    "`] naming the offending magnitude `value` and the ",
+                    "non-ASCII Unicode whitespace `ch` that fell inside it. ",
+                    "Folds the uniform `{ value: value.to_string(), ch, ",
+                    "codepoint: ch as u32 }` three-slot construction onto ",
+                    "one substrate primitive so every wire-up on this ",
+                    "variant reads through one dispatch rather than the ",
+                    "pre-lift five-line struct-literal block. The load-",
+                    "bearing `codepoint = ch as u32` derivation is pulled ",
+                    "inside the ctor body so every future consumer of the ",
+                    "variant carries it through one canonical path."
+                )]
+                #[must_use]
+                pub fn $ctor(value: &str, ch: char) -> Self {
+                    Self::$variant {
+                        value: value.to_string(),
+                        ch,
+                        codepoint: ch as u32,
+                    }
+                }
+            )*
+        }
+    };
+}
+
+limits_codec_value_char_ctors! {
+    non_ascii_whitespace_in_byte_size => NonAsciiWhitespaceInByteSize,
+    non_ascii_whitespace_in_duration => NonAsciiWhitespaceInDuration,
+    non_ascii_whitespace_in_millicores => NonAsciiWhitespaceInMillicores,
 }
 
 #[cfg(test)]
@@ -6502,6 +6669,206 @@ mod tests {
                 "LimitsSpec::cpu must return :limits :cpu \
                  verbatim by copy — got {first:?}, expected {cpu:?}",
             );
+        }
+    }
+
+    // ── LimitsError ctor macro-family equivalence pins ───────────────
+    //
+    // Peer discipline of the sibling `layout_violation_ctors!`
+    // `*_ctor_matches_struct_literal_wrap` pin family (131ca0d) on
+    // [`LayoutError`], and the sibling `aplicacao_field_reason_ctors!`
+    // / `contrato_target_ctors!` / `contrato_empty_pair_ctors!` /
+    // `contrato_pair_value_reason_ctors!` `*_ctor_matches_struct_literal_wrap`
+    // pin families (981060b / 14b81d5 / 8580068 / 14e13f1) on
+    // [`AplicacaoError`]. A silent regression that de-folded one variant
+    // and re-inlined the pre-lift struct-literal at one wire-up site
+    // (or dropped a field, or diverged the string conversion on one
+    // arm) trips the affected variant's pin first, so every future edit
+    // to a variant on the three shared envelopes lands in exactly one
+    // place.
+
+    #[test]
+    fn non_integer_byte_magnitude_ctor_matches_struct_literal_wrap() {
+        let value = "1.5KiB";
+        assert_eq!(
+            LimitsError::non_integer_byte_magnitude(value),
+            LimitsError::NonIntegerByteMagnitude {
+                value: value.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn leading_zero_byte_magnitude_ctor_matches_struct_literal_wrap() {
+        let value = "064MiB";
+        assert_eq!(
+            LimitsError::leading_zero_byte_magnitude(value),
+            LimitsError::LeadingZeroByteMagnitude {
+                value: value.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn non_integer_duration_magnitude_ctor_matches_struct_literal_wrap() {
+        let value = "1.5s";
+        assert_eq!(
+            LimitsError::non_integer_duration_magnitude(value),
+            LimitsError::NonIntegerDurationMagnitude {
+                value: value.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn leading_zero_duration_magnitude_ctor_matches_struct_literal_wrap() {
+        let value = "030s";
+        assert_eq!(
+            LimitsError::leading_zero_duration_magnitude(value),
+            LimitsError::LeadingZeroDurationMagnitude {
+                value: value.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn non_integer_millicore_magnitude_ctor_matches_struct_literal_wrap() {
+        let value = "1.5";
+        assert_eq!(
+            LimitsError::non_integer_millicore_magnitude(value),
+            LimitsError::NonIntegerMillicoreMagnitude {
+                value: value.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn leading_zero_millicore_magnitude_ctor_matches_struct_literal_wrap() {
+        let value = "0500m";
+        assert_eq!(
+            LimitsError::leading_zero_millicore_magnitude(value),
+            LimitsError::LeadingZeroMillicoreMagnitude {
+                value: value.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn whitespace_in_byte_size_ctor_matches_struct_literal_wrap() {
+        let value = " 64MiB";
+        let byte: u8 = 0x20;
+        assert_eq!(
+            LimitsError::whitespace_in_byte_size(value, byte),
+            LimitsError::WhitespaceInByteSize {
+                value: value.to_string(),
+                byte,
+            },
+        );
+    }
+
+    #[test]
+    fn whitespace_in_duration_ctor_matches_struct_literal_wrap() {
+        let value = " 30s";
+        let byte: u8 = 0x09;
+        assert_eq!(
+            LimitsError::whitespace_in_duration(value, byte),
+            LimitsError::WhitespaceInDuration {
+                value: value.to_string(),
+                byte,
+            },
+        );
+    }
+
+    #[test]
+    fn whitespace_in_millicores_ctor_matches_struct_literal_wrap() {
+        let value = " 500m";
+        let byte: u8 = 0x0A;
+        assert_eq!(
+            LimitsError::whitespace_in_millicores(value, byte),
+            LimitsError::WhitespaceInMillicores {
+                value: value.to_string(),
+                byte,
+            },
+        );
+    }
+
+    #[test]
+    fn non_ascii_whitespace_in_byte_size_ctor_matches_struct_literal_wrap() {
+        let value = "\u{00A0}64MiB";
+        let ch = '\u{00A0}';
+        assert_eq!(
+            LimitsError::non_ascii_whitespace_in_byte_size(value, ch),
+            LimitsError::NonAsciiWhitespaceInByteSize {
+                value: value.to_string(),
+                ch,
+                codepoint: ch as u32,
+            },
+        );
+    }
+
+    #[test]
+    fn non_ascii_whitespace_in_duration_ctor_matches_struct_literal_wrap() {
+        let value = "30s\u{2028}";
+        let ch = '\u{2028}';
+        assert_eq!(
+            LimitsError::non_ascii_whitespace_in_duration(value, ch),
+            LimitsError::NonAsciiWhitespaceInDuration {
+                value: value.to_string(),
+                ch,
+                codepoint: ch as u32,
+            },
+        );
+    }
+
+    #[test]
+    fn non_ascii_whitespace_in_millicores_ctor_matches_struct_literal_wrap() {
+        let value = "500\u{2003}m";
+        let ch = '\u{2003}';
+        assert_eq!(
+            LimitsError::non_ascii_whitespace_in_millicores(value, ch),
+            LimitsError::NonAsciiWhitespaceInMillicores {
+                value: value.to_string(),
+                ch,
+                codepoint: ch as u32,
+            },
+        );
+    }
+
+    #[test]
+    fn limits_codec_value_char_ctors_route_codepoint_through_ch_as_u32_uniformly() {
+        // Cross-family sweep: the load-bearing `codepoint = ch as u32`
+        // derivation is now spelled once — inside the
+        // `limits_codec_value_char_ctors!` macro body — rather than
+        // three times at each wire-up. A silent regression that
+        // de-folded one variant and re-inlined the derivation with a
+        // different width (`ch as u16`, `ch as i32`) or dropped it
+        // entirely trips here on the very first codepoint the two
+        // implementations disagree on. Every non-ASCII Unicode
+        // whitespace codepoint the sibling
+        // `crate::render::find_non_ascii_whitespace_char` predicate
+        // yields is a valid `char`, so `ch as u32` covers the full
+        // domain the wire-ups reach.
+        for ch in [
+            '\u{00A0}', // NBSP
+            '\u{2028}', // LINE SEPARATOR
+            '\u{2003}', // EM SPACE
+            '\u{202F}', // NARROW NO-BREAK SPACE
+            '\u{3000}', // IDEOGRAPHIC SPACE
+        ] {
+            let value = format!("prefix{ch}suffix");
+            let expected_codepoint = ch as u32;
+            assert!(matches!(
+                LimitsError::non_ascii_whitespace_in_byte_size(&value, ch),
+                LimitsError::NonAsciiWhitespaceInByteSize { codepoint, .. } if codepoint == expected_codepoint,
+            ));
+            assert!(matches!(
+                LimitsError::non_ascii_whitespace_in_duration(&value, ch),
+                LimitsError::NonAsciiWhitespaceInDuration { codepoint, .. } if codepoint == expected_codepoint,
+            ));
+            assert!(matches!(
+                LimitsError::non_ascii_whitespace_in_millicores(&value, ch),
+                LimitsError::NonAsciiWhitespaceInMillicores { codepoint, .. } if codepoint == expected_codepoint,
+            ));
         }
     }
 }
