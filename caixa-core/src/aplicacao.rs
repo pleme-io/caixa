@@ -5355,9 +5355,7 @@ fn validate_entrada_path(path: &str) -> Result<(), AplicacaoError> {
         return Err(AplicacaoError::EntradaPathEmpty);
     }
     if !path.starts_with('/') {
-        return Err(AplicacaoError::EntradaPathNotAbsolute {
-            path: path.to_string(),
-        });
+        return Err(AplicacaoError::entrada_path_not_absolute(path));
     }
     crate::render::is_gateway_api_http_path(path)
         .map_err(|reason| AplicacaoError::entrada_path_invalid(path, reason))
@@ -8070,7 +8068,7 @@ impl AplicacaoSpec {
                     return Err(AplicacaoError::EntradaPathEmpty);
                 }
                 if !p.starts_with('/') {
-                    return Err(AplicacaoError::EntradaPathNotAbsolute { path: p.clone() });
+                    return Err(AplicacaoError::entrada_path_not_absolute(p));
                 }
                 // Per-entry value-shape gate: the path lands verbatim
                 // as a K8s Gateway API HTTPRoute `matches[].path.value`
@@ -8094,7 +8092,7 @@ impl AplicacaoSpec {
                 // apiserver's accepted set at validate time.
                 validate_entrada_path(p)?;
                 crate::render::insert_first_seen(&mut seen, p.as_str(), || {
-                    AplicacaoError::EntradaPathDuplicate { path: p.clone() }
+                    AplicacaoError::entrada_path_duplicate(p)
                 })?;
             }
         }
@@ -9709,6 +9707,90 @@ aplicacao_caixa_only_ctors! {
     membro_versao_empty => MembroVersaoEmpty,
     membro_duplicate => MembroDuplicate,
     membro_is_self_aplicacao => MembroIsSelfAplicacao,
+}
+
+// Fold the three `AplicacaoError::{EntradaPathNotAbsolute,
+// EntradaPathDuplicate} { path: <val>.to_string() | <val>.clone() }` wire-up
+// sites onto one substrate-primitive family per typed variant — the direct
+// per-`:entrada :paths` value-shape sibling of the peer
+// `aplicacao_caixa_only_ctors!` (d9f6867, `{ caixa: String }` on
+// `ContratoMemberMissing` / `MembroVersaoEmpty` / `MembroDuplicate` /
+// `MembroIsSelfAplicacao`) on the sibling per-`:membros :caixa` envelope, and
+// per-`:entrada :para` sibling of the peer `contrato_empty_pair_ctors!`
+// (8580068, `{ de, para }` on `EmptyWit` / `ContratoEndpointEmpty` /
+// `ContratoSubjectEmpty` / `ContratoSlotEmpty`) on the per-`:contratos` edge
+// envelope. Same shape family as the [`crate::dep::dep_nome_only_ctors!`]
+// (792aa92, `{ nome: String }` on five `DepError` variants) fold on the peer
+// `:deps` envelope — every single-`String`-slot error family in caixa-core
+// now reaches through one substrate primitive per typed variant.
+//
+// The three wire-up sites — one under [`validate_entrada_path`]'s
+// leading-slash grammar arm (`EntradaPathNotAbsolute` against
+// `path: &str`), one under the per-`:entrada :paths` loop's identical
+// arm (`EntradaPathNotAbsolute` against a `&String` head via `.clone()`),
+// and one under the per-`:entrada :paths` loop's dedup arm
+// (`EntradaPathDuplicate` against the same `&String` via
+// [`crate::render::insert_first_seen`]'s ctor closure) — opened the identical
+// `AplicacaoError::EntradaPath<Variant> { path: <val>.to_string() | .clone() }`
+// three-line struct-literal against a caller-side `&str` / `&String`, the
+// exact "same block re-inlined at every consumer" shape the PRIME DIRECTIVE
+// names as a bug. Every one of the compile-time guarantees in
+// MESH-COMPOSITION.md §III.3 (a `:entrada :paths` entry whose value doesn't
+// start with `/` becomes a caixa-build error, not a Gateway API webhook
+// rejection at `kubectl apply` time; a duplicated `:entrada :paths` entry
+// becomes a caixa-build error, not a silent last-writer-wins render) now
+// routes through one dispatch per typed variant at every emit site.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(path: &str) -> AplicacaoError`, collapsing
+// every wire-up site onto one dispatch:
+// `AplicacaoError::<ctor>(<path>)` (byte-equal to the pre-lift struct-literal
+// on the same `&str` fixture) or the `&String` sites through
+// `p.as_str()` (byte-equal on the same slice-view). The uniform one-field
+// construction (`path: path.to_string()`) is spelled once — inside the
+// macro — rather than at every wire-up site. Every ctor is `#[must_use]` so
+// a caller who mistakenly discards the constructed error trips a compile
+// warning at the wire-up site.
+//
+// Every future consumer that wants to construct one of these two variants
+// outside the current in-crate wire-up sites — a deferred
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission webhook
+// per-`:entrada :paths` re-check against a cluster-local Gateway API
+// snapshot, a future `feira validate --entrada` per-caixa admission verb
+// re-checking each declared `:paths` entry against the same axes, a
+// per-tenant per-`Aplicacao` overlay resolver rejecting a
+// duplicate / non-absolute `:paths` entry against a cluster-local Gateway
+// snapshot the M4 CR materializer projects — now reaches each variant
+// through one call rather than re-inlining the three-line struct-literal in
+// lockstep with the three in-crate wire-up sites.
+macro_rules! aplicacao_path_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl AplicacaoError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`AplicacaoError::",
+                    stringify!($variant),
+                    "`] naming the offending `:entrada :paths` entry. ",
+                    "Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { path: path.to_string() }` one-field ",
+                    "struct-literal onto one substrate primitive so ",
+                    "every wire-up on this variant reads through one ",
+                    "dispatch rather than the pre-lift three-line ",
+                    "open-coded struct-literal block."
+                )]
+                #[must_use]
+                pub fn $ctor(path: &str) -> Self {
+                    Self::$variant { path: path.to_string() }
+                }
+            )*
+        }
+    };
+}
+
+aplicacao_path_only_ctors! {
+    entrada_path_not_absolute => EntradaPathNotAbsolute,
+    entrada_path_duplicate => EntradaPathDuplicate,
 }
 
 #[cfg(test)]
@@ -32587,6 +32669,62 @@ mod tests {
             AplicacaoError::membro_is_self_aplicacao(name),
             AplicacaoError::MembroIsSelfAplicacao {
                 caixa: name.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn entrada_path_not_absolute_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            AplicacaoError::entrada_path_not_absolute("api/cart"),
+            AplicacaoError::EntradaPathNotAbsolute {
+                path: "api/cart".to_string(),
+            },
+            "generated entrada_path_not_absolute ctor must produce byte-equal \
+             AplicacaoError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn entrada_path_duplicate_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            AplicacaoError::entrada_path_duplicate("/api/cart"),
+            AplicacaoError::EntradaPathDuplicate {
+                path: "/api/cart".to_string(),
+            },
+            "generated entrada_path_duplicate ctor must produce byte-equal \
+             AplicacaoError to the open-coded struct-literal wrap on the \
+             same &str fixture",
+        );
+    }
+
+    #[test]
+    fn aplicacao_path_only_ctors_route_path_through_to_string() {
+        // Cross-axis pin: sweep the sole constructor input axis (`path:
+        // &str`) through a non-default fixture path against every generated
+        // arm in the [`aplicacao_path_only_ctors!`] macro, so any
+        // wrapper-side lowercase / trim / truncate / re-order on the
+        // `path.to_string()` sole-field construction surfaces here rather
+        // than at a downstream diagnostic-shape mismatch. Peer of the
+        // sibling `aplicacao_caixa_only_ctors_route_caixa_through_to_string`
+        // cross-axis pin on the peer `AplicacaoError` `{ caixa: String }`
+        // envelope (d9f6867), extended here onto the sibling
+        // `AplicacaoError` `{ path: String }` envelope so every substrate-
+        // primitive ctor family in caixa-core carrying a single-slot
+        // `{ <slot>: String }` shape guarantees the sole-field construction
+        // routes the caller's `&str` through `.to_string()` verbatim.
+        let path = "/api/v2/checkout";
+        assert_eq!(
+            AplicacaoError::entrada_path_not_absolute(path),
+            AplicacaoError::EntradaPathNotAbsolute {
+                path: path.to_string(),
+            },
+        );
+        assert_eq!(
+            AplicacaoError::entrada_path_duplicate(path),
+            AplicacaoError::EntradaPathDuplicate {
+                path: path.to_string(),
             },
         );
     }
