@@ -767,18 +767,9 @@ fn validate_callback_path(slot: &'static str, path: &Path) -> Result<(), Behavio
     crate::render::require_sandboxed_lisp_path(
         path,
         || BehaviorError::EmptyPath { slot },
-        || BehaviorError::AbsolutePath {
-            slot,
-            path: path.to_path_buf(),
-        },
-        || BehaviorError::ParentEscape {
-            slot,
-            path: path.to_path_buf(),
-        },
-        || BehaviorError::NonLispExtension {
-            slot,
-            path: path.to_path_buf(),
-        },
+        || BehaviorError::absolute_path(slot, path),
+        || BehaviorError::parent_escape(slot, path),
+        || BehaviorError::non_lisp_extension(slot, path),
     )
 }
 
@@ -815,6 +806,138 @@ pub enum BehaviorError {
         path.display()
     )]
     NonLispExtension { slot: &'static str, path: PathBuf },
+}
+
+// Fold the three `BehaviorError::{AbsolutePath, ParentEscape,
+// NonLispExtension} { slot, path: path.to_path_buf() }` two-slot
+// struct-variant wire-up sites at [`validate_callback_path`]'s three
+// closures passed to [`crate::render::require_sandboxed_lisp_path`]
+// onto one substrate primitive per typed variant — the paired
+// `{ slot: &'static str, path: PathBuf }` two-slot family on
+// [`BehaviorError`], sibling on the M2 `:behavior` envelope of the peer
+// [`crate::upgrade::upgrade_from_script_ctors!`] (8e67041, 3 variants
+// on `{ from: String, script: PathBuf }`) two-slot family on the sibling
+// M2 `:upgrade-from` envelope, the peer
+// [`crate::upgrade::upgrade_script_only_ctors!`] (7468ca9, 3 variants
+// on `{ script: PathBuf }`) one-slot family that closed the second fold
+// on that sibling envelope, the peer
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] (db09650, 3
+// variants on `{ caixa: String }`) single-slot family on the sibling
+// `SupervisorError` envelope, the peer [`crate::dep::dep_nome_only_ctors!`]
+// (792aa92, 5 variants on `{ nome: String }`) and
+// [`crate::dep::fonte_caminho_ctors!`] (f85f145, 11 variants on
+// `{ nome, caminho }`) / [`crate::dep::fonte_caminho_byte_ctors!`]
+// (0e35793, 12 variants on `{ nome, caminho, byte }`) families on the
+// sibling `DepError` envelope, the peer
+// [`crate::aplicacao::contrato_empty_pair_ctors!`] (8580068, 4 variants
+// on `{ de, para }`) / [`crate::aplicacao::contrato_target_ctors!`]
+// (14b81d5, 2 variants on `{ de, para, wit, expected }`) /
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b, 7
+// variants on `{ <field>: String, reason: String }`) /
+// [`crate::aplicacao::contrato_pair_value_reason_ctors!`] (14e13f1, 3
+// variants on `{ de, para, <field>: String, reason: String }`) families
+// on the sibling `AplicacaoError` envelopes, the peer four `LayoutError`
+// families ([`crate::layout::layout_violation_ctors!`] 131ca0d, 16
+// variants on `{ caixa, issue }`; [`crate::layout::layout_slot_kind_ctors!`]
+// 0419438, 4 variants on `{ caixa, kind, slots }`;
+// [`crate::LayoutError::missing_entry`] 1b09f9d, 1 variant on
+// `{ kind, path }`; [`crate::layout::layout_nome_only_ctors!`] 3fe3dd7,
+// 6 variants on `<Variant>(String)`), and the three
+// [`crate::limits::limits_codec_value_*_ctors!`] codec families (81c856c,
+// 12 codec wire-ups on `LimitsError`).
+//
+// Each of the three wire-up sites on this shape (`AbsolutePath` at the
+// per-slot absolute-path arm, `ParentEscape` at the per-slot `..`-escape
+// arm, `NonLispExtension` at the per-slot terminating-extension arm)
+// opened the identical `BehaviorError::<Variant> { slot,
+// path: path.to_path_buf() }` four-line struct-literal against the same
+// `(slot: &'static str, path: &Path)` closure-captured pair — the exact
+// "same block re-inlined at every consumer" shape the PRIME DIRECTIVE
+// names as a bug, on the same altitude the peer `UpgradeError` /
+// `SupervisorError` / `DepError` / `AplicacaoError` / `LayoutError` /
+// `LimitsError` families each closed on their sibling envelopes. The
+// three variants share one `{ slot: &'static str, path: PathBuf }`
+// shape, so the fold routes each closure through one dispatch per typed
+// variant. The sibling `EmptyPath` variant on the same envelope stays
+// on its pre-lift open-coded shape — it carries no `path` field (the
+// offending `:on-*` path value *is* the empty path this variant
+// catches), so the uniform `fn(slot: &'static str, path: &Path) -> Self`
+// signature this macro promises does not apply, and the peer helper's
+// `|| Self::EmptyPath { slot }` closure is already a one-liner. This
+// closes the first (and, given the four-variant envelope's `EmptyPath`
+// one-liner remainder, only-populated) fold family on the `BehaviorError`
+// envelope, sibling of the two folds on the peer `UpgradeError` envelope
+// established at 8e67041 (two-slot `{ from, script }`) and 7468ca9
+// (one-slot `{ script }`).
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(slot: &'static str, path: &std::path::Path)
+// -> Self`, so every closure collapses onto one dispatch:
+// `BehaviorError::<ctor>(slot, path)`, byte-equal to the pre-lift
+// struct-literal on the same `(&'static str, &Path)` fixture. The
+// uniform two-field construction (`slot` verbatim as `&'static str`,
+// `path.to_path_buf()`) is spelled once — inside the macro — rather
+// than at every wire-up site. The `slot` parameter stays `&'static str`
+// (not `&str`) so every arm continues to carry a program-lifetime
+// M2 `:behavior :on-*` author-key label routed through the
+// [`crate::M2_BEHAVIOR_AUTHOR_KEY_ON_*`] const roster, matching the
+// enum-field type and the [`BehaviorSpec::declared_slots`] iterator's
+// per-arm slot axis — a runtime-borrowed `&str` would silently downgrade
+// the label lifetime and let a caller stash a non-`'static` borrow into
+// the returned error. The `&Path` parameter accepts both `&Path` and
+// `&PathBuf` (via Deref coercion), so every existing closure — each
+// captures `path: &Path` from the outer [`validate_callback_path`]
+// signature — threads through the ctor without a pre-conversion.
+//
+// Every future consumer that wants to construct one of these three
+// variants outside the three in-crate closures (a deferred wasm-engine
+// per-slot callback-shape re-checker at instance-start time re-consulting
+// the same four-arm sandboxed-lisp-path cascade the closures already
+// share via [`crate::render::require_sandboxed_lisp_path`], a future
+// `feira validate --behavior` per-caixa admission verb re-checking each
+// declared `:behavior :on-*` slot's path shape against the same axis, a
+// per-`Caixa` overlay resolver rejecting an author-supplied `:behavior
+// :on-*` path against a cluster-local snapshot) now reaches each variant
+// through one call rather than re-inlining the four-line struct-literal
+// in lockstep with the three in-crate closure sites.
+macro_rules! behavior_slot_path_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl BehaviorError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`BehaviorError::",
+                    stringify!($variant),
+                    "`] naming the offending `:behavior :on-*` slot ",
+                    "label and callback `path`. Folds the uniform ",
+                    "`Self::",
+                    stringify!($variant),
+                    " { slot, path: path.to_path_buf() }` two-field ",
+                    "struct-literal onto one substrate primitive so ",
+                    "every closure passed to ",
+                    "[`crate::render::require_sandboxed_lisp_path`] at ",
+                    "[`validate_callback_path`] on this variant reads ",
+                    "through one dispatch rather than the pre-lift ",
+                    "four-line open-coded block. The `slot` label ",
+                    "threads verbatim from ",
+                    "[`BehaviorSpec::declared_slots`] and the `path` ",
+                    "from the same iterator at the call site."
+                )]
+                #[must_use]
+                pub fn $ctor(slot: &'static str, path: &std::path::Path) -> Self {
+                    Self::$variant {
+                        slot,
+                        path: path.to_path_buf(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+behavior_slot_path_ctors! {
+    absolute_path => AbsolutePath,
+    parent_escape => ParentEscape,
+    non_lisp_extension => NonLispExtension,
 }
 
 #[cfg(test)]
@@ -2280,5 +2403,151 @@ mod tests {
              axis (got {:?})",
             with.on_terminate(),
         );
+    }
+
+    // Per-variant equivalence pins for the [`behavior_slot_path_ctors!`]
+    // macro definition (see the paired doc-block above the macro
+    // definition) — every generated `<ctor>(slot: &'static str,
+    // path: &Path) -> Self` constructor folds the uniform `Self::<Variant>
+    // { slot, path: path.to_path_buf() }` two-field struct-literal onto
+    // one substrate primitive. The three per-variant equivalence pins
+    // below (fail-before-pass-after by construction — a byte-mismatched
+    // macro arm would trip its equivalence pin first) lock each generated
+    // constructor to its struct-literal peer under `PartialEq`, so every
+    // closure passed to [`crate::render::require_sandboxed_lisp_path`] at
+    // [`validate_callback_path`] on that variant produces a byte-equal
+    // `BehaviorError` to the pre-lift open-coded struct-literal. The
+    // cross-axis pin that follows (non-default `(slot, path)` pair over
+    // every `M2_BEHAVIOR_AUTHOR_KEY_ON_*` label, and both `&Path` and
+    // `&PathBuf` shapes) routes both constructor input axes verbatim
+    // (`slot` as `&'static str` without conversion, `path` via
+    // `.to_path_buf()`), so the fold does not silently collapse onto a
+    // fixed `slot` or `path` value or drop the Deref-coercion arm the
+    // wire-up sites depend on.
+    //
+    // Peer of the sibling `absolute_script_ctor_matches_struct_literal_wrap`
+    // / `parent_escape_script_ctor_matches_struct_literal_wrap` /
+    // `non_lisp_extension_script_ctor_matches_struct_literal_wrap` /
+    // `upgrade_script_only_ctors_route_script_through_to_path_buf`
+    // equivalence + cross-axis pins the peer
+    // [`crate::upgrade::upgrade_script_only_ctors!`] family (7468ca9)
+    // established on the peer `{ script: PathBuf }` one-slot envelope of
+    // the sibling `UpgradeError`, and of the peer
+    // `state_change_without_prior_load_ctor_matches_struct_literal_wrap` /
+    // `duplicate_state_change_ctor_matches_struct_literal_wrap` /
+    // `state_change_without_on_state_change_callback_ctor_matches_struct_literal_wrap`
+    // / `upgrade_from_script_ctors_route_from_and_script_verbatim` pins
+    // the peer [`crate::upgrade::upgrade_from_script_ctors!`] family
+    // (8e67041) established on the peer `{ from: String, script: PathBuf }`
+    // two-slot envelope of that same sibling; extended here onto the
+    // `BehaviorError` `{ slot: &'static str, path: PathBuf }` two-slot
+    // envelope so every substrate-primitive ctor family in caixa-core
+    // guarantees the same-shape fold every wire-up on the family reads
+    // through one dispatch.
+
+    #[test]
+    fn absolute_path_ctor_matches_struct_literal_wrap() {
+        let slot = M2_BEHAVIOR_AUTHOR_KEY_ON_INIT;
+        let path = Path::new("/etc/nope.lisp");
+        assert_eq!(
+            BehaviorError::absolute_path(slot, path),
+            BehaviorError::AbsolutePath {
+                slot,
+                path: path.to_path_buf(),
+            },
+            "generated absolute_path ctor must produce byte-equal \
+             BehaviorError to the open-coded struct-literal wrap on the \
+             same (&'static str, &Path) fixture",
+        );
+    }
+
+    #[test]
+    fn parent_escape_ctor_matches_struct_literal_wrap() {
+        let slot = M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE;
+        let path = Path::new("../oops.lisp");
+        assert_eq!(
+            BehaviorError::parent_escape(slot, path),
+            BehaviorError::ParentEscape {
+                slot,
+                path: path.to_path_buf(),
+            },
+            "generated parent_escape ctor must produce byte-equal \
+             BehaviorError to the open-coded struct-literal wrap on the \
+             same (&'static str, &Path) fixture",
+        );
+    }
+
+    #[test]
+    fn non_lisp_extension_ctor_matches_struct_literal_wrap() {
+        let slot = M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE;
+        let path = Path::new("lib/cleanup.rs");
+        assert_eq!(
+            BehaviorError::non_lisp_extension(slot, path),
+            BehaviorError::NonLispExtension {
+                slot,
+                path: path.to_path_buf(),
+            },
+            "generated non_lisp_extension ctor must produce byte-equal \
+             BehaviorError to the open-coded struct-literal wrap on the \
+             same (&'static str, &Path) fixture",
+        );
+    }
+
+    #[test]
+    fn behavior_slot_path_ctors_route_slot_and_path_verbatim() {
+        // Cross-axis pin: sweep both constructor input axes (`slot:
+        // &'static str`, `path: &Path`) through non-default fixtures
+        // over every M2 `:behavior :on-*` author-key label and both
+        // `&Path` (direct `Path::new`) / `&PathBuf` (via Deref coercion)
+        // shapes against every generated arm in the
+        // [`behavior_slot_path_ctors!`] macro, so any wrapper-side
+        // lowercase / trim / truncate / re-order / fixed-slot-or-path
+        // substitution on the two-field construction surfaces here
+        // rather than at a downstream diagnostic-shape mismatch. Also
+        // exercises the `&Path` parameter under both `&Path` (direct
+        // `Path::new`) and `&PathBuf` (via Deref coercion), matching the
+        // shape the three closures at [`validate_callback_path`] thread
+        // through — the wire-ups hand a `&Path` from
+        // [`BehaviorSpec::declared_slots`]' iterator into each closure,
+        // so the Deref-coercion arm the ctor advertises must actually
+        // route through `.to_path_buf()` and not silently swap in a
+        // fixed path. Peer of the sibling
+        // `upgrade_from_script_ctors_route_from_and_script_verbatim`
+        // (8e67041) cross-axis pin on the sibling `UpgradeError`
+        // `{ from, script }` two-slot envelope.
+        let path_owned = PathBuf::from("lib/handlers.lisp");
+        let path_ref: &Path = path_owned.as_path();
+        for slot in [
+            M2_BEHAVIOR_AUTHOR_KEY_ON_INIT,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_CALL,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_CAST,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_INFO,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
+        ] {
+            for path in [path_ref, &path_owned as &Path] {
+                assert_eq!(
+                    BehaviorError::absolute_path(slot, path),
+                    BehaviorError::AbsolutePath {
+                        slot,
+                        path: path.to_path_buf(),
+                    },
+                );
+                assert_eq!(
+                    BehaviorError::parent_escape(slot, path),
+                    BehaviorError::ParentEscape {
+                        slot,
+                        path: path.to_path_buf(),
+                    },
+                );
+                assert_eq!(
+                    BehaviorError::non_lisp_extension(slot, path),
+                    BehaviorError::NonLispExtension {
+                        slot,
+                        path: path.to_path_buf(),
+                    },
+                );
+            }
+        }
     }
 }
