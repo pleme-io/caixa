@@ -1566,13 +1566,11 @@ impl WitContract {
             // shared with `:contratos :endpoint` through the lifted
             // `crate::render::is_gateway_api_http_path` predicate.
             if let Err(reason) = crate::render::is_gateway_api_http_path(ep) {
-                let (de, para) = self.edge_pair();
-                return Err(AplicacaoError::ContratoEndpointInvalid {
-                    de,
-                    para,
-                    endpoint: ep.to_string(),
+                return Err(AplicacaoError::contrato_endpoint_invalid(
+                    self.edge_pair(),
+                    ep,
                     reason,
-                });
+                ));
             }
             return Ok(WitTarget::Http { endpoint: ep });
         }
@@ -1609,13 +1607,11 @@ impl WitContract {
             // with `:contratos :subject` through the lifted
             // `crate::render::is_nats_subject` predicate.
             if let Err(reason) = crate::render::is_nats_subject(s) {
-                let (de, para) = self.edge_pair();
-                return Err(AplicacaoError::ContratoSubjectInvalid {
-                    de,
-                    para,
-                    subject: s.to_string(),
+                return Err(AplicacaoError::contrato_subject_invalid(
+                    self.edge_pair(),
+                    s,
                     reason,
-                });
+                ));
             }
             return Ok(WitTarget::PubSub { subject: s });
         }
@@ -1659,13 +1655,11 @@ impl WitContract {
             // [`WitTarget`] arms (HTTP / PubSub / Store / Capability)
             // that caixa-mesh + the future kv emitters land in.
             if let Err(reason) = crate::render::is_wasi_keyvalue_slot(sl) {
-                let (de, para) = self.edge_pair();
-                return Err(AplicacaoError::ContratoSlotInvalid {
-                    de,
-                    para,
-                    slot: sl.to_string(),
+                return Err(AplicacaoError::contrato_slot_invalid(
+                    self.edge_pair(),
+                    sl,
                     reason,
-                });
+                ));
             }
             return Ok(WitTarget::Store { slot: sl });
         }
@@ -9507,6 +9501,116 @@ aplicacao_field_reason_ctors! {
     placement_cluster_invalid => PlacementClusterInvalid { cluster },
     placement_affinity_invalid => PlacementAffinityInvalid { affinity },
     shard_key_invalid => ShardKeyInvalid { shard_key },
+}
+
+// Fold the three `AplicacaoError::Contrato{Endpoint,Subject,Slot}Invalid
+// { de, para, <field>: <val>.to_string(), reason }` wire-up sites at
+// [`WitContract::target`] onto one substrate-primitive family per typed
+// variant — the paired `{ de: String, para: String, <field>: String,
+// reason: String }` four-slot sibling on [`AplicacaoError`] of the peer
+// four-slot [`contrato_target_ctors!`] (14b81d5, `{ de, para, wit,
+// expected }` on `ContratoWrongTarget` / `ContratoMissingTarget`), the
+// peer two-slot [`contrato_empty_pair_ctors!`] (8580068, `{ de, para }`
+// on `EmptyWit` / `ContratoEndpointEmpty` / `ContratoSubjectEmpty` /
+// `ContratoSlotEmpty`), and the peer two-slot
+// [`aplicacao_field_reason_ctors!`] (981060b, `{ <field>: String,
+// reason: String }` on `MembroCaixaInvalid` / `EntradaParaInvalid` /
+// `EntradaHostInvalid` / `EntradaPathInvalid` / `PlacementClusterInvalid`
+// / `PlacementAffinityInvalid` / `ShardKeyInvalid`) each carry on the
+// sibling `AplicacaoError` envelopes, plus the peer four-family
+// `LayoutError` ctor set on the sibling layout-side envelope.
+//
+// Every one of the three wire-up sites — three per-payload-axis value-
+// shape gates inside [`WitContract::target`] (the HTTP arm's
+// [`crate::render::is_gateway_api_http_path`] failure on `:endpoint`,
+// the pub-sub arm's [`crate::render::is_nats_subject`] failure on
+// `:subject`, the store arm's [`crate::render::is_wasi_keyvalue_slot`]
+// failure on `:slot`) — opened the identical five-line
+// `let (de, para) = self.edge_pair();
+// return Err(AplicacaoError::Contrato<Field>Invalid { de, para,
+// <field>: <val>.to_string(), reason });` block against the local
+// [`WitContract::edge_pair`] composite-projection accessor and the
+// per-arm `<val>: &str` argument — the exact "same block re-inlined at
+// every consumer" shape the PRIME DIRECTIVE names as a bug, on the same
+// altitude the peer three `AplicacaoError` constructor families and the
+// four peer `LayoutError` constructor families each closed on their
+// sibling envelopes.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(edge: (String, String), <field>: &str,
+// reason: impl Into<String>) -> AplicacaoError`, collapsing the three
+// sites onto one dispatch per arm:
+// `return Err(AplicacaoError::<ctor>(self.edge_pair(), <val>, reason));`,
+// byte-equal to the pre-lift struct-literal on the same
+// `(edge_pair, <val>, reason)` triple. The uniform four-field
+// construction (`de, para` pair-destructure onto same-named fields +
+// `<field>: <val>.to_string()` + `reason: reason.into()`) is spelled
+// once — inside the macro — rather than at every wire-up site. The
+// `reason: impl Into<String>` bound accepts both `&str` literals and
+// `format!(…)` outputs verbatim so no wire-up site changes its per-arm
+// diagnostic shape at the lift, matching the peer
+// [`aplicacao_field_reason_ctors!`] bound on the sibling two-slot
+// envelope. `#[must_use]` fires a compile warning at any wire-up that
+// mistakenly discards the constructed error.
+//
+// Every future consumer that wants to construct one of these three
+// variants outside [`WitContract::target`] (a deferred
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-`:contratos`
+// admission validator raising per-payload value-shape diagnostics on
+// unrecognized `:endpoint` / `:subject` / `:slot` shapes, a future
+// `feira validate --contratos` per-caixa admission verb, an M4 typed
+// WIT-registry-driven per-arm pre-emitter probing each declared
+// `:endpoint` / `:subject` / `:slot` payload against a canonical
+// per-arm shape gate, a per-`Certificate` SAN pre-emitter for
+// cert-manager on the `:endpoint` axis, an M4 typed Cilium L7 rule
+// pre-emitter probing each `:endpoint` against the same shared
+// HTTPPathMatch grammar) reaches the variant through one call rather
+// than re-inlining the five-line pair-destructure + struct-literal
+// block in lockstep with the three in-crate wire-up sites.
+macro_rules! contrato_pair_value_reason_ctors {
+    ($($ctor:ident => $variant:ident { $field:ident }),* $(,)?) => {
+        impl AplicacaoError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`AplicacaoError::",
+                    stringify!($variant),
+                    "`] naming the offending edge `(de, para)` pair, the ",
+                    "per-payload `",
+                    stringify!($field),
+                    "` value, and the parser-shaped `reason`. Folds the ",
+                    "uniform `{ de, para, ",
+                    stringify!($field),
+                    ": ",
+                    stringify!($field),
+                    ".to_string(), reason: reason.into() }` four-slot ",
+                    "construction onto one substrate primitive so every ",
+                    "wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift five-line pair-destructure ",
+                    "+ struct-literal block. The `edge` pair threads ",
+                    "verbatim from [`WitContract::edge_pair`] at the ",
+                    "call site; `reason` accepts both `&str` literals ",
+                    "and `format!(…)` outputs through the `impl ",
+                    "Into<String>` bound."
+                )]
+                #[must_use]
+                pub fn $ctor(edge: (String, String), $field: &str, reason: impl Into<String>) -> Self {
+                    let (de, para) = edge;
+                    Self::$variant {
+                        de,
+                        para,
+                        $field: $field.to_string(),
+                        reason: reason.into(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+contrato_pair_value_reason_ctors! {
+    contrato_endpoint_invalid => ContratoEndpointInvalid { endpoint },
+    contrato_subject_invalid => ContratoSubjectInvalid { subject },
+    contrato_slot_invalid => ContratoSlotInvalid { slot },
 }
 
 #[cfg(test)]
@@ -32109,5 +32213,161 @@ mod tests {
                 "para field on {label} must thread verbatim",
             );
         }
+    }
+
+    // ── contrato_pair_value_reason_ctors! fold pins ─────────────────────
+    //
+    // Fixture edge pair + value + reason for every
+    // `contrato_pair_value_reason_ctors!`-generated ctor pin below. Kept
+    // as non-default `("cart", "catalog")` on the `(de, para)` pair and
+    // fixed per-axis `<val>` / reason so a byte-equality mistake against
+    // the fixture default doesn't silently pass. Peer of the sibling
+    // `contrato_empty_pair_ctor_fixture` (8580068, pair-only envelope on
+    // `contrato_empty_pair_ctors!`) / `contrato_target_ctor_fixture`
+    // (14b81d5, triple + expected-label envelope on
+    // `contrato_target_ctors!`) / `entrada_host_invalid_ctor_matches_
+    // struct_literal_wrap` (17dd504, host + reason envelope on
+    // `entrada_host_invalid`).
+    fn contrato_pair_value_reason_ctor_fixture() -> (String, String) {
+        ("cart".to_string(), "catalog".to_string())
+    }
+
+    #[test]
+    fn contrato_endpoint_invalid_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::ContratoEndpointInvalid` to the pre-lift
+        // open-coded struct-literal on the same
+        // `(edge_pair, endpoint, reason)` triple, so the fold cannot
+        // silently drift on any future field-addition / reordering /
+        // string-conversion tweak on the variant. Peer of the sibling
+        // `contrato_endpoint_empty_ctor_matches_struct_literal_wrap`
+        // (8580068) on the paired two-slot envelope of the same
+        // `{ de, para, ... }` prefix, and of
+        // `entrada_host_invalid_ctor_matches_struct_literal_wrap`
+        // (17dd504) on the sibling `{ <field>: String, reason: String }`
+        // two-slot envelope.
+        let (de, para) = contrato_pair_value_reason_ctor_fixture();
+        let endpoint = "/charge";
+        let reason = "sample reason text";
+        let lifted =
+            AplicacaoError::contrato_endpoint_invalid((de.clone(), para.clone()), endpoint, reason);
+        let struct_literal = AplicacaoError::ContratoEndpointInvalid {
+            de,
+            para,
+            endpoint: endpoint.to_string(),
+            reason: reason.to_string(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_subject_invalid_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin peer of the sibling
+        // `contrato_endpoint_invalid_ctor_matches_struct_literal_wrap`
+        // above on the paired `ContratoSubjectInvalid` variant of the
+        // same four-slot envelope shape the
+        // `contrato_pair_value_reason_ctors!` macro closes.
+        let (de, para) = contrato_pair_value_reason_ctor_fixture();
+        let subject = "checkout.events.charge.failed";
+        let reason = "sample reason text";
+        let lifted =
+            AplicacaoError::contrato_subject_invalid((de.clone(), para.clone()), subject, reason);
+        let struct_literal = AplicacaoError::ContratoSubjectInvalid {
+            de,
+            para,
+            subject: subject.to_string(),
+            reason: reason.to_string(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_slot_invalid_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin peer of the sibling
+        // `contrato_subject_invalid_ctor_matches_struct_literal_wrap`
+        // above on the paired `ContratoSlotInvalid` variant of the same
+        // four-slot envelope shape.
+        let (de, para) = contrato_pair_value_reason_ctor_fixture();
+        let slot = "checkout/$orderId";
+        let reason = "sample reason text";
+        let lifted =
+            AplicacaoError::contrato_slot_invalid((de.clone(), para.clone()), slot, reason);
+        let struct_literal = AplicacaoError::ContratoSlotInvalid {
+            de,
+            para,
+            slot: slot.to_string(),
+            reason: reason.to_string(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_pair_value_reason_ctors_route_edge_pair_through_verbatim() {
+        // Routing pin: the `(de, para)` pair threads verbatim onto
+        // same-named fields on all three generated ctors, no wrapper-
+        // side lowercase / trim / re-order. Sweeps a non-default pair
+        // (`"cart-svc" → "catalog-v2"`) so any wrapper-side
+        // transformation surfaces here rather than at a downstream
+        // diagnostic-shape drift. Sibling of
+        // `contrato_empty_pair_ctors_route_edge_pair_through_verbatim`
+        // (8580068) on the paired two-slot envelope and of
+        // `contrato_target_ctors_route_edge_triple_through_verbatim`
+        // (14b81d5) on the paired triple-carrying envelope.
+        let edge = ("cart-svc".to_string(), "catalog-v2".to_string());
+        let variants: [(AplicacaoError, &'static str); 3] = [
+            (
+                AplicacaoError::contrato_endpoint_invalid(edge.clone(), "/x", "r"),
+                "ContratoEndpointInvalid",
+            ),
+            (
+                AplicacaoError::contrato_subject_invalid(edge.clone(), "x.y", "r"),
+                "ContratoSubjectInvalid",
+            ),
+            (
+                AplicacaoError::contrato_slot_invalid(edge.clone(), "x/y", "r"),
+                "ContratoSlotInvalid",
+            ),
+        ];
+        for (built, label) in variants {
+            let (de, para) = match built {
+                AplicacaoError::ContratoEndpointInvalid { de, para, .. }
+                | AplicacaoError::ContratoSubjectInvalid { de, para, .. }
+                | AplicacaoError::ContratoSlotInvalid { de, para, .. } => (de, para),
+                other => panic!("expected {label} pair variant, got {other:?}"),
+            };
+            assert_eq!(de, "cart-svc", "de field on {label} must thread verbatim");
+            assert_eq!(
+                para, "catalog-v2",
+                "para field on {label} must thread verbatim",
+            );
+        }
+    }
+
+    #[test]
+    fn contrato_pair_value_reason_ctors_route_reason_through_into_uniformly() {
+        // Cross-arm invariance pin — the three ctors all route
+        // `reason: impl Into<String>` verbatim onto their respective
+        // typed variants through the shared
+        // [`contrato_pair_value_reason_ctors!`] macro. Sweeps a fixture
+        // pair (`&str` literal, `format!` output) against every ctor to
+        // pin that no per-arm wrapper transformation drifted in against
+        // the uniform macro-generated body. Peer of
+        // `aplicacao_field_reason_ctors_route_reason_through_into_uniformly`
+        // (981060b) on the sibling two-slot envelope's cross-arm sweep.
+        let edge = || ("cart".to_string(), "catalog".to_string());
+        let via_literal = "literal reason text";
+        let via_format = format!("{} reason text", "literal");
+        assert_eq!(
+            AplicacaoError::contrato_endpoint_invalid(edge(), "/e", via_literal),
+            AplicacaoError::contrato_endpoint_invalid(edge(), "/e", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::contrato_subject_invalid(edge(), "s.t", via_literal),
+            AplicacaoError::contrato_subject_invalid(edge(), "s.t", via_format.clone()),
+        );
+        assert_eq!(
+            AplicacaoError::contrato_slot_invalid(edge(), "k/v", via_literal),
+            AplicacaoError::contrato_slot_invalid(edge(), "k/v", via_format),
+        );
     }
 }
