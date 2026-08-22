@@ -4301,6 +4301,119 @@ impl Caixa {
         gate(self).map_err(|err| wrap(self, err))
     }
 
+    /// Run one arm of the cross-family kind ↔ owned-slot-family
+    /// coherence cascade on `self`: on a caixa whose [`Self::kind`] does
+    /// not own the typed-slot family named by `is_owner`, refuse when
+    /// the paired `accumulator` reports any declared slot in that
+    /// family; otherwise pass. Substrate primitive folding the three
+    /// self-similar four-line
+    /// `if !self.kind().is_<owner>() { let slots = self.declared_<family>_slots();
+    /// if !slots.is_empty() { return Err(<wrap>(self, slots)); } }`
+    /// arms at [`Self::validate_kind_slot_coherence`] onto one dispatch.
+    /// Three consumers (M3 mesh — Aplicacao-owner, supervisor-tree —
+    /// Supervisor-owner, M2 Servico-runtime — Servico-owner), one
+    /// identical shape, one substrate primitive on [`Caixa`] closing
+    /// the duplication the PRIME DIRECTIVE names as a bug on the
+    /// outer kind-coherence arm shape — peer with the substrate
+    /// primitives on the two adjacent halves of the same three-arm
+    /// cascade the sibling [`Self::declared_mesh_slots`] /
+    /// [`Self::declared_supervisor_slots`] /
+    /// [`Self::declared_servico_slots`] accumulator family closes on
+    /// the inner slot-set enumerator axis and the sibling
+    /// [`crate::layout::layout_slot_kind_ctors!`] macro (0419438)
+    /// closes on the inner wrap-envelope ctor axis. Each of the three
+    /// [`Self::validate_kind_slot_coherence`] arms now reads through
+    /// one call across every altitude of the per-arm cascade:
+    /// one dispatch on this primitive for the outer guard shape, one
+    /// dispatch on `Self::declared_<family>_slots` for the accumulator,
+    /// one dispatch on `crate::LayoutError::<family>_on_non_<owner>`
+    /// for the wrap ctor.
+    ///
+    /// Composes the outer owner-kind guard, the per-family accumulator,
+    /// and the per-family wrap ctor through three typed callables:
+    /// `is_owner` runs on `&self.kind()` (a `&CaixaKind` borrow so the
+    /// `gen_platform::IsVariant`-derived `fn(&CaixaKind) -> bool`
+    /// per-arm predicates — [`crate::CaixaKind::is_aplicacao`] /
+    /// [`crate::CaixaKind::is_supervisor`] / [`crate::CaixaKind::is_servico`]
+    /// — pass verbatim as function references), `accumulator` runs on
+    /// `&self` and yields the
+    /// per-family declared-slot list, and `wrap` runs on `(&self,
+    /// Vec<&'static str>)` and yields the per-family
+    /// [`crate::LayoutError`] wrap. The `is_owner` short-circuit fires
+    /// before the accumulator dispatch (so the owner kind of each
+    /// family passes without invoking `accumulator`, byte-equal to the
+    /// pre-lift `if !self.kind().is_<owner>() { … }` outer guard's
+    /// short-circuit — pinned by
+    /// `run_kind_owned_slot_family_gate_owner_kind_short_circuits_before_accumulator`),
+    /// and the accumulator's `is_empty` short-circuit fires before the
+    /// wrap dispatch (so a non-owner kind with no declared slot in that
+    /// family passes without invoking `wrap`, byte-equal to the pre-lift
+    /// `if !<slots>.is_empty() { … }` inner guard's short-circuit —
+    /// pinned by
+    /// `run_kind_owned_slot_family_gate_empty_accumulator_short_circuits_before_wrap`).
+    /// The wrap ctor is `FnOnce(&Caixa, Vec<&'static str>) ->
+    /// crate::LayoutError` — matching the [`crate::layout::layout_slot_kind_ctors!`]
+    /// macro's per-variant `fn(&Caixa, Vec<&'static str>) -> LayoutError`
+    /// substrate-canonical ctor shape verbatim, so
+    /// [`crate::LayoutError::mesh_slots_on_non_aplicacao`] /
+    /// [`crate::LayoutError::supervisor_slots_on_non_supervisor`] /
+    /// [`crate::LayoutError::servico_slots_on_non_servico`] pass as
+    /// function references without a closure wrap. A mismatch between
+    /// the ctor's signature and this bound trips at the wire-up site
+    /// (compile-time) rather than at a closure body.
+    ///
+    /// The sibling [`crate::LayoutError::ForeignCodeSlot`] gate on the
+    /// code-surface family sits outside this primitive because
+    /// [`Self::declared_foreign_code_slots`] bakes the per-arm kind-
+    /// check into the accumulator itself (each arm's
+    /// `!self.kind().requires_<slot>()` guard fires inside the
+    /// accumulator, not around it), so the code-surface arm carries no
+    /// outer `is_owner`-shaped guard and its dispatch reads through
+    /// [`Self::validate_foreign_code_kind_coherence`] verbatim without
+    /// this primitive — the same posture the `_no_code_` /
+    /// `_ci_kind_` coherence axes take on their respective per-arm
+    /// shapes. The primitive here is specific to the "outer
+    /// non-owner-kind guard + inner accumulator + inner emptiness
+    /// guard + wrap" arm shape that fires three times in
+    /// [`Self::validate_kind_slot_coherence`].
+    ///
+    /// Every future consumer that wants to gate one kind-owned slot
+    /// family as a unit outside the composed cascade (the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission-
+    /// webhook per-family re-check after a per-slot patch, a future
+    /// `feira validate --<family>-coherence` per-caixa admission verb,
+    /// a per-`Caixa` overlay resolver rejecting a kind-foreign patch
+    /// on one family) reaches the four-line arm through one call
+    /// rather than re-inlining the outer-guard + accumulator +
+    /// emptiness-guard + wrap cascade in lockstep with the pre-existing
+    /// three arms. Every future kind-owned typed-slot family (an
+    /// `Actor`-owned per-virtual-actor grain slot the M5 Orleans-
+    /// inspired kind reaches through, a per-Aplicacao overlay slot the
+    /// M4 CR materializer consults) folds onto
+    /// [`Self::validate_kind_slot_coherence`] as one additional
+    /// dispatch on this primitive rather than a fourth open-coded
+    /// four-line block.
+    pub fn run_kind_owned_slot_family_gate<F, A, W>(
+        &self,
+        is_owner: F,
+        accumulator: A,
+        wrap: W,
+    ) -> Result<(), crate::LayoutError>
+    where
+        F: FnOnce(&crate::CaixaKind) -> bool,
+        A: FnOnce(&Caixa) -> Vec<&'static str>,
+        W: FnOnce(&Caixa, Vec<&'static str>) -> crate::LayoutError,
+    {
+        if is_owner(&self.kind()) {
+            return Ok(());
+        }
+        let slots = accumulator(self);
+        if slots.is_empty() {
+            return Ok(());
+        }
+        Err(wrap(self, slots))
+    }
+
     /// Reject `:nome` values the K8s apiserver would refuse at admission
     /// time. The top-level Caixa identity flows directly into every
     /// substrate-side artifact's `metadata.name` axis: the
@@ -5205,32 +5318,42 @@ impl Caixa {
     /// carrying no declared slot in that family (the fold's identity
     /// element on both axes).
     pub fn validate_kind_slot_coherence(&self) -> Result<(), crate::LayoutError> {
-        if !self.kind().is_aplicacao() {
-            let mesh_slots = self.declared_mesh_slots();
-            if !mesh_slots.is_empty() {
-                return Err(crate::LayoutError::mesh_slots_on_non_aplicacao(
-                    self, mesh_slots,
-                ));
-            }
-        }
-        if !self.kind().is_supervisor() {
-            let supervisor_slots = self.declared_supervisor_slots();
-            if !supervisor_slots.is_empty() {
-                return Err(crate::LayoutError::supervisor_slots_on_non_supervisor(
-                    self,
-                    supervisor_slots,
-                ));
-            }
-        }
-        if !self.kind().is_servico() {
-            let servico_slots = self.declared_servico_slots();
-            if !servico_slots.is_empty() {
-                return Err(crate::LayoutError::servico_slots_on_non_servico(
-                    self,
-                    servico_slots,
-                ));
-            }
-        }
+        // Each of the three arms routes through the shared
+        // [`Self::run_kind_owned_slot_family_gate`] substrate primitive
+        // — the outer non-owner-kind guard + inner accumulator + inner
+        // emptiness-guard + wrap arm shape now lands on one dispatch
+        // per family rather than a four-line open-coded block in
+        // lockstep across all three arms. Canonical mesh → supervisor
+        // → servico order preserved (the primitive short-circuits
+        // arm-by-arm; the outer `?;` cascade at this altitude threads
+        // the first surfaced arm's error verbatim). Each of the three
+        // ctors ([`crate::LayoutError::mesh_slots_on_non_aplicacao`] /
+        // [`crate::LayoutError::supervisor_slots_on_non_supervisor`] /
+        // [`crate::LayoutError::servico_slots_on_non_servico`]) was
+        // already lifted onto the substrate by the peer
+        // [`crate::layout::layout_slot_kind_ctors!`] macro, so each arm
+        // routes through the same substrate-canonical
+        // `Self::<variant> { caixa, kind, slots }` wrap per arm as the
+        // pre-lift open-coded blocks — byte-equal, pinned by the
+        // paired `validate_kind_slot_coherence_folds_<family>_arm_matches_gate`
+        // equivalence pins and the peer
+        // `validate_kind_slot_coherence_{mesh,supervisor}_arm_fires_before_<next>_arm`
+        // ordering pins.
+        self.run_kind_owned_slot_family_gate(
+            crate::CaixaKind::is_aplicacao,
+            Caixa::declared_mesh_slots,
+            crate::LayoutError::mesh_slots_on_non_aplicacao,
+        )?;
+        self.run_kind_owned_slot_family_gate(
+            crate::CaixaKind::is_supervisor,
+            Caixa::declared_supervisor_slots,
+            crate::LayoutError::supervisor_slots_on_non_supervisor,
+        )?;
+        self.run_kind_owned_slot_family_gate(
+            crate::CaixaKind::is_servico,
+            Caixa::declared_servico_slots,
+            crate::LayoutError::servico_slots_on_non_servico,
+        )?;
         Ok(())
     }
 
@@ -21983,6 +22106,175 @@ mod tests {
                 )
             });
         }
+    }
+
+    #[test]
+    fn run_kind_owned_slot_family_gate_owner_kind_short_circuits_before_accumulator() {
+        // Fail-before-pass-after identity-element pin on the owner-kind
+        // arm of the substrate primitive: on a caixa whose kind IS the
+        // owner of the family named by `is_owner`, the primitive
+        // short-circuits before dispatching `accumulator` — pinned here
+        // by a poison-pill accumulator that panics on call. If a
+        // regression drops the `is_owner` short-circuit and always
+        // invokes the accumulator, the poison panic surfaces here
+        // rather than a spurious pass. Byte-equal to the pre-lift
+        // `if !self.kind().is_<owner>() { … }` outer guard's
+        // short-circuit at the pre-fold layout call site.
+        let c = bare_servico_fixture("demo");
+        c.run_kind_owned_slot_family_gate(
+            CaixaKind::is_servico,
+            |_| panic!("run_kind_owned_slot_family_gate must short-circuit before invoking accumulator on the owner kind"),
+            |_, _| panic!("run_kind_owned_slot_family_gate must short-circuit before invoking wrap on the owner kind"),
+        )
+        .expect(
+            "the owner kind of a slot family must pass the substrate \
+             primitive as the fold's identity element on the outer \
+             is_owner guard, without invoking accumulator or wrap",
+        );
+    }
+
+    #[test]
+    fn run_kind_owned_slot_family_gate_empty_accumulator_short_circuits_before_wrap() {
+        // Fail-before-pass-after identity-element pin on the empty-
+        // accumulator arm: on a non-owner kind whose per-family
+        // accumulator yields no declared slot, the primitive short-
+        // circuits before dispatching `wrap` — pinned here by a
+        // poison-pill wrap that panics on call. Byte-equal to the
+        // pre-lift `if !<slots>.is_empty() { … }` inner emptiness
+        // guard's short-circuit at the pre-fold layout call site.
+        let c = bare_servico_fixture("demo");
+        c.run_kind_owned_slot_family_gate(
+            CaixaKind::is_aplicacao,
+            Caixa::declared_mesh_slots,
+            |_, _| panic!("run_kind_owned_slot_family_gate must short-circuit before invoking wrap on an empty accumulator"),
+        )
+        .expect(
+            "a non-owner kind carrying no declared slot in the family \
+             must pass the substrate primitive as the fold's identity \
+             element on the inner emptiness guard, without invoking \
+             wrap",
+        );
+    }
+
+    #[test]
+    fn run_kind_owned_slot_family_gate_non_owner_non_empty_wraps_verbatim() {
+        // Equivalence pin on the refusal arm: on a non-owner kind
+        // whose accumulator yields a non-empty slot list, the primitive
+        // returns the caller-supplied wrap byte-equal to the direct
+        // ctor dispatch on the same `(caixa, slots)` pair. Pins the
+        // three-argument route through — `is_owner` fires false, the
+        // accumulator produces the slot list, and the wrap ctor
+        // receives verbatim what a direct dispatch would receive.
+        // Sibling of the peer per-arm equivalence pins on
+        // [`Caixa::validate_kind_slot_coherence`].
+        use crate::aplicacao::Membro;
+        let mut c = bare_servico_fixture("demo");
+        c.membros = vec![Membro {
+            caixa: "cart".into(),
+            versao: "^0.1".into(),
+        }];
+        let via_primitive = c
+            .run_kind_owned_slot_family_gate(
+                CaixaKind::is_aplicacao,
+                Caixa::declared_mesh_slots,
+                crate::LayoutError::mesh_slots_on_non_aplicacao,
+            )
+            .unwrap_err();
+        let via_direct =
+            crate::LayoutError::mesh_slots_on_non_aplicacao(&c, c.declared_mesh_slots());
+        assert_eq!(
+            via_primitive, via_direct,
+            "Caixa::run_kind_owned_slot_family_gate must route the \
+             non-owner-kind + non-empty-accumulator arm through the \
+             caller-supplied wrap byte-equal to the direct ctor \
+             dispatch on the same (caixa, slots) pair",
+        );
+    }
+
+    #[test]
+    fn validate_kind_slot_coherence_routes_each_arm_through_run_kind_owned_slot_family_gate() {
+        // Cross-primitive routing pin: every arm of the compound gate
+        // [`Caixa::validate_kind_slot_coherence`] routes through the
+        // substrate primitive [`Caixa::run_kind_owned_slot_family_gate`]
+        // on its `(is_owner, accumulator, wrap)` triple. A silent
+        // regression that de-folded one arm and re-inlined the four-
+        // line block would surface here as a mismatch between the
+        // compound-gate error and the direct-primitive-dispatch error
+        // on the same fixture. Sibling of the peer
+        // `probe_declared_entries_routes_miss_arm_through_probe_declared_entry`
+        // cross-primitive routing pin on the layout-pipeline
+        // existence-probe axis.
+        use crate::aplicacao::Membro;
+        use crate::limits::LimitsSpec;
+        use crate::supervisor::RestartStrategy;
+
+        // Mesh arm — non-Aplicacao carrying a declared M3 slot.
+        let mut mesh = bare_servico_fixture("demo");
+        mesh.membros = vec![Membro {
+            caixa: "cart".into(),
+            versao: "^0.1".into(),
+        }];
+        let via_compound = mesh.validate_kind_slot_coherence().unwrap_err();
+        let via_primitive = mesh
+            .run_kind_owned_slot_family_gate(
+                CaixaKind::is_aplicacao,
+                Caixa::declared_mesh_slots,
+                crate::LayoutError::mesh_slots_on_non_aplicacao,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_compound, via_primitive,
+            "validate_kind_slot_coherence's mesh arm must route \
+             byte-equal through the run_kind_owned_slot_family_gate \
+             substrate primitive",
+        );
+
+        // Supervisor arm — non-Supervisor carrying a declared
+        // supervisor-tree slot on a kind foreign to both the Aplicacao
+        // arm and this one.
+        let mut sup = bare_servico_fixture("demo");
+        sup.estrategia = Some(RestartStrategy::OneForOne);
+        let via_compound = sup.validate_kind_slot_coherence().unwrap_err();
+        let via_primitive = sup
+            .run_kind_owned_slot_family_gate(
+                CaixaKind::is_supervisor,
+                Caixa::declared_supervisor_slots,
+                crate::LayoutError::supervisor_slots_on_non_supervisor,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_compound, via_primitive,
+            "validate_kind_slot_coherence's supervisor arm must route \
+             byte-equal through the run_kind_owned_slot_family_gate \
+             substrate primitive",
+        );
+
+        // Servico arm — non-Servico carrying a declared M2 slot on a
+        // kind foreign to every prior arm (Biblioteca — foreign to
+        // both the Aplicacao mesh arm and the Supervisor supervisor
+        // arm and the Servico M2 arm).
+        let mut svc = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        svc.kind = CaixaKind::Biblioteca;
+        svc.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: None,
+            wall_clock: None,
+            cpu: None,
+        });
+        let via_compound = svc.validate_kind_slot_coherence().unwrap_err();
+        let via_primitive = svc
+            .run_kind_owned_slot_family_gate(
+                CaixaKind::is_servico,
+                Caixa::declared_servico_slots,
+                crate::LayoutError::servico_slots_on_non_servico,
+            )
+            .unwrap_err();
+        assert_eq!(
+            via_compound, via_primitive,
+            "validate_kind_slot_coherence's servico arm must route \
+             byte-equal through the run_kind_owned_slot_family_gate \
+             substrate primitive",
+        );
     }
 
     #[test]
