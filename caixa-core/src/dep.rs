@@ -3177,18 +3177,18 @@ pub fn validate_no_self_dep(
 ) -> Result<(), DepError> {
     for dep in deps {
         if dep.nome() == parent_nome {
-            return Err(DepError::DepIsSelf {
-                nome: parent_nome.to_string(),
-                list: crate::render::DEP_AUTHOR_KEY_DEPS,
-            });
+            return Err(DepError::dep_is_self(
+                parent_nome,
+                crate::render::DEP_AUTHOR_KEY_DEPS,
+            ));
         }
     }
     for dep in deps_dev {
         if dep.nome() == parent_nome {
-            return Err(DepError::DepIsSelf {
-                nome: parent_nome.to_string(),
-                list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
-            });
+            return Err(DepError::dep_is_self(
+                parent_nome,
+                crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+            ));
         }
     }
     Ok(())
@@ -4612,6 +4612,74 @@ dep_nome_only_ctors! {
     fonte_pin_missing => FontePinMissing,
     fonte_caminho_empty => FonteCaminhoEmpty,
     caracteristica_empty => CaracteristicaEmpty,
+}
+
+// Fold the four `DepError::{DuplicateNome, DepIsSelf}` struct-variant
+// wire-up sites at [`crate::manifest::Caixa::push_dep`] +
+// [`crate::manifest::Caixa::validate_deps`] +
+// [`validate_no_self_dep`] onto one substrate-primitive family per
+// typed variant — the `DepError`-side siblings of the peer
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] macro (db09650)
+// on the `SupervisorError { caixa: String }` one-slot envelope and of
+// the peer [`dep_nome_only_ctors!`] macro (792aa92) on the
+// `DepError { nome: String }` one-slot envelope. The two variants
+// carry the same `{ nome: String, list: &'static str }` two-slot
+// shape: the `nome` field names the offending dep the diagnostic
+// points the author back at, and the `list` field carries the
+// `":deps"` / `":deps-dev"` author-surface tag verbatim (via
+// [`crate::dep::DepList::as_str`] on the [`push_dep`] /
+// [`validate_deps`] arms, and via the paired
+// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `&'static str`
+// canonicals on the [`validate_no_self_dep`] arm) so the author can
+// grep their caixa.lisp for the offending list block in one edit.
+//
+// Each of the four wire-up sites opened the same struct-literal
+// `DepError::<Variant> { nome: <name>.to_string(), list: <tag> }`
+// two-line block — the exact "same block re-inlined at every
+// consumer" shape the PRIME DIRECTIVE names as a bug, on the same
+// altitude the peer `DepError` / `SupervisorError` /
+// `AplicacaoError` / `LayoutError` / `LimitsError` ctor families
+// already closed on their sibling envelopes. The two `#[must_use]`
+// inherent constructors below fold each wire-up onto one dispatch:
+// `DepError::duplicate_nome(<nome>, <list>)` and
+// `DepError::dep_is_self(<nome>, <list>)`, byte-equal to the
+// pre-lift struct-literal on the same scalar fixtures. The `list:
+// &'static str` parameter (not `impl Into<String>`) preserves the
+// exact wire tag every consumer already passes verbatim — no
+// downstream diagnostic reshaping at the lift, matching the peer
+// `DepList::as_str` / `DEP_AUTHOR_KEY_DEPS*` `&'static str`
+// contract each wire-up site already keys off.
+macro_rules! dep_nome_list_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl DepError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`DepError::",
+                    stringify!($variant),
+                    "`] naming the offending `:deps :nome` and the ",
+                    "author-surface list tag (`:deps` vs. `:deps-dev`) ",
+                    "the diagnostic points the author back at. Folds ",
+                    "the uniform `Self::",
+                    stringify!($variant),
+                    " { nome: nome.to_string(), list }` two-field ",
+                    "struct-literal onto one substrate primitive so ",
+                    "every in-crate wire-up on this variant reads ",
+                    "through one dispatch rather than the pre-lift ",
+                    "open-coded struct-literal block."
+                )]
+                #[must_use]
+                pub fn $ctor(nome: &str, list: &'static str) -> Self {
+                    Self::$variant { nome: nome.to_string(), list }
+                }
+            )*
+        }
+    };
+}
+
+dep_nome_list_ctors! {
+    duplicate_nome => DuplicateNome,
+    dep_is_self => DepIsSelf,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -16498,6 +16566,103 @@ mod tests {
                  through `.to_string()` onto the canonical `nome` field \
                  — a field-rename or silent-conversion regression surfaces \
                  here rather than at a downstream diagnostic-shape mismatch",
+            );
+        }
+    }
+
+    // ── `dep_nome_list_ctors!` — the paired `{ nome: String, list:
+    //    &'static str }` two-slot envelope on `DepError`, strict
+    //    sibling of the peer `dep_nome_only_ctors!` (792aa92) on the
+    //    same envelope's `{ nome: String }` one-slot shape and of the
+    //    peer `supervisor_caixa_only_ctors!` (db09650) on the
+    //    `SupervisorError` envelope's `{ caixa: String }` one-slot axis.
+
+    #[test]
+    fn duplicate_nome_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::duplicate_nome("caixa-teia", crate::render::DEP_AUTHOR_KEY_DEPS),
+            DepError::DuplicateNome {
+                nome: "caixa-teia".to_string(),
+                list: crate::render::DEP_AUTHOR_KEY_DEPS,
+            },
+            "generated duplicate_nome ctor must produce byte-equal \
+             `DepError::DuplicateNome` to the pre-lift struct-literal \
+             wrap on the same scalar fixtures",
+        );
+    }
+
+    #[test]
+    fn dep_is_self_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::dep_is_self("orquestra", crate::render::DEP_AUTHOR_KEY_DEPS_DEV),
+            DepError::DepIsSelf {
+                nome: "orquestra".to_string(),
+                list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+            },
+            "generated dep_is_self ctor must produce byte-equal \
+             `DepError::DepIsSelf` to the pre-lift struct-literal \
+             wrap on the same scalar fixtures",
+        );
+    }
+
+    #[test]
+    fn dep_nome_list_ctors_route_nome_and_list_through_uniformly() {
+        // Cross-axis routing pin: sweep the two constructor input axes
+        // (`nome: &str`, `list: &'static str`) through non-default
+        // fixtures against every generated arm in the
+        // [`dep_nome_list_ctors!`] macro, so any wrapper-side
+        // lowercase / trim / truncate at codegen time — or a silent
+        // field re-name away from the canonical `nome` / `list` axes
+        // on any one variant, or a `list` axis silently rerouted
+        // through `.to_string()` instead of passed as `&'static str`
+        // verbatim — surfaces here rather than at a downstream
+        // diagnostic-shape mismatch. Peer of the sibling
+        // `dep_nome_only_ctors_route_nome_through_to_string` pin
+        // (792aa92) on the same envelope's one-slot family, and of the
+        // peer
+        // `supervisor_child_reason_ctors_route_reason_through_into_uniformly`
+        // pin (d2ef2ec) on the sibling `SupervisorError` envelope's
+        // two-slot `{ caixa: String, reason: String }` shape.
+        let nome = "sibling-teia";
+        let cases: [(DepError, DepError); 4] = [
+            (
+                DepError::duplicate_nome(nome, crate::render::DEP_AUTHOR_KEY_DEPS),
+                DepError::DuplicateNome {
+                    nome: nome.to_string(),
+                    list: crate::render::DEP_AUTHOR_KEY_DEPS,
+                },
+            ),
+            (
+                DepError::duplicate_nome(nome, crate::render::DEP_AUTHOR_KEY_DEPS_DEV),
+                DepError::DuplicateNome {
+                    nome: nome.to_string(),
+                    list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+                },
+            ),
+            (
+                DepError::dep_is_self(nome, crate::render::DEP_AUTHOR_KEY_DEPS),
+                DepError::DepIsSelf {
+                    nome: nome.to_string(),
+                    list: crate::render::DEP_AUTHOR_KEY_DEPS,
+                },
+            ),
+            (
+                DepError::dep_is_self(nome, crate::render::DEP_AUTHOR_KEY_DEPS_DEV),
+                DepError::DepIsSelf {
+                    nome: nome.to_string(),
+                    list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+                },
+            ),
+        ];
+        for (via_ctor, via_struct_literal) in cases {
+            assert_eq!(
+                via_ctor, via_struct_literal,
+                "dep_nome_list_ctors!-generated ctor must route `nome` \
+                 through `.to_string()` onto the canonical `nome` field \
+                 and pass `list` verbatim onto the canonical `&'static str` \
+                 `list` field — a field-rename, silent-conversion, or \
+                 axis-swap regression surfaces here rather than at a \
+                 downstream diagnostic-shape mismatch",
             );
         }
     }
