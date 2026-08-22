@@ -150,9 +150,7 @@ impl LayoutInvariants for StandardLayout {
         // [`LayoutError::LimitsViolation`] / [`LayoutError::BehaviorViolation`]
         // / [`LayoutError::UpgradeViolation`] / [`LayoutError::SupervisorViolation`]
         // / [`LayoutError::AplicacaoViolation`]).
-        caixa
-            .validate_nome()
-            .map_err(|err| LayoutError::nome_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_nome, LayoutError::nome_violation)?;
         // `:nome`-side joint-length budget on the canonical
         // `lareira-<nome>` chart-name shape — the second arm on the
         // shared `:nome` axis after the bare-DNS-1123 gate above. Runs
@@ -170,12 +168,11 @@ impl LayoutInvariants for StandardLayout {
         // [`lareira_chart_name`] doc-comment's explicit M4-admission
         // deferral (caixa-core/src/render.rs:3198) into a build-time
         // structural property of every emitted artifact.
-        caixa
-            .validate_nome_chart_name_budget()
-            .map_err(|err| LayoutError::nome_violation(caixa, err))?;
-        caixa
-            .validate_versao()
-            .map_err(|err| LayoutError::versao_violation(caixa, err))?;
+        caixa.run_layout_gate(
+            Caixa::validate_nome_chart_name_budget,
+            LayoutError::nome_violation,
+        )?;
+        caixa.run_layout_gate(Caixa::validate_versao, LayoutError::versao_violation)?;
 
         // `:deps` / `:deps-dev` per-entry shape gate. The third Caixa-
         // level orphan validator on the universal authoring surface (peer
@@ -266,9 +263,7 @@ impl LayoutInvariants for StandardLayout {
         // verb, a per-`:deps` overlay resolver) reaches the two-arm
         // compound gate through one dispatch rather than re-inlining
         // the two-dispatch cascade in lockstep with this wire-up.
-        caixa
-            .validate_deps()
-            .map_err(|err| LayoutError::deps_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_deps, LayoutError::deps_violation)?;
 
         // `:etiquetas` per-entry empty + cross-entry duplicate gate. The
         // fourth universal-axis Caixa-level value-shape gate (peer of
@@ -322,9 +317,7 @@ impl LayoutInvariants for StandardLayout {
         // "empty entry" defect (for the empty arm), so the wrap
         // envelope's `issue` carries a self-locating "which axis, which
         // entry, why" without re-shaping the per-arm reason.
-        caixa
-            .validate_etiquetas()
-            .map_err(|err| LayoutError::etiquetas_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_etiquetas, LayoutError::etiquetas_violation)?;
 
         // `:autores` per-entry empty + cross-entry duplicate gate. The
         // fifth universal-axis Caixa-level value-shape gate (peer of
@@ -375,9 +368,7 @@ impl LayoutInvariants for StandardLayout {
         // "empty entry" defect (for the empty arm), so the wrap
         // envelope's `issue` carries a self-locating "which axis, which
         // entry, why" without re-shaping the per-arm reason.
-        caixa
-            .validate_autores()
-            .map_err(|err| LayoutError::autores_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_autores, LayoutError::autores_violation)?;
 
         // `:repositorio` git-repo-URL shape gate. The sixth
         // universal-axis Caixa-level value-shape gate (peer of
@@ -446,9 +437,10 @@ impl LayoutInvariants for StandardLayout {
         // equivalent — every value past validate is
         // guaranteed-acceptable by the shared predicate's constraint
         // union, by construction.
-        caixa
-            .validate_repositorio()
-            .map_err(|err| LayoutError::repositorio_violation(caixa, err))?;
+        caixa.run_layout_gate(
+            Caixa::validate_repositorio,
+            LayoutError::repositorio_violation,
+        )?;
 
         // `:descricao` non-empty shape gate. The seventh universal-
         // axis Caixa-level value-shape gate (peer of
@@ -508,9 +500,7 @@ impl LayoutInvariants for StandardLayout {
         // `:descricao` slot + cites the renderer-side footgun, so
         // the wrap envelope's `issue` carries a self-locating
         // "which axis, why" without re-shaping the per-arm reason.
-        caixa
-            .validate_descricao()
-            .map_err(|err| LayoutError::descricao_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_descricao, LayoutError::descricao_violation)?;
 
         // `:licenca` non-empty shape gate. The eighth universal-axis
         // Caixa-level value-shape gate (peer of [`Caixa::validate_nome`]
@@ -567,9 +557,7 @@ impl LayoutInvariants for StandardLayout {
         // `:licenca` slot + cites the renderer-side footgun, so
         // the wrap envelope's `issue` carries a self-locating
         // "which axis, why" without re-shaping the per-arm reason.
-        caixa
-            .validate_licenca()
-            .map_err(|err| LayoutError::licenca_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_licenca, LayoutError::licenca_violation)?;
 
         // `:edicao` non-empty shape gate. The ninth (and last
         // un-gated) universal-axis Caixa-level value-shape gate
@@ -638,9 +626,7 @@ impl LayoutInvariants for StandardLayout {
         // `:descricao` 4e6db38, `:licenca` 3d1e535, `:edicao` here)
         // now carries the same structural empty-arm gate by
         // construction.
-        caixa
-            .validate_edicao()
-            .map_err(|err| LayoutError::edicao_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_edicao, LayoutError::edicao_violation)?;
 
         // Kind ↔ code-surface coherence on the three no-code kinds
         // (Supervisor / Aplicacao / Acao) — folded onto one substrate
@@ -819,9 +805,7 @@ impl LayoutInvariants for StandardLayout {
         // surfaces its self-locating per-slot diagnostic rather than a
         // downstream `MissingEntry` / `ExeOutsideDir` /
         // `ServicoOutsideDir` against the resolved sandbox-escape path).
-        caixa
-            .validate_code_paths()
-            .map_err(|err| LayoutError::code_path_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_code_paths, LayoutError::code_path_violation)?;
 
         if caixa.kind().requires_lib() && caixa.bibliotecas().is_empty() {
             let expected = root
@@ -964,9 +948,7 @@ impl LayoutInvariants for StandardLayout {
         // resolver) reaches the four-axis cascade through one dispatch
         // rather than re-inlining the `if let Some(l) = …` unwrap-and-
         // dispatch pattern in lockstep with this wire-up.
-        caixa
-            .validate_limits()
-            .map_err(|err| LayoutError::limits_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_limits, LayoutError::limits_violation)?;
 
         // Compound per-Caixa entry gate on the M2 `:behavior` slot's
         // pure value-shape surface: the layout pipeline's
@@ -1021,9 +1003,7 @@ impl LayoutInvariants for StandardLayout {
         // instruction script-path existence probe that stayed at this
         // altitude after the [`crate::Caixa::validate_upgrade_from`]
         // lift for the same reason.
-        caixa
-            .validate_behavior()
-            .map_err(|err| LayoutError::behavior_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_behavior, LayoutError::behavior_violation)?;
         if let Some(b) = caixa.behavior() {
             for p in b.declared_paths() {
                 self.probe_declared_entry(
@@ -1082,9 +1062,7 @@ impl LayoutInvariants for StandardLayout {
         // on the sibling code-path axes: the typed-shape gate fires on
         // the per-Caixa surface, the on-disk existence check fires on
         // the [`StandardLayout`] surface.
-        caixa
-            .validate_upgrade_from()
-            .map_err(|err| LayoutError::upgrade_violation(caixa, err))?;
+        caixa.run_layout_gate(Caixa::validate_upgrade_from, LayoutError::upgrade_violation)?;
         for entry in caixa.upgrade_from() {
             for instr in entry.instructions() {
                 if let Some(p) = instr.declared_path() {
@@ -1161,9 +1139,10 @@ impl LayoutInvariants for StandardLayout {
             // not a canonical duration: …"`), so the wrap's `issue`
             // carries a self-locating "which axis, which value, why"
             // without re-shaping the parser-side reason.
-            caixa
-                .validate_restart_window()
-                .map_err(|err| LayoutError::restart_window_violation(caixa, err))?;
+            caixa.run_layout_gate(
+                Caixa::validate_restart_window,
+                LayoutError::restart_window_violation,
+            )?;
             // Compound per-Caixa entry gate on the Supervisor-kind
             // supervision-tree slot family: the layout pipeline's paired
             // `let view = caixa.supervisor_view().expect(...);
@@ -1229,9 +1208,10 @@ impl LayoutInvariants for StandardLayout {
             // parse-gate arm keeps its self-locating envelope so a
             // malformed `:restart-window` surfaces the raw-value
             // diagnostic rather than the laundered-to-`None` soft-pass.
-            caixa
-                .validate_supervisor_shape()
-                .map_err(|err| LayoutError::supervisor_violation(caixa, err))?;
+            caixa.run_layout_gate(
+                Caixa::validate_supervisor_shape,
+                LayoutError::supervisor_violation,
+            )?;
         }
 
         // Aplicacao invariants — typed graph composition. Like
@@ -1291,9 +1271,10 @@ impl LayoutInvariants for StandardLayout {
         // caixa.kind().is_supervisor()` parallel structure at this
         // altitude.
         if caixa.kind().is_aplicacao() {
-            caixa
-                .validate_aplicacao_shape()
-                .map_err(|err| LayoutError::aplicacao_violation(caixa, err))?;
+            caixa.run_layout_gate(
+                Caixa::validate_aplicacao_shape,
+                LayoutError::aplicacao_violation,
+            )?;
         }
 
         // Acao invariants — typed CI-run decompose. Like Supervisor and
@@ -1372,9 +1353,7 @@ impl LayoutInvariants for StandardLayout {
         // aplicacao branches' `if caixa.kind().is_<kind>()` parallel
         // structure at this altitude.
         if caixa.kind().is_acao() {
-            caixa
-                .validate_acao_shape()
-                .map_err(|err| LayoutError::acao_violation(caixa, err))?;
+            caixa.run_layout_gate(Caixa::validate_acao_shape, LayoutError::acao_violation)?;
         }
 
         Ok(())
@@ -2119,6 +2098,116 @@ mod tests {
                 caixa: "alt-nome".to_string(),
                 issue: "sample issue".to_string(),
             },
+        );
+    }
+
+    // ── Caixa::run_layout_gate — per-slot gate + LayoutError wrap fold ───
+    //
+    // The [`Caixa::run_layout_gate`] substrate primitive folds the 18
+    // self-similar `caixa.validate_<slot>().map_err(|err| LayoutError::
+    // <slot>_violation(caixa, err))?;` wire-up sites at
+    // [`StandardLayout::verify`] onto one dispatch. The pins below
+    // (fail-before-pass-after by construction — a silent regression that
+    // de-folded either arm would trip its own pin first) lock the two
+    // arms of the fold under `PartialEq`:
+    //
+    //   - The `Ok(())` identity-element arm passes through verbatim (no
+    //     wrap runs, no `caixa` closure capture).
+    //   - The `Err(E)` arm routes through the caller-supplied `wrap`
+    //     ctor with `self` bound as the caixa slot, byte-equal to the
+    //     pre-lift `.map_err(|err| CTOR(caixa, err))` closure.
+    //
+    // The third pin (per-arm equivalence) runs the primitive with the
+    // canonical `Caixa::validate_nome` validator and the paired
+    // `LayoutError::nome_violation` ctor on a fixture whose `:nome`
+    // fails `validate_nome`'s DNS-1123 gate ("Bad_Nome" — the uppercase
+    // + underscore double footgun) and asserts the primitive's
+    // `Result<(), LayoutError>` matches the open-coded pre-lift cascade
+    // on the same fixture. A silent regression that de-folded the wrap
+    // (dropped the `self` binding, threaded a stale caixa nome, swapped
+    // the wrap ctor) would surface here as a mismatch between the two
+    // dispatches.
+
+    #[test]
+    fn run_layout_gate_ok_arm_passes_through() {
+        // Positive control on the identity-element arm: a gate returning
+        // `Ok(())` short-circuits before the wrap runs, so the caller
+        // receives `Ok(())` verbatim regardless of what the paired ctor
+        // would have produced. Pins the fold's `Result::map_err`
+        // short-circuit semantics — a regression that unconditionally
+        // wrapped (e.g. always called the ctor) would trip here.
+        let c = caixa(CaixaKind::Biblioteca);
+        let result: Result<(), LayoutError> = c.run_layout_gate(
+            |_c: &Caixa| Ok::<(), &'static str>(()),
+            |_c: &Caixa, _err: &'static str| {
+                panic!("wrap must not run on the Ok(()) arm of the fold")
+            },
+        );
+        assert!(
+            result.is_ok(),
+            "run_layout_gate must pass Ok(()) through verbatim, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn run_layout_gate_err_arm_wraps_via_ctor() {
+        // Positive control on the err arm: a gate returning `Err(E)`
+        // threads `E` into the caller-supplied `wrap` ctor with `self`
+        // bound as the caixa argument. Uses a synthetic `&'static str`
+        // error and the canonical `LayoutError::deps_violation` ctor so
+        // the pin covers the fold's two-callable dispatch shape without
+        // depending on any per-slot validator's specific arm sweep.
+        let c = caixa(CaixaKind::Biblioteca);
+        let sample_reason = "sample gate reason";
+        let result = c.run_layout_gate(
+            |_c: &Caixa| Err::<(), &'static str>(sample_reason),
+            LayoutError::deps_violation,
+        );
+        let err = result.expect_err("Err arm must reach the caller");
+        assert_eq!(
+            err,
+            LayoutError::DepsViolation {
+                caixa: c.nome().to_string(),
+                issue: sample_reason.to_string(),
+            },
+            "run_layout_gate must wrap the gate's Err via the caller-supplied \
+             ctor with `self` bound as the caixa slot"
+        );
+    }
+
+    #[test]
+    fn run_layout_gate_folds_arm_matches_gate() {
+        // Fail-before-pass-after per-arm equivalence pin on the err arm:
+        // a fixture whose `:nome` fails `validate_nome`'s DNS-1123 gate
+        // (`"Bad_Nome"` — uppercase + underscore double footgun the
+        // [`crate::ManifestError::NomeInvalid`] arm rejects) surfaces
+        // the same `LayoutError::NomeViolation` byte-equal through both
+        // the primitive `Caixa::run_layout_gate(Caixa::validate_nome,
+        // LayoutError::nome_violation)` and the open-coded pre-lift
+        // cascade `Caixa::validate_nome().map_err(|err|
+        // LayoutError::nome_violation(&c, err))` on the same Caixa
+        // fixture. Pins the fold — a silent regression that de-folded
+        // either arm (dropped the `self` binding, threaded a stale
+        // caixa nome, swapped the wrap ctor) would surface here as a
+        // mismatch between the two dispatches.
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "Bad_Nome".into();
+        let via_primitive = c
+            .run_layout_gate(Caixa::validate_nome, LayoutError::nome_violation)
+            .expect_err("Bad_Nome must fail validate_nome");
+        let via_open_coded = c
+            .validate_nome()
+            .map_err(|err| LayoutError::nome_violation(&c, err))
+            .expect_err("Bad_Nome must fail validate_nome");
+        assert_eq!(
+            via_primitive, via_open_coded,
+            "Caixa::run_layout_gate must surface the err-arm diagnostic \
+             byte-equal to the open-coded `.map_err(|err| CTOR(caixa, err))` \
+             cascade on the same Caixa fixture"
+        );
+        assert!(
+            matches!(via_primitive, LayoutError::NomeViolation { .. }),
+            "expected NomeViolation on Bad_Nome, got {via_primitive:?}"
         );
     }
 

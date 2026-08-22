@@ -4225,6 +4225,82 @@ impl Caixa {
         Ok(())
     }
 
+    /// Run a per-slot typed validator on `self` and, on the per-arm
+    /// parser-side error arm, thread the error into a paired
+    /// [`crate::LayoutError`] wrap under `self.nome()`. Substrate
+    /// primitive folding the 18 self-similar layout-pipeline wire-up
+    /// sites at [`crate::layout::StandardLayout::verify`] that carry
+    /// the identical
+    /// `caixa.validate_<slot>().map_err(|err| crate::LayoutError::<slot>_violation(caixa, err))?;`
+    /// cascade onto one dispatch. Each of the eighteen sites (`:nome`,
+    /// `:nome`-chart-name-budget, `:versao`, `:deps`, `:etiquetas`,
+    /// `:autores`, `:repositorio`, `:descricao`, `:licenca`, `:edicao`,
+    /// `:bibliotecas`/`:exe`/`:servicos` code-path shape, `:limits`,
+    /// `:behavior`, `:upgrade-from`, `:restart-window`, per-Supervisor
+    /// shape, per-Aplicacao shape, per-Acao shape) carried the same
+    /// four-line "run a per-slot typed validator on `caixa` and, on the
+    /// per-arm parser-side error arm, thread it into the paired
+    /// [`crate::LayoutError`] one-slot envelope through the substrate-
+    /// canonical `layout_violation_ctors!` family (131ca0d)" cascade,
+    /// differing only in the two names bound at each site — the
+    /// validator (`Caixa::validate_deps` / `validate_nome` / ...) and
+    /// the paired ctor (`LayoutError::deps_violation` / ...). Eighteen
+    /// consumers, one identical shape, one substrate primitive on
+    /// [`Caixa`] closing the duplication the PRIME DIRECTIVE names as
+    /// a bug — on the second half of the per-slot cascade the peer
+    /// substrate primitives on the [`crate::LayoutError`]-wrap side
+    /// (the `layout_violation_ctors!` macro 131ca0d, the
+    /// `layout_slot_kind_ctors!` macro 0419438, the `layout_nome_only_ctors!`
+    /// macro 3fe3dd7, the [`crate::LayoutError::missing_entry`] ctor
+    /// 1b09f9d, the [`crate::layout::StandardLayout::probe_declared_entry`]
+    /// primitive fda1e35) each closed on their sibling envelopes; the
+    /// first half of the cascade (the per-slot compound gates
+    /// [`Self::validate_deps`] b5dd55e, [`Self::validate_limits`]
+    /// baa4688, [`Self::validate_behavior`] 0d2877a,
+    /// [`Self::validate_upgrade_from`] d6801df,
+    /// [`Self::validate_aplicacao_shape`] 949a7a0,
+    /// [`Self::validate_supervisor_shape`] 4c70105,
+    /// [`Self::validate_acao_shape`] 5d6df54,
+    /// [`Self::validate_kind_slot_coherence`] f0d286e,
+    /// [`Self::validate_no_code_kind_coherence`] 3bbf6a2,
+    /// [`Self::validate_ci_kind_coherence`] 9b55beb,
+    /// [`Self::validate_required_kind_slot`] 9c385d8) each closed on
+    /// their per-slot compound gates.
+    ///
+    /// Composes the [`crate::layout::LayoutError`] wrap and the per-slot
+    /// typed validator through two typed callables: `gate` runs on
+    /// `self` and yields a per-slot error `E`; on the `Err(E)` arm
+    /// `wrap` re-wraps that error under `self` into a
+    /// [`crate::layout::LayoutError`]. The `Ok(())` arm passes through
+    /// verbatim as the fold's identity element — byte-equal to the
+    /// pre-lift `Result::map_err` short-circuit at the `?;` marker
+    /// every wire-up site formerly carried. Every future consumer that
+    /// wants to run one of the per-slot gates and thread its error
+    /// through the layout wrap (the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission-
+    /// webhook per-slot re-check, a future `feira validate --<slot>`
+    /// per-caixa admission verb, an overlay resolver re-running one
+    /// gate after a per-slot patch) reaches the two-callable dispatch
+    /// through one call rather than re-inlining the four-line cascade
+    /// in lockstep with the pre-existing 18 wire-ups. The two callables
+    /// reach the primitive as first-class type-checked references
+    /// rather than the pre-lift `.map_err(|err| CTOR(caixa, err))`
+    /// closure body — so a mismatch between the validator's `E` type
+    /// and the ctor's `E` bound trips at the wire-up site (compile-
+    /// time) rather than at the closure body (also compile-time, but
+    /// with a diagnostic pointing at the closure expression rather
+    /// than the two named callables).
+    pub fn run_layout_gate<E, W>(
+        &self,
+        gate: impl FnOnce(&Caixa) -> Result<(), E>,
+        wrap: W,
+    ) -> Result<(), crate::LayoutError>
+    where
+        W: FnOnce(&Caixa, E) -> crate::LayoutError,
+    {
+        gate(self).map_err(|err| wrap(self, err))
+    }
+
     /// Reject `:nome` values the K8s apiserver would refuse at admission
     /// time. The top-level Caixa identity flows directly into every
     /// substrate-side artifact's `metadata.name` axis: the
