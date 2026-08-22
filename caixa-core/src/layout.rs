@@ -676,25 +676,49 @@ impl LayoutInvariants for StandardLayout {
         // future symmetry lift can join here.
         caixa.validate_kind_slot_coherence()?;
 
-        // Kind ↔ slot coherence (mirror of the three gates above on the
-        // Acao `:ci` slot, CANTEIRO §7.1-C): `:ci` carries a typed CI
-        // run — a canteiro_types::CiRun — that only the caixa-actions
-        // renderer decomposes + validates, and only for a :kind Acao.
-        // On any *other* kind a declared `:ci` is the manifest field's
-        // documented "ignored otherwise": it silently passes verify and
-        // then vanishes (never decomposed, never rendered), far from the
-        // source caixa.lisp. Reject it here — beside the mesh-,
-        // supervisor-, and servico-slot gates — naming the offending
-        // kind. Unlike its three siblings this axis is a single
-        // `Option` field, not a Vec-of-named-slots, so the gate reads
-        // `caixa.ci().is_some()` directly rather than reaching for a
-        // `declared_*_slots()` helper.
-        if caixa.ci().is_some() && !caixa.kind().is_acao() {
-            return Err(LayoutError::CiOnNonAcao {
-                caixa: caixa.nome().to_string(),
-                kind: caixa.kind(),
-            });
-        }
+        // Kind ↔ `:ci` coherence (mirror of the three arms above on
+        // the M3 mesh / supervisor-tree / M2 Servico-runtime slot
+        // families, CANTEIRO §7.1-C, folded onto one substrate
+        // primitive at [`crate::Caixa::validate_ci_kind_coherence`]):
+        // `:ci` carries a typed CI run — a
+        // [`canteiro_types::CiRun`] — that only the caixa-actions
+        // renderer decomposes + validates, and only for a `:kind
+        // Acao`. On any *other* kind a declared `:ci` is the
+        // manifest field's documented "ignored otherwise": it
+        // silently passes verify and then vanishes (never
+        // decomposed, never rendered), far from the source
+        // `caixa.lisp`. Pre-lift the arm lived as a self-similar
+        // `if caixa.ci().is_some() && !caixa.kind().is_acao() { …
+        // return Err(LayoutError::CiOnNonAcao { … }); }` block at
+        // this call site — one consumer today but every future
+        // consumer that wanted to gate this coherence axis as a
+        // unit was structurally forced to re-inline the two-
+        // condition guard in lockstep with this wire-up (the
+        // duplication the PRIME DIRECTIVE names as a bug).
+        // Post-fold the arm reads through one call, and the
+        // [`crate::LayoutError::CiOnNonAcao`] envelope (with its
+        // distinct `{ caixa, kind }` wrap shape — no `slots`
+        // field, because `:ci` is a single `Option` not a `Vec`-
+        // of-named-slots) surfaces byte-for-byte equivalent to the
+        // pre-fold open-coded block, pinned by the paired
+        // `validate_ci_kind_coherence_folds_arm_matches_gate`
+        // per-arm equivalence pin and the
+        // `validate_ci_kind_coherence_accepts_acao_on_every_ci_shape`
+        // /
+        // `validate_ci_kind_coherence_accepts_absent_ci_on_every_kind`
+        // identity-element pins in the
+        // [`crate::Caixa::validate_ci_kind_coherence`] pin family
+        // (`manifest.rs`). Peer to the sibling three-arm
+        // [`crate::Caixa::validate_kind_slot_coherence`] fold
+        // f0d286e: that primitive carries the M3 / supervisor-tree
+        // / M2 axes under a uniform `{ caixa, kind, slots }`
+        // envelope, this primitive carries the `:ci` axis under
+        // its distinct `{ caixa, kind }` envelope, and every
+        // author-time kind ↔ slot coherence diagnostic at the
+        // layout altitude now routes through one substrate
+        // primitive per envelope shape rather than an open-coded
+        // block.
+        caixa.validate_ci_kind_coherence()?;
 
         // Kind ↔ slot coherence on the fourth and final axis — the
         // code-surface slot set (the trio M2/Supervisor/Aplicacao gates
