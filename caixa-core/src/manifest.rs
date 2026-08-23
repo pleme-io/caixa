@@ -6166,9 +6166,7 @@ impl Caixa {
             crate::render::is_chart_keyword_shape(etiqueta)
                 .map_err(|reason| ManifestError::etiqueta_invalid(etiqueta, reason))?;
             crate::render::insert_first_seen(&mut seen, etiqueta.as_str(), || {
-                ManifestError::EtiquetaDuplicate {
-                    etiqueta: etiqueta.clone(),
-                }
+                ManifestError::etiqueta_duplicate(etiqueta)
             })?;
         }
         Ok(())
@@ -6254,9 +6252,7 @@ impl Caixa {
             crate::render::is_chart_maintainer_name_shape(autor)
                 .map_err(|reason| ManifestError::autor_invalid(autor, reason))?;
             crate::render::insert_first_seen(&mut seen, autor.as_str(), || {
-                ManifestError::AutorDuplicate {
-                    autor: autor.clone(),
-                }
+                ManifestError::autor_duplicate(autor)
             })?;
         }
         Ok(())
@@ -7512,6 +7508,113 @@ manifest_field_reason_ctors! {
     descricao_invalid => DescricaoInvalid { descricao },
     licenca_invalid => LicencaInvalid { licenca },
     edicao_invalid => EdicaoInvalid { edicao },
+}
+
+// Fold the two `ManifestError::{EtiquetaDuplicate, AutorDuplicate}
+// { <field>: <val>.clone() }` single-`String`-slot wire-up sites at
+// [`Caixa::validate_etiquetas`] and [`Caixa::validate_autores`] onto one
+// substrate-primitive family per typed variant — the direct sibling on
+// the [`ManifestError`] envelope of the peer
+// [`crate::aplicacao::aplicacao_caixa_only_ctors!`] (d9f6867, 4 variants
+// on `AplicacaoError` at `ContratoMemberMissing` / `MembroVersaoEmpty` /
+// `MembroDuplicate` / `MembroIsSelfAplicacao` on the `{ caixa: String }`
+// shape) and [`crate::aplicacao::aplicacao_path_only_ctors!`] (3ba8de6,
+// 2 variants on `AplicacaoError` at `EntradaPathNotAbsolute` /
+// `EntradaPathDuplicate` on the `{ path: String }` shape) on the sibling
+// M3 mesh `AplicacaoError` envelope, and of the peer
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] (db09650, 3 variants
+// on the sibling M2 `SupervisorError` envelope's `{ caixa: String }`
+// shape), [`crate::dep::dep_nome_only_ctors!`] (792aa92, 5 variants on
+// `DepError { nome: String }`), and [`crate::upgrade::upgrade_script_only_ctors!`]
+// (7468ca9, 3 variants on `UpgradeError { script: PathBuf }`) folds on
+// the sibling envelopes — the last two open-coded single-slot
+// `{ <field>: String }` struct-literal sites on `ManifestError` fold
+// onto one substrate primitive per typed variant, matching the
+// "one substrate primitive per typed variant on the single-slot
+// `{ <ident>: String }` envelope shape" fold discipline every peer
+// per-Caixa-identity family already carries.
+//
+// Both wire-up sites — one at [`Caixa::validate_etiquetas`]'s per-entry
+// [`crate::render::insert_first_seen`] dedup closure
+// (`|| ManifestError::EtiquetaDuplicate { etiqueta: etiqueta.clone() }`
+// against the per-`:etiquetas` `&String` loop head) and one at
+// [`Caixa::validate_autores`]'s per-entry [`crate::render::insert_first_seen`]
+// dedup closure (`|| ManifestError::AutorDuplicate
+// { autor: autor.clone() }` against the per-`:autores` `&String` loop
+// head) — opened the identical `ManifestError::<Variant>Duplicate
+// { <field>: <val>.clone() }` three-line struct-literal against a
+// caller-side `&String`, the exact "same block re-inlined at every
+// consumer" shape the PRIME DIRECTIVE names as a bug. The two variants
+// share one `{ <field>: String }` shape, so the fold routes each wire-up
+// site through one dispatch per typed variant.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(<field>: &str) -> ManifestError`, so every
+// wire-up site collapses onto one dispatch:
+// `ManifestError::<ctor>(<&str>)`, byte-equal to the pre-lift
+// struct-literal on the same `&str` fixture. The uniform one-field
+// construction (`<field>: <field>.to_string()`) is spelled once — inside
+// the macro — rather than at every wire-up site. The `<field>: &str`
+// parameter accepts both `&str` and `&String` (via Deref coercion), so
+// each existing dedup-closure wire-up threading `<val>.as_str()` — or a
+// bare `&String` head — through the ctor routes through one dispatch
+// without a pre-conversion, and the `.clone()` the pre-lift wire-up
+// carried at the closure body folds into the ctor's canonical
+// `.to_string()` (byte-equal on the same underlying bytes). Every
+// constructor is `#[must_use]` so a caller who mistakenly discards the
+// constructed error trips a compile warning at the wire-up site.
+//
+// Every future consumer that wants to construct one of these two
+// variants outside the current in-crate wire-up sites — a deferred
+// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission webhook
+// re-checking one added/renamed `:etiquetas` / `:autores` entry against
+// the same dedup axis, a future `feira validate --etiquetas` /
+// `--autores` per-caixa admission verb re-running the same per-entry
+// dedup gate on demand, a per-lacre overlay resolver rejecting an
+// author-supplied duplicate `:etiquetas` / `:autores` entry against a
+// cluster-local snapshot the M4 CR materializer projects, a future
+// `caixa-registry` per-lacre re-validator at lacre-resolve time
+// re-checking each declared list against the same dedup predicate — now
+// reaches each variant through one call rather than re-inlining the
+// three-line struct-literal in lockstep with the two in-crate wire-up
+// sites.
+macro_rules! manifest_field_only_ctors {
+    ($($ctor:ident => $variant:ident { $field:ident }),* $(,)?) => {
+        impl ManifestError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`ManifestError::",
+                    stringify!($variant),
+                    "`] naming the offending `",
+                    stringify!($field),
+                    "` entry. Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { ",
+                    stringify!($field),
+                    ": ",
+                    stringify!($field),
+                    ".to_string() }` one-field struct-literal onto one ",
+                    "substrate primitive so every wire-up on this variant ",
+                    "reads through one dispatch rather than the pre-lift ",
+                    "three-line open-coded struct-literal block. The `",
+                    stringify!($field),
+                    ": &str` parameter accepts both `&str` and `&String` ",
+                    "via Deref coercion."
+                )]
+                #[must_use]
+                pub fn $ctor($field: &str) -> Self {
+                    Self::$variant {
+                        $field: $field.to_string(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+manifest_field_only_ctors! {
+    etiqueta_duplicate => EtiquetaDuplicate { etiqueta },
+    autor_duplicate => AutorDuplicate { autor },
 }
 
 #[cfg(test)]
@@ -23551,6 +23654,101 @@ mod tests {
         assert_eq!(
             ManifestError::etiqueta_invalid("MyKeyword", "r"),
             ManifestError::etiqueta_invalid(&owned, "r"),
+        );
+    }
+
+    // ── `manifest_field_only_ctors!` — the paired `{ <field>: String }`
+    //    single-slot envelope on `ManifestError`, direct sibling of the
+    //    peer [`crate::aplicacao::aplicacao_caixa_only_ctors!`] (d9f6867,
+    //    `{ caixa: String }` on `AplicacaoError`) and
+    //    [`crate::aplicacao::aplicacao_path_only_ctors!`] (3ba8de6,
+    //    `{ path: String }` on `AplicacaoError`) on the M3 mesh envelope,
+    //    of the peer [`crate::supervisor::supervisor_caixa_only_ctors!`]
+    //    (db09650, `{ caixa: String }` on `SupervisorError`), and of the
+    //    peer [`crate::dep::dep_nome_only_ctors!`] (792aa92,
+    //    `{ nome: String }` on `DepError`) folds on their sibling
+    //    envelopes. Two-variant lift closing the last two open-coded
+    //    single-`String`-slot ctor sites at
+    //    [`Caixa::validate_etiquetas`] and [`Caixa::validate_autores`].
+
+    #[test]
+    fn etiqueta_duplicate_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            ManifestError::etiqueta_duplicate("mesh"),
+            ManifestError::EtiquetaDuplicate {
+                etiqueta: "mesh".to_string(),
+            },
+            "generated etiqueta_duplicate ctor must produce byte-equal \
+             `ManifestError::EtiquetaDuplicate` to the pre-lift \
+             struct-literal wrap on the same `&str` fixture",
+        );
+    }
+
+    #[test]
+    fn autor_duplicate_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            ManifestError::autor_duplicate("pleme-io"),
+            ManifestError::AutorDuplicate {
+                autor: "pleme-io".to_string(),
+            },
+            "generated autor_duplicate ctor must produce byte-equal \
+             `ManifestError::AutorDuplicate` to the pre-lift \
+             struct-literal wrap on the same `&str` fixture",
+        );
+    }
+
+    #[test]
+    fn manifest_field_only_ctors_route_field_through_to_string() {
+        // Cross-axis pin: sweep the sole constructor input axis
+        // (`<field>: &str`) through a non-default fixture value against
+        // every generated arm in the [`manifest_field_only_ctors!`]
+        // macro, so any wrapper-side lowercase / trim / truncate / silent
+        // constant-substitution on the `<field>.to_string()` sole-field
+        // construction surfaces here rather than at a downstream
+        // diagnostic-shape mismatch. Peer of the sibling
+        // [`crate::aplicacao::tests::aplicacao_caixa_only_ctors_route_caixa_through_to_string`]
+        // (d9f6867) and
+        // [`crate::aplicacao::tests::aplicacao_path_only_ctors_route_path_through_to_string`]
+        // (3ba8de6) cross-axis pins on the peer `AplicacaoError`
+        // single-`String`-slot envelopes.
+        let value = "cache-v2";
+        assert_eq!(
+            ManifestError::etiqueta_duplicate(value),
+            ManifestError::EtiquetaDuplicate {
+                etiqueta: value.to_string(),
+            },
+        );
+        assert_eq!(
+            ManifestError::autor_duplicate(value),
+            ManifestError::AutorDuplicate {
+                autor: value.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn manifest_field_only_ctors_accept_both_str_and_string_slice_iters() {
+        // The two wire-up sites at [`Caixa::validate_etiquetas`] and
+        // [`Caixa::validate_autores`] each thread a `&String` loop head
+        // through the ctor via Deref coercion at the `<field>: &str`
+        // parameter — this pin locks that call shape's byte-equality
+        // against the direct `&str` shape so a future rebrand of the
+        // `:etiquetas` / `:autores` slice-iterator type that silently
+        // broke the Deref-coercion path surfaces here rather than at a
+        // recompile-time type-mismatch far from the ctor family. Peer of
+        // the sibling
+        // [`manifest_field_reason_ctors_accept_both_str_and_string_slice_iters`]
+        // pin on the peer two-slot `{ <field>: String, reason: String }`
+        // envelope.
+        let etiqueta: String = String::from("mesh");
+        assert_eq!(
+            ManifestError::etiqueta_duplicate("mesh"),
+            ManifestError::etiqueta_duplicate(&etiqueta),
+        );
+        let autor: String = String::from("pleme-io");
+        assert_eq!(
+            ManifestError::autor_duplicate("pleme-io"),
+            ManifestError::autor_duplicate(&autor),
         );
     }
 }
