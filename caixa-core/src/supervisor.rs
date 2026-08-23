@@ -1884,9 +1884,7 @@ impl SupervisorSpec {
             }
             _ => {
                 if self.children().is_empty() {
-                    return Err(SupervisorError::NoChildren {
-                        estrategia: self.estrategia(),
-                    });
+                    return Err(SupervisorError::no_children(self.estrategia()));
                 }
             }
         }
@@ -1943,7 +1941,7 @@ impl SupervisorSpec {
             self.max_restarts(),
             SUPERVISOR_MAX_RESTARTS_MAX,
             || SupervisorError::ZeroMaxRestarts,
-            |max_restarts| SupervisorError::MaxRestartsExceedsCap { max_restarts },
+            SupervisorError::max_restarts_exceeds_cap,
         )?;
         // Route the [`SupervisorSpec::validate`] `:restart-window`
         // zero-floor + integer-millisecond canonical-form + upper-cap
@@ -1982,8 +1980,8 @@ impl SupervisorSpec {
                 w,
                 SUPERVISOR_RESTART_WINDOW_MAX,
                 || SupervisorError::RestartWindowZero,
-                |window| SupervisorError::RestartWindowNotCanonical { window },
-                |window| SupervisorError::RestartWindowExceedsCap { window },
+                SupervisorError::restart_window_not_canonical,
+                SupervisorError::restart_window_exceeds_cap,
             )?;
         }
         // Route the per-child DNS-1123 / semver-requirement / duplicate-
@@ -2447,6 +2445,109 @@ impl SupervisorError {
             reason: reason.into(),
         }
     }
+}
+
+// Fold the four `SupervisorError::<Variant> { <field>: <Copy> }` one-field
+// Copy-scalar struct-variant wire-up sites at [`SupervisorSpec::validate`]'s
+// three bracket-arms — one struct-literal at the `:children`-empty
+// non-`SimpleOneForOne` refusal cascade (`NoChildren { estrategia }`) plus
+// three `impl FnOnce(<ty>) -> SupervisorError` bracket-closures at the
+// [`crate::render::require_positive_bounded_u32`] `:max-restarts` cap arm
+// (`MaxRestartsExceedsCap { max_restarts }`) and the paired
+// [`crate::render::require_positive_canonical_bounded_duration`]
+// `:restart-window` canonical-form + cap arms (`RestartWindowNotCanonical
+// { window }`, `RestartWindowExceedsCap { window }`) — onto one substrate
+// primitive per typed variant, matching the sibling
+// [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] macro (7ef425e, 8
+// variants on the same `{ <field>: Duration | u32 }` shape) at that
+// discipline on the peer `AplicacaoError` envelope's per-`:politicas`
+// scalar axis. Every variant is a one-field `Copy`-pass-through struct-
+// literal — `RestartStrategy | u32 | Duration` — so the fold routes each
+// wire-up site through one dispatch per typed variant without a runtime-
+// work delta.
+//
+// Each of the four wire-up sites opened the identical
+// `SupervisorError::<Variant> { <field>: <val> }` struct-literal — the
+// exact "same block re-inlined at every consumer" shape the PRIME
+// DIRECTIVE names as a bug, on the same altitude the peer
+// `aplicacao_policy_scalar_ctors!` fold closed on the sibling
+// `AplicacaoError` envelope's per-`:politicas` per-axis cap / canonical-
+// form arms. The four variants share one `{ <field>: <Copy> }` shape, so
+// the fold routes each wire-up site through one dispatch per typed
+// variant.
+//
+// The macro below generates one static constructor per variant of shape
+// `const fn <ctor>(<field>: <ty>) -> SupervisorError`, so every wire-up
+// site collapses onto one dispatch: `SupervisorError::<ctor>(<val>)`,
+// byte-equal to the pre-lift struct-literal on the same `Copy`-`<ty>`
+// fixture — as a direct call at the [`SupervisorSpec::validate`]
+// `:children`-empty refusal, or as a bare function pointer in the
+// `impl FnOnce(<ty>) -> SupervisorError` bracket-closure slot every
+// [`crate::render::require_positive_bounded_u32`] /
+// [`crate::render::require_positive_canonical_bounded_duration`] gate
+// carries — rather than the pre-lift open-coded one-line closure over
+// the same one-field struct-literal. `const fn` preserves the `Copy`-
+// pass-through's zero-runtime-work property verbatim. Every constructor
+// is `#[must_use]` so a caller who mistakenly discards the constructed
+// error trips a compile warning at the wire-up site.
+//
+// Every future consumer that wants to construct one of these four
+// variants outside `SupervisorSpec::validate` — a deferred
+// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+// webhook re-checking one edited `:estrategia` / `:max-restarts` /
+// `:restart-window` slot against the cap + canonical-form cascade, a
+// future `feira validate --supervisor` per-caixa admission verb re-
+// running the shape gates on demand, a per-Supervisor overlay resolver
+// rejecting an author-supplied slot against a cluster-local snapshot —
+// now reaches each variant through one call rather than re-inlining the
+// per-shape struct-literal block in lockstep with the four in-crate
+// wire-up sites.
+macro_rules! supervisor_scalar_ctors {
+    ($($ctor:ident => $variant:ident { $field:ident: $ty:ty }),* $(,)?) => {
+        impl SupervisorError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`SupervisorError::",
+                    stringify!($variant),
+                    "`] naming the offending per-`:supervisor` `",
+                    stringify!($field),
+                    "` scalar. Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { ",
+                    stringify!($field),
+                    " }` one-field `Copy`-pass-through struct-literal onto ",
+                    "one substrate primitive so every per-axis wire-up on ",
+                    "this variant reads through one dispatch — as a direct ",
+                    "call (`SupervisorError::",
+                    stringify!($ctor),
+                    "(<val>)`, byte-equal to the pre-lift struct-literal on ",
+                    "the same `Copy`-`",
+                    stringify!($ty),
+                    "` fixture) or as a bare function pointer in the ",
+                    "`impl FnOnce(",
+                    stringify!($ty),
+                    ") -> SupervisorError` bracket-closure slot every ",
+                    "`crate::render::require_positive_bounded_*` / ",
+                    "`crate::render::require_positive_canonical_bounded_*` ",
+                    "gate carries — rather than the pre-lift open-coded ",
+                    "one-line closure over the same one-field struct-",
+                    "literal. `const fn` preserves the `Copy`-pass-through's ",
+                    "zero-runtime-work property verbatim."
+                )]
+                #[must_use]
+                pub const fn $ctor($field: $ty) -> Self {
+                    Self::$variant { $field }
+                }
+            )*
+        }
+    };
+}
+
+supervisor_scalar_ctors! {
+    no_children => NoChildren { estrategia: RestartStrategy },
+    max_restarts_exceeds_cap => MaxRestartsExceedsCap { max_restarts: u32 },
+    restart_window_not_canonical => RestartWindowNotCanonical { window: Duration },
+    restart_window_exceeds_cap => RestartWindowExceedsCap { window: Duration },
 }
 
 /// Shared duration string codec for the typed slots that take a
@@ -8312,5 +8413,161 @@ mod tests {
                 caixa: name.to_string(),
             },
         );
+    }
+
+    // ── supervisor_scalar_ctors! per-variant + cross-axis pins ──────────────
+    //
+    // Per-variant byte-equality pins guaranteeing every generated ctor arm in
+    // the [`supervisor_scalar_ctors!`] macro produces a `SupervisorError`
+    // structurally identical to the pre-lift `Self::<variant> { <field>: <val> }`
+    // one-line struct-literal on the same `Copy`-`RestartStrategy | u32 |
+    // Duration` fixture, plus one cross-axis sweep that routes each per-variant
+    // `<field>: <ty>` scalar through the sole `$field:ident: $ty:ty` axis the
+    // macro exposes so any wrapper-side truncation / re-order / silent `.into()`
+    // / silent constant-substitution on any one variant surfaces here rather
+    // than at a downstream per-`:supervisor` diagnostic-shape drift. Peer of the
+    // sibling per-variant pins on `aplicacao_policy_scalar_ctors!` (7ef425e,
+    // the 8-variant `AplicacaoError` `{ <field>: Duration | u32 }` fold on the
+    // per-`:politicas` per-axis cap / canonical-form arms), plus the sibling
+    // `supervisor_caixa_only_ctors!` (db09650), `SupervisorError::
+    // {child_caixa_invalid,child_versao_invalid}` (d2ef2ec), and the peer
+    // `DepError` / `AplicacaoError` / `LayoutError` / `LimitsError` /
+    // `BehaviorError` / `UpgradeError` per-envelope ctor-macro pins.
+    #[test]
+    fn no_children_ctor_matches_struct_literal_wrap() {
+        let estrategia = RestartStrategy::OneForAll;
+        assert_eq!(
+            SupervisorError::no_children(estrategia),
+            SupervisorError::NoChildren { estrategia },
+            "generated no_children ctor must produce byte-equal \
+             `SupervisorError::NoChildren` to the pre-lift struct-literal wrap \
+             on the same `Copy`-`RestartStrategy` fixture",
+        );
+    }
+
+    #[test]
+    fn max_restarts_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let max_restarts = SUPERVISOR_MAX_RESTARTS_MAX + 1;
+        assert_eq!(
+            SupervisorError::max_restarts_exceeds_cap(max_restarts),
+            SupervisorError::MaxRestartsExceedsCap { max_restarts },
+            "generated max_restarts_exceeds_cap ctor must produce byte-equal \
+             `SupervisorError::MaxRestartsExceedsCap` to the pre-lift \
+             struct-literal wrap on the same `Copy`-`u32` fixture",
+        );
+    }
+
+    #[test]
+    fn restart_window_not_canonical_ctor_matches_struct_literal_wrap() {
+        let window = Duration::from_micros(1_500);
+        assert_eq!(
+            SupervisorError::restart_window_not_canonical(window),
+            SupervisorError::RestartWindowNotCanonical { window },
+            "generated restart_window_not_canonical ctor must produce \
+             byte-equal `SupervisorError::RestartWindowNotCanonical` to the \
+             pre-lift struct-literal wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn restart_window_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let window = SUPERVISOR_RESTART_WINDOW_MAX + Duration::from_millis(1);
+        assert_eq!(
+            SupervisorError::restart_window_exceeds_cap(window),
+            SupervisorError::RestartWindowExceedsCap { window },
+            "generated restart_window_exceeds_cap ctor must produce \
+             byte-equal `SupervisorError::RestartWindowExceedsCap` to the \
+             pre-lift struct-literal wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn supervisor_scalar_ctors_route_field_through_copy_uniformly() {
+        // Cross-axis routing pin: sweep each generated `<field>: <ty>`
+        // constructor input axis through a non-default `Copy` fixture against
+        // every arm in the [`supervisor_scalar_ctors!`] macro, so any wrapper-
+        // side silent `.into()` / silent constant-substitution / silent field
+        // re-name away from the canonical `estrategia | max_restarts | window`
+        // axes on any one variant, or a `RestartStrategy | u32 | Duration`
+        // axis silently rerouted through some other `Copy` coercion, surfaces
+        // here rather than at a downstream per-`:supervisor` diagnostic-shape
+        // drift. Peer of the sibling
+        // `aplicacao_policy_scalar_ctors_route_field_through_copy_uniformly`
+        // (7ef425e) cross-axis routing pin on the peer `AplicacaoError`
+        // envelope's per-`:politicas` per-axis ctor family, extended here onto
+        // the last M2 per-`:supervisor` `Copy`-scalar `SupervisorError`
+        // variant family folded onto a substrate primitive.
+        //
+        // Fixtures picked out of each variant's accept-set boundary rather
+        // than the default value so a silent constant-substitution to a per-
+        // variant sentinel surfaces here on the structural-equality assertion.
+        // The `RestartStrategy` fixture picks `RestForOne` (a non-default arm
+        // that isn't the `OneForOne` [`SUPERVISOR_ESTRATEGIA_DEFAULT`] and
+        // isn't the `SimpleOneForOne` arm the sibling
+        // `SimpleOneForOneWithStaticChildren` unit variant intercepts). The
+        // `max_restarts` fixture picks an above-cap magnitude the cap arm
+        // rejects; the two `Duration` fixtures pick the sub-millisecond and
+        // above-cap ends of the `:restart-window` canonical-form + cap
+        // bracket respectively.
+        let estrategia = RestartStrategy::RestForOne;
+        let above_cap_restarts = SUPERVISOR_MAX_RESTARTS_MAX + 137;
+        let sub_ms = Duration::from_micros(1_500);
+        let above_hour = SUPERVISOR_RESTART_WINDOW_MAX + Duration::from_secs(1);
+        assert_eq!(
+            SupervisorError::no_children(estrategia),
+            SupervisorError::NoChildren { estrategia },
+        );
+        assert_eq!(
+            SupervisorError::max_restarts_exceeds_cap(above_cap_restarts),
+            SupervisorError::MaxRestartsExceedsCap {
+                max_restarts: above_cap_restarts,
+            },
+        );
+        assert_eq!(
+            SupervisorError::restart_window_not_canonical(sub_ms),
+            SupervisorError::RestartWindowNotCanonical { window: sub_ms },
+        );
+        assert_eq!(
+            SupervisorError::restart_window_exceeds_cap(above_hour),
+            SupervisorError::RestartWindowExceedsCap { window: above_hour },
+        );
+    }
+
+    #[test]
+    fn supervisor_scalar_ctors_are_const_zero_runtime_work() {
+        // Const-eval pin: the [`supervisor_scalar_ctors!`] macro spells every
+        // generated ctor `const fn` so a caller can pin a `SupervisorError`
+        // at compile time — the same zero-runtime-work property the pre-lift
+        // `|<slot>| SupervisorError::<Variant> { <slot> }` closure carried on
+        // its `Copy`-pass-through construction path (no `.to_string()` /
+        // `.into()` allocation, no branching). If any future edit silently
+        // drops the `const` qualifier from the macro body the per-arm `const`
+        // bindings below fail to compile, which surfaces the regression at
+        // the substrate-primitive definition rather than at some downstream
+        // consumer that had come to rely on the `const`-constructibility.
+        // Peer of the sibling
+        // `aplicacao_policy_scalar_ctors_are_const_zero_runtime_work`
+        // (7ef425e) const-eval pin on the peer `AplicacaoError` envelope's
+        // per-`:politicas` per-axis ctor family.
+        const NO_CHILDREN: SupervisorError =
+            SupervisorError::no_children(RestartStrategy::OneForAll);
+        const MAX_RESTARTS_CAP: SupervisorError = SupervisorError::max_restarts_exceeds_cap(1_337);
+        const WINDOW_NC: SupervisorError =
+            SupervisorError::restart_window_not_canonical(Duration::from_micros(1));
+        const WINDOW_CAP: SupervisorError =
+            SupervisorError::restart_window_exceeds_cap(Duration::from_secs(3_601));
+        assert!(matches!(NO_CHILDREN, SupervisorError::NoChildren { .. }));
+        assert!(matches!(
+            MAX_RESTARTS_CAP,
+            SupervisorError::MaxRestartsExceedsCap { .. }
+        ));
+        assert!(matches!(
+            WINDOW_NC,
+            SupervisorError::RestartWindowNotCanonical { .. }
+        ));
+        assert!(matches!(
+            WINDOW_CAP,
+            SupervisorError::RestartWindowExceedsCap { .. }
+        ));
     }
 }
