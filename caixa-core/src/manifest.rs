@@ -4964,10 +4964,7 @@ impl Caixa {
         };
         crate::supervisor::duration_codec::parse(s)
             .map(|_| ())
-            .map_err(|reason| ManifestError::RestartWindowMalformed {
-                restart_window: s.to_string(),
-                reason,
-            })
+            .map_err(|reason| ManifestError::restart_window_malformed(s, reason))
     }
 
     /// Compound per-`Caixa` entry gate on the Aplicacao-kind mesh-slot
@@ -7338,8 +7335,9 @@ manifest_code_path_slot_path_ctors! {
     code_path_duplicate => CodePathDuplicate,
 }
 
-// Fold the nine `ManifestError::{Nome, NomeChartNameBudgetExceeded, Versao,
-// Etiqueta, Autor, Repositorio, Descricao, Licenca, Edicao}Invalid
+// Fold the ten `ManifestError::{Nome, NomeChartNameBudgetExceeded, Versao,
+// Etiqueta, Autor, Repositorio, Descricao, Licenca, Edicao}Invalid +
+// RestartWindowMalformed
 // { <field>: <val>.to_string() | <val>.clone(), reason: <expr> }` wire-up
 // sites at the per-axis [`Caixa::validate_*`] cascade onto one substrate-
 // primitive family per typed variant — the direct sibling on the
@@ -7363,7 +7361,7 @@ manifest_code_path_slot_path_ctors! {
 // [`crate::limits::limits_codec_value_*_ctors!`] codec families (81c856c)
 // each carry the same discipline on their sibling envelopes.
 //
-// The nine variants share the identical `{ <field>: String,
+// The ten variants share the identical `{ <field>: String,
 // reason: String }` two-slot shape:
 //   - `NomeInvalid { nome, reason }` at [`Caixa::validate_nome`]
 //     (`|reason| ManifestError::NomeInvalid { nome: nome.to_string(),
@@ -7408,7 +7406,13 @@ manifest_code_path_slot_path_ctors! {
 //   - `EdicaoInvalid { edicao, reason }` at [`Caixa::validate_edicao`]
 //     (`return Err(ManifestError::EdicaoInvalid { edicao: s.to_string(),
 //     reason: "must be a 4-digit ASCII decimal year (canonical
-//     \"2026\")".to_string() })` on the direct year-shape arm).
+//     \"2026\")".to_string() })` on the direct year-shape arm);
+//   - `RestartWindowMalformed { restart_window, reason }` at
+//     [`Caixa::validate_restart_window`]
+//     (`|reason| ManifestError::RestartWindowMalformed { restart_window:
+//     s.to_string(), reason }` after
+//     [`crate::supervisor::duration_codec::parse`] rejects the offending
+//     `:restart-window` raw string).
 //
 // Each opened the identical four-line
 // `ManifestError::<Variant> { <field>: <val>.to_string() | .clone(),
@@ -7445,7 +7449,7 @@ manifest_code_path_slot_path_ctors! {
 // that mistakenly discards the constructed error rather than routing it
 // through `return Err(…)` / `.map_err(…)` / a closure return.
 //
-// Every future consumer that wants to construct one of these nine
+// Every future consumer that wants to construct one of these ten
 // variants outside the current in-crate wire-up sites (a deferred
 // `caixa.pleme.io/v1alpha1/Caixa` CR materializer's per-manifest-axis
 // admission validators re-checking each declared identity / metadata
@@ -7457,7 +7461,7 @@ manifest_code_path_slot_path_ctors! {
 // `caixa-registry` per-lacre re-validator at lacre-resolve time
 // re-checking each declared axis against the same predicates) now
 // reaches each variant through one call rather than re-inlining the
-// four-line struct-literal in lockstep with the nine in-crate wire-up
+// four-line struct-literal in lockstep with the ten in-crate wire-up
 // sites.
 macro_rules! manifest_field_reason_ctors {
     ($($ctor:ident => $variant:ident { $field:ident }),* $(,)?) => {
@@ -7508,6 +7512,7 @@ manifest_field_reason_ctors! {
     descricao_invalid => DescricaoInvalid { descricao },
     licenca_invalid => LicencaInvalid { licenca },
     edicao_invalid => EdicaoInvalid { edicao },
+    restart_window_malformed => RestartWindowMalformed { restart_window },
 }
 
 // Fold the two `ManifestError::{EtiquetaDuplicate, AutorDuplicate}
@@ -23398,8 +23403,14 @@ mod tests {
     //    shape and of the peer [`crate::dep::dep_nome_axis_reason_ctors!`]
     //    (5621f8a) on the sibling `:deps` envelope's mirror-symmetric
     //    three-slot shape (the `nome` axis added at the per-dep-owned
-    //    altitude). Nine-variant lift closing the nine open-coded ctor
-    //    sites at the per-axis [`Caixa::validate_*`] cascade.
+    //    altitude). Ten-variant lift closing the ten open-coded ctor
+    //    sites at the per-axis [`Caixa::validate_*`] cascade — the tenth
+    //    (`restart_window_malformed => RestartWindowMalformed
+    //    { restart_window }`) closes the last open-coded four-line
+    //    `.map_err(|reason| ManifestError::RestartWindowMalformed
+    //    { restart_window: s.to_string(), reason })` block at
+    //    [`Caixa::validate_restart_window`] onto the same substrate
+    //    primitive per typed variant.
 
     #[test]
     fn nome_invalid_ctor_matches_struct_literal_wrap() {
@@ -23546,7 +23557,56 @@ mod tests {
         );
     }
 
-    // Cross-family invariance pin — the nine sibling ctors all route
+    #[test]
+    fn restart_window_malformed_ctor_matches_struct_literal_wrap() {
+        let restart_window = "1.5s";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::restart_window_malformed(restart_window, reason),
+            ManifestError::RestartWindowMalformed {
+                restart_window: restart_window.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated restart_window_malformed ctor must produce byte-equal \
+             `ManifestError::RestartWindowMalformed` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    // Routing pin against the actual [`Caixa::validate_restart_window`]
+    // wire-up: the codec surfaces its parse error as `Result<Duration, String>`,
+    // and the pre-lift `.map_err(|reason| ManifestError::RestartWindowMalformed
+    // { restart_window: s.to_string(), reason })` closure passed the owned
+    // `String` verbatim onto the `reason: String` slot. The lifted
+    // `restart_window_malformed(&str, impl Into<String>)` ctor must produce
+    // byte-equal output on the same `(offending_value, owned_reason)` pair a
+    // real parse-failure fixture surfaces, so a silent regression on the
+    // owned-`String` axis (a future `reason` bound change dropping the
+    // `Into<String>` route the owned reason threads through) surfaces here
+    // rather than at a downstream diagnostic-shape drift.
+    #[test]
+    fn restart_window_malformed_ctor_matches_wire_up_owned_reason_shape() {
+        let raw = "1.5s";
+        let reason: String = crate::supervisor::duration_codec::parse(raw)
+            .expect_err("fractional-seconds `1.5s` must fail the shared codec");
+        assert_eq!(
+            ManifestError::restart_window_malformed(raw, reason.clone()),
+            ManifestError::RestartWindowMalformed {
+                restart_window: raw.to_string(),
+                reason: reason.clone(),
+            },
+            "generated restart_window_malformed ctor must accept the owned \
+             `String` the [`crate::supervisor::duration_codec::parse`] parse-\
+             error carrier surfaces (the exact shape the \
+             [`Caixa::validate_restart_window`] `.map_err(|reason| ...)` \
+             closure passes into it) and produce byte-equal \
+             `ManifestError::RestartWindowMalformed` to the pre-lift \
+             struct-literal wrap on the same `(offending_value, owned_reason)` \
+             pair",
+        );
+    }
+
+    // Cross-family invariance pin — the ten sibling ctors all route
     // `reason: impl Into<String>` + `<field>: &str` verbatim onto their
     // respective typed variants through the shared
     // [`manifest_field_reason_ctors!`] macro. Sweeps three fixture
@@ -23605,15 +23665,23 @@ mod tests {
         );
         assert_eq!(
             ManifestError::edicao_invalid("26", via_literal),
-            ManifestError::edicao_invalid("26", via_owned),
+            ManifestError::edicao_invalid("26", via_owned.clone()),
         );
         assert_eq!(
             ManifestError::edicao_invalid("26", via_literal),
-            ManifestError::edicao_invalid("26", via_format),
+            ManifestError::edicao_invalid("26", via_format.clone()),
+        );
+        assert_eq!(
+            ManifestError::restart_window_malformed("1.5s", via_literal),
+            ManifestError::restart_window_malformed("1.5s", via_owned),
+        );
+        assert_eq!(
+            ManifestError::restart_window_malformed("1.5s", via_literal),
+            ManifestError::restart_window_malformed("1.5s", via_format),
         );
     }
 
-    // Cross-arm routing pin — the nine sibling ctors accept both `&str`
+    // Cross-arm routing pin — the ten sibling ctors accept both `&str`
     // (from the [`Caixa::nome`] / [`Caixa::versao`] / [`Caixa::repositorio`]
     // / [`Caixa::descricao`] / [`Caixa::licenca`] / [`Caixa::edicao`]
     // accessors that return `&str`) and `&String` (from the
