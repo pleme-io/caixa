@@ -6025,16 +6025,10 @@ impl Caixa {
                         return Err(ManifestError::CodePathEmpty { slot });
                     }
                     Err(PathShapeViolation::Absolute) => {
-                        return Err(ManifestError::CodePathAbsolute {
-                            slot,
-                            path: path.to_path_buf(),
-                        });
+                        return Err(ManifestError::code_path_absolute(slot, path));
                     }
                     Err(PathShapeViolation::ParentEscape) => {
-                        return Err(ManifestError::CodePathParentEscape {
-                            slot,
-                            path: path.to_path_buf(),
-                        });
+                        return Err(ManifestError::code_path_parent_escape(slot, path));
                     }
                 }
                 // The per-slot file-type gate dispatched through the
@@ -6074,26 +6068,19 @@ impl Caixa {
                     CodePathFileType::None => {}
                     CodePathFileType::LispSource => {
                         if !is_lisp_extension(path) {
-                            return Err(ManifestError::CodePathNonLispExtension {
-                                slot,
-                                path: path.to_path_buf(),
-                            });
+                            return Err(ManifestError::code_path_non_lisp_extension(slot, path));
                         }
                     }
                     CodePathFileType::ComputeUnitYaml => {
                         if !is_computeunit_yaml_extension(path) {
-                            return Err(ManifestError::CodePathNonComputeUnitYamlExtension {
-                                slot,
-                                path: path.to_path_buf(),
-                            });
+                            return Err(ManifestError::code_path_non_computeunit_yaml_extension(
+                                slot, path,
+                            ));
                         }
                     }
                 }
                 crate::render::insert_first_seen(&mut seen, entry.as_str(), || {
-                    ManifestError::CodePathDuplicate {
-                        slot,
-                        path: path.to_path_buf(),
-                    }
+                    ManifestError::code_path_duplicate(slot, path)
                 })?;
             }
         }
@@ -7274,6 +7261,113 @@ pub enum ManifestError {
          like `\"2026\"`)"
     )]
     EdicaoInvalid { edicao: String, reason: String },
+}
+
+// Fold the five `Err(ManifestError::CodePath{Absolute,ParentEscape,
+// NonLispExtension,NonComputeUnitYamlExtension,Duplicate} { slot,
+// path: path.to_path_buf() })` four-line struct-variant wire-up sites at
+// [`Caixa::validate_code_path_lists`]'s per-slot per-entry cascade onto
+// one substrate-primitive family on the `ManifestError` envelope — the
+// five open-coded ctor sites remaining on the `:bibliotecas` / `:exe` /
+// `:servicos` code-path-list value-shape trajectory this envelope carries,
+// and the family sibling of the peer [`crate::behavior::behavior_slot_path_ctors!`]
+// (67c31ec) two-slot `{ slot: &'static str, path: PathBuf }` envelope on
+// the [`crate::BehaviorError`] surface that keys off the exact same
+// `(slot: &'static str, path: &Path)` argument tuple.
+//
+// The five wire-up sites this fold closes are the sandbox-shape
+// absolute-path arm (`return Err(ManifestError::CodePathAbsolute { slot,
+// path: path.to_path_buf() })` on the [`is_sandboxed_relative_path`]
+// `PathShapeViolation::Absolute` branch), the sandbox-shape
+// parent-escape arm (`return Err(ManifestError::CodePathParentEscape {
+// slot, path: path.to_path_buf() })` on the sibling
+// `PathShapeViolation::ParentEscape` branch), the LispSource
+// terminating-extension arm (`return Err(ManifestError::CodePathNonLispExtension {
+// slot, path: path.to_path_buf() })` on the `!is_lisp_extension(path)`
+// branch of the `:bibliotecas` file-type gate), the ComputeUnitYaml
+// compound-suffix arm (`return Err(ManifestError::CodePathNonComputeUnitYamlExtension
+// { slot, path: path.to_path_buf() })` on the
+// `!is_computeunit_yaml_extension(path)` branch of the `:servicos`
+// file-type gate), and the cross-entry duplicate arm
+// (`ManifestError::CodePathDuplicate { slot, path: path.to_path_buf() }`
+// inside the closure passed to [`crate::render::insert_first_seen`]) —
+// each opened the identical `ManifestError::CodePath* { slot,
+// path: path.to_path_buf() }` four-line struct-literal against the same
+// `(slot: &'static str, path: &Path)` local tuple, the exact "same
+// block re-inlined at every consumer" shape the PRIME DIRECTIVE names
+// as a bug. The variant discriminator is the only thing that varies
+// between the five sites; the rest of the struct-literal is a
+// byte-for-byte re-inline.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(slot: &'static str, path: &std::path::Path)
+// -> Self`, so every wire-up site collapses onto one dispatch:
+// `ManifestError::<ctor>(slot, path)`, byte-equal to the pre-lift
+// struct-literal on the same `(&'static str, &Path)` fixture. The
+// uniform two-field construction (`slot` verbatim as `&'static str`,
+// `path.to_path_buf()`) is spelled once — inside the macro — rather
+// than at every wire-up site. The `slot` parameter stays `&'static str`
+// (not `&str`) so every arm continues to carry a program-lifetime
+// `:bibliotecas` / `:exe` / `:servicos` author-key label — one of the
+// three `&'static str` literals threaded through the outer per-slot
+// iterator at [`Caixa::validate_code_path_lists`] — matching the
+// enum-field type. A runtime-borrowed `&str` would silently downgrade
+// the label lifetime and let a caller stash a non-`'static` borrow into
+// the returned error. The `&Path` parameter accepts both
+// `&Path` and `&PathBuf` (via Deref coercion), so every existing
+// wire-up — each already binds `let path = Path::new(entry);` from the
+// per-entry loop — threads through the ctor without a pre-conversion.
+//
+// Every future consumer that wants to construct one of these five
+// variants outside the five in-crate wire-up sites (a deferred
+// `feira validate --code-paths` per-caixa admission verb re-checking
+// each declared `:bibliotecas` / `:exe` / `:servicos` entry against the
+// same sandbox-shape + file-type + duplicate cascade, a future
+// caixa-registry per-lacre code-path re-validator at lacre-resolve
+// time, a per-`Caixa` overlay resolver rejecting an author-supplied
+// code-path against a cluster-local snapshot) now reaches each variant
+// through one call rather than re-inlining the four-line struct-literal
+// in lockstep with the five in-crate wire-up sites.
+macro_rules! manifest_code_path_slot_path_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl ManifestError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`ManifestError::",
+                    stringify!($variant),
+                    "`] naming the offending `:bibliotecas` / `:exe` / ",
+                    "`:servicos` code-path list `slot` label and the ",
+                    "offending entry `path`. Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { slot, path: path.to_path_buf() }` two-field ",
+                    "struct-literal onto one substrate primitive so ",
+                    "every wire-up on this variant at ",
+                    "[`Caixa::validate_code_path_lists`] reads through ",
+                    "one dispatch rather than the pre-lift four-line ",
+                    "open-coded block. The `slot` label threads verbatim ",
+                    "from the outer per-slot iterator (one of the three ",
+                    "code-path author-key `&'static str` consts) and the ",
+                    "`path` from the per-entry inner iterator's ",
+                    "`Path::new(entry)` binding."
+                )]
+                #[must_use]
+                pub fn $ctor(slot: &'static str, path: &std::path::Path) -> Self {
+                    Self::$variant {
+                        slot,
+                        path: path.to_path_buf(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+manifest_code_path_slot_path_ctors! {
+    code_path_absolute => CodePathAbsolute,
+    code_path_parent_escape => CodePathParentEscape,
+    code_path_non_lisp_extension => CodePathNonLispExtension,
+    code_path_non_computeunit_yaml_extension => CodePathNonComputeUnitYamlExtension,
+    code_path_duplicate => CodePathDuplicate,
 }
 
 #[cfg(test)]
@@ -22873,6 +22967,179 @@ mod tests {
                      {err:?}",
                 )
             });
+        }
+    }
+
+    // ── `manifest_code_path_slot_path_ctors!` — the paired `{ slot:
+    //    &'static str, path: PathBuf }` two-slot envelope on
+    //    `ManifestError`, strict sibling of the peer
+    //    [`crate::behavior::behavior_slot_path_ctors!`] (67c31ec) on the
+    //    sibling `BehaviorError` envelope's identical
+    //    `{ slot: &'static str, path: PathBuf }` two-slot shape.
+    //    Five-variant lift closing the five open-coded ctor sites
+    //    remaining on the `:bibliotecas` / `:exe` / `:servicos`
+    //    code-path-list value-shape trajectory this envelope carries.
+
+    #[test]
+    fn code_path_absolute_ctor_matches_struct_literal_wrap() {
+        let path = Path::new("/abs/lib/x.lisp");
+        assert_eq!(
+            ManifestError::code_path_absolute(":bibliotecas", path),
+            ManifestError::CodePathAbsolute {
+                slot: ":bibliotecas",
+                path: path.to_path_buf(),
+            },
+            "generated code_path_absolute ctor must produce byte-equal \
+             `ManifestError::CodePathAbsolute` to the pre-lift \
+             struct-literal wrap on the same `(&'static str, &Path)` \
+             fixture",
+        );
+    }
+
+    #[test]
+    fn code_path_parent_escape_ctor_matches_struct_literal_wrap() {
+        let path = Path::new("lib/../../etc/x.lisp");
+        assert_eq!(
+            ManifestError::code_path_parent_escape(":bibliotecas", path),
+            ManifestError::CodePathParentEscape {
+                slot: ":bibliotecas",
+                path: path.to_path_buf(),
+            },
+            "generated code_path_parent_escape ctor must produce \
+             byte-equal `ManifestError::CodePathParentEscape` to the \
+             pre-lift struct-literal wrap on the same `(&'static str, \
+             &Path)` fixture",
+        );
+    }
+
+    #[test]
+    fn code_path_non_lisp_extension_ctor_matches_struct_literal_wrap() {
+        let path = Path::new("lib/x.txt");
+        assert_eq!(
+            ManifestError::code_path_non_lisp_extension(":bibliotecas", path),
+            ManifestError::CodePathNonLispExtension {
+                slot: ":bibliotecas",
+                path: path.to_path_buf(),
+            },
+            "generated code_path_non_lisp_extension ctor must produce \
+             byte-equal `ManifestError::CodePathNonLispExtension` to \
+             the pre-lift struct-literal wrap on the same \
+             `(&'static str, &Path)` fixture",
+        );
+    }
+
+    #[test]
+    fn code_path_non_computeunit_yaml_extension_ctor_matches_struct_literal_wrap() {
+        let path = Path::new("servicos/x.yaml");
+        assert_eq!(
+            ManifestError::code_path_non_computeunit_yaml_extension(":servicos", path),
+            ManifestError::CodePathNonComputeUnitYamlExtension {
+                slot: ":servicos",
+                path: path.to_path_buf(),
+            },
+            "generated code_path_non_computeunit_yaml_extension ctor \
+             must produce byte-equal \
+             `ManifestError::CodePathNonComputeUnitYamlExtension` to \
+             the pre-lift struct-literal wrap on the same \
+             `(&'static str, &Path)` fixture",
+        );
+    }
+
+    #[test]
+    fn code_path_duplicate_ctor_matches_struct_literal_wrap() {
+        let path = Path::new("lib/x.lisp");
+        assert_eq!(
+            ManifestError::code_path_duplicate(":bibliotecas", path),
+            ManifestError::CodePathDuplicate {
+                slot: ":bibliotecas",
+                path: path.to_path_buf(),
+            },
+            "generated code_path_duplicate ctor must produce byte-equal \
+             `ManifestError::CodePathDuplicate` to the pre-lift \
+             struct-literal wrap on the same `(&'static str, &Path)` \
+             fixture",
+        );
+    }
+
+    #[test]
+    fn manifest_code_path_slot_path_ctors_route_slot_and_path_through_uniformly() {
+        // Cross-axis routing pin: sweep the two constructor input axes
+        // (`slot: &'static str`, `path: &Path`) through non-default
+        // fixtures against every generated arm in the
+        // [`manifest_code_path_slot_path_ctors!`] macro, so any
+        // wrapper-side lowercase / trim / truncate / canonicalization at
+        // codegen time — or a silent field re-name away from the
+        // canonical `slot` / `path` axes on any one variant, or a `slot`
+        // axis silently rerouted through `.to_string()` instead of
+        // passed as `&'static str` verbatim, or a `path` axis silently
+        // rerouted through `.canonicalize()` / `PathBuf::from(<lossy
+        // string>)` instead of `.to_path_buf()` — surfaces here rather
+        // than at a downstream diagnostic-shape mismatch. Peer of the
+        // sibling
+        // [`crate::behavior::tests::behavior_slot_path_ctors_route_slot_and_path_through_uniformly`]
+        // pin (67c31ec) on the sibling `BehaviorError` envelope's
+        // identical two-slot family.
+        //
+        // The `path` fixture carries three distinguishing traits at
+        // once: a non-`root/`-relative leading segment (`weird/`), a
+        // `..` component (a canonicalization trap that would collapse
+        // to `weird/x.lisp` under `.canonicalize()`), and a mixed-case
+        // extension (a lowercase-normalization trap that would collapse
+        // `.LISP` to `.lisp` under any `to_ascii_lowercase()` codegen)
+        // so a routing regression on any one of the three trap axes
+        // surfaces at assert time. Similarly the `slot` fixture
+        // sweeps the three canonical code-path author-key literals
+        // (`:bibliotecas` / `:exe` / `:servicos`) so a silent lookup
+        // against a per-variant const roster would surface here.
+        let path = Path::new("weird/../nested/x.LISP");
+        let cases: [(ManifestError, ManifestError); 5] = [
+            (
+                ManifestError::code_path_absolute(":bibliotecas", path),
+                ManifestError::CodePathAbsolute {
+                    slot: ":bibliotecas",
+                    path: path.to_path_buf(),
+                },
+            ),
+            (
+                ManifestError::code_path_parent_escape(":exe", path),
+                ManifestError::CodePathParentEscape {
+                    slot: ":exe",
+                    path: path.to_path_buf(),
+                },
+            ),
+            (
+                ManifestError::code_path_non_lisp_extension(":servicos", path),
+                ManifestError::CodePathNonLispExtension {
+                    slot: ":servicos",
+                    path: path.to_path_buf(),
+                },
+            ),
+            (
+                ManifestError::code_path_non_computeunit_yaml_extension(":bibliotecas", path),
+                ManifestError::CodePathNonComputeUnitYamlExtension {
+                    slot: ":bibliotecas",
+                    path: path.to_path_buf(),
+                },
+            ),
+            (
+                ManifestError::code_path_duplicate(":exe", path),
+                ManifestError::CodePathDuplicate {
+                    slot: ":exe",
+                    path: path.to_path_buf(),
+                },
+            ),
+        ];
+        for (via_ctor, via_struct_literal) in cases {
+            assert_eq!(
+                via_ctor, via_struct_literal,
+                "manifest_code_path_slot_path_ctors!-generated ctor \
+                 must pass `slot` verbatim onto the canonical \
+                 `&'static str` `slot` field and route `path` through \
+                 `.to_path_buf()` onto the canonical `PathBuf` `path` \
+                 field — a field-rename, silent-conversion, or \
+                 axis-swap regression surfaces here rather than at a \
+                 downstream diagnostic-shape mismatch",
+            );
         }
     }
 }
