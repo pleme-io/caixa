@@ -278,11 +278,7 @@ impl DepSource {
                 // addressing equality probe resolves), closing the
                 // `:fonte` slot's value-shape trajectory end-to-end.
                 if let Err(reason) = crate::render::is_git_repo_url(repo) {
-                    return Err(DepError::FonteRepoShape {
-                        nome: nome.to_string(),
-                        repo: repo.clone(),
-                        reason,
-                    });
+                    return Err(DepError::fonte_repo_shape(nome, repo, reason));
                 }
                 let pins: [(&'static str, Option<&String>); 3] = [
                     (":tag", tag.as_ref()),
@@ -3000,11 +2996,7 @@ impl Dep {
         crate::render::require_valid_versao_requirement(
             self.versao_requirement(),
             || DepError::versao_empty(&self.nome),
-            |reason| DepError::VersaoInvalid {
-                nome: self.nome.clone(),
-                versao: self.versao_requirement().to_string(),
-                reason,
-            },
+            |reason| DepError::versao_invalid(&self.nome, self.versao_requirement(), reason),
         )?;
         if let Some(fonte) = self.fonte() {
             fonte.validate(&self.nome)?;
@@ -3101,11 +3093,7 @@ impl Dep {
                 return Err(DepError::caracteristica_empty(&self.nome));
             }
             if let Err(reason) = crate::render::is_cargo_feature_name(c) {
-                return Err(DepError::CaracteristicaInvalid {
-                    nome: self.nome.clone(),
-                    caracteristica: c.clone(),
-                    reason,
-                });
+                return Err(DepError::caracteristica_invalid(&self.nome, c, reason));
             }
             crate::render::insert_first_seen(&mut seen, c.as_str(), || {
                 DepError::CaracteristicaDuplicate {
@@ -4670,6 +4658,127 @@ macro_rules! dep_nome_list_ctors {
 dep_nome_list_ctors! {
     duplicate_nome => DuplicateNome,
     dep_is_self => DepIsSelf,
+}
+
+// Fold the three `DepError::{VersaoInvalid, FonteRepoShape,
+// CaracteristicaInvalid} { nome: <nome>.to_string(), <axis>:
+// <value>.to_string(), reason }` struct-variant wire-up sites at
+// [`Dep::validate`]'s `:versao` requirement-shape gate + [`DepSource::validate`]'s
+// `:fonte (:tipo git …) :repo` value-shape gate + [`Dep::validate_caracteristicas`]'s
+// per-entry `:caracteristicas` feature-name-shape gate onto one substrate-
+// primitive family per typed variant — the `DepError`-side siblings of the
+// peer [`dep_nome_only_ctors!`] (792aa92) on the one-slot `{ nome }`
+// envelope, [`dep_nome_list_ctors!`] (6f5e0cd) on the two-slot `{ nome,
+// list: &'static str }` envelope, [`fonte_caminho_ctors!`] (f85f145) on
+// the two-slot `{ nome, caminho }` envelope, and
+// [`fonte_caminho_byte_ctors!`] (0e35793) on the three-slot `{ nome,
+// caminho, byte }` envelope. The three variants share the same
+// `{ nome: String, <axis>: String, reason: String }` three-slot shape —
+// the `nome` field names the offending dep the diagnostic points the
+// author back at, the middle `<axis>: String` field carries the offending
+// axis value verbatim (`:versao` requirement scalar on `VersaoInvalid`,
+// `:repo` URL scalar on `FonteRepoShape`, `:caracteristicas` per-entry
+// feature-name scalar on `CaracteristicaInvalid`), and the `reason: String`
+// field carries the parser-shaped rejection sentence the paired
+// [`crate::render::require_valid_versao_requirement`] /
+// [`crate::render::is_git_repo_url`] /
+// [`crate::render::is_cargo_feature_name`] predicate returned. The middle
+// axis-field name differs across variants (`versao` / `repo` /
+// `caracteristica`) so the ctor family below takes the axis field name as
+// a macro parameter (`$axis:ident`) alongside the ctor + variant names,
+// generating one `pub fn $ctor(nome: &str, $axis: &str, reason: String)
+// -> Self` inherent constructor per typed variant that spells the uniform
+// three-field construction (`nome.to_string()` / `<axis>.to_string()` /
+// `reason` forwarded owned) exactly once. Peer of the sibling
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b) macro
+// family on the `AplicacaoError` envelope's mirror-symmetric
+// `{ <field>: String, reason: String }` two-slot shape — same
+// `<axis>: <value>.to_string()` + `reason` owned-forward payload shape,
+// one `nome`-axis added at the per-dep-owned altitude the `DepError`
+// envelope keys off (every `DepError` variant carries the offending
+// `:deps :nome` verbatim so the author can grep their caixa.lisp for the
+// offending block in one edit).
+//
+// The three wire-up sites this fold closes are:
+// - [`DepSource::validate`]'s `:repo` value-shape arm
+//   (`Err(DepError::FonteRepoShape { nome: nome.to_string(), repo:
+//   repo.clone(), reason })` after [`crate::render::is_git_repo_url`]
+//   rejects the offending URL);
+// - [`Dep::validate`]'s `:versao` requirement-shape arm
+//   (`|reason| DepError::VersaoInvalid { nome: self.nome.clone(), versao:
+//   self.versao_requirement().to_string(), reason }` inside the
+//   [`crate::render::require_valid_versao_requirement`] callback pair);
+// - [`Dep::validate_caracteristicas`]'s per-entry feature-name-shape arm
+//   (`Err(DepError::CaracteristicaInvalid { nome: self.nome.clone(),
+//   caracteristica: c.clone(), reason })` after
+//   [`crate::render::is_cargo_feature_name`] rejects the offending
+//   feature-name).
+//
+// Each opened the identical five-line struct-literal against the same
+// `(nome, <axis>, reason)` local triple — the exact "same block re-inlined
+// at every consumer" shape the PRIME DIRECTIVE names as a bug, on the
+// same altitude the peer four already-lifted `DepError` ctor families
+// closed on their sibling shape-envelopes. The three variant / axis-field
+// discriminators are the only things that vary between them; the rest of
+// the struct-literal is a byte-for-byte re-inline.
+//
+// Every future consumer wanting to raise one of these three diagnostics
+// (a deferred `caixa-resolver` per-`:deps` re-validator at lacre-resolve
+// time re-checking each declared dep against the same requirement +
+// git-URL + feature-name value-shape cascade, a future `feira validate
+// --deps` per-caixa admission verb re-running the shape gates on demand,
+// a per-lacre overlay resolver rejecting an author-supplied dep against a
+// cluster-local snapshot) now reaches one dispatch rather than re-inlining
+// the five-line struct-literal in lockstep with the three in-crate
+// wire-up sites.
+macro_rules! dep_nome_axis_reason_ctors {
+    ($($ctor:ident => $variant:ident { $axis:ident }),* $(,)?) => {
+        impl DepError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`DepError::",
+                    stringify!($variant),
+                    "`] naming the offending `:deps :nome`, the offending ",
+                    "`:", stringify!($axis), "` axis value, and the ",
+                    "parser-shaped rejection `reason`. Folds the uniform ",
+                    "`Self::",
+                    stringify!($variant),
+                    " { nome: nome.to_string(), ",
+                    stringify!($axis),
+                    ": ",
+                    stringify!($axis),
+                    ".to_string(), reason }` three-field struct-literal ",
+                    "onto one substrate primitive so every in-crate ",
+                    "wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift five-line open-coded block. ",
+                    "The `nome: &str` and `",
+                    stringify!($axis),
+                    ": &str` parameters accept `&str` literals and ",
+                    "`&String` (via Deref coercion) so every existing ",
+                    "wire-up threads through the ctor without a ",
+                    "pre-conversion; the `reason: String` parameter takes ",
+                    "an owned `String` (not `impl Into<String>`) matching ",
+                    "the paired `crate::render::*` predicate's ",
+                    "`Result<(), String>` return shape every wire-up ",
+                    "already holds owned at the call site."
+                )]
+                #[must_use]
+                pub fn $ctor(nome: &str, $axis: &str, reason: String) -> Self {
+                    Self::$variant {
+                        nome: nome.to_string(),
+                        $axis: $axis.to_string(),
+                        reason,
+                    }
+                }
+            )*
+        }
+    };
+}
+
+dep_nome_axis_reason_ctors! {
+    versao_invalid => VersaoInvalid { versao },
+    fonte_repo_shape => FonteRepoShape { repo },
+    caracteristica_invalid => CaracteristicaInvalid { caracteristica },
 }
 
 // Fold the two `DepError::FontePinShape { nome: nome.to_string(),
@@ -17189,5 +17298,124 @@ mod dep_source_is_variant_tests {
             "the dev-mode Path-arm materialization must satisfy is_path()"
         );
         assert!(!via_path.is_git(), "paired negation pin");
+    }
+
+    // ── `dep_nome_axis_reason_ctors!` — the `{ nome: String, <axis>:
+    //    String, reason: String }` three-slot envelope on `DepError`,
+    //    strict sibling of the peer `dep_nome_only_ctors!` (792aa92) on
+    //    the one-slot `{ nome }` envelope, `dep_nome_list_ctors!`
+    //    (6f5e0cd) on the two-slot `{ nome, list: &'static str }`
+    //    envelope, `fonte_caminho_ctors!` (f85f145) on the two-slot
+    //    `{ nome, caminho }` envelope, and `fonte_caminho_byte_ctors!`
+    //    (0e35793) on the three-slot `{ nome, caminho, byte }` envelope.
+
+    #[test]
+    fn versao_invalid_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::versao_invalid("caixa-teia", "^0..1", "invalid comparator".to_string()),
+            DepError::VersaoInvalid {
+                nome: "caixa-teia".to_string(),
+                versao: "^0..1".to_string(),
+                reason: "invalid comparator".to_string(),
+            },
+            "versao_invalid ctor must produce byte-equal \
+             `DepError::VersaoInvalid` to the pre-lift struct-literal wrap",
+        );
+    }
+
+    #[test]
+    fn fonte_repo_shape_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_repo_shape(
+                "caixa-teia",
+                "-upload-pack=evil",
+                "leading dash rejected".to_string(),
+            ),
+            DepError::FonteRepoShape {
+                nome: "caixa-teia".to_string(),
+                repo: "-upload-pack=evil".to_string(),
+                reason: "leading dash rejected".to_string(),
+            },
+            "fonte_repo_shape ctor must produce byte-equal \
+             `DepError::FonteRepoShape` to the pre-lift struct-literal wrap",
+        );
+    }
+
+    #[test]
+    fn caracteristica_invalid_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::caracteristica_invalid(
+                "caixa-teia",
+                "bad feature!",
+                "embedded space rejected".to_string(),
+            ),
+            DepError::CaracteristicaInvalid {
+                nome: "caixa-teia".to_string(),
+                caracteristica: "bad feature!".to_string(),
+                reason: "embedded space rejected".to_string(),
+            },
+            "caracteristica_invalid ctor must produce byte-equal \
+             `DepError::CaracteristicaInvalid` to the pre-lift struct-literal wrap",
+        );
+    }
+
+    #[test]
+    fn dep_nome_axis_reason_ctors_route_nome_axis_and_reason_through_uniformly() {
+        // Cross-axis routing pin: sweep the three constructor input axes
+        // (`nome: &str`, `<axis>: &str`, `reason: String`) through
+        // distinct-per-axis fixtures against every generated arm in the
+        // [`dep_nome_axis_reason_ctors!`] macro, so any wrapper-side
+        // lowercase / trim / truncate on the two `&str` axes — a silent
+        // field swap between `nome`, the middle `<axis>` field, and
+        // `reason`, or a `reason` axis silently rerouted through
+        // `.to_string()` instead of forwarded owned — surfaces here rather
+        // than at a downstream diagnostic-shape mismatch. Peer of the
+        // sibling `fonte_caminho_byte_ctors_route_nome_caminho_and_byte_
+        // through_to_string` (0e35793) cross-axis routing pin on the same
+        // envelope's `{ nome, caminho, byte }` three-slot family and of
+        // the peer `dep_nome_list_ctors_route_nome_and_list_through_
+        // uniformly` (6f5e0cd) pin on the same envelope's two-slot family
+        // — extended here onto the `{ nome, <axis>: String, reason:
+        // String }` three-slot envelope so every substrate-primitive ctor
+        // family in caixa-core's `DepError` envelope guarantees each field
+        // routes the caller's value verbatim through `.to_string()` (or
+        // owned-forward for `reason: String`) in declared field order.
+        // Distinct-per-axis fixtures rule out any two-axis swap
+        // (`nome` ↔ `<axis>`, `<axis>` ↔ `reason`) that would still pass a
+        // same-fixture-per-axis pin.
+        let nome = "sibling-teia";
+        let axis = "distinct-axis-value";
+        let reason = "distinct rejection sentence".to_string();
+        assert_eq!(
+            DepError::versao_invalid(nome, axis, reason.clone()),
+            DepError::VersaoInvalid {
+                nome: nome.to_string(),
+                versao: axis.to_string(),
+                reason: reason.clone(),
+            },
+            "versao_invalid must route `nome` → `nome`, `axis` → `versao`, \
+             `reason` → `reason` in declared field order",
+        );
+        assert_eq!(
+            DepError::fonte_repo_shape(nome, axis, reason.clone()),
+            DepError::FonteRepoShape {
+                nome: nome.to_string(),
+                repo: axis.to_string(),
+                reason: reason.clone(),
+            },
+            "fonte_repo_shape must route `nome` → `nome`, `axis` → `repo`, \
+             `reason` → `reason` in declared field order",
+        );
+        assert_eq!(
+            DepError::caracteristica_invalid(nome, axis, reason.clone()),
+            DepError::CaracteristicaInvalid {
+                nome: nome.to_string(),
+                caracteristica: axis.to_string(),
+                reason: reason.clone(),
+            },
+            "caracteristica_invalid must route `nome` → `nome`, \
+             `axis` → `caracteristica`, `reason` → `reason` in declared \
+             field order",
+        );
     }
 }
