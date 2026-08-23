@@ -294,18 +294,12 @@ impl DepSource {
                     1 => {
                         for (pin, value) in pins {
                             if value.is_some_and(String::is_empty) {
-                                return Err(DepError::FontePinEmpty {
-                                    nome: nome.to_string(),
-                                    pin: pin.to_string(),
-                                });
+                                return Err(DepError::fonte_pin_empty(nome, pin));
                             }
                         }
                     }
                     _ => {
-                        return Err(DepError::FontePinAmbiguous {
-                            nome: nome.to_string(),
-                            pins: set.join(", "),
-                        });
+                        return Err(DepError::fonte_pin_ambiguous(nome, &set.join(", ")));
                     }
                 }
                 // Per-pin value-shape gate. The refname-shaped axes
@@ -3096,10 +3090,7 @@ impl Dep {
                 return Err(DepError::caracteristica_invalid(&self.nome, c, reason));
             }
             crate::render::insert_first_seen(&mut seen, c.as_str(), || {
-                DepError::CaracteristicaDuplicate {
-                    nome: self.nome.clone(),
-                    caracteristica: c.clone(),
-                }
+                DepError::caracteristica_duplicate(&self.nome, c)
             })?;
         }
         Ok(())
@@ -4779,6 +4770,117 @@ dep_nome_axis_reason_ctors! {
     versao_invalid => VersaoInvalid { versao },
     fonte_repo_shape => FonteRepoShape { repo },
     caracteristica_invalid => CaracteristicaInvalid { caracteristica },
+}
+
+// Fold the three `DepError::{FontePinEmpty, FontePinAmbiguous,
+// CaracteristicaDuplicate} { nome: <nome>.to_string(), <axis>:
+// <value>.to_string() }` struct-variant wire-up sites at
+// [`DepSource::validate`]'s per-`:fonte` git-pin single-pin-empty +
+// multi-pin-ambiguous cascade and [`Dep::validate_caracteristicas`]'s
+// per-entry set-not-multiset dedup closure onto one substrate-primitive
+// family per typed variant — the missing two-slot rung on the
+// `DepError`-side four-family ladder ([`dep_nome_only_ctors!`] (792aa92)
+// one-slot `{ nome }` → this two-slot `{ nome, <axis>: String }` →
+// [`dep_nome_list_ctors!`] (6f5e0cd) two-slot `{ nome, list: &'static
+// str }` → [`dep_nome_axis_reason_ctors!`] (5621f8a) three-slot
+// `{ nome, <axis>: String, reason: String }` → [`fonte_pin_shape`]
+// (86e2a17) four-slot `{ nome, pin, value, reason }`), and mirror-
+// symmetric sibling of the peer
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b) two-slot
+// `{ <field>: String, reason: String }` fold on the `AplicacaoError`
+// envelope — same `<axis>: <value>.to_string()` owned-forward payload
+// shape, `reason` axis removed and `nome`-axis added at the per-dep-
+// owned altitude the `DepError` envelope keys off (every `DepError`
+// variant carries the offending `:deps :nome` verbatim so the author
+// can grep their caixa.lisp for the offending block in one edit). The
+// three variants share the same `{ nome: String, <axis>: String }`
+// two-slot shape: the `nome` field names the offending dep the
+// diagnostic points the author back at, and the middle `<axis>:
+// String` field carries the offending per-envelope axis value verbatim
+// (`:fonte` per-pin author-surface tag on `FontePinEmpty`, the
+// comma-joined multi-pin ambiguity report on `FontePinAmbiguous`, the
+// duplicate `:caracteristicas` entry on `CaracteristicaDuplicate`).
+// The middle axis-field name differs across variants (`pin` / `pins` /
+// `caracteristica`) so the ctor family below takes the axis field name
+// as a macro parameter (`$axis:ident`) alongside the ctor + variant
+// names, generating one `pub fn $ctor(nome: &str, $axis: &str) ->
+// Self` inherent constructor per typed variant that spells the
+// uniform two-field construction (`nome.to_string()` /
+// `<axis>.to_string()`) exactly once.
+//
+// The three wire-up sites this fold closes are:
+// - [`DepSource::validate`]'s per-`:fonte` set-of-one empty-pin arm
+//   (`return Err(DepError::FontePinEmpty { nome: nome.to_string(), pin:
+//   pin.to_string() });` inside the `set.len() == 1` branch after the
+//   `is_some_and(String::is_empty)` iterator);
+// - [`DepSource::validate`]'s per-`:fonte` set-of-two-or-more
+//   ambiguity arm (`return Err(DepError::FontePinAmbiguous { nome:
+//   nome.to_string(), pins: set.join(", ") });` inside the `_` branch);
+// - [`Dep::validate_caracteristicas`]'s per-entry
+//   set-not-multiset-dedup closure (`|| DepError::CaracteristicaDuplicate
+//   { nome: self.nome.clone(), caracteristica: c.clone() }` passed to
+//   [`crate::render::insert_first_seen`]).
+//
+// Each opened the identical four-line struct-literal against the same
+// `(nome, <axis>)` local pair — the exact "same block re-inlined at
+// every consumer" shape the PRIME DIRECTIVE names as a bug, on the
+// same altitude the peer four already-lifted `DepError` ctor families
+// closed on their sibling shape-envelopes. The three variant / axis-
+// field discriminators are the only things that vary between them;
+// the rest of the struct-literal is a byte-for-byte re-inline.
+//
+// Every future consumer wanting to raise one of these three
+// diagnostics (a deferred `caixa-resolver` per-`:deps` re-validator
+// at lacre-resolve time re-checking each declared dep against the
+// same `:fonte` set-of-one / set-of-many + `:caracteristicas`
+// set-not-multiset cascade, a future `feira validate --deps` per-
+// caixa admission verb re-running the shape gates on demand, a
+// per-lacre overlay resolver rejecting an author-supplied dep against
+// a cluster-local snapshot the M4 CR materializer projects) now
+// reaches one dispatch rather than re-inlining the four-line struct-
+// literal in lockstep with the three in-crate wire-up sites.
+macro_rules! dep_nome_axis_ctors {
+    ($($ctor:ident => $variant:ident { $axis:ident }),* $(,)?) => {
+        impl DepError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`DepError::",
+                    stringify!($variant),
+                    "`] naming the offending `:deps :nome` and the ",
+                    "offending `:", stringify!($axis), "` axis value. ",
+                    "Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { nome: nome.to_string(), ",
+                    stringify!($axis),
+                    ": ",
+                    stringify!($axis),
+                    ".to_string() }` two-field struct-literal onto one ",
+                    "substrate primitive so every in-crate wire-up on ",
+                    "this variant reads through one dispatch rather than ",
+                    "the pre-lift four-line open-coded block. Both `nome: ",
+                    "&str` and `",
+                    stringify!($axis),
+                    ": &str` parameters accept `&str` literals and ",
+                    "`&String` (via Deref coercion) so every existing ",
+                    "wire-up threads through the ctor without a pre-",
+                    "conversion."
+                )]
+                #[must_use]
+                pub fn $ctor(nome: &str, $axis: &str) -> Self {
+                    Self::$variant {
+                        nome: nome.to_string(),
+                        $axis: $axis.to_string(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+dep_nome_axis_ctors! {
+    fonte_pin_empty => FontePinEmpty { pin },
+    fonte_pin_ambiguous => FontePinAmbiguous { pins },
+    caracteristica_duplicate => CaracteristicaDuplicate { caracteristica },
 }
 
 // Fold the two `DepError::FontePinShape { nome: nome.to_string(),
@@ -17416,6 +17518,137 @@ mod dep_source_is_variant_tests {
             "caracteristica_invalid must route `nome` → `nome`, \
              `axis` → `caracteristica`, `reason` → `reason` in declared \
              field order",
+        );
+    }
+
+    // ── `dep_nome_axis_ctors!` — the `{ nome: String, <axis>: String }`
+    //    two-slot envelope on `DepError`, missing rung between
+    //    `dep_nome_only_ctors!` (792aa92) on the one-slot `{ nome }`
+    //    envelope and `dep_nome_axis_reason_ctors!` (5621f8a) on the
+    //    three-slot `{ nome, <axis>: String, reason: String }` envelope.
+    //    Sibling of `dep_nome_list_ctors!` (6f5e0cd) on the peer
+    //    two-slot `{ nome, list: &'static str }` envelope (same slot
+    //    count, `&'static str` axis instead of owned `String` axis).
+
+    #[test]
+    fn fonte_pin_empty_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_pin_empty("caixa-teia", ":tag"),
+            DepError::FontePinEmpty {
+                nome: "caixa-teia".to_string(),
+                pin: ":tag".to_string(),
+            },
+            "fonte_pin_empty ctor must produce byte-equal \
+             `DepError::FontePinEmpty` to the pre-lift struct-literal wrap \
+             on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn fonte_pin_ambiguous_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::fonte_pin_ambiguous("caixa-teia", ":tag, :rev"),
+            DepError::FontePinAmbiguous {
+                nome: "caixa-teia".to_string(),
+                pins: ":tag, :rev".to_string(),
+            },
+            "fonte_pin_ambiguous ctor must produce byte-equal \
+             `DepError::FontePinAmbiguous` to the pre-lift struct-literal \
+             wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn caracteristica_duplicate_ctor_matches_struct_literal_wrap() {
+        assert_eq!(
+            DepError::caracteristica_duplicate("caixa-teia", "http"),
+            DepError::CaracteristicaDuplicate {
+                nome: "caixa-teia".to_string(),
+                caracteristica: "http".to_string(),
+            },
+            "caracteristica_duplicate ctor must produce byte-equal \
+             `DepError::CaracteristicaDuplicate` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn fonte_pin_ambiguous_ctor_matches_owned_string_join_shape() {
+        // Owned-`String` routing pin: thread the real
+        // `set.join(", ")` `String` carrier through the ctor's
+        // `&str`-parameter Deref coercion, so the ambiguity-arm
+        // wire-up site's actual `&set.join(", ")` shape stays
+        // byte-equal to a direct `":tag, :rev"` literal. A future
+        // parameter-shape change silently dropping the Deref
+        // coercion route (e.g., a switch to `impl Into<String>`)
+        // surfaces here rather than at the wire-up's compile
+        // error far from the ctor definition.
+        let set: Vec<&'static str> = vec![":tag", ":rev"];
+        let joined: String = set.join(", ");
+        assert_eq!(
+            DepError::fonte_pin_ambiguous("caixa-teia", &joined),
+            DepError::FontePinAmbiguous {
+                nome: "caixa-teia".to_string(),
+                pins: ":tag, :rev".to_string(),
+            },
+            "fonte_pin_ambiguous ctor must accept an owned-`String` \
+             `&set.join(\", \")` carrier via Deref coercion — the exact \
+             shape the ambiguity-arm wire-up site passes into it",
+        );
+    }
+
+    #[test]
+    fn dep_nome_axis_ctors_route_nome_and_axis_through_to_string_uniformly() {
+        // Cross-axis routing pin: sweep the two constructor input axes
+        // (`nome: &str`, `<axis>: &str`) through distinct-per-axis
+        // fixtures against every generated arm in the
+        // [`dep_nome_axis_ctors!`] macro, so any wrapper-side lowercase /
+        // trim / truncate at codegen time — a silent field swap between
+        // `nome` and the middle `<axis>` field, or a `<axis>` axis
+        // silently rerouted through the wrong field on any one variant
+        // — surfaces here rather than at a downstream diagnostic-shape
+        // mismatch. Peer of the sibling
+        // `dep_nome_list_ctors_route_nome_and_list_through_uniformly`
+        // (6f5e0cd) pin on the same envelope's peer two-slot family
+        // (`{ nome, list: &'static str }`) and of the sibling
+        // `dep_nome_axis_reason_ctors_route_nome_axis_and_reason_through_uniformly`
+        // (5621f8a) pin on the same envelope's three-slot `{ nome,
+        // <axis>: String, reason: String }` family — extended here onto
+        // the `{ nome, <axis>: String }` two-slot envelope so the last
+        // per-`DepError`-two-slot-owned-axis rung on the ctor-family
+        // ladder guarantees each field routes the caller's value
+        // verbatim through `.to_string()` in declared field order.
+        // Distinct-per-axis fixtures rule out any two-axis swap
+        // (`nome` ↔ `<axis>`) that would still pass a same-fixture-
+        // per-axis pin.
+        let nome = "sibling-teia";
+        let axis = "distinct-axis-value";
+        assert_eq!(
+            DepError::fonte_pin_empty(nome, axis),
+            DepError::FontePinEmpty {
+                nome: nome.to_string(),
+                pin: axis.to_string(),
+            },
+            "fonte_pin_empty must route `nome` → `nome`, `axis` → `pin` \
+             in declared field order",
+        );
+        assert_eq!(
+            DepError::fonte_pin_ambiguous(nome, axis),
+            DepError::FontePinAmbiguous {
+                nome: nome.to_string(),
+                pins: axis.to_string(),
+            },
+            "fonte_pin_ambiguous must route `nome` → `nome`, `axis` → `pins` \
+             in declared field order",
+        );
+        assert_eq!(
+            DepError::caracteristica_duplicate(nome, axis),
+            DepError::CaracteristicaDuplicate {
+                nome: nome.to_string(),
+                caracteristica: axis.to_string(),
+            },
+            "caracteristica_duplicate must route `nome` → `nome`, \
+             `axis` → `caracteristica` in declared field order",
         );
     }
 }
