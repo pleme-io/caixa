@@ -55,6 +55,52 @@ pub enum RenderError {
     },
 }
 
+/// Serialize a typed M2 slot value into a [`serde_yaml::Value`], tagging any
+/// failure with the caller-supplied `slot` label so the diagnostic reads
+/// `yaml serialization of M2 slot <slot>: <source>` — the canonical
+/// substrate primitive every [`servico_m2_overlay`] per-slot serialization
+/// site now routes through, folding the pre-lift uniform three-line
+/// `serde_yaml::to_value(<val>).map_err(|source| RenderError::Yaml { slot,
+/// source })` block onto one dispatch. Byte-equal on the `Ok` axis to
+/// `serde_yaml::to_value(value)` on every input the underlying serializer
+/// accepts, and tags the `Err` axis with the caller-supplied `slot` label
+/// verbatim so a downstream `#[from]` consumer of [`RenderError::Yaml`]
+/// sees the same envelope shape the pre-lift inline block emitted.
+///
+/// Peer of [`servico_m2_overlay`] on the same per-slot serialization
+/// altitude: the three wire-up sites at `:limits` / `:behavior` /
+/// `:upgrade-from` now each reach for one `to_yaml_slot(<M2_KEY>, <val>)?`
+/// step in place of the identical three-line inline block, so any future
+/// edit to the [`RenderError::Yaml`] envelope shape — a `path: PathBuf`
+/// trailer once per-slot validation-time context lands, a
+/// `caixa: String` trailer once the M2 overlay grows a named-offending-
+/// caixa diagnostic — reaches all three sites through one substrate
+/// primitive rather than three coordinated per-arm rewrites. Every
+/// future consumer wanting to raise a [`RenderError::Yaml`]-tagged
+/// failure (a future overlay resolver serializing an author-supplied
+/// `:limits` override, a future admission webhook re-serializing a
+/// candidate slot against a cluster-local snapshot, a future
+/// per-Aplicacao / per-Acao renderer growing its own typed-slot
+/// serialization step) reaches through this one dispatch rather than
+/// re-inlining the same three-line `map_err` block.
+///
+/// Generic over `T: serde::Serialize + ?Sized` so the primitive accepts
+/// both the owned typed-slot values every M2 accessor returns
+/// (`LimitsSpec` / `BehaviorSpec` behind an `Option`) and the
+/// borrow-through-slice slot (`&[UpgradeFromEntry]` behind the
+/// `upgrade_from()` accessor's `.as_slice()`) without a per-arm arity
+/// split.
+///
+/// # Errors
+/// Returns [`RenderError::Yaml`] tagged with `slot` if
+/// `serde_yaml::to_value` fails on `value`.
+pub fn to_yaml_slot<T>(slot: &'static str, value: &T) -> Result<serde_yaml::Value, RenderError>
+where
+    T: serde::Serialize + ?Sized,
+{
+    serde_yaml::to_value(value).map_err(|source| RenderError::Yaml { slot, source })
+}
+
 /// Typed kind-mismatch view: the canonical surface every per-kind
 /// `caixa-<target>` renderer raises when it's handed a [`Caixa`] whose
 /// `:kind` doesn't match the kind that renderer is targeting. Carries
@@ -26247,27 +26293,18 @@ pub fn servico_m2_overlay(
     if let Some(limits) = caixa.limits()
         && !limits.is_empty()
     {
-        let v = serde_yaml::to_value(limits).map_err(|source| RenderError::Yaml {
-            slot: M2_KEY_LIMITS,
-            source,
-        })?;
-        out.insert(M2_KEY_LIMITS, v);
+        out.insert(M2_KEY_LIMITS, to_yaml_slot(M2_KEY_LIMITS, limits)?);
     }
     if let Some(behavior) = caixa.behavior()
         && !behavior.is_empty()
     {
-        let v = serde_yaml::to_value(behavior).map_err(|source| RenderError::Yaml {
-            slot: M2_KEY_BEHAVIOR,
-            source,
-        })?;
-        out.insert(M2_KEY_BEHAVIOR, v);
+        out.insert(M2_KEY_BEHAVIOR, to_yaml_slot(M2_KEY_BEHAVIOR, behavior)?);
     }
     if !caixa.upgrade_from().is_empty() {
-        let v = serde_yaml::to_value(caixa.upgrade_from()).map_err(|source| RenderError::Yaml {
-            slot: M2_KEY_UPGRADE_FROM,
-            source,
-        })?;
-        out.insert(M2_KEY_UPGRADE_FROM, v);
+        out.insert(
+            M2_KEY_UPGRADE_FROM,
+            to_yaml_slot(M2_KEY_UPGRADE_FROM, caixa.upgrade_from())?,
+        );
     }
     Ok(out)
 }
@@ -28263,6 +28300,118 @@ mod tests {
             entrada: None,
             ci: None,
         }
+    }
+
+    // ── to_yaml_slot — per-slot serialization primitive ─────────────────
+    //
+    // Pins the substrate primitive [`servico_m2_overlay`] routes every
+    // per-slot serialization site through, on three axes: byte-equal Ok-
+    // value forwarding (any wrapper-side silent transformation of the
+    // serialized value surfaces here), tagged Err-slot routing (the
+    // caller-supplied `slot` label is threaded verbatim into the
+    // [`RenderError::Yaml`] envelope), and cross-arm uniformity through
+    // [`servico_m2_overlay`] (every M2 arm's emitted fragment matches the
+    // primitive's output on the same value).
+
+    #[test]
+    fn to_yaml_slot_ok_matches_serde_yaml_to_value_on_every_m2_slot_type() {
+        // Byte-equal to `serde_yaml::to_value` on the three canonical M2
+        // slot value shapes (`&LimitsSpec` / `&BehaviorSpec` /
+        // `&[UpgradeFromEntry]`). Any wrapper-side silent transformation
+        // of the serialized value — a silent `.to_string()` re-wrap, a
+        // silent key re-sort, a silent field re-order — surfaces here
+        // rather than at a downstream renderer-side YAML-diff mismatch.
+        let limits = LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: Some(1_000_000),
+            wall_clock: Some(Duration::from_secs(30)),
+            cpu: Some(500),
+        };
+        let via_helper_limits = to_yaml_slot(M2_KEY_LIMITS, &limits).unwrap();
+        let via_serde_limits = serde_yaml::to_value(limits).unwrap();
+        assert_eq!(via_helper_limits, via_serde_limits);
+        let behavior = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            ..Default::default()
+        };
+        let via_helper_behavior = to_yaml_slot(M2_KEY_BEHAVIOR, &behavior).unwrap();
+        let via_serde_behavior = serde_yaml::to_value(behavior).unwrap();
+        assert_eq!(via_helper_behavior, via_serde_behavior);
+        let upgrade = vec![UpgradeFromEntry {
+            from: "0.0.9".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: "hello-rio".into(),
+            }],
+        }];
+        let via_helper_upgrade = to_yaml_slot(M2_KEY_UPGRADE_FROM, upgrade.as_slice()).unwrap();
+        let via_serde_upgrade = serde_yaml::to_value(upgrade).unwrap();
+        assert_eq!(via_helper_upgrade, via_serde_upgrade);
+    }
+
+    #[test]
+    fn to_yaml_slot_err_tags_slot_and_forwards_source_verbatim() {
+        // A serializer that always errors surfaces as [`RenderError::Yaml`]
+        // carrying the caller-supplied `slot` verbatim and the failing
+        // serializer's source unchanged. Any future edit that silently
+        // rewrites the `slot` axis (a lowercase / trim / rename between
+        // the caller's label and the emitted envelope) surfaces here
+        // rather than at a downstream diagnostic-shape mismatch.
+        struct AlwaysFail;
+        impl serde::Serialize for AlwaysFail {
+            fn serialize<S>(&self, _: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("intentional test failure"))
+            }
+        }
+        let err = to_yaml_slot(M2_KEY_LIMITS, &AlwaysFail).unwrap_err();
+        let RenderError::Yaml { slot, source } = err;
+        assert_eq!(slot, M2_KEY_LIMITS);
+        assert!(
+            source.to_string().contains("intentional test failure"),
+            "forwarded source carries the failing serializer's message verbatim: {source}"
+        );
+    }
+
+    #[test]
+    fn to_yaml_slot_routes_every_servico_m2_overlay_arm_through_the_primitive() {
+        // Cross-slot routing sweep: every [`servico_m2_overlay`] arm
+        // produces the same fragment [`to_yaml_slot`] produces on the
+        // same value, so any silent divergence (a per-arm swap of the
+        // wrapping shape, a silent `unwrap_or(Value::Null)` re-
+        // introduction, a silent `slot` axis rename between the arm and
+        // its emitted key) surfaces at build time rather than at a
+        // downstream renderer-side YAML-diff mismatch.
+        let mut c = bare_servico();
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            ..Default::default()
+        });
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            ..Default::default()
+        });
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.0.9".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: "hello-rio".into(),
+            }],
+        }];
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert_eq!(
+            overlay.get(M2_KEY_LIMITS),
+            Some(&to_yaml_slot(M2_KEY_LIMITS, c.limits.as_ref().unwrap()).unwrap()),
+        );
+        assert_eq!(
+            overlay.get(M2_KEY_BEHAVIOR),
+            Some(&to_yaml_slot(M2_KEY_BEHAVIOR, c.behavior.as_ref().unwrap()).unwrap()),
+        );
+        assert_eq!(
+            overlay.get(M2_KEY_UPGRADE_FROM),
+            Some(&to_yaml_slot(M2_KEY_UPGRADE_FROM, c.upgrade_from.as_slice()).unwrap()),
+        );
     }
 
     #[test]
