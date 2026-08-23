@@ -4464,10 +4464,7 @@ impl Caixa {
         crate::render::require_valid_dns_1123_label(
             nome,
             || ManifestError::NomeEmpty,
-            |reason| ManifestError::NomeInvalid {
-                nome: nome.to_string(),
-                reason,
-            },
+            |reason| ManifestError::nome_invalid(nome, reason),
         )
     }
 
@@ -4533,12 +4530,8 @@ impl Caixa {
     /// overflow the joint cap" arm for this gate.
     pub fn validate_nome_chart_name_budget(&self) -> Result<(), ManifestError> {
         let nome = self.nome();
-        crate::render::is_lareira_chart_name_shape(nome).map_err(|reason| {
-            ManifestError::NomeChartNameBudgetExceeded {
-                nome: nome.to_string(),
-                reason,
-            }
-        })
+        crate::render::is_lareira_chart_name_shape(nome)
+            .map_err(|reason| ManifestError::nome_chart_name_budget_exceeded(nome, reason))
     }
 
     /// Reject `:versao` values that don't parse as [`semver::Version`].
@@ -4608,10 +4601,8 @@ impl Caixa {
         if versao.is_empty() {
             return Err(ManifestError::VersaoEmpty);
         }
-        semver::Version::parse(versao).map_err(|e| ManifestError::VersaoInvalid {
-            versao: versao.to_string(),
-            reason: e.to_string(),
-        })?;
+        semver::Version::parse(versao)
+            .map_err(|e| ManifestError::versao_invalid(versao, e.to_string()))?;
         Ok(())
     }
 
@@ -6172,12 +6163,8 @@ impl Caixa {
             if etiqueta.is_empty() {
                 return Err(ManifestError::EtiquetaEmpty);
             }
-            crate::render::is_chart_keyword_shape(etiqueta).map_err(|reason| {
-                ManifestError::EtiquetaInvalid {
-                    etiqueta: etiqueta.clone(),
-                    reason,
-                }
-            })?;
+            crate::render::is_chart_keyword_shape(etiqueta)
+                .map_err(|reason| ManifestError::etiqueta_invalid(etiqueta, reason))?;
             crate::render::insert_first_seen(&mut seen, etiqueta.as_str(), || {
                 ManifestError::EtiquetaDuplicate {
                     etiqueta: etiqueta.clone(),
@@ -6264,12 +6251,8 @@ impl Caixa {
             if autor.is_empty() {
                 return Err(ManifestError::AutorEmpty);
             }
-            crate::render::is_chart_maintainer_name_shape(autor).map_err(|reason| {
-                ManifestError::AutorInvalid {
-                    autor: autor.clone(),
-                    reason,
-                }
-            })?;
+            crate::render::is_chart_maintainer_name_shape(autor)
+                .map_err(|reason| ManifestError::autor_invalid(autor, reason))?;
             crate::render::insert_first_seen(&mut seen, autor.as_str(), || {
                 ManifestError::AutorDuplicate {
                     autor: autor.clone(),
@@ -6359,10 +6342,7 @@ impl Caixa {
         if s.is_empty() {
             return Err(ManifestError::RepositorioEmpty);
         }
-        is_git_repo_url(s).map_err(|reason| ManifestError::RepositorioInvalid {
-            repositorio: s.to_string(),
-            reason,
-        })
+        is_git_repo_url(s).map_err(|reason| ManifestError::repositorio_invalid(s, reason))
     }
 
     /// Reject `:descricao` values that are the empty string. The flat
@@ -6451,12 +6431,8 @@ impl Caixa {
         if s.is_empty() {
             return Err(ManifestError::DescricaoEmpty);
         }
-        crate::render::is_chart_description_shape(s).map_err(|reason| {
-            ManifestError::DescricaoInvalid {
-                descricao: s.to_string(),
-                reason,
-            }
-        })?;
+        crate::render::is_chart_description_shape(s)
+            .map_err(|reason| ManifestError::descricao_invalid(s, reason))?;
         Ok(())
     }
 
@@ -6543,12 +6519,8 @@ impl Caixa {
         if s.is_empty() {
             return Err(ManifestError::LicencaEmpty);
         }
-        crate::render::is_spdx_expression_shape(s).map_err(|reason| {
-            ManifestError::LicencaInvalid {
-                licenca: s.to_string(),
-                reason,
-            }
-        })?;
+        crate::render::is_spdx_expression_shape(s)
+            .map_err(|reason| ManifestError::licenca_invalid(s, reason))?;
         Ok(())
     }
 
@@ -6659,10 +6631,10 @@ impl Caixa {
             return Err(ManifestError::EdicaoEmpty);
         }
         if s.len() != 4 || !s.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(ManifestError::EdicaoInvalid {
-                edicao: s.to_string(),
-                reason: "must be a 4-digit ASCII decimal year (canonical \"2026\")".to_string(),
-            });
+            return Err(ManifestError::edicao_invalid(
+                s,
+                "must be a 4-digit ASCII decimal year (canonical \"2026\")",
+            ));
         }
         Ok(())
     }
@@ -7368,6 +7340,178 @@ manifest_code_path_slot_path_ctors! {
     code_path_non_lisp_extension => CodePathNonLispExtension,
     code_path_non_computeunit_yaml_extension => CodePathNonComputeUnitYamlExtension,
     code_path_duplicate => CodePathDuplicate,
+}
+
+// Fold the nine `ManifestError::{Nome, NomeChartNameBudgetExceeded, Versao,
+// Etiqueta, Autor, Repositorio, Descricao, Licenca, Edicao}Invalid
+// { <field>: <val>.to_string() | <val>.clone(), reason: <expr> }` wire-up
+// sites at the per-axis [`Caixa::validate_*`] cascade onto one substrate-
+// primitive family per typed variant — the direct sibling on the
+// [`ManifestError`] envelope of the peer
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b, 7 variants
+// on `AplicacaoError` at `MembroCaixaInvalid` / `EntradaParaInvalid` /
+// `EntradaHostInvalid` / `EntradaPathInvalid` / `PlacementClusterInvalid` /
+// `PlacementAffinityInvalid` / `ShardKeyInvalid`) on the M3 mesh side, and
+// of the peer [`crate::dep::dep_nome_axis_reason_ctors!`] (5621f8a,
+// 3 variants on `DepError` at `VersaoInvalid` / `FonteRepoShape` /
+// `CaracteristicaInvalid`) on the sibling `:deps` envelope's mirror-
+// symmetric `{ nome: String, <axis>: String, reason: String }` three-slot
+// shape (the `nome` axis added at the per-dep-owned altitude). Every one
+// of the peer four-family `LayoutError` ctor set
+// ([`crate::layout::layout_violation_ctors!`] 131ca0d — 16 variants on
+// `{ caixa, issue }`, [`crate::layout::layout_slot_kind_ctors!`] 0419438
+// — 4 variants on `{ caixa, kind, slots }`,
+// [`crate::LayoutError::missing_entry`] 1b09f9d — 1 variant on
+// `{ kind, path }`, [`crate::layout::layout_nome_only_ctors!`] 3fe3dd7 —
+// 6 variants on `<Variant>(String)`) and the peer three
+// [`crate::limits::limits_codec_value_*_ctors!`] codec families (81c856c)
+// each carry the same discipline on their sibling envelopes.
+//
+// The nine variants share the identical `{ <field>: String,
+// reason: String }` two-slot shape:
+//   - `NomeInvalid { nome, reason }` at [`Caixa::validate_nome`]
+//     (`|reason| ManifestError::NomeInvalid { nome: nome.to_string(),
+//     reason }` inside [`crate::render::require_valid_dns_1123_label`]'s
+//     `on_invalid` bracket-closure slot);
+//   - `NomeChartNameBudgetExceeded { nome, reason }` at
+//     [`Caixa::validate_nome_chart_name_budget`]
+//     (`|reason| ManifestError::NomeChartNameBudgetExceeded { nome:
+//     nome.to_string(), reason }` after
+//     [`crate::render::is_lareira_chart_name_shape`] rejects the offending
+//     `:nome`);
+//   - `VersaoInvalid { versao, reason }` at [`Caixa::validate_versao`]
+//     (`|e| ManifestError::VersaoInvalid { versao: versao.to_string(),
+//     reason: e.to_string() }` after [`semver::Version::parse`] rejects
+//     the offending `:versao`);
+//   - `EtiquetaInvalid { etiqueta, reason }` at
+//     [`Caixa::validate_etiquetas`]
+//     (`|reason| ManifestError::EtiquetaInvalid { etiqueta:
+//     etiqueta.clone(), reason }` after
+//     [`crate::render::is_chart_keyword_shape`] rejects the offending
+//     `:etiquetas` entry);
+//   - `AutorInvalid { autor, reason }` at [`Caixa::validate_autores`]
+//     (`|reason| ManifestError::AutorInvalid { autor: autor.clone(),
+//     reason }` after [`crate::render::is_chart_maintainer_name_shape`]
+//     rejects the offending `:autores` entry);
+//   - `RepositorioInvalid { repositorio, reason }` at
+//     [`Caixa::validate_repositorio`]
+//     (`|reason| ManifestError::RepositorioInvalid { repositorio:
+//     s.to_string(), reason }` after
+//     [`crate::render::is_git_repo_url`] rejects the offending
+//     `:repositorio`);
+//   - `DescricaoInvalid { descricao, reason }` at
+//     [`Caixa::validate_descricao`]
+//     (`|reason| ManifestError::DescricaoInvalid { descricao:
+//     s.to_string(), reason }` after
+//     [`crate::render::is_chart_description_shape`] rejects the offending
+//     `:descricao`);
+//   - `LicencaInvalid { licenca, reason }` at [`Caixa::validate_licenca`]
+//     (`|reason| ManifestError::LicencaInvalid { licenca: s.to_string(),
+//     reason }` after [`crate::render::is_spdx_expression_shape`] rejects
+//     the offending `:licenca`);
+//   - `EdicaoInvalid { edicao, reason }` at [`Caixa::validate_edicao`]
+//     (`return Err(ManifestError::EdicaoInvalid { edicao: s.to_string(),
+//     reason: "must be a 4-digit ASCII decimal year (canonical
+//     \"2026\")".to_string() })` on the direct year-shape arm).
+//
+// Each opened the identical four-line
+// `ManifestError::<Variant> { <field>: <val>.to_string() | .clone(),
+// reason: <expr> }` struct-literal against the caller-side `<field>: &str`
+// / `<field>: &String` local — the exact "same block re-inlined at every
+// consumer" shape the PRIME DIRECTIVE names as a bug, on the same altitude
+// the peer `aplicacao_field_reason_ctors!` / `dep_nome_axis_reason_ctors!`
+// / `LayoutError` / `LimitsError` / `BehaviorError` / `UpgradeError`
+// families each closed on their sibling envelopes.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(<field>: &str, reason: impl Into<String>)
+// -> Self`, collapsing every site onto one dispatch per arm:
+// `ManifestError::<ctor>(<val>, <reason>)`, byte-equal to the pre-lift
+// struct-literal on the same `(<field>, reason)` pair. The uniform
+// two-field construction (`<field>: <field>.to_string()`,
+// `reason: reason.into()`) is spelled once — inside the macro — rather
+// than at every wire-up site. The `reason: impl Into<String>` bound
+// accepts owned `String` (the parser-shaped reason every predicate
+// returns via `Result<(), String>`; the `e.to_string()` result the
+// `semver::Version::parse` arm passes; the literal `"…".to_string()` the
+// `EdicaoInvalid` direct arm passes), `&str` literals, and `format!(…)`
+// outputs verbatim so no wire-up site changes its per-arm diagnostic
+// shape at the lift, matching the peer
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] and
+// [`crate::dep::dep_nome_axis_reason_ctors!`] bounds on the sibling
+// two- and three-slot envelopes. The `<field>: &str` parameter accepts
+// both `&str` (from the [`Caixa::nome`] / [`Caixa::versao`] /
+// [`Caixa::repositorio`] / [`Caixa::descricao`] / [`Caixa::licenca`] /
+// [`Caixa::edicao`] accessors) and `&String` (from the
+// [`Caixa::etiquetas`] / [`Caixa::autores`] slice iterators) via Deref
+// coercion, so every existing wire-up threads through the ctor without a
+// pre-conversion. `#[must_use]` fires a compile warning at any wire-up
+// that mistakenly discards the constructed error rather than routing it
+// through `return Err(…)` / `.map_err(…)` / a closure return.
+//
+// Every future consumer that wants to construct one of these nine
+// variants outside the current in-crate wire-up sites (a deferred
+// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's per-manifest-axis
+// admission validators re-checking each declared identity / metadata
+// axis against a cluster-local snapshot, a future `feira validate
+// --manifest` per-caixa admission verb re-running the same
+// value-shape gates on demand, a per-lacre overlay resolver rejecting
+// an author-supplied manifest override against a cluster-local snapshot
+// the M4 CR materializer projects, a future
+// `caixa-registry` per-lacre re-validator at lacre-resolve time
+// re-checking each declared axis against the same predicates) now
+// reaches each variant through one call rather than re-inlining the
+// four-line struct-literal in lockstep with the nine in-crate wire-up
+// sites.
+macro_rules! manifest_field_reason_ctors {
+    ($($ctor:ident => $variant:ident { $field:ident }),* $(,)?) => {
+        impl ManifestError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`ManifestError::",
+                    stringify!($variant),
+                    "`] naming the offending `",
+                    stringify!($field),
+                    "` under the given `reason`. Folds the uniform ",
+                    "`Self::",
+                    stringify!($variant),
+                    " { ",
+                    stringify!($field),
+                    ": ",
+                    stringify!($field),
+                    ".to_string(), reason: reason.into() }` two-slot ",
+                    "construction onto one substrate primitive so every ",
+                    "wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift four-line struct-literal ",
+                    "block. `reason` accepts owned `String`, `&str` ",
+                    "literals, and `format!(…)` outputs through the ",
+                    "`impl Into<String>` bound; the `",
+                    stringify!($field),
+                    ": &str` parameter accepts both `&str` and `&String` ",
+                    "via Deref coercion."
+                )]
+                #[must_use]
+                pub fn $ctor($field: &str, reason: impl Into<String>) -> Self {
+                    Self::$variant {
+                        $field: $field.to_string(),
+                        reason: reason.into(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+manifest_field_reason_ctors! {
+    nome_invalid => NomeInvalid { nome },
+    nome_chart_name_budget_exceeded => NomeChartNameBudgetExceeded { nome },
+    versao_invalid => VersaoInvalid { versao },
+    etiqueta_invalid => EtiquetaInvalid { etiqueta },
+    autor_invalid => AutorInvalid { autor },
+    repositorio_invalid => RepositorioInvalid { repositorio },
+    descricao_invalid => DescricaoInvalid { descricao },
+    licenca_invalid => LicencaInvalid { licenca },
+    edicao_invalid => EdicaoInvalid { edicao },
 }
 
 #[cfg(test)]
@@ -23141,5 +23285,272 @@ mod tests {
                  downstream diagnostic-shape mismatch",
             );
         }
+    }
+
+    // ── `manifest_field_reason_ctors!` — the paired `{ <field>: String,
+    //    reason: String }` two-slot envelope on `ManifestError`, direct
+    //    sibling of the peer
+    //    [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b)
+    //    on the M3 mesh `AplicacaoError` envelope's identical two-slot
+    //    shape and of the peer [`crate::dep::dep_nome_axis_reason_ctors!`]
+    //    (5621f8a) on the sibling `:deps` envelope's mirror-symmetric
+    //    three-slot shape (the `nome` axis added at the per-dep-owned
+    //    altitude). Nine-variant lift closing the nine open-coded ctor
+    //    sites at the per-axis [`Caixa::validate_*`] cascade.
+
+    #[test]
+    fn nome_invalid_ctor_matches_struct_literal_wrap() {
+        let nome = "cart-svc";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::nome_invalid(nome, reason),
+            ManifestError::NomeInvalid {
+                nome: nome.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated nome_invalid ctor must produce byte-equal \
+             `ManifestError::NomeInvalid` to the pre-lift struct-literal \
+             wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn nome_chart_name_budget_exceeded_ctor_matches_struct_literal_wrap() {
+        let nome = "a-very-long-cart-service-name";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::nome_chart_name_budget_exceeded(nome, reason),
+            ManifestError::NomeChartNameBudgetExceeded {
+                nome: nome.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated nome_chart_name_budget_exceeded ctor must produce \
+             byte-equal `ManifestError::NomeChartNameBudgetExceeded` to \
+             the pre-lift struct-literal wrap on the same `(&str, &str)` \
+             fixture",
+        );
+    }
+
+    #[test]
+    fn versao_invalid_ctor_matches_struct_literal_wrap() {
+        let versao = "0.1";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::versao_invalid(versao, reason),
+            ManifestError::VersaoInvalid {
+                versao: versao.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated versao_invalid ctor must produce byte-equal \
+             `ManifestError::VersaoInvalid` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn etiqueta_invalid_ctor_matches_struct_literal_wrap() {
+        let etiqueta = "MyKeyword";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::etiqueta_invalid(etiqueta, reason),
+            ManifestError::EtiquetaInvalid {
+                etiqueta: etiqueta.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated etiqueta_invalid ctor must produce byte-equal \
+             `ManifestError::EtiquetaInvalid` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn autor_invalid_ctor_matches_struct_literal_wrap() {
+        let autor = "Ada Lovelace";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::autor_invalid(autor, reason),
+            ManifestError::AutorInvalid {
+                autor: autor.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated autor_invalid ctor must produce byte-equal \
+             `ManifestError::AutorInvalid` to the pre-lift struct-literal \
+             wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn repositorio_invalid_ctor_matches_struct_literal_wrap() {
+        let repositorio = "https://example.com/no-dot-git";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::repositorio_invalid(repositorio, reason),
+            ManifestError::RepositorioInvalid {
+                repositorio: repositorio.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated repositorio_invalid ctor must produce byte-equal \
+             `ManifestError::RepositorioInvalid` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn descricao_invalid_ctor_matches_struct_literal_wrap() {
+        let descricao = "some description";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::descricao_invalid(descricao, reason),
+            ManifestError::DescricaoInvalid {
+                descricao: descricao.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated descricao_invalid ctor must produce byte-equal \
+             `ManifestError::DescricaoInvalid` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn licenca_invalid_ctor_matches_struct_literal_wrap() {
+        let licenca = "not-an-spdx";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::licenca_invalid(licenca, reason),
+            ManifestError::LicencaInvalid {
+                licenca: licenca.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated licenca_invalid ctor must produce byte-equal \
+             `ManifestError::LicencaInvalid` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    #[test]
+    fn edicao_invalid_ctor_matches_struct_literal_wrap() {
+        let edicao = "26";
+        let reason = "sample reason text";
+        assert_eq!(
+            ManifestError::edicao_invalid(edicao, reason),
+            ManifestError::EdicaoInvalid {
+                edicao: edicao.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated edicao_invalid ctor must produce byte-equal \
+             `ManifestError::EdicaoInvalid` to the pre-lift \
+             struct-literal wrap on the same `(&str, &str)` fixture",
+        );
+    }
+
+    // Cross-family invariance pin — the nine sibling ctors all route
+    // `reason: impl Into<String>` + `<field>: &str` verbatim onto their
+    // respective typed variants through the shared
+    // [`manifest_field_reason_ctors!`] macro. Sweeps three fixture
+    // shapes for `reason` (`&str` literal, owned `String`, `format!(…)`
+    // output — the three shapes every in-crate wire-up threads through:
+    // the parser-shaped `String` every `Result<(), String>` predicate
+    // returns, the `e.to_string()` owned `String` the
+    // `semver::Version::parse` arm passes, and the literal-shape reason
+    // the `EdicaoInvalid` direct arm passes) against every generated arm
+    // so any per-arm wrapper transformation drift surfaces here rather
+    // than at a downstream diagnostic-shape mismatch. Peer of the
+    // sibling
+    // [`crate::aplicacao::tests::aplicacao_field_reason_ctors_route_reason_through_into_uniformly`]
+    // pin (981060b) on the sibling `AplicacaoError` envelope's identical
+    // two-slot family.
+    #[test]
+    fn manifest_field_reason_ctors_route_reason_through_into_uniformly() {
+        let via_literal = "literal reason text";
+        let via_owned: String = String::from("literal reason text");
+        let via_format = format!("{} reason text", "literal");
+        assert_eq!(
+            ManifestError::nome_invalid("n", via_literal),
+            ManifestError::nome_invalid("n", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::nome_invalid("n", via_literal),
+            ManifestError::nome_invalid("n", via_format.clone()),
+        );
+        assert_eq!(
+            ManifestError::nome_chart_name_budget_exceeded("n", via_literal),
+            ManifestError::nome_chart_name_budget_exceeded("n", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::versao_invalid("0.1", via_literal),
+            ManifestError::versao_invalid("0.1", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::etiqueta_invalid("k", via_literal),
+            ManifestError::etiqueta_invalid("k", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::autor_invalid("a", via_literal),
+            ManifestError::autor_invalid("a", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::repositorio_invalid("r", via_literal),
+            ManifestError::repositorio_invalid("r", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::descricao_invalid("d", via_literal),
+            ManifestError::descricao_invalid("d", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::licenca_invalid("l", via_literal),
+            ManifestError::licenca_invalid("l", via_owned.clone()),
+        );
+        assert_eq!(
+            ManifestError::edicao_invalid("26", via_literal),
+            ManifestError::edicao_invalid("26", via_owned),
+        );
+        assert_eq!(
+            ManifestError::edicao_invalid("26", via_literal),
+            ManifestError::edicao_invalid("26", via_format),
+        );
+    }
+
+    // Cross-arm routing pin — the nine sibling ctors accept both `&str`
+    // (from the [`Caixa::nome`] / [`Caixa::versao`] / [`Caixa::repositorio`]
+    // / [`Caixa::descricao`] / [`Caixa::licenca`] / [`Caixa::edicao`]
+    // accessors that return `&str`) and `&String` (from the
+    // [`Caixa::etiquetas`] / [`Caixa::autores`] slice iterators that yield
+    // `&String`) at the `<field>: &str` parameter via Deref coercion. This
+    // pin sweeps both call shapes against the two accessors' actual
+    // wire-up postures so a future rebrand of the etiquetas / autores
+    // slice-iterator type (a lift from `&[String]` to `&[Cow<'_, str>]`,
+    // a `smol_str::SmolStr` per-entry swap) that silently broke the
+    // Deref-coercion path surfaces at this pin rather than at a
+    // recompile-time type-mismatch far from the ctor family.
+    #[test]
+    fn manifest_field_reason_ctors_accept_both_str_and_string_slice_iters() {
+        let owned: String = String::from("MyKeyword");
+        // `&str` literal — the canonical accessor-return shape
+        // ([`Caixa::nome`] etc. yield `&str`).
+        assert_eq!(
+            ManifestError::etiqueta_invalid("MyKeyword", "r"),
+            ManifestError::EtiquetaInvalid {
+                etiqueta: "MyKeyword".to_string(),
+                reason: "r".to_string(),
+            },
+        );
+        // `&String` — the canonical slice-iterator-yield shape
+        // ([`Caixa::etiquetas`] / [`Caixa::autores`] yield `&String`).
+        assert_eq!(
+            ManifestError::etiqueta_invalid(&owned, "r"),
+            ManifestError::EtiquetaInvalid {
+                etiqueta: owned.clone(),
+                reason: "r".to_string(),
+            },
+        );
+        // Both call shapes must produce byte-equal
+        // [`ManifestError::EtiquetaInvalid`] values on the same
+        // underlying `String`, so a wire-up threading `etiqueta: &String`
+        // through the same ctor as a peer wire-up threading `nome: &str`
+        // through it collapses onto one canonical shape.
+        assert_eq!(
+            ManifestError::etiqueta_invalid("MyKeyword", "r"),
+            ManifestError::etiqueta_invalid(&owned, "r"),
+        );
     }
 }
