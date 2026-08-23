@@ -377,23 +377,13 @@ impl DepSource {
                     if let Some(v) = value
                         && let Err(reason) = crate::render::is_git_ref_name(v)
                     {
-                        return Err(DepError::FontePinShape {
-                            nome: nome.to_string(),
-                            pin: pin.to_string(),
-                            value: v.clone(),
-                            reason,
-                        });
+                        return Err(DepError::fonte_pin_shape(nome, pin, v, reason));
                     }
                 }
                 if let Some(v) = rev.as_ref()
                     && let Err(reason) = crate::render::is_git_oid(v)
                 {
-                    return Err(DepError::FontePinShape {
-                        nome: nome.to_string(),
-                        pin: ":rev".to_string(),
-                        value: v.clone(),
-                        reason,
-                    });
+                    return Err(DepError::fonte_pin_shape(nome, ":rev", v, reason));
                 }
                 Ok(())
             }
@@ -4680,6 +4670,103 @@ macro_rules! dep_nome_list_ctors {
 dep_nome_list_ctors! {
     duplicate_nome => DuplicateNome,
     dep_is_self => DepIsSelf,
+}
+
+// Fold the two `DepError::FontePinShape { nome: nome.to_string(),
+// pin: <pin>.to_string(), value: v.clone(), reason }` four-slot
+// struct-variant wire-up sites at [`DepSource::validate`]'s
+// per-`:fonte` git-pin value-shape gate onto one substrate primitive on
+// the `DepError` envelope — the last open-coded ctor site remaining on
+// the `:fonte (:tipo git …)` value-shape trajectory this envelope
+// carries, and the single-variant sibling of the peer four already-
+// lifted [`DepError`] ctor families ([`fonte_caminho_ctors!`] f85f145
+// on the two-slot `{ nome, caminho }` envelope,
+// [`fonte_caminho_byte_ctors!`] 0e35793 on the three-slot
+// `{ nome, caminho, byte }` envelope, [`dep_nome_only_ctors!`] 792aa92
+// on the one-slot `{ nome }` envelope, and [`dep_nome_list_ctors!`]
+// 6f5e0cd on the two-slot `{ nome, list }` envelope). Peer of the
+// sibling [`crate::aplicacao::contrato_pair_value_reason_ctors!`]
+// (14e13f1) four-slot fold on the `AplicacaoError` envelope — same
+// `{ …, value: String, reason: String }` payload shape, one axis
+// removed at the `nome`-only-owner altitude the `DepError` envelope
+// keys off (no `edge_pair()` de/para pair).
+//
+// The two wire-up sites this fold closes are the paired refname-pin
+// arm (`|| DepError::FontePinShape { nome: nome.to_string(),
+// pin: pin.to_string(), value: v.clone(), reason }` inside the
+// `[(":tag", tag), (":branch", branch)]` iterator against
+// [`crate::render::is_git_ref_name`]) and the hex-OID-pin arm
+// (`|| DepError::FontePinShape { nome: nome.to_string(),
+// pin: ":rev".to_string(), value: v.clone(), reason }` against
+// [`crate::render::is_git_oid`]) — each opened the identical
+// `DepError::FontePinShape { … }` six-line struct-literal against the
+// same `(nome: &str, pin: &str, v: &String, reason: String)` local
+// tuple, the exact "same block re-inlined at every consumer" shape
+// the PRIME DIRECTIVE names as a bug. The `pin` axis discriminator is
+// the only thing that varies between them (`":tag"`/`":branch"` on
+// the refname arm, `":rev"` on the hex-OID arm); the rest of the
+// struct-literal is a byte-for-byte re-inline. Refname/hex-OID both
+// route through the same ctor because their `pin` field carries the
+// author-surface tag verbatim (matching the `FontePinEmpty` /
+// `FontePinAmbiguous` sibling variants' `pin: String` axis
+// convention), so the offending author can grep their caixa.lisp for
+// the offending `:tag "<value>"` / `:branch "<value>"` /
+// `:rev "<value>"` literal in one edit.
+//
+// The single ctor below folds each wire-up onto one dispatch:
+// `DepError::fonte_pin_shape(nome, pin, v, reason)`, byte-equal to
+// the pre-lift struct-literal on the same `(&str, &str, &str,
+// String)` fixture. The uniform four-field construction
+// (`nome.to_string()` / `pin.to_string()` / `value.to_string()` /
+// `reason` forwarded owned) is spelled once here rather than at every
+// wire-up site. The `reason: String` field takes an owned `String`
+// (not `impl Into<String>`) matching the two call sites' pre-existing
+// `let Err(reason) = crate::render::is_git_ref_name(v)` /
+// `let Err(reason) = crate::render::is_git_oid(v)` shape — both
+// predicates return `Result<(), String>`, so the caller always holds
+// an owned `String` at the wire-up site and threading it through the
+// ctor without a `.into()` shim keeps the routing shape byte-equal to
+// the pre-lift block. The `value: &str` parameter accepts both `&str`
+// literals (unused today) and `&String` (from the caller-held
+// `v: &String` on each arm, via Deref coercion), so every existing
+// wire-up threads through the ctor without a pre-conversion.
+//
+// Every future consumer that wants to construct this variant outside
+// the two in-crate [`DepSource::validate`] wire-up sites (a deferred
+// `caixa-resolver` per-`:fonte` re-validator at lacre-resolve time
+// re-checking the same value-shape axes the resolver consumes, a
+// future `feira validate --deps` per-caixa admission verb re-checking
+// the `:fonte :tag`/`:branch`/`:rev` axes, a per-lacre overlay
+// resolver rejecting a git-pin value against a cluster-local
+// snapshot) now reaches this variant through one call rather than
+// re-inlining the six-line struct-literal in lockstep with the two
+// in-crate wire-up sites.
+impl DepError {
+    /// Construct a [`DepError::FontePinShape`] naming the offending
+    /// `:deps :nome`, the offending `:fonte (:tipo git …) :<pin>`
+    /// axis tag, the offending value, and the parser-shaped `reason`.
+    /// Folds the uniform
+    /// `Self::FontePinShape { nome: nome.to_string(),
+    /// pin: pin.to_string(), value: value.to_string(), reason }`
+    /// four-field struct-literal onto one substrate primitive so
+    /// every [`DepSource::validate`] wire-up on this variant reads
+    /// through one dispatch rather than the pre-lift six-line
+    /// open-coded block. The `nome` string threads verbatim from
+    /// [`Dep::nome`] at the call site; the `pin` string carries the
+    /// author-surface `:tag` / `:branch` / `:rev` tag verbatim; the
+    /// `value` string carries the offending refname / hex-OID
+    /// verbatim; and `reason` forwards the owned `String` returned
+    /// by [`crate::render::is_git_ref_name`] /
+    /// [`crate::render::is_git_oid`] without a `.into()` shim.
+    #[must_use]
+    pub fn fonte_pin_shape(nome: &str, pin: &str, value: &str, reason: String) -> Self {
+        Self::FontePinShape {
+            nome: nome.to_string(),
+            pin: pin.to_string(),
+            value: value.to_string(),
+            reason,
+        }
+    }
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -16665,6 +16752,121 @@ mod tests {
                  downstream diagnostic-shape mismatch",
             );
         }
+    }
+
+    // ── `fonte_pin_shape` — the paired `{ nome: String, pin: String,
+    //    value: String, reason: String }` four-slot envelope on
+    //    `DepError`, sibling of the peer `dep_nome_only_ctors!` (792aa92),
+    //    `dep_nome_list_ctors!` (6f5e0cd), `fonte_caminho_ctors!` (f85f145),
+    //    and `fonte_caminho_byte_ctors!` (0e35793) folds on the same
+    //    envelope, and of the peer `contrato_pair_value_reason_ctors!`
+    //    (14e13f1) four-slot fold on the sibling `AplicacaoError`
+    //    envelope. Single-variant lift closing the last open-coded ctor
+    //    site on the `:fonte (:tipo git …)` value-shape trajectory.
+
+    #[test]
+    fn fonte_pin_shape_ctor_matches_struct_literal_wrap() {
+        // Pre-lift equivalence pin on the [`DepError::fonte_pin_shape`]
+        // ctor: sweep both wire-up-shape arms (the refname-pin arm
+        // routing `":tag"` / `":branch"` value through
+        // [`crate::render::is_git_ref_name`], and the hex-OID-pin arm
+        // routing `":rev"` through [`crate::render::is_git_oid`]) and
+        // assert byte-equal `PartialEq` against the pre-lift
+        // struct-literal, so any wrapper-side field-rename /
+        // silent-conversion regression surfaces here rather than at a
+        // downstream diagnostic-shape mismatch. Peer of the sibling
+        // per-envelope byte-equal ctor pins
+        // ([`fonte_pin_missing_ctor_matches_struct_literal_wrap`],
+        // [`duplicate_nome_ctor_matches_struct_literal_wrap`],
+        // [`dep_is_self_ctor_matches_struct_literal_wrap`]).
+        assert_eq!(
+            DepError::fonte_pin_shape(
+                "caixa-teia",
+                ":tag",
+                "v0.1.0 ",
+                "trailing whitespace".to_string(),
+            ),
+            DepError::FontePinShape {
+                nome: "caixa-teia".to_string(),
+                pin: ":tag".to_string(),
+                value: "v0.1.0 ".to_string(),
+                reason: "trailing whitespace".to_string(),
+            },
+            "fonte_pin_shape ctor must produce byte-equal \
+             `DepError::FontePinShape` to the pre-lift struct-literal \
+             wrap on a refname-pin (`:tag` / `:branch`) fixture",
+        );
+        assert_eq!(
+            DepError::fonte_pin_shape(
+                "caixa-teia",
+                ":rev",
+                "DEADBEEF",
+                "abbreviated OID rejected".to_string(),
+            ),
+            DepError::FontePinShape {
+                nome: "caixa-teia".to_string(),
+                pin: ":rev".to_string(),
+                value: "DEADBEEF".to_string(),
+                reason: "abbreviated OID rejected".to_string(),
+            },
+            "fonte_pin_shape ctor must produce byte-equal \
+             `DepError::FontePinShape` to the pre-lift struct-literal \
+             wrap on a hex-OID-pin (`:rev`) fixture",
+        );
+    }
+
+    #[test]
+    fn fonte_pin_shape_ctor_routes_all_four_axes_through_to_string() {
+        // Cross-axis routing pin: sweep every one of the four
+        // constructor input axes (`nome: &str`, `pin: &str`,
+        // `value: &str`, `reason: String`) through non-default
+        // fixtures against the [`DepError::fonte_pin_shape`] ctor, so
+        // any wrapper-side lowercase / trim / truncate at codegen time
+        // — or a silent field re-name / axis-swap on any one of the
+        // four fields, or a `reason` axis silently routed through
+        // `.to_string()` instead of forwarded owned — surfaces here
+        // rather than at a downstream diagnostic-shape mismatch. Peer
+        // of the sibling
+        // `dep_nome_only_ctors_route_nome_through_to_string` pin
+        // (792aa92) and
+        // `dep_nome_list_ctors_route_nome_and_list_through_uniformly`
+        // pin (6f5e0cd) on the same envelope's one- and two-slot
+        // families. Distinct-per-axis fixtures rule out any two-axis
+        // swap (`nome` ↔ `pin`, `pin` ↔ `value`, `value` ↔ `reason`,
+        // etc.) that would still pass a same-fixture-per-axis pin.
+        let nome = "sibling-teia";
+        let pin = ":branch";
+        let value = "feature/bar";
+        let reason = "embedded space".to_string();
+        let via_ctor = DepError::fonte_pin_shape(nome, pin, value, reason.clone());
+        let via_struct_literal = DepError::FontePinShape {
+            nome: nome.to_string(),
+            pin: pin.to_string(),
+            value: value.to_string(),
+            reason: reason.clone(),
+        };
+        assert_eq!(
+            via_ctor, via_struct_literal,
+            "fonte_pin_shape ctor must route `nome` / `pin` / `value` \
+             through `.to_string()` onto their canonical fields and \
+             forward `reason` owned onto the canonical `reason` field \
+             — a field-rename, silent-conversion, or axis-swap \
+             regression surfaces here rather than at a downstream \
+             diagnostic-shape mismatch",
+        );
+        let DepError::FontePinShape {
+            nome: n,
+            pin: p,
+            value: v,
+            reason: r,
+        } = via_ctor
+        else {
+            panic!("fonte_pin_shape ctor produced non-FontePinShape variant")
+        };
+        assert_eq!(n, nome);
+        assert_eq!(p, pin);
+        assert_eq!(v, value);
+        assert_eq!(r, reason);
     }
 
     // ── `fonte_caminho_byte_ctors!` — the paired `{ nome: String,
