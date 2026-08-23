@@ -1536,12 +1536,10 @@ impl WitContract {
                 return Err(AplicacaoError::contrato_endpoint_empty(self.edge_pair()));
             }
             if !ep.starts_with('/') {
-                let (de, para) = self.edge_pair();
-                return Err(AplicacaoError::ContratoEndpointNotAbsolute {
-                    de,
-                    para,
-                    endpoint: ep.to_string(),
-                });
+                return Err(AplicacaoError::contrato_endpoint_not_absolute(
+                    self.edge_pair(),
+                    ep,
+                ));
             }
             // The `:endpoint` lands verbatim as a Cilium L7 `path:` rule
             // (caixa-mesh/src/lib.rs:311) and shares the K8s Gateway
@@ -9379,6 +9377,109 @@ contrato_empty_pair_ctors! {
     contrato_endpoint_empty => ContratoEndpointEmpty,
     contrato_subject_empty => ContratoSubjectEmpty,
     contrato_slot_empty => ContratoSlotEmpty,
+}
+
+// Fold the last open-coded `AplicacaoError::ContratoEndpointNotAbsolute
+// { de, para, endpoint: <val>.to_string() }` three-slot struct-literal
+// wire-up site at [`WitContract::target`]'s HTTP-arm leading-slash gate
+// onto one substrate primitive on [`AplicacaoError`] — sibling on the
+// `{ de: String, para: String, <field>: String }` three-slot envelope of
+// the peer [`contrato_empty_pair_ctors!`] macro just above (8580068, four
+// variants on the paired `{ de, para }` two-slot envelope carrying the
+// same `let (de, para) = <contract>.edge_pair(); return Err(<Variant>
+// { de, para });` pair-destructure prelude), the peer four-slot
+// [`contrato_pair_value_reason_ctors!`] macro (14e13f1, four variants on
+// the paired `{ de, para, <field>: String, reason: String }` envelope
+// carrying the parser-shaped `reason` trailer), and the peer four-slot
+// [`contrato_target_ctors!`] macro (14b81d5, two variants on the paired
+// `{ de, para, wit, expected: &'static str }` envelope carrying the
+// canonical target-field-name label). The `ContratoEndpointNotAbsolute`
+// variant is the sole occupant of the three-slot `{ de, para, <field>:
+// String }` shape on [`AplicacaoError`] (no sibling
+// `ContratoSubjectNotAbsolute` / `ContratoSlotNotAbsolute` — the `:subject`
+// and `:slot` axes carry no "must start with /" invariant, since the
+// NATS subject grammar and the WASI keyvalue slot template grammar don't
+// share the Gateway-API-HTTPPathMatch leading-slash prelude the
+// `:endpoint` axis does), so a full macro isn't warranted; a single
+// `#[must_use]` inherent ctor matching the ambient
+// `fn <ctor>(edge: (String, String), <field>: &str) -> Self` shape the
+// peer per-`:contratos` ctor families each carry closes the last
+// open-coded three-slot struct-literal on the envelope, matching the
+// same standalone-ctor discipline the sibling
+// [`crate::LayoutError::missing_entry`] (1b09f9d, one variant on the
+// `{ kind: &'static str, path: PathBuf }` two-slot envelope),
+// [`crate::SupervisorError::child_caixa_invalid`] /
+// [`::child_versao_invalid`] (d2ef2ec, two variants on the paired
+// `{ caixa: String, [versao: String,] reason: String }` two- and three-
+// slot envelopes), and [`AplicacaoError::entrada_host_invalid`] (17dd504,
+// one variant on the `{ host: String, reason: String }` two-slot
+// envelope) apply on their sibling one-off variants.
+//
+// The one wire-up site on this variant — [`WitContract::target`]'s
+// HTTP-arm leading-slash gate at `if !ep.starts_with('/')`, one of the
+// six per-`:contratos` value-shape gates inside the same method body,
+// where the other five (`ContratoWrongTarget`, `ContratoMissingTarget`,
+// `ContratoEndpointEmpty`, `ContratoEndpointInvalid`,
+// `ContratoWitInvalid`) each already reach through one of the three
+// peer macro-generated ctor families above — opened the same five-line
+// `let (de, para) = self.edge_pair(); return
+// Err(AplicacaoError::ContratoEndpointNotAbsolute { de, para, endpoint:
+// ep.to_string() });` struct-literal against the local
+// [`WitContract::edge_pair`] composite-projection accessor and the
+// caller-side `&str` endpoint — the exact "same block re-inlined at
+// every consumer" shape the PRIME DIRECTIVE names as a bug, on the same
+// altitude the six peer `AplicacaoError` constructor families each
+// closed on their sibling envelopes. Every guarantee in MESH-COMPOSITION
+// §III.3 (a `:contratos :endpoint` value that doesn't start with `/`
+// becomes a caixa-build error, not a Cilium L7 policy-side path-match
+// silent traffic drop far from the source caixa.lisp) now routes through
+// one substrate primitive on the envelope.
+//
+// The ctor below folds the site onto one dispatch:
+// `return Err(AplicacaoError::contrato_endpoint_not_absolute(
+// self.edge_pair(), ep));`, byte-equal to the pre-lift struct-literal
+// on the same `(edge_pair, endpoint)` pair. The uniform three-field
+// construction (`de, para` pair-destructure onto same-named fields +
+// `endpoint: endpoint.to_string()`) is spelled once — inside the ctor
+// body — rather than at the wire-up site. `#[must_use]` fires a compile
+// warning at any future wire-up that mistakenly discards the constructed
+// error.
+//
+// Every future consumer that wants to construct this variant outside
+// [`WitContract::target`] (a deferred `mesh.pleme.io/v1alpha1/Aplicacao`
+// CR materializer's per-`:contratos` admission validator raising the
+// leading-slash diagnostic on unrecognized `:endpoint` shapes, a future
+// `feira validate --contratos` per-caixa admission verb re-running the
+// leading-slash arm on demand, an M4 typed Cilium L7 rule pre-emitter
+// probing each declared `:endpoint` against the same shared
+// HTTPPathMatch grammar prelude, a per-tenant per-`Aplicacao` overlay
+// resolver rejecting a leading-slash-missing `:endpoint` against a
+// cluster-local Cilium snapshot the M4 CR materializer projects) now
+// reaches this variant through one call rather than re-inlining the
+// five-line pair-destructure + struct-literal block in lockstep with
+// the sole in-crate wire-up site.
+impl AplicacaoError {
+    /// Construct an [`AplicacaoError::ContratoEndpointNotAbsolute`]
+    /// naming the offending edge `(de, para)` pair and the per-payload
+    /// `endpoint` value. Folds the uniform `{ de, para, endpoint:
+    /// endpoint.to_string() }` three-slot struct-literal onto one
+    /// substrate primitive so every wire-up on this variant reads
+    /// through one dispatch rather than the pre-lift five-line
+    /// pair-destructure + struct-literal block. The `edge` pair threads
+    /// verbatim from [`WitContract::edge_pair`] at the call site,
+    /// matching the sibling [`AplicacaoError::contrato_endpoint_empty`] /
+    /// [`AplicacaoError::contrato_endpoint_invalid`] ctors' shape on the
+    /// paired two-slot and four-slot per-`:contratos :endpoint`
+    /// envelopes on the same [`AplicacaoError`] type.
+    #[must_use]
+    pub fn contrato_endpoint_not_absolute(edge: (String, String), endpoint: &str) -> Self {
+        let (de, para) = edge;
+        Self::ContratoEndpointNotAbsolute {
+            de,
+            para,
+            endpoint: endpoint.to_string(),
+        }
+    }
 }
 
 // Fold the seven `AplicacaoError::{MembroCaixa, EntradaPara, EntradaHost,
@@ -32716,6 +32817,100 @@ mod tests {
         assert_eq!(
             AplicacaoError::contrato_wit_invalid(edge(), "wasi:http/proxy", via_literal),
             AplicacaoError::contrato_wit_invalid(edge(), "wasi:http/proxy", via_format),
+        );
+    }
+
+    // ── contrato_endpoint_not_absolute standalone ctor pins ─────────────
+    //
+    // Fail-before-pass-after pins for the standalone
+    // [`AplicacaoError::contrato_endpoint_not_absolute`] inherent ctor
+    // (see the paired doc-block above the ctor definition) — the fold of
+    // the last open-coded three-slot `{ de, para, endpoint: <val>
+    // .to_string() }` struct-literal inside [`WitContract::target`]'s
+    // HTTP-arm leading-slash gate onto one substrate primitive on the
+    // envelope. A byte-mismatched ctor body would trip the equivalence
+    // pin first, ahead of any downstream diagnostic-shape drift.
+    //
+    // Peer of the sibling standalone-ctor equivalence pins on the peer
+    // one-off variants across caixa-core:
+    // `contrato_endpoint_empty_ctor_matches_struct_literal_wrap` +
+    // `contrato_endpoint_invalid_ctor_matches_struct_literal_wrap` above
+    // on the paired two-slot and four-slot per-`:contratos :endpoint`
+    // envelopes; `child_caixa_invalid_ctor_matches_struct_literal_wrap`
+    // and `child_versao_invalid_ctor_matches_struct_literal_wrap`
+    // (d2ef2ec) on the sibling `SupervisorError` `{ caixa, [versao,]
+    // reason }` two- and three-slot envelopes; the
+    // `entrada_host_invalid_ctor_matches_struct_literal_wrap` (17dd504)
+    // pin on the sibling standalone `{ host, reason }` two-slot ctor.
+    fn contrato_endpoint_not_absolute_ctor_fixture() -> (String, String) {
+        ("cart".to_string(), "catalog".to_string())
+    }
+
+    #[test]
+    fn contrato_endpoint_not_absolute_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::ContratoEndpointNotAbsolute` to the pre-lift
+        // open-coded struct-literal on the same `(edge_pair, endpoint)`
+        // pair, so the fold cannot silently drift on any future
+        // field-addition / reordering / string-conversion tweak on the
+        // variant. Same equivalence-pin shape as the sibling
+        // `contrato_endpoint_empty_ctor_matches_struct_literal_wrap`
+        // (8580068) on the paired two-slot envelope and
+        // `contrato_endpoint_invalid_ctor_matches_struct_literal_wrap`
+        // (14e13f1) on the paired four-slot envelope of the same
+        // `{ de, para, ... }`-prefix `:endpoint` axis.
+        let (de, para) = contrato_endpoint_not_absolute_ctor_fixture();
+        let endpoint = "charge";
+        let lifted =
+            AplicacaoError::contrato_endpoint_not_absolute((de.clone(), para.clone()), endpoint);
+        let struct_literal = AplicacaoError::ContratoEndpointNotAbsolute {
+            de,
+            para,
+            endpoint: endpoint.to_string(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_endpoint_not_absolute_ctor_routes_edge_pair_through_verbatim() {
+        // Routing pin on the `(de, para)` axis: sweep a non-default
+        // pair (`"cart-svc" → "catalog-v2"`) so any wrapper-side
+        // lowercase / trim / re-order surfaces here rather than at a
+        // downstream diagnostic-shape drift. Peer of
+        // `contrato_empty_pair_ctors_route_edge_pair_through_verbatim`
+        // (8580068) on the paired two-slot envelope and
+        // `contrato_pair_value_reason_ctors_route_edge_pair_through_verbatim`
+        // (14e13f1) on the paired four-slot envelope of the same
+        // `{ de, para, ... }`-prefix `:contratos` axis.
+        let edge = ("cart-svc".to_string(), "catalog-v2".to_string());
+        let built = AplicacaoError::contrato_endpoint_not_absolute(edge, "charge");
+        match built {
+            AplicacaoError::ContratoEndpointNotAbsolute { de, para, .. } => {
+                assert_eq!(de, "cart-svc", "de field must thread verbatim");
+                assert_eq!(para, "catalog-v2", "para field must thread verbatim");
+            }
+            other => panic!("expected ContratoEndpointNotAbsolute, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn contrato_endpoint_not_absolute_ctor_routes_endpoint_through_to_string() {
+        // Routing pin on the `endpoint: &str` axis: sweep a non-default
+        // value (`"charge"` — no leading `/`, the exact shape the
+        // [`WitContract::target`] HTTP-arm leading-slash gate rejects)
+        // through the sole payload-carrier constructor axis so any
+        // wrapper-side transformation on the `endpoint.to_string()`
+        // one-field construction surfaces here rather than at a
+        // downstream diagnostic-shape mismatch. Sibling of
+        // `contrato_pair_value_reason_ctors_route_reason_through_into_uniformly`
+        // (14e13f1) on the sibling four-slot envelope's payload-carrier
+        // routing pin.
+        let edge = || ("cart".to_string(), "catalog".to_string());
+        let via_literal = "charge";
+        let via_string = String::from("charge");
+        assert_eq!(
+            AplicacaoError::contrato_endpoint_not_absolute(edge(), via_literal),
+            AplicacaoError::contrato_endpoint_not_absolute(edge(), via_string.as_str()),
         );
     }
 
