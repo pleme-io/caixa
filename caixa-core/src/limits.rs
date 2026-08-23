@@ -755,9 +755,9 @@ impl LimitsSpec {
                 LIMITS_MEMORY_WASM32_PAGE_BYTES,
                 LIMITS_MEMORY_WASM32_MAX_BYTES,
                 || LimitsError::MemoryZero,
-                |bytes| LimitsError::MemoryBelowWasm32Page { bytes },
-                |bytes| LimitsError::MemoryExceedsWasm32Cap { bytes },
-                |bytes| LimitsError::MemoryNotPageMultiple { bytes },
+                LimitsError::memory_below_wasm32_page,
+                LimitsError::memory_exceeds_wasm32_cap,
+                LimitsError::memory_not_page_multiple,
             )?;
         }
         // Zero-floor + upper-cap bracket on the typed `:fuel` axis. See
@@ -796,7 +796,7 @@ impl LimitsSpec {
                 f,
                 LIMITS_FUEL_MAX,
                 || LimitsError::FuelZero,
-                |fuel| LimitsError::FuelExceedsCap { fuel },
+                LimitsError::fuel_exceeds_cap,
             )?;
         }
         if let Some(w) = self.wall_clock() {
@@ -819,8 +819,8 @@ impl LimitsSpec {
                 w,
                 LIMITS_WALL_CLOCK_MAX,
                 || LimitsError::WallClockZero,
-                |wall_clock| LimitsError::WallClockNotCanonical { wall_clock },
-                |wall_clock| LimitsError::WallClockExceedsCap { wall_clock },
+                LimitsError::wall_clock_not_canonical,
+                LimitsError::wall_clock_exceeds_cap,
             )?;
         }
         // Zero-floor + upper-cap bracket on the typed `:cpu` axis. See
@@ -858,7 +858,7 @@ impl LimitsSpec {
                 m,
                 LIMITS_CPU_MILLICORES_MAX,
                 || LimitsError::CpuZero,
-                |millicores| LimitsError::CpuExceedsCap { millicores },
+                LimitsError::cpu_exceeds_cap,
             )?;
         }
         Ok(())
@@ -1940,6 +1940,116 @@ limits_codec_value_char_ctors! {
     non_ascii_whitespace_in_byte_size => NonAsciiWhitespaceInByteSize,
     non_ascii_whitespace_in_duration => NonAsciiWhitespaceInDuration,
     non_ascii_whitespace_in_millicores => NonAsciiWhitespaceInMillicores,
+}
+
+// Fold the seven `LimitsError::<Variant> { <field>: <Copy> }` one-field
+// `Copy`-scalar struct-variant wire-up sites at [`LimitsSpec::validate`]'s
+// four typed-axis bracket cascades — three closure-slots at the
+// [`crate::render::require_positive_quantum_multiple_bounded_u64`] `:memory`
+// axis (`MemoryBelowWasm32Page { bytes }`, `MemoryExceedsWasm32Cap { bytes }`,
+// `MemoryNotPageMultiple { bytes }`), one at the
+// [`crate::render::require_positive_bounded_u64`] `:fuel` axis
+// (`FuelExceedsCap { fuel }`), two at the
+// [`crate::render::require_positive_canonical_bounded_duration`]
+// `:wall-clock` axis (`WallClockNotCanonical { wall_clock }`,
+// `WallClockExceedsCap { wall_clock }`), and one at the
+// [`crate::render::require_positive_bounded_u32`] `:cpu` axis
+// (`CpuExceedsCap { millicores }`) — onto one substrate primitive per typed
+// variant, matching the sibling
+// [`crate::supervisor::supervisor_scalar_ctors!`] macro (f0f77a2, 4 variants
+// on the same `{ <field>: RestartStrategy | u32 | Duration }` shape) and the
+// peer [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] macro (7ef425e,
+// 8 variants on the same `{ <field>: Duration | u32 }` shape) at that
+// discipline on the sibling `SupervisorError` per-`:supervisor` scalar axis
+// and the peer `AplicacaoError` per-`:politicas` scalar axis. Every variant
+// is a one-field `Copy`-pass-through struct-literal — `u64 | u32 |
+// Duration` — so the fold routes each wire-up site through one dispatch per
+// typed variant without a runtime-work delta. Last unlifted per-`:limits`
+// scalar `LimitsError` variant family folded onto a substrate primitive;
+// every M2 `LimitsSpec::validate` per-axis bracket-closure slot now reaches
+// for a bare-function-pointer `LimitsError::<ctor>` in place of the pre-lift
+// open-coded `|<field>| LimitsError::<Variant> { <field> }` one-line
+// closure over the same one-field struct-literal.
+//
+// Each of the seven wire-up sites opened the identical
+// `|<field>| LimitsError::<Variant> { <field> }` bracket-closure — the exact
+// "same block re-inlined at every consumer" shape the PRIME DIRECTIVE names
+// as a bug, on the same altitude the peer `supervisor_scalar_ctors!` /
+// `aplicacao_policy_scalar_ctors!` folds each closed on the sibling
+// `SupervisorError` / `AplicacaoError` envelopes' per-axis cap /
+// canonical-form / below-quantum arms. The seven variants share one
+// `{ <field>: <Copy> }` shape, so the fold routes each wire-up site through
+// one dispatch per typed variant.
+//
+// The macro below generates one static constructor per variant of shape
+// `const fn <ctor>(<field>: <ty>) -> LimitsError`, so every wire-up site
+// collapses onto one dispatch: `LimitsError::<ctor>(<val>)`, byte-equal to
+// the pre-lift struct-literal on the same `Copy`-`<ty>` fixture — as a bare
+// function pointer in the `impl FnOnce(<ty>) -> LimitsError` bracket-
+// closure slot every [`crate::render::require_positive_bounded_u32`] /
+// [`crate::render::require_positive_bounded_u64`] /
+// [`crate::render::require_positive_canonical_bounded_duration`] /
+// [`crate::render::require_positive_quantum_multiple_bounded_u64`] gate
+// carries — rather than the pre-lift open-coded one-line closure over the
+// same one-field struct-literal. `const fn` preserves the `Copy`-pass-
+// through's zero-runtime-work property verbatim. Every constructor is
+// `#[must_use]` so a caller who mistakenly discards the constructed error
+// trips a compile warning at the wire-up site.
+//
+// Every future consumer that wants to construct one of these seven variants
+// outside `LimitsSpec::validate` — a deferred
+// `mesh.pleme.io/v1alpha1/Servico` CR materializer's admission webhook
+// re-checking one edited `:memory` / `:fuel` / `:wall-clock` / `:cpu` slot
+// against the below-quantum + cap + canonical-form cascade, a future
+// `feira validate --limits` per-caixa admission verb re-running the shape
+// gates on demand, a per-Servico overlay resolver rejecting an author-
+// supplied slot against a cluster-local snapshot — now reaches each variant
+// through one call rather than re-inlining the per-shape struct-literal
+// block in lockstep with the seven in-crate wire-up sites.
+macro_rules! limits_scalar_ctors {
+    ($($ctor:ident => $variant:ident { $field:ident: $ty:ty }),* $(,)?) => {
+        impl LimitsError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LimitsError::",
+                    stringify!($variant),
+                    "`] naming the offending per-`:limits` `",
+                    stringify!($field),
+                    "` scalar. Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { ",
+                    stringify!($field),
+                    " }` one-field `Copy`-pass-through struct-literal onto ",
+                    "one substrate primitive so every per-axis wire-up on ",
+                    "this variant reads through one dispatch — as a bare ",
+                    "function pointer in the `impl FnOnce(",
+                    stringify!($ty),
+                    ") -> LimitsError` bracket-closure slot every ",
+                    "`crate::render::require_positive_bounded_*` / ",
+                    "`crate::render::require_positive_canonical_bounded_*` / ",
+                    "`crate::render::require_positive_quantum_multiple_bounded_*` ",
+                    "gate carries — rather than the pre-lift open-coded ",
+                    "one-line closure over the same one-field struct-literal. ",
+                    "`const fn` preserves the `Copy`-pass-through's ",
+                    "zero-runtime-work property verbatim."
+                )]
+                #[must_use]
+                pub const fn $ctor($field: $ty) -> Self {
+                    Self::$variant { $field }
+                }
+            )*
+        }
+    };
+}
+
+limits_scalar_ctors! {
+    memory_below_wasm32_page => MemoryBelowWasm32Page { bytes: u64 },
+    memory_exceeds_wasm32_cap => MemoryExceedsWasm32Cap { bytes: u64 },
+    memory_not_page_multiple => MemoryNotPageMultiple { bytes: u64 },
+    fuel_exceeds_cap => FuelExceedsCap { fuel: u64 },
+    wall_clock_not_canonical => WallClockNotCanonical { wall_clock: Duration },
+    wall_clock_exceeds_cap => WallClockExceedsCap { wall_clock: Duration },
+    cpu_exceeds_cap => CpuExceedsCap { millicores: u32 },
 }
 
 #[cfg(test)]
@@ -6870,5 +6980,226 @@ mod tests {
                 LimitsError::NonAsciiWhitespaceInMillicores { codepoint, .. } if codepoint == expected_codepoint,
             ));
         }
+    }
+
+    // ── limits_scalar_ctors! per-variant + cross-axis pins ──────────────────
+    //
+    // Per-variant byte-equality pins guaranteeing every generated ctor arm in
+    // the [`limits_scalar_ctors!`] macro produces a `LimitsError` structurally
+    // identical to the pre-lift `Self::<variant> { <field>: <val> }` one-line
+    // struct-literal on the same `Copy`-`u64 | u32 | Duration` fixture, plus
+    // one cross-axis sweep that routes each per-variant `<field>: <ty>` scalar
+    // through the sole `$field:ident: $ty:ty` axis the macro exposes so any
+    // wrapper-side truncation / re-order / silent `.into()` / silent constant-
+    // substitution on any one variant surfaces here rather than at a
+    // downstream per-`:limits` diagnostic-shape drift, plus one `const`-eval
+    // pin that fires at compile time if any future edit silently drops the
+    // `const` qualifier from the macro body. Peer of the sibling per-variant
+    // pins on [`crate::supervisor::supervisor_scalar_ctors!`] (f0f77a2, the
+    // 4-variant `SupervisorError` `{ <field>: RestartStrategy | u32 |
+    // Duration }` fold on the per-`:supervisor` scalar axis) and the peer
+    // [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] (7ef425e, the
+    // 8-variant `AplicacaoError` `{ <field>: Duration | u32 }` fold on the
+    // per-`:politicas` per-axis cap / canonical-form arms).
+    #[test]
+    fn memory_below_wasm32_page_ctor_matches_struct_literal_wrap() {
+        let bytes = LIMITS_MEMORY_WASM32_PAGE_BYTES - 1;
+        assert_eq!(
+            LimitsError::memory_below_wasm32_page(bytes),
+            LimitsError::MemoryBelowWasm32Page { bytes },
+            "generated memory_below_wasm32_page ctor must produce byte-equal \
+             `LimitsError::MemoryBelowWasm32Page` to the pre-lift struct-literal \
+             wrap on the same `Copy`-`u64` fixture",
+        );
+    }
+
+    #[test]
+    fn memory_exceeds_wasm32_cap_ctor_matches_struct_literal_wrap() {
+        let bytes = LIMITS_MEMORY_WASM32_MAX_BYTES + LIMITS_MEMORY_WASM32_PAGE_BYTES;
+        assert_eq!(
+            LimitsError::memory_exceeds_wasm32_cap(bytes),
+            LimitsError::MemoryExceedsWasm32Cap { bytes },
+            "generated memory_exceeds_wasm32_cap ctor must produce byte-equal \
+             `LimitsError::MemoryExceedsWasm32Cap` to the pre-lift struct-literal \
+             wrap on the same `Copy`-`u64` fixture",
+        );
+    }
+
+    #[test]
+    fn memory_not_page_multiple_ctor_matches_struct_literal_wrap() {
+        let bytes = LIMITS_MEMORY_WASM32_PAGE_BYTES + 1;
+        assert_eq!(
+            LimitsError::memory_not_page_multiple(bytes),
+            LimitsError::MemoryNotPageMultiple { bytes },
+            "generated memory_not_page_multiple ctor must produce byte-equal \
+             `LimitsError::MemoryNotPageMultiple` to the pre-lift struct-literal \
+             wrap on the same `Copy`-`u64` fixture",
+        );
+    }
+
+    #[test]
+    fn fuel_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let fuel = LIMITS_FUEL_MAX + 1;
+        assert_eq!(
+            LimitsError::fuel_exceeds_cap(fuel),
+            LimitsError::FuelExceedsCap { fuel },
+            "generated fuel_exceeds_cap ctor must produce byte-equal \
+             `LimitsError::FuelExceedsCap` to the pre-lift struct-literal wrap \
+             on the same `Copy`-`u64` fixture",
+        );
+    }
+
+    #[test]
+    fn wall_clock_not_canonical_ctor_matches_struct_literal_wrap() {
+        let wall_clock = Duration::from_micros(1_500);
+        assert_eq!(
+            LimitsError::wall_clock_not_canonical(wall_clock),
+            LimitsError::WallClockNotCanonical { wall_clock },
+            "generated wall_clock_not_canonical ctor must produce byte-equal \
+             `LimitsError::WallClockNotCanonical` to the pre-lift struct-literal \
+             wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn wall_clock_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let wall_clock = LIMITS_WALL_CLOCK_MAX + Duration::from_millis(1);
+        assert_eq!(
+            LimitsError::wall_clock_exceeds_cap(wall_clock),
+            LimitsError::WallClockExceedsCap { wall_clock },
+            "generated wall_clock_exceeds_cap ctor must produce byte-equal \
+             `LimitsError::WallClockExceedsCap` to the pre-lift struct-literal \
+             wrap on the same `Copy`-`Duration` fixture",
+        );
+    }
+
+    #[test]
+    fn cpu_exceeds_cap_ctor_matches_struct_literal_wrap() {
+        let millicores = LIMITS_CPU_MILLICORES_MAX + 1;
+        assert_eq!(
+            LimitsError::cpu_exceeds_cap(millicores),
+            LimitsError::CpuExceedsCap { millicores },
+            "generated cpu_exceeds_cap ctor must produce byte-equal \
+             `LimitsError::CpuExceedsCap` to the pre-lift struct-literal wrap \
+             on the same `Copy`-`u32` fixture",
+        );
+    }
+
+    #[test]
+    fn limits_scalar_ctors_route_field_through_copy_uniformly() {
+        // Cross-axis routing pin: sweep each generated `<field>: <ty>`
+        // constructor input axis through a non-default `Copy` fixture against
+        // every arm in the [`limits_scalar_ctors!`] macro, so any wrapper-
+        // side silent `.into()` / silent constant-substitution / silent field
+        // re-name away from the canonical `bytes | fuel | wall_clock |
+        // millicores` axes on any one variant, or a `u64 | u32 | Duration`
+        // axis silently rerouted through some other `Copy` coercion, surfaces
+        // here rather than at a downstream per-`:limits` diagnostic-shape
+        // drift. Peer of the sibling
+        // `supervisor_scalar_ctors_route_field_through_copy_uniformly`
+        // (f0f77a2) and
+        // `aplicacao_policy_scalar_ctors_route_field_through_copy_uniformly`
+        // (7ef425e) cross-axis routing pins on the sibling `SupervisorError`
+        // / `AplicacaoError` envelopes' per-axis ctor families.
+        //
+        // Fixtures picked out of each variant's accept-set boundary rather
+        // than the default value so a silent constant-substitution to a
+        // per-variant sentinel surfaces here on the structural-equality
+        // assertion: the three `:memory` axes pick the below-page / above-cap
+        // / page-plus-one shapes; the `:fuel` cap picks the above-cap shape;
+        // the two `:wall-clock` axes pick sub-millisecond and above-cap
+        // `Duration` shapes; the `:cpu` cap picks the above-cap millicore
+        // shape.
+        let below_page = LIMITS_MEMORY_WASM32_PAGE_BYTES - 137;
+        let above_mem_cap = LIMITS_MEMORY_WASM32_MAX_BYTES + LIMITS_MEMORY_WASM32_PAGE_BYTES;
+        let page_plus_one = LIMITS_MEMORY_WASM32_PAGE_BYTES + 1;
+        let above_fuel_cap = LIMITS_FUEL_MAX + 137;
+        let sub_ms = Duration::from_micros(1_500);
+        let above_hour = LIMITS_WALL_CLOCK_MAX + Duration::from_secs(1);
+        let above_cpu_cap = LIMITS_CPU_MILLICORES_MAX + 137;
+        assert_eq!(
+            LimitsError::memory_below_wasm32_page(below_page),
+            LimitsError::MemoryBelowWasm32Page { bytes: below_page },
+        );
+        assert_eq!(
+            LimitsError::memory_exceeds_wasm32_cap(above_mem_cap),
+            LimitsError::MemoryExceedsWasm32Cap {
+                bytes: above_mem_cap,
+            },
+        );
+        assert_eq!(
+            LimitsError::memory_not_page_multiple(page_plus_one),
+            LimitsError::MemoryNotPageMultiple {
+                bytes: page_plus_one,
+            },
+        );
+        assert_eq!(
+            LimitsError::fuel_exceeds_cap(above_fuel_cap),
+            LimitsError::FuelExceedsCap {
+                fuel: above_fuel_cap,
+            },
+        );
+        assert_eq!(
+            LimitsError::wall_clock_not_canonical(sub_ms),
+            LimitsError::WallClockNotCanonical { wall_clock: sub_ms },
+        );
+        assert_eq!(
+            LimitsError::wall_clock_exceeds_cap(above_hour),
+            LimitsError::WallClockExceedsCap {
+                wall_clock: above_hour,
+            },
+        );
+        assert_eq!(
+            LimitsError::cpu_exceeds_cap(above_cpu_cap),
+            LimitsError::CpuExceedsCap {
+                millicores: above_cpu_cap,
+            },
+        );
+    }
+
+    #[test]
+    fn limits_scalar_ctors_are_const_zero_runtime_work() {
+        // Const-eval pin: the [`limits_scalar_ctors!`] macro spells every
+        // generated ctor `const fn` so a caller can pin a `LimitsError` at
+        // compile time — the same zero-runtime-work property the pre-lift
+        // `|<field>| LimitsError::<Variant> { <field> }` closure carried on
+        // its `Copy`-pass-through construction path (no `.to_string()` /
+        // `.into()` allocation, no branching). If any future edit silently
+        // drops the `const` qualifier from the macro body the per-arm `const`
+        // bindings below fail to compile, which surfaces the regression at
+        // the substrate-primitive definition rather than at some downstream
+        // consumer that had come to rely on the `const`-constructibility.
+        // Peer of the sibling
+        // `supervisor_scalar_ctors_are_const_zero_runtime_work` (f0f77a2) and
+        // `aplicacao_policy_scalar_ctors_are_const_zero_runtime_work`
+        // (7ef425e) const-eval pins on the sibling `SupervisorError` /
+        // `AplicacaoError` envelopes' per-axis ctor families.
+        const MEM_BELOW: LimitsError = LimitsError::memory_below_wasm32_page(1);
+        const MEM_CAP: LimitsError =
+            LimitsError::memory_exceeds_wasm32_cap(LIMITS_MEMORY_WASM32_MAX_BYTES + 1);
+        const MEM_NOT_MULTIPLE: LimitsError =
+            LimitsError::memory_not_page_multiple(LIMITS_MEMORY_WASM32_PAGE_BYTES + 1);
+        const FUEL_CAP: LimitsError = LimitsError::fuel_exceeds_cap(LIMITS_FUEL_MAX + 1);
+        const WALL_NC: LimitsError =
+            LimitsError::wall_clock_not_canonical(Duration::from_micros(1));
+        const WALL_CAP: LimitsError =
+            LimitsError::wall_clock_exceeds_cap(Duration::from_secs(3_601));
+        const CPU_CAP: LimitsError = LimitsError::cpu_exceeds_cap(LIMITS_CPU_MILLICORES_MAX + 1);
+        assert!(matches!(
+            MEM_BELOW,
+            LimitsError::MemoryBelowWasm32Page { .. }
+        ));
+        assert!(matches!(
+            MEM_CAP,
+            LimitsError::MemoryExceedsWasm32Cap { .. }
+        ));
+        assert!(matches!(
+            MEM_NOT_MULTIPLE,
+            LimitsError::MemoryNotPageMultiple { .. }
+        ));
+        assert!(matches!(FUEL_CAP, LimitsError::FuelExceedsCap { .. }));
+        assert!(matches!(WALL_NC, LimitsError::WallClockNotCanonical { .. }));
+        assert!(matches!(WALL_CAP, LimitsError::WallClockExceedsCap { .. }));
+        assert!(matches!(CPU_CAP, LimitsError::CpuExceedsCap { .. }));
     }
 }
