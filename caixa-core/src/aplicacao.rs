@@ -8163,10 +8163,8 @@ impl AplicacaoSpec {
             crate::render::require_valid_versao_requirement(
                 m.versao_requirement(),
                 || AplicacaoError::membro_versao_empty(m.nome()),
-                |reason| AplicacaoError::MembroVersaoInvalid {
-                    caixa: m.nome().to_string(),
-                    versao: m.versao_requirement().to_string(),
-                    reason,
+                |reason| {
+                    AplicacaoError::membro_versao_invalid(m.nome(), m.versao_requirement(), reason)
                 },
             )?;
             crate::render::insert_first_seen(&mut seen, m.nome(), || {
@@ -9530,6 +9528,36 @@ impl AplicacaoError {
         Self::ContratoSelfLoop {
             caixa: contract.source().to_string(),
             wit: contract.world_ref().to_string(),
+        }
+    }
+
+    /// Construct an [`AplicacaoError::MembroVersaoInvalid`] naming the
+    /// offending `:membros :caixa` and its `:versao` requirement under
+    /// the given `reason`. Folds the uniform `Self::MembroVersaoInvalid {
+    /// caixa: caixa.to_string(), versao: versao.to_string(), reason:
+    /// reason.into() }` three-slot struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one
+    /// dispatch, matching the peer
+    /// [`crate::SupervisorError::child_versao_invalid`] (d2ef2ec) ctor's
+    /// shape verbatim on the sibling `SupervisorError { caixa: String,
+    /// versao: String, reason: String }` envelope's per-`:children :versao`
+    /// axis. `reason` accepts both `&str` literals and `format!(…)`
+    /// outputs through the `impl Into<String>` bound so the sole
+    /// [`AplicacaoSpec::validate_membros`] wire-up's per-`:membros`
+    /// requirement-cascade closure (routing the shared
+    /// [`crate::render::require_valid_versao_requirement`]-delivered
+    /// `reason` verbatim) picks the ctor up without a per-arm wrapper
+    /// transformation on the caller-side `reason` axis. The
+    /// [`Membro::nome`] / [`Membro::versao_requirement`] typed-accessor
+    /// routing the sole wire-up already threads through remains verbatim
+    /// — the ctor's two `&str` parameters accept the two accessors'
+    /// returns as-is with no re-allocation at the call site.
+    #[must_use]
+    pub fn membro_versao_invalid(caixa: &str, versao: &str, reason: impl Into<String>) -> Self {
+        Self::MembroVersaoInvalid {
+            caixa: caixa.to_string(),
+            versao: versao.to_string(),
+            reason: reason.into(),
         }
     }
 }
@@ -33247,6 +33275,92 @@ mod tests {
              AplicacaoError to the open-coded struct-literal wrap on the \
              same &str fixture",
         );
+    }
+
+    // ── membro_versao_invalid ctor pins ────────────────────────────────
+    //
+    // Per-variant byte-equality + cross-axis routing pins guaranteeing the
+    // lifted [`AplicacaoError::membro_versao_invalid`] inherent constructor
+    // produces an `AplicacaoError` structurally identical to the pre-lift
+    // `Self::MembroVersaoInvalid { caixa: caixa.to_string(), versao:
+    // versao.to_string(), reason: reason.into() }` open-coded three-slot
+    // struct-literal on the same `(&str, &str, reason)` fixture. Peer of
+    // the sibling `child_versao_invalid_ctor_matches_struct_literal_wrap` +
+    // `supervisor_child_reason_ctors_route_reason_through_into_uniformly`
+    // pins on the peer `SupervisorError` `{ caixa: String, versao: String,
+    // reason: String }` envelope's per-`:children :versao` axis (d2ef2ec),
+    // extended here onto the paired per-`:membros :versao` axis on the
+    // sibling `AplicacaoError` envelope so both three-slot `{ caixa,
+    // versao, reason }` per-caixa-versao-invalidation ctors on caixa-core's
+    // typed-error surface guarantee the shared three-field construction
+    // routes through one substrate primitive per envelope.
+
+    #[test]
+    fn membro_versao_invalid_ctor_matches_struct_literal_wrap() {
+        let caixa = "cart";
+        let versao = "not-a-req";
+        let reason = "sample reason text";
+        assert_eq!(
+            AplicacaoError::membro_versao_invalid(caixa, versao, reason),
+            AplicacaoError::MembroVersaoInvalid {
+                caixa: caixa.to_string(),
+                versao: versao.to_string(),
+                reason: reason.to_string(),
+            },
+            "lifted membro_versao_invalid ctor must produce byte-equal \
+             AplicacaoError to the open-coded struct-literal wrap on the \
+             same (&str, &str, reason) fixture",
+        );
+    }
+
+    #[test]
+    fn membro_versao_invalid_ctor_routes_caixa_and_versao_through_to_string() {
+        // Cross-axis pin: sweep the two `&str`-shaped constructor input
+        // axes (`caixa`, `versao`) through non-default fixtures so any
+        // wrapper-side lowercase / trim / truncate / re-order on either
+        // `.to_string()` field construction surfaces here rather than at
+        // a downstream diagnostic-shape mismatch. Peer of the sibling
+        // `supervisor_child_reason_ctors_route_reason_through_into_uniformly`
+        // routing pin on the peer `SupervisorError` envelope.
+        let caixa = "Cart-V2";
+        let versao = "0.1.0-alpha+build.42";
+        let reason = "constructed reason";
+        let err = AplicacaoError::membro_versao_invalid(caixa, versao, reason);
+        let AplicacaoError::MembroVersaoInvalid {
+            caixa: got_caixa,
+            versao: got_versao,
+            reason: got_reason,
+        } = err
+        else {
+            panic!("membro_versao_invalid must construct MembroVersaoInvalid variant");
+        };
+        assert_eq!(got_caixa, caixa.to_string());
+        assert_eq!(got_versao, versao.to_string());
+        assert_eq!(got_reason, reason.to_string());
+    }
+
+    #[test]
+    fn membro_versao_invalid_ctor_routes_reason_through_into() {
+        // Route pin: the `reason: impl Into<String>` bound accepts both
+        // `&str` literals and `format!(…)` / `String` outputs verbatim,
+        // matching the sibling
+        // `supervisor_child_reason_ctors_route_reason_through_into_uniformly`
+        // routing pin on the peer `SupervisorError::child_versao_invalid`.
+        // Pins the sole `AplicacaoSpec::validate_membros` wire-up's
+        // `require_valid_versao_requirement`-delivered `reason` closure
+        // parameter (typed `String`) picks the ctor up without a per-arm
+        // wrapper transformation, and every future consumer that
+        // constructs the variant from a `format!(…)` reason surfaces
+        // byte-equal to the `&str`-literal path.
+        let caixa = "cart";
+        let versao = "not-a-req";
+        let from_literal = AplicacaoError::membro_versao_invalid(caixa, versao, "literal reason");
+        let from_format =
+            AplicacaoError::membro_versao_invalid(caixa, versao, format!("{} reason", "literal"));
+        let from_string =
+            AplicacaoError::membro_versao_invalid(caixa, versao, "literal reason".to_string());
+        assert_eq!(from_literal, from_format);
+        assert_eq!(from_literal, from_string);
     }
 
     #[test]
