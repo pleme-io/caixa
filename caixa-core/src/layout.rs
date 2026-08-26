@@ -1007,10 +1007,7 @@ impl LayoutInvariants for StandardLayout {
                 .join(crate::render::LAYOUT_DIR_LIB)
                 .join(format!("{}.lisp", caixa.nome()));
             if !self.exists(&expected) {
-                return Err(LayoutError::MissingLib {
-                    caixa: caixa.nome().to_string(),
-                    expected,
-                });
+                return Err(LayoutError::missing_lib(caixa, expected));
             }
         }
 
@@ -1879,6 +1876,27 @@ impl LayoutError {
     #[must_use]
     pub fn missing_entry(kind: &'static str, path: PathBuf) -> Self {
         Self::MissingEntry { kind, path }
+    }
+
+    /// Construct a [`LayoutError::MissingLib`] naming the offending
+    /// `caixa.nome()` and the resolved fallback `expected` path.
+    ///
+    /// Folds the uniform `Self::MissingLib { caixa: caixa.nome()
+    /// .to_string(), expected }` two-slot struct-literal onto one
+    /// substrate primitive so every [`StandardLayout::verify`] wire-up
+    /// on this variant reads through one dispatch rather than the
+    /// pre-lift open-coded struct-literal block, projecting the caixa
+    /// slot through the paired [`crate::Caixa::nome`] accessor — the
+    /// same discipline the sibling [`Self::missing_entry`]
+    /// `{ kind, path }` ctor and the [`layout_nome_only_ctors!`]
+    /// `{ caixa }`-only tuple-variant ctor family already take on the
+    /// same envelope.
+    #[must_use]
+    pub fn missing_lib(caixa: &crate::Caixa, expected: PathBuf) -> Self {
+        Self::MissingLib {
+            caixa: caixa.nome().to_string(),
+            expected,
+        }
     }
 }
 
@@ -8683,5 +8701,101 @@ mod tests {
                  fired for {kind:?}: {result:?}"
             );
         }
+    }
+
+    #[test]
+    fn missing_lib_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin locking [`LayoutError::missing_lib`] to its
+        // struct-literal peer under PartialEq. The pre-lift wire-up at
+        // layout.rs:1010 read `LayoutError::MissingLib { caixa:
+        // caixa.nome().to_string(), expected }`; the post-lift
+        // dispatch reads `LayoutError::missing_lib(caixa, expected)`.
+        // Both must produce byte-equal variants — a silent divergence
+        // (a `to_lowercase()`, a `trim()`, a lost `.to_string()` copy,
+        // an accidental `.clone()` of the wrong side of the `expected`
+        // path) surfaces here rather than at a downstream diagnostic-
+        // shape drift.
+        let bib = caixa(CaixaKind::Biblioteca);
+        let expected = PathBuf::from("/tmp/x")
+            .join(crate::render::LAYOUT_DIR_LIB)
+            .join(format!("{}.lisp", bib.nome()));
+        let struct_lit = LayoutError::MissingLib {
+            caixa: bib.nome().to_string(),
+            expected: expected.clone(),
+        };
+        let ctor = LayoutError::missing_lib(&bib, expected);
+        assert_eq!(
+            struct_lit, ctor,
+            "missing_lib ctor must byte-equal the pre-lift struct-literal"
+        );
+    }
+
+    #[test]
+    fn missing_lib_ctor_projects_nome_through_accessor() {
+        // Accessor-fidelity pin: any future `:nome` axis extension
+        // (namespace-qualified rewrite `pleme-io/<nome>`, per-cluster
+        // alias overlay, case-normalization pass) that lands on
+        // [`crate::Caixa::nome`] must reach the `caixa:` carrier
+        // through this projection rather than a raw field access.
+        // The neighbour required-slot ctor family
+        // ([`layout_nome_only_ctors!`]) projects the same way; this
+        // pin locks `missing_lib` onto the same discipline so the
+        // whole `LayoutError` family stays coherent under any future
+        // `:nome` rewrite.
+        //
+        // Deliberately uses a byte-distinctive nome ("named-lib") so
+        // a regression that hard-codes a fixture literal at the ctor
+        // body (rather than projecting through the accessor) drops
+        // the bytes and trips the assertion.
+        let mut bib = caixa(CaixaKind::Biblioteca);
+        bib.nome = "named-lib".into();
+        let expected = PathBuf::from("/srv")
+            .join(crate::render::LAYOUT_DIR_LIB)
+            .join(format!("{}.lisp", bib.nome()));
+        let err = LayoutError::missing_lib(&bib, expected.clone());
+        let LayoutError::MissingLib {
+            caixa: cname,
+            expected: got,
+        } = err
+        else {
+            panic!("missing_lib ctor must construct the MissingLib variant, got a foreign arm");
+        };
+        assert_eq!(
+            cname,
+            bib.nome(),
+            "missing_lib `caixa:` carrier must project through Caixa::nome()"
+        );
+        assert_eq!(
+            got, expected,
+            "missing_lib `expected:` path must pass through verbatim"
+        );
+    }
+
+    #[test]
+    fn missing_lib_verify_wire_up_routes_through_ctor() {
+        // Behavioural pin: [`StandardLayout::verify`] must reach the
+        // `MissingLib` variant through the newly lifted ctor rather
+        // than a residual struct-literal block. The end-to-end
+        // observable — a Biblioteca with no lib fallback — must
+        // surface a `MissingLib` whose `caixa:` and `expected:`
+        // carriers are byte-equal to what the ctor would produce
+        // when called directly.
+        let root = PathBuf::from("/opt/pkg");
+        let manifest = root.join("caixa.lisp");
+        let manifest_only = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_only);
+        let bib = caixa(CaixaKind::Biblioteca);
+        let expected = root
+            .join(crate::render::LAYOUT_DIR_LIB)
+            .join(format!("{}.lisp", bib.nome()));
+
+        let observed = layout.verify(&bib, &root).unwrap_err();
+        let synthesized = LayoutError::missing_lib(&bib, expected);
+        assert_eq!(
+            observed, synthesized,
+            "StandardLayout::verify must reach MissingLib through the missing_lib ctor \
+             — a residual struct-literal block would silently diverge on any future \
+             accessor projection change"
+        );
     }
 }
