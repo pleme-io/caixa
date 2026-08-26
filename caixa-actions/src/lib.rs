@@ -130,32 +130,22 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
     // naming-the-offending-caixa contract for free.
     let (ci, cd) = caixa_core::require_acao_view::<Error>(caixa)?;
 
-    // Post-`decompose_ci`, `topo_order()` is infallible by construction:
-    // the substrate primitive already refused every `canteiro_types::
-    // DecomposeError` arm (duplicate node, missing dep, cycle) that
-    // could otherwise surface here, so no reachable path lands on the
-    // `Err(_)` branch. Documented on the substrate side in
-    // `caixa_core::render::tests::decompose_ci_accepts_valid_ci_run_
-    // and_returns_canteiro_dag` (render.rs:28107 — "The topo_order()
-    // call on a successful decompose is infallible by construction (no
-    // cycles present)"). The pre-lift code hand-authored a
-    // `CiDecomposeFailure { nome, source: DecomposeError::Cycle }` on
-    // this axis, which (a) re-inlined the substrate-primitive-only
-    // constructor outside `caixa_core::render::decompose_ci` — the
-    // exact anti-pattern every peer per-`Acao` typed-view pin warns
-    // against — and (b) hard-coded `DecomposeError::Cycle` regardless
-    // of which underlying arm would have failed, so the (unreachable)
-    // diagnostic would misname the failure mode. Panicking here surfaces
-    // any future substrate-contract regression at the call site rather
-    // than silently misdiagnosing it.
-    let topo = cd
-        .topo_order()
-        .expect("acyclic CanteiroDag returns a valid topo_order — decompose_ci gated the input");
-
-    let node_names_topo = topo
-        .iter()
-        .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
-        .collect();
+    // Route the per-`RenderedAcao::node_names_topo` topological-order
+    // node-name projection through the substrate-canonical
+    // [`caixa_core::ci_topo_node_names`] primitive rather than the
+    // three-line `let topo = cd.topo_order().expect(...); topo.iter()
+    // .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
+    // .collect()` open-coded chain. Peer of the sibling
+    // [`caixa_core::ci_declared_edge_count`] `usize`-scalar projection
+    // on the borrowed [`canteiro_types::CiRun`] axis, extended here
+    // onto the owned [`canteiro_types::CanteiroDag`] axis — every
+    // future per-`Acao` consumer that materializes a
+    // `RenderedAcao`-shaped view reads through the paired substrate
+    // one-liners rather than re-inlining the topo + filter_map + collect
+    // chain. Substrate primitive owns the panic message on the
+    // unreachable-post-`decompose_ci` `Err(_)` arm so a future
+    // contract-regression diagnosis surfaces at one authored site.
+    let node_names_topo = caixa_core::ci_topo_node_names(&cd);
     let edge_count = caixa_core::ci_declared_edge_count(ci);
 
     Ok(RenderedAcao {
@@ -421,6 +411,74 @@ mod tests {
                  with no reconstruction path a future edit could drift",
             );
         }
+    }
+
+    #[test]
+    fn validate_node_names_topo_routes_through_caixa_core_ci_topo_node_names_helper() {
+        // Fail-before-pass-after pin on the [`validate`]
+        // `node_names_topo` field construction axis: pre-lift the
+        // function ran the three-line
+        //
+        //   let topo = cd.topo_order().expect(...);
+        //   let node_names_topo = topo.iter()
+        //       .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
+        //       .collect();
+        //
+        // block inline at this crate's own [`validate`] call site — one
+        // of five open-coded copies of the same `topo.iter().filter_map
+        // (...).collect()` chain across the workspace (the two other
+        // per-crate sites the [`caixa_core::ci_topo_node_names`]
+        // docstring names + the two `caixa_core::require_acao_view`
+        // byte-parity pin sites at `caixa-core/src/render.rs:37769` /
+        // `caixa-core/src/render.rs:37773`). Converging the arm on the
+        // substrate-canonical [`caixa_core::ci_topo_node_names`]
+        // primitive (peer of the sibling
+        // [`caixa_core::ci_declared_edge_count`] scalar projection on
+        // the borrowed [`canteiro_types::CiRun`] axis) closes the
+        // per-`Acao` topological-node-name axis: every future
+        // per-`Acao` consumer that materializes a `RenderedAcao`-shaped
+        // view reaches for the paired substrate one-liners
+        // ([`caixa_core::ci_topo_node_names`] for the topo-order names,
+        // [`caixa_core::ci_declared_edge_count`] for the edge count)
+        // rather than re-inlining the topo + filter_map + collect chain.
+        //
+        // Byte-for-byte parity assertion: on every fixture the
+        // substrate primitive [`caixa_core::decompose_ci`] accepts,
+        // [`validate`]'s returned `node_names_topo` must equal the
+        // primitive's direct output on the same DAG. Trips at
+        // caixa-actions build time if [`validate`] re-inlines the
+        // three-line topo-projection block and drifts from the
+        // substrate primitive.
+        let ok_fixture = || {
+            let ci = CiRun {
+                workspace: "pleme-io".to_string(),
+                repo: "caixa".to_string(),
+                nodes: vec![
+                    CiNode::new("build", EnvClass::None, action("build"), vec![]),
+                    CiNode::new(
+                        "test",
+                        EnvClass::None,
+                        action("test"),
+                        vec!["build".to_string()],
+                    ),
+                ],
+            };
+            acao_caixa(Some(ci))
+        };
+        let c = ok_fixture();
+        let via_validate = validate(&c).expect("valid two-node Acao decomposes");
+        let ci_for_primitive = c.ci().expect("fixture carries :ci");
+        let cd = caixa_core::decompose_ci(&c, ci_for_primitive).expect("acyclic run decomposes");
+        let via_primitive = caixa_core::ci_topo_node_names(&cd);
+        assert_eq!(
+            via_validate.node_names_topo, via_primitive,
+            "validate's node_names_topo must equal the substrate \
+             primitive `caixa_core::ci_topo_node_names`'s output on the \
+             same DAG — a future regression that re-inlines the \
+             three-line `topo.iter().filter_map(...).collect()` chain \
+             breaks the substrate-primitive-routing contract this pin \
+             closes"
+        );
     }
 
     #[test]

@@ -477,6 +477,103 @@ pub fn ci_declared_edge_count(ci: &canteiro_types::CiRun) -> usize {
     ci.nodes.iter().map(|n| n.deps.len()).sum()
 }
 
+/// Substrate-canonical per-`Acao` topological-order node-name projection
+/// every consumer of an owned [`canteiro_types::CanteiroDag`] that needs
+/// the parents-before-children flat list of author-declared node names
+/// keys off — folds the three-line
+/// `let topo = cd.topo_order().expect(...); topo.iter().filter_map(|id|
+/// cd.nodes.get(id).map(|n| n.name.clone())).collect()` chain onto one
+/// substrate primitive returning [`Vec<String>`] verbatim, running the
+/// `topo_order()` axis internally so consumers reach for one dispatch.
+///
+/// The topological-node-name projection carries the "in what order does
+/// the DAG hand back the author-declared node names?" surface every
+/// per-`Acao` downstream consumer fans on: the
+/// `caixa_actions::RenderedAcao::node_names_topo` artifact the M0
+/// renderer's `validate` returns (paired with the declared edge count
+/// from [`ci_declared_edge_count`]), the deferred
+/// `sui-supercacheci::canteiro::emit_gha` workflow renderer's per-job
+/// `jobs.<name>` map key ordering (GitHub Actions preserves declaration
+/// order for readability, so an author-facing workflow whose jobs are
+/// emitted in `parents-before-children` topological order reads as a
+/// build-then-test-then-publish narrative rather than a
+/// hash-map-arbitrary-order jumble), a future `feira lint --acao`
+/// per-caixa admission verb's per-repo topological-summary print, a
+/// future M4 `acao.pleme.io/v1alpha1/Acao` CR materializer's admission
+/// webhook per-node ordering pin.
+///
+/// Prior to this lift the
+/// `topo.iter().filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
+/// .collect()` expression was inlined at three sites in the
+/// `caixa-actions` crate — the production
+/// [`caixa_actions::validate`]'s `node_names_topo` field construction
+/// at `caixa-actions/src/lib.rs:155`, plus two byte-parity pins in the
+/// same crate's test module — and at two more sites in this crate's own
+/// [`require_acao_view`] byte-parity test at
+/// `caixa-core/src/render.rs:37769` / `caixa-core/src/render.rs:37773`
+/// (which reconstruct the same list through the compound helper's
+/// returned `CanteiroDag` to pin that the two paths agree). Five
+/// open-coded copies of the same three-line topo + `filter_map` + collect
+/// chain expressed no compile-time link back to a substrate primitive,
+/// so a future refactor of the projection shape (a promotion of the
+/// plain [`Vec<String>`] to a `Vec<(String, EnvClass)>` once consumers
+/// need the per-node env-class alongside the name, a per-`:ci`
+/// stable-tie-breaking pass that sorts sibling nodes lexicographically
+/// once the underlying `shigoto_dag::Dag::toposort` axis grows a
+/// tie-break axis, a per-node canonicalization pass that trims
+/// whitespace once the canteiro-types axis grows a per-node
+/// canonicalization step) would have had to be threaded through five
+/// open-coded copies in lockstep or the M0 renderer's
+/// `node_names_topo` artifact would silently disagree with its own
+/// byte-parity pins. Lifting the projection to a typed function on the
+/// substrate primitive means every downstream consumer of the `Acao`'s
+/// topological-node-name surface reaches for exactly one typed dispatch.
+///
+/// Runs `cd.topo_order()` internally with an `.expect(...)` on the
+/// `Err(_)` arm carrying the substrate-canonical message every consumer
+/// would otherwise re-author verbatim — the `Err(_)` arm is
+/// unreachable-by-construction after a successful [`decompose_ci`]
+/// (documented on the peer [`decompose_ci`] docstring and the
+/// canteiro-types `CanteiroDag::topo_order` docstring: "`decompose`
+/// already rejects cycles, so an error here is an internal invariant
+/// break"). Panicking here surfaces any future substrate-contract
+/// regression at the call site rather than silently returning an empty
+/// [`Vec<String>`] that a consumer's downstream logic would misread as
+/// "no nodes to render".
+///
+/// Peer of the sibling [`ci_declared_edge_count`] `usize`-scalar
+/// projection on the borrowed [`canteiro_types::CiRun`] axis — extends
+/// the "one typed dispatch on the substrate primitive, thin projections
+/// at each consumer" discipline onto the owned
+/// [`canteiro_types::CanteiroDag`] axis (the sibling primitive projects
+/// through the borrowed run's node-list shape; this primitive projects
+/// through the owned DAG's topo-order + node-map shape). Together the
+/// two per-`Acao` scalar-projection primitives cover the two axes the
+/// M0 [`caixa_actions::RenderedAcao`] artifact carries (`edge_count`
+/// through the borrowed run, `node_names_topo` through the owned DAG),
+/// so every future per-`Acao` consumer that materializes a
+/// `RenderedAcao`-shaped view reads through two substrate one-liners.
+///
+/// # Panics
+///
+/// Panics if `cd.topo_order()` returns [`Err(_)`] — an unreachable arm
+/// after a successful [`decompose_ci`] (which rejects every cyclic
+/// input via [`CiDecomposeFailure`]). A caller reaching this panic has
+/// constructed a [`canteiro_types::CanteiroDag`] outside
+/// [`decompose_ci`] and passed one whose internal
+/// [`shigoto_dag::Dag`] is cyclic — a substrate-contract regression
+/// worth surfacing at the call site, not silently masking with an
+/// empty [`Vec<String>`].
+#[must_use]
+pub fn ci_topo_node_names(cd: &canteiro_types::CanteiroDag) -> Vec<String> {
+    let topo = cd
+        .topo_order()
+        .expect("acyclic CanteiroDag returns a valid topo_order — decompose_ci gated the input");
+    topo.iter()
+        .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
+        .collect()
+}
+
 /// Typed `:servicos`-count-mismatch view: the canonical surface every
 /// per-Servico `caixa-<target>` renderer raises when it's handed a
 /// [`Caixa`] whose `:servicos` list doesn't carry exactly one entry —
@@ -36542,6 +36639,111 @@ mod tests {
              count off the borrowed run's node-list shape, not off the \
              `decompose_ci`-produced `CanteiroDag`'s edge algebra",
         );
+    }
+
+    // ── ci_topo_node_names — per-`Acao` topological-node-name projection ─
+
+    #[test]
+    fn ci_topo_node_names_returns_singleton_for_solo_node() {
+        // The singleton arm: a `CiRun` with exactly one node yields
+        // a one-element topological-order node-name list carrying that
+        // node's name verbatim. Pins the primitive's `.collect()` on
+        // the one-element post-filter_map iterator.
+        let ci = canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![canteiro_types::CiNode::new(
+                "solo",
+                canteiro_types::EnvClass::None,
+                canteiro_types::ActionRef {
+                    name: "solo".into(),
+                    command: "true".into(),
+                    args: vec![],
+                },
+                vec![],
+            )],
+        };
+        let cd = canteiro_types::decompose(&ci).expect("singleton run decomposes");
+        assert_eq!(
+            ci_topo_node_names(&cd),
+            vec!["solo".to_string()],
+            "singleton fixture must yield a one-element topological \
+             node-name list carrying the node's name verbatim — the \
+             primitive's projection must route through the sole node's \
+             `.name.clone()`, not through the empty-vec `Default` shape",
+        );
+    }
+
+    #[test]
+    fn ci_topo_node_names_orders_parents_before_children_on_linear_chain() {
+        // The linear-chain arm: `test` depends on `build`, so the
+        // parents-before-children topological order is exactly
+        // `["build", "test"]`. Pins that the primitive respects the
+        // canteiro-types `CanteiroDag::topo_order` contract on a
+        // non-degenerate fixture — a future regression that iterated
+        // through `cd.nodes` in `HashMap` order (arbitrary!) would land
+        // as an occasional reversal here.
+        let ci = linear_ci_run();
+        let cd = canteiro_types::decompose(&ci).expect("linear run decomposes");
+        assert_eq!(
+            ci_topo_node_names(&cd),
+            vec!["build".to_string(), "test".to_string()],
+            "linear-chain fixture must yield `[build, test]` — the \
+             parents-before-children topological order the canteiro-types \
+             `CanteiroDag::topo_order` contract specifies. A future \
+             regression that walked `cd.nodes` in `HashMap` order would \
+             land as an occasional `[test, build]` here",
+        );
+    }
+
+    #[test]
+    fn ci_topo_node_names_matches_open_coded_projection_across_shapes() {
+        // Byte-parity pin — the substrate-primitive convergence
+        // discipline every peer per-`Acao` substrate primitive carries:
+        // the primitive's return must equal the open-coded
+        // `cd.topo_order().expect(...).iter().filter_map(|id|
+        // cd.nodes.get(id).map(|n| n.name.clone())).collect()` chain at
+        // each of the two canonical acyclic `:ci` run shapes this test
+        // module already carries (`linear_ci_run` — the canonical
+        // happy-path two-node acyclic; the singleton shape a
+        // `caixa-init`-scaffolded no-deps stub lands as). Any future
+        // refactor of the primitive's projection shape trips here
+        // before landing on the consumer's
+        // `RenderedAcao::node_names_topo` artifact.
+        let singleton = canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![canteiro_types::CiNode::new(
+                "solo",
+                canteiro_types::EnvClass::None,
+                canteiro_types::ActionRef {
+                    name: "solo".into(),
+                    command: "true".into(),
+                    args: vec![],
+                },
+                vec![],
+            )],
+        };
+        for (label, ci) in [
+            ("linear-two-node", linear_ci_run()),
+            ("singleton", singleton),
+        ] {
+            let cd = canteiro_types::decompose(&ci)
+                .unwrap_or_else(|e| panic!("{label}: fixture must decompose: {e}"));
+            let via_primitive = ci_topo_node_names(&cd);
+            let via_open_coded: Vec<String> = cd
+                .topo_order()
+                .expect("acyclic CanteiroDag returns a valid topo_order")
+                .iter()
+                .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
+                .collect();
+            assert_eq!(
+                via_primitive, via_open_coded,
+                "{label}: `ci_topo_node_names` must equal the open-coded \
+                 `topo.iter().filter_map(...).collect()` the five prior \
+                 open-coded sites carried — pre-lift regression check",
+            );
+        }
     }
 
     #[test]
