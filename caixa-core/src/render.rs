@@ -1751,6 +1751,72 @@ pub enum DurationUnitError {
     UnknownUnit,
 }
 
+// Fold the two open-coded `DurationUnitError::Overflow { multiplier: <u64> }`
+// one-slot struct-variant wire-up sites at [`duration_from_integer_magnitude_and_unit`]'s
+// minute (`60`) and hour (`3600`) `checked_mul` arms onto one substrate
+// primitive on `DurationUnitError` — the last open-coded single-slot
+// `{ multiplier: u64 }` struct-literal on the `DurationUnitError` envelope,
+// matching the peer `Copy`-scalar constructor discipline the sibling
+// [`crate::limits::limits_scalar_ctors!`] (cb32e93, 7 variants on
+// `{ <field>: u64 | u32 | Duration }`) /
+// [`crate::supervisor::supervisor_scalar_ctors!`] (f0f77a2, 4 variants on
+// `{ <field>: RestartStrategy | u32 | Duration }`) /
+// [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] (7ef425e, 8 variants
+// on `{ <field>: Duration | u32 }`) families already established on the
+// sibling `Copy`-scalar one-slot envelopes across the crate. After this
+// lift every wire-up on the sole `DurationUnitError` `{ multiplier: u64 }`
+// variant reads through one substrate-primitive ctor dispatch rather than
+// two open-coded struct-literal arms carrying the seconds-multiplier
+// table's `60` / `3600` literals verbatim.
+//
+// A family macro is not warranted on the one-variant envelope shape
+// `{ multiplier: u64 }` — unlike the peer multi-variant `Copy`-scalar
+// families the [`limits_scalar_ctors!`] / [`supervisor_scalar_ctors!`] /
+// [`aplicacao_policy_scalar_ctors!`] macros close — but the same
+// substrate-primitive discipline applies: every future consumer that
+// wants to construct an `Overflow` outside
+// [`duration_from_integer_magnitude_and_unit`] (a future unit addition
+// widening the dispatch table with a `"us"` microsecond or `"d"` day
+// suffix that shares the same `checked_mul` overflow shape, a deferred
+// per-codec fast-path pre-validating the magnitude bound against the
+// unit's multiplier before dispatch, a future re-checker at an author-
+// facing `feira validate --durations` verb re-consulting the same
+// unit-multiplier table) reaches the variant through one call rather
+// than re-inlining the one-line struct-literal in lockstep with the
+// in-crate dispatch site.
+//
+// `multiplier` stays `u64` — matching the enum-field type, the
+// `checked_mul` operand + return type at each pre-lift wire-up site,
+// and the seconds-per-`"m"` / seconds-per-`"h"` unit-multiplier table's
+// value type verbatim — so the constructor input axis reads the exact
+// same `u64` the pre-lift open-coded struct-literal received. `const fn`
+// preserves the zero-runtime-work property of the pre-lift struct-
+// literal verbatim, matching the sibling
+// [`crate::supervisor::supervisor_scalar_ctors!`] /
+// [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] `Copy`-scalar
+// discipline on their sibling envelopes.
+impl DurationUnitError {
+    /// Construct a [`DurationUnitError::Overflow`] naming the offending
+    /// seconds-multiplier. Folds the uniform
+    /// `Self::Overflow { multiplier }` one-field struct-literal onto one
+    /// substrate primitive so both minute-arm (`60`) and hour-arm
+    /// (`3600`) `checked_mul` overflow sites at
+    /// [`duration_from_integer_magnitude_and_unit`] read through one
+    /// dispatch rather than the pre-lift open-coded struct-literal
+    /// block. Peer of the sibling `Copy`-scalar constructor families
+    /// [`crate::limits::limits_scalar_ctors!`] /
+    /// [`crate::supervisor::supervisor_scalar_ctors!`] /
+    /// [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] already
+    /// established on their sibling `Copy`-scalar one-slot envelopes —
+    /// the two-arm overflow cascade at
+    /// [`duration_from_integer_magnitude_and_unit`] now routes every
+    /// arm through one substrate-primitive ctor per typed variant.
+    #[must_use]
+    pub const fn overflow(multiplier: u64) -> Self {
+        Self::Overflow { multiplier }
+    }
+}
+
 /// Dispatch a validated integer magnitude through the shared
 /// `{"ms" | "s" | "" | "m" | "h"} → Duration` unit table — the
 /// canonical single-owner primitive every typed-duration codec in
@@ -1827,11 +1893,11 @@ pub fn duration_from_integer_magnitude_and_unit(
         "m" => num
             .checked_mul(60)
             .map(std::time::Duration::from_secs)
-            .ok_or(DurationUnitError::Overflow { multiplier: 60 }),
+            .ok_or(DurationUnitError::overflow(60)),
         "h" => num
             .checked_mul(3600)
             .map(std::time::Duration::from_secs)
-            .ok_or(DurationUnitError::Overflow { multiplier: 3600 }),
+            .ok_or(DurationUnitError::overflow(3600)),
         _ => Err(DurationUnitError::UnknownUnit),
     }
 }
@@ -61298,6 +61364,63 @@ spec:
                 via_helper, via_supervisor,
                 "supervisor duration codec must agree with the shared \
                  helper on {literal:?}"
+            );
+        }
+    }
+
+    // Per-variant equivalence pin for the [`DurationUnitError::overflow`]
+    // one-slot inherent constructor (see the paired doc-block above the
+    // impl definition) — the constructor folds the uniform
+    // `Self::Overflow { multiplier }` one-field struct-literal onto one
+    // substrate primitive. The equivalence pin below (fail-before-pass-
+    // after by construction — a byte-mismatched constructor body would
+    // trip this pin first) locks the generated constructor to its
+    // struct-literal peer under `PartialEq`, so both overflow arms at
+    // [`duration_from_integer_magnitude_and_unit`] produce a byte-equal
+    // `DurationUnitError` to the pre-lift open-coded struct-literal. The
+    // cross-axis pin that follows (`multiplier: u64` sweep over every
+    // seconds-multiplier the accepted unit set carries — the minute-arm
+    // `60` and the hour-arm `3600` — plus the sentinel `u64::MAX` / `0`
+    // / `1` boundary values) routes the constructor input axis verbatim
+    // (`multiplier` as `u64` without conversion), so the fold does not
+    // silently collapse onto a fixed `multiplier` value.
+    //
+    // Peer of the sibling `Copy`-scalar equivalence + cross-axis pins the
+    // peer [`crate::limits::limits_scalar_ctors!`] (cb32e93) /
+    // [`crate::supervisor::supervisor_scalar_ctors!`] (f0f77a2) /
+    // [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] (7ef425e)
+    // families established on their sibling `Copy`-scalar one-slot
+    // envelopes — extended here onto the `DurationUnitError`
+    // `{ multiplier: u64 }` envelope so every one-slot `Copy`-scalar
+    // constructor across the crate carries a per-input-axis sweep.
+    #[test]
+    fn overflow_ctor_matches_struct_literal_wrap() {
+        let multiplier = 60_u64;
+        assert_eq!(
+            DurationUnitError::overflow(multiplier),
+            DurationUnitError::Overflow { multiplier },
+            "generated overflow ctor must produce byte-equal \
+             DurationUnitError to the open-coded struct-literal wrap on \
+             the same u64 fixture",
+        );
+    }
+
+    #[test]
+    fn overflow_ctor_routes_multiplier_verbatim_across_every_seconds_multiplier() {
+        // Cross-axis pin: sweep the constructor's single input axis
+        // (`multiplier: u64`) through every seconds-multiplier the
+        // accepted-unit set carries today (`60` for `"m"`, `3600` for
+        // `"h"`) plus the boundary values (`0`, `1`, `u64::MAX`) so any
+        // wrapper-side clamp / saturate / fixed-multiplier substitution
+        // on the one-field construction surfaces here rather than at a
+        // downstream diagnostic-shape mismatch. The `0` / `1` /
+        // `u64::MAX` boundary values pin the constructor against any
+        // silent bound-check regression — the enum-field type carries
+        // no clamp; the constructor must not either.
+        for multiplier in [0_u64, 1, 60, 3600, u64::MAX] {
+            assert_eq!(
+                DurationUnitError::overflow(multiplier),
+                DurationUnitError::Overflow { multiplier },
             );
         }
     }
