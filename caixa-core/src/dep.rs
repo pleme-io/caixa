@@ -2973,10 +2973,7 @@ impl Dep {
             return Err(DepError::NomeEmpty);
         }
         if let Err(reason) = crate::render::is_dns_1123_label(&self.nome) {
-            return Err(DepError::NomeInvalid {
-                nome: self.nome.clone(),
-                reason,
-            });
+            return Err(DepError::nome_invalid(&self.nome, reason));
         }
         // Delegate the empty-first + `parse_requirement` cascade to the
         // shared [`crate::render::require_valid_versao_requirement`]
@@ -4975,6 +4972,71 @@ impl DepError {
             nome: nome.to_string(),
             pin: pin.to_string(),
             value: value.to_string(),
+            reason,
+        }
+    }
+
+    /// Construct a [`DepError::NomeInvalid`] naming the offending
+    /// `:deps :nome` byte-string and the parser-shaped rejection
+    /// `reason` returned by [`crate::render::is_dns_1123_label`].
+    ///
+    /// Folds the uniform
+    /// `Self::NomeInvalid { nome: nome.to_string(), reason }` two-field
+    /// struct-literal onto one substrate primitive so every wire-up on
+    /// this variant reads through one dispatch rather than the pre-lift
+    /// four-line open-coded `DepError::NomeInvalid { nome:
+    /// self.nome.clone(), reason }` block inside [`Dep::validate`]. The
+    /// missing two-slot `{ nome, reason }` rung on the `DepError`-side
+    /// ctor-family ladder (`{ nome }` one-slot →
+    /// [`dep_nome_only_ctors!`] (792aa92); `{ nome, <axis>: String }`
+    /// two-slot → [`dep_nome_axis_ctors!`] (7f7c950); `{ nome, list:
+    /// &'static str }` two-slot → [`dep_nome_list_ctors!`] (6f5e0cd);
+    /// `{ nome, <axis>: String, reason: String }` three-slot →
+    /// [`dep_nome_axis_reason_ctors!`] (5621f8a); `{ nome, pin, value,
+    /// reason }` four-slot → [`DepError::fonte_pin_shape`] (86e2a17))
+    /// — the sole variant on the envelope carrying the
+    /// `{ nome: String, reason: String }` two-slot shape without a
+    /// middle axis, matching the peer
+    /// [`crate::manifest::ManifestError::NomeInvalid`] +
+    /// [`crate::aplicacao::AplicacaoError::MembroCaixaInvalid`] +
+    /// [`crate::supervisor::SupervisorError::ChildCaixaInvalid`]
+    /// four-axis DNS-1123 caixa-identifier diagnostic family the
+    /// existing `nome_invalid_diagnostic_carries_offending_name` test
+    /// pins on this envelope.
+    ///
+    /// The `nome: &str` parameter accepts `&str` literals and `&String`
+    /// (via Deref coercion) so the sole in-crate wire-up threads through
+    /// the ctor without a pre-conversion; the `reason: String`
+    /// parameter takes an owned `String` (not `impl Into<String>`)
+    /// matching the [`crate::render::is_dns_1123_label`] predicate's
+    /// `Result<(), String>` return shape the sole wire-up site already
+    /// holds owned at the call site, keeping the routing byte-equal to
+    /// the pre-lift block. Same owned-`String`-forward `reason` payload
+    /// discipline as the sibling three-slot family
+    /// [`dep_nome_axis_reason_ctors!`] on `{ nome, <axis>, reason }`
+    /// and the four-slot [`DepError::fonte_pin_shape`] on
+    /// `{ nome, pin, value, reason }`.
+    ///
+    /// Every future consumer that raises the same diagnostic outside
+    /// [`Dep::validate`] — a deferred `caixa-resolver` per-`:deps`
+    /// re-validator at lacre-resolve time re-checking each declared
+    /// dep's `:nome` against the same DNS-1123 predicate the apiserver-
+    /// side schema uses (the `:nome` value flows verbatim as the target
+    /// caixa's `:nome`, the rendered `lareira-<nome>` Helm chart name
+    /// segment, the `LABEL_PROGRAM` label value, and the resolver's
+    /// checkout-directory leaf), a future `feira validate --deps`
+    /// per-caixa admission verb re-running the shape gate on demand, a
+    /// per-lacre overlay resolver rejecting an author-supplied dep's
+    /// `:nome` against a cluster-local snapshot the M4 CR materializer
+    /// projects, a future authoring-surface widening the field into a
+    /// `(String, Vec<Suggestion>)` pair carrying a
+    /// "did-you-mean-<nearest-valid-label>" hint — now reaches this
+    /// variant through one call rather than re-inlining the four-line
+    /// struct-literal in lockstep with the one in-crate wire-up site.
+    #[must_use]
+    pub fn nome_invalid(nome: &str, reason: String) -> Self {
+        Self::NomeInvalid {
+            nome: nome.to_string(),
             reason,
         }
     }
@@ -17649,6 +17711,125 @@ mod dep_source_is_variant_tests {
             },
             "caracteristica_duplicate must route `nome` → `nome`, \
              `axis` → `caracteristica` in declared field order",
+        );
+    }
+
+    #[test]
+    fn nome_invalid_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `DepError::NomeInvalid` to the pre-lift open-coded struct-
+        // literal that cloned the offending `:deps :nome` verbatim and
+        // forwarded the [`crate::render::is_dns_1123_label`]-shaped
+        // owned `reason` payload at the caller site inside
+        // [`Dep::validate`]. Guards any future field-addition /
+        // reordering / accessor-return tweak on the variant. Sibling of
+        // the peer four-slot `fonte_pin_shape` ctor equivalence pins
+        // (below) and the sibling three-slot
+        // `dep_nome_axis_reason_ctors_route_nome_axis_and_reason_through_uniformly`
+        // pin on the same envelope's three-slot `{ nome, <axis>: String,
+        // reason: String }` family.
+        let nome = "Caixa-Teia";
+        let reason = crate::render::is_dns_1123_label(nome).unwrap_err();
+        let via_ctor = DepError::nome_invalid(nome, reason.clone());
+        let via_literal = DepError::NomeInvalid {
+            nome: nome.to_string(),
+            reason,
+        };
+        assert_eq!(
+            via_ctor, via_literal,
+            "nome_invalid(nome, reason) must byte-equal the open-coded \
+             NomeInvalid struct-literal on the same `(nome, reason)` fixture"
+        );
+        assert_eq!(
+            via_ctor.to_string(),
+            via_literal.to_string(),
+            "Display byte-string must byte-equal the open-coded struct-literal"
+        );
+    }
+
+    #[test]
+    fn nome_invalid_ctor_routes_nome_and_reason_through_to_string_uniformly() {
+        // Boundary-sweep pin on the ctor's two-slot projection: sweep
+        // the two ctor input axes (`nome: &str`, `reason: String`)
+        // through distinct-per-axis fixtures against a representative
+        // set of DNS-1123-refused `:deps :nome` byte-strings, so any
+        // wrapper-side silent lowercase / trim / truncate at codegen
+        // time — a silent field swap between `nome` and `reason`, an
+        // accidental `nome`-side `.to_lowercase()` shim, or a `.into()`
+        // divergence on the `reason` axis — surfaces at caixa-core
+        // build time rather than at a downstream diagnostic consumer
+        // that reads `err.nome` / `err.reason` back and gets a different
+        // value than the one it stored. Peer of the sibling
+        // `dep_nome_axis_ctors_route_nome_and_axis_through_to_string_uniformly`
+        // (7f7c950) pin on the same envelope's peer two-slot family
+        // (`{ nome, <axis>: String }`) — extended here onto the
+        // `{ nome, reason: String }` two-slot rung the sole `NomeInvalid`
+        // variant carries. Distinct-per-axis fixtures rule out any
+        // two-axis swap (`nome` ↔ `reason`) that would still pass a
+        // same-fixture-per-axis pin. The sweep list carries a mixed
+        // DNS-1123-refused set (uppercase-carrying, underscore-carrying,
+        // dot-carrying, leading-hyphen, trailing-hyphen, slash-carrying,
+        // over-63-byte) so a future silent per-input normalization
+        // surfaces on the arm that diverges.
+        for nome in [
+            "Caixa-Teia",
+            "caixa_teia",
+            "caixa.teia",
+            "-caixa-teia",
+            "caixa-teia-",
+            "caixa/teia",
+            &"a".repeat(64),
+        ] {
+            let reason = crate::render::is_dns_1123_label(nome)
+                .expect_err("fixture must be a DNS-1123-refused label");
+            let via_ctor = DepError::nome_invalid(nome, reason.clone());
+            let DepError::NomeInvalid {
+                nome: stored_nome,
+                reason: stored_reason,
+            } = via_ctor
+            else {
+                panic!("nome_invalid must construct NomeInvalid for {nome:?}");
+            };
+            assert_eq!(
+                stored_nome, nome,
+                "nome slot must round-trip verbatim through `.to_string()` for {nome:?}"
+            );
+            assert_eq!(
+                stored_reason, reason,
+                "reason slot must forward the owned `String` verbatim for {nome:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_nome_invalid_arm_routes_through_nome_invalid_ctor() {
+        // End-to-end pin: the sole in-crate wire-up site
+        // ([`Dep::validate`]'s DNS-1123 refusal arm) routes through
+        // [`DepError::nome_invalid`] and the observed `Err` byte-equals
+        // the ctor's output on the same DNS-1123-refused `:deps :nome`
+        // fixture, with identical `Display` rendering. A future silent
+        // de-lift of the wire-up back to the open-coded struct-literal
+        // trips this test at caixa-core build time rather than at a
+        // downstream diagnostic consumer far from the wire-up commit.
+        // Sibling of the peer
+        // `nome_invalid_diagnostic_carries_offending_name` pattern-match
+        // pin on the same wire-up — extended here from a `matches!`
+        // shape check to a byte-identity + Display parity route through
+        // the ctor.
+        let d = Dep::simple("Caixa_Teia", "^0.1");
+        let observed = d.validate().unwrap_err();
+        let reason = crate::render::is_dns_1123_label("Caixa_Teia")
+            .expect_err("fixture must be DNS-1123-refused");
+        let expected = DepError::nome_invalid("Caixa_Teia", reason);
+        assert_eq!(
+            observed, expected,
+            "Dep::validate's DNS-1123 refusal arm must byte-equal \
+             nome_invalid(nome, reason)"
+        );
+        assert_eq!(
+            observed.to_string(),
+            expected.to_string(),
+            "Display byte-string parity"
         );
     }
 }
