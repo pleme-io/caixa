@@ -972,11 +972,11 @@ impl UpgradeFromEntry {
             let kind = instr.lisp_form();
             if let Some(prior_idx) = seen.iter().position(|(m, _)| *m == module) {
                 let prior_kind = seen[prior_idx].1;
-                return Err(UpgradeError::DuplicateCleanup {
-                    from: self.prior_versao().to_string(),
-                    module: module.to_string(),
-                    kinds: vec![prior_kind, kind],
-                });
+                return Err(UpgradeError::duplicate_cleanup(
+                    self.prior_versao(),
+                    module,
+                    vec![prior_kind, kind],
+                ));
             }
             seen.push((module, kind));
         }
@@ -2782,6 +2782,74 @@ impl UpgradeError {
             script: script.to_path_buf(),
             prior_cleanup_kind,
             prior_cleanup_module: prior_cleanup_module.to_string(),
+        }
+    }
+
+    /// Construct an [`UpgradeError::DuplicateCleanup`] naming the
+    /// offending `(:from <prior-versao>)` entry, the colliding `:module`
+    /// target, and the ordered pair of colliding cleanup `:kind` lisp-
+    /// forms (`:soft-purge` / `:purge`). Folds the uniform
+    /// `Self::DuplicateCleanup { from: from.to_string(), module:
+    /// module.to_string(), kinds }` three-field struct-literal onto one
+    /// substrate primitive so every wire-up on this sole-variant within-
+    /// entry per-module cleanup-singularity refusal envelope reads
+    /// through one dispatch rather than the pre-lift five-line open-coded
+    /// block. Closes the last unlifted `{ from: String, module: String,
+    /// kinds: Vec<&'static str> }` three-slot open-coded struct-literal
+    /// wire-up on the OTP-appup per-module cleanup-singularity axis,
+    /// filling a peer three-slot rung on the `UpgradeError`-side ctor-
+    /// family ladder alongside the sibling three-slot
+    /// [`UpgradeError::purge_without_prior_load`] (9752da1) standalone
+    /// ctor on the paired within-entry load → cleanup ordering axis, the
+    /// one-slot [`UpgradeError::duplicate_from`] (7e52aec) standalone
+    /// ctor on the sibling cross-entry duplicate-`:from` gate, the four-
+    /// slot [`UpgradeError::state_change_after_cleanup`] (be68237)
+    /// standalone ctor on the migrate → cleanup boundary, the two-slot
+    /// [`upgrade_from_axis_ctors!`] (41d08db) /
+    /// [`upgrade_from_script_ctors!`] (8e67041) macro-generated families,
+    /// and the one-slot [`upgrade_script_only_ctors!`] (7468ca9) family.
+    /// Sole in-crate wire-up site is inside
+    /// [`UpgradeFromEntry::validate_cleanup_singularity`]'s per-module
+    /// cleanup-family dedup arm.
+    ///
+    /// The `from: &str` parameter accepts `&str` literals and `&String`
+    /// via Deref coercion so the sole in-crate wire-up threads
+    /// [`UpgradeFromEntry::prior_versao`] (a `&str` accessor) verbatim
+    /// without a pre-conversion. The `module: &str` parameter takes the
+    /// `&str` [`UpgradeInstruction::declared_module`] returns via
+    /// `.expect("is_cleanup() implies declared_module() is Some")` at the
+    /// caller — the `is_cleanup`-implies-`declared_module`-is-`Some`
+    /// composition pin at
+    /// [`tests::upgrade_instruction_is_cleanup_implies_declared_module_is_some`]
+    /// makes the `.expect(…)` structurally infallible at build time. The
+    /// `kinds: Vec<&'static str>` parameter takes the ordered pair
+    /// `vec![prior_kind, kind]` built at the caller from the two
+    /// [`UpgradeInstruction::lisp_form`] `&'static str` returns
+    /// (`M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE` /
+    /// `M2_UPGRADE_INSTRUCTION_KIND_PURGE`) — the same substrate-
+    /// primitive `&'static str` projection the paired three-slot
+    /// [`UpgradeError::purge_without_prior_load`] ctor threads on the
+    /// sibling load → cleanup ordering axis.
+    ///
+    /// Every future consumer that raises this refusal outside
+    /// [`UpgradeFromEntry::validate_cleanup_singularity`] — a deferred
+    /// wasm-operator's `install_release/1` per-entry per-module
+    /// cleanup-singularity re-checker at hot-upgrade dispatch time, a
+    /// future `feira validate --upgrade-from` per-caixa admission verb
+    /// re-running the singularity pass on demand, a per-`Caixa` overlay
+    /// resolver rejecting a cluster-local `:soft-purge` / `:purge`
+    /// overlay that collides with a base-entry cleanup on the same
+    /// module, the M4 `mesh.pleme.io/v1alpha1/Caixa` CR admission webhook
+    /// re-checking a per-`:upgrade-from`-patched candidate before the
+    /// singularity gate re-fires — reaches the variant through one call
+    /// rather than re-inlining the five-line struct-literal in lockstep
+    /// with the sole in-crate wire-up site.
+    #[must_use]
+    pub fn duplicate_cleanup(from: &str, module: &str, kinds: Vec<&'static str>) -> Self {
+        Self::DuplicateCleanup {
+            from: from.to_string(),
+            module: module.to_string(),
+            kinds,
         }
     }
 }
@@ -9063,6 +9131,225 @@ mod tests {
                  `:state-change` after a bare-cleanup {kind:?} entry, \
                  byte-equal to the pre-lift open-coded struct-literal \
                  wrap on the same fixture",
+            );
+        }
+    }
+
+    // Per-variant equivalence + cross-axis + end-to-end wire-up pins for
+    // the standalone [`UpgradeError::duplicate_cleanup`] inherent ctor
+    // (see the paired doc-block above the ctor definition) — the fold of
+    // the last open-coded three-slot `{ from: String, module: String,
+    // kinds: Vec<&'static str> }` struct-literal wire-up on
+    // [`UpgradeError`] closes the sole in-crate wire-up site inside
+    // [`UpgradeFromEntry::validate_cleanup_singularity`]'s per-module
+    // cleanup-family dedup arm onto one substrate primitive. A byte-
+    // mismatched ctor body would trip the equivalence pin first, ahead of
+    // any downstream diagnostic-shape drift. Peer of the sibling
+    // standalone-ctor equivalence + routing pins on the sibling one-off
+    // variants across `UpgradeError`
+    // (`purge_without_prior_load_ctor_matches_struct_literal_wrap` on the
+    // paired three-slot `{ from, kind, module }` envelope for the sibling
+    // load → cleanup ordering axis;
+    // `state_change_after_cleanup_ctor_matches_struct_literal_wrap` on
+    // the paired four-slot `{ from, script, prior_cleanup_kind,
+    // prior_cleanup_module }` envelope for the migrate → cleanup
+    // boundary; `duplicate_from_ctor_matches_struct_literal_wrap` on the
+    // paired one-slot `{ from }` envelope for the cross-entry duplicate-
+    // `:from` gate).
+
+    #[test]
+    fn duplicate_cleanup_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `UpgradeError::DuplicateCleanup` to the pre-lift open-coded
+        // three-field struct-literal on the same `(&str, &str,
+        // Vec<&'static str>)` fixture. Guards any future field-addition /
+        // reordering / string-conversion tweak on the variant. Same
+        // equivalence-pin shape as the sibling
+        // `purge_without_prior_load_ctor_matches_struct_literal_wrap`
+        // (9752da1) on the peer three-slot envelope.
+        let from = "0.1.0";
+        let module = "x-old";
+        let kinds: Vec<&'static str> = vec![
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+        ];
+        assert_eq!(
+            UpgradeError::duplicate_cleanup(from, module, kinds.clone()),
+            UpgradeError::DuplicateCleanup {
+                from: from.to_string(),
+                module: module.to_string(),
+                kinds,
+            },
+            "generated duplicate_cleanup ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same (&str, &str, Vec<&'static str>) fixture",
+        );
+    }
+
+    #[test]
+    fn duplicate_cleanup_ctor_routes_from_module_and_kinds_through_verbatim() {
+        // Cross-axis routing pin: sweep the three constructor input axes
+        // (`from: &str`, `module: &str`, `kinds: Vec<&'static str>`)
+        // through distinct-per-axis fixtures across every ordered pair of
+        // cleanup-family [`UpgradeInstruction::lisp_form`] variants (the
+        // four `(prior_kind, kind)` combinations `validate_cleanup_
+        // singularity` can emit: SS, PP, SP, PS) + a boundary mix of
+        // SemVer-2 `from` shapes (release, pre-release, pre-release +
+        // build-metadata, zero) + DNS-1123 module shapes (leaf,
+        // hyphenated, deeply-hyphenated) so any wrapper-side lowercase /
+        // trim / truncate / silent axis-swap (`from` ↔ `module`, kinds
+        // pair-reorder, kinds-vec drop-or-duplicate on the two-element
+        // owned `Vec<&'static str>`) on the three-field construction
+        // surfaces at assert time rather than at a downstream diagnostic
+        // consumer that reads the fields back and gets a different value
+        // than the one it stored. Both `&str`-literal and `&String` (via
+        // Deref coercion) carriers are exercised for `from` / `module`
+        // because the sole wire-up hands `self.prior_versao()` (a `&str`
+        // accessor) and `module` (also `&str`, from `declared_module().
+        // expect(…)`) — the ctor must accept both shapes without a
+        // pre-conversion.
+        let all_kinds: [&'static str; 2] = [
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+        ];
+        let froms: [&str; 4] = ["0.1.0", "1.2.3-rc.1", "0.2.0-alpha.7+build.5", "0.0.0"];
+        let modules: [&str; 3] = ["x", "hello-rio-old", "cache-v2-ancient"];
+        for prior_kind in all_kinds {
+            for kind in all_kinds {
+                for from in froms {
+                    for module in modules {
+                        let from_owned: String = from.to_string();
+                        let module_owned: String = module.to_string();
+                        for (from_in, module_in) in
+                            [(from, module), (from_owned.as_str(), module_owned.as_str())]
+                        {
+                            let kinds: Vec<&'static str> = vec![prior_kind, kind];
+                            assert_eq!(
+                                UpgradeError::duplicate_cleanup(from_in, module_in, kinds.clone(),),
+                                UpgradeError::DuplicateCleanup {
+                                    from: from.to_string(),
+                                    module: module.to_string(),
+                                    kinds,
+                                },
+                                "duplicate_cleanup must route from → from, \
+                                 module → module, kinds → kinds in declared \
+                                 field order verbatim on ({from:?}, \
+                                 {module:?}, [{prior_kind:?}, {kind:?}])",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn validate_cleanup_singularity_arm_routes_through_duplicate_cleanup_ctor() {
+        // End-to-end wire-up pin: build an entry whose declared
+        // `:instructions` list front-loads a `:load-module` (so the
+        // sibling `validate_purge_ordering` load → cleanup gate returns
+        // `Ok(())` on the fixture) and then places two cleanup
+        // instructions targeting the same module so
+        // [`UpgradeFromEntry::validate_cleanup_singularity`]'s per-module
+        // cleanup-family dedup arm surfaces
+        // `UpgradeError::DuplicateCleanup`, then pin that the observed
+        // `Err` byte-equals the substrate-primitive
+        // [`UpgradeError::duplicate_cleanup`] ctor's output on the same
+        // fixture. A future silent de-lift of the wire-up back to the
+        // open-coded struct-literal (or a silent axis-swap on the three-
+        // field construction at the wire-up site, or a kinds-pair
+        // reorder) trips at caixa-core test time rather than at a
+        // downstream diagnostic consumer far from the wire-up commit.
+        // Same end-to-end-wire-up discipline as the sibling
+        // `validate_purge_ordering_arm_routes_through_purge_without_prior_load_ctor`
+        // on the peer load → cleanup ordering gate and
+        // `validate_state_change_before_cleanup_arm_routes_through_state_change_after_cleanup_ctor`
+        // on the peer migrate → cleanup boundary; all three key off
+        // exactly one typed dispatch on the substrate primitive.
+        let cases: [(
+            &str,
+            UpgradeInstruction,
+            UpgradeInstruction,
+            &str,
+            [&'static str; 2],
+        ); 4] = [
+            (
+                "0.1.0",
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+                "hello-rio-old",
+                [
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                ],
+            ),
+            (
+                "1.2.3-rc.1",
+                UpgradeInstruction::Purge {
+                    module: "cache-v2-ancient".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "cache-v2-ancient".into(),
+                },
+                "cache-v2-ancient",
+                [
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                ],
+            ),
+            (
+                "0.2.0-alpha.7+build.5",
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                "x-old",
+                [
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                ],
+            ),
+            (
+                "0.0.0",
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                "x-old",
+                [
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                ],
+            ),
+        ];
+        for (from, first, second, module, kinds) in cases {
+            let e = entry(
+                from,
+                vec![
+                    UpgradeInstruction::LoadModule {
+                        module: "hello-rio".into(),
+                    },
+                    first,
+                    second,
+                ],
+            );
+            let observed = e.validate().unwrap_err();
+            assert_eq!(
+                observed,
+                UpgradeError::duplicate_cleanup(from, module, kinds.to_vec()),
+                "validate_cleanup_singularity must route its refusal \
+                 through UpgradeError::duplicate_cleanup(from, module, \
+                 kinds) on a two-cleanup {kinds:?} entry targeting the \
+                 same module, byte-equal to the pre-lift open-coded \
+                 struct-literal wrap on the same fixture",
             );
         }
     }
