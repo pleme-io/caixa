@@ -8239,9 +8239,18 @@ impl AplicacaoSpec {
         // now key off after this accessor lift.
         let p = self.placement();
         if p.clusters().is_empty() {
-            return Err(AplicacaoError::PlacementWithoutClusters {
-                estrategia: p.estrategia(),
-            });
+            // Route the per-`:placement` empty-clusters diagnostic
+            // through the substrate-primitive
+            // [`AplicacaoError::placement_without_clusters`] ctor rather
+            // than the pre-lift three-line open-coded
+            // `AplicacaoError::PlacementWithoutClusters { estrategia:
+            // p.estrategia() }` struct-literal — folds the sole in-crate
+            // wire-up on this variant onto one dispatch matching the
+            // sibling per-`:placement :clusters` dedup /
+            // per-`:contratos` self-edge / per-`:upgrade-from :from`
+            // duplicate substrate-primitive-projection ctors on the
+            // same `AplicacaoError` / `UpgradeError` envelopes.
+            return Err(AplicacaoError::placement_without_clusters(p));
         }
         let mut seen = std::collections::HashSet::new();
         for c in p.clusters() {
@@ -9612,6 +9621,64 @@ impl AplicacaoError {
     pub fn placement_cluster_duplicate(cluster: &str) -> Self {
         Self::PlacementClusterDuplicate {
             cluster: cluster.to_string(),
+        }
+    }
+
+    /// Construct an [`AplicacaoError::PlacementWithoutClusters`] naming
+    /// the offending `:placement :estrategia` scalar the empty `:clusters`
+    /// list was declared against, projecting through the paired
+    /// [`Placement::estrategia`] `Copy`-scalar accessor on the substrate
+    /// primitive.
+    ///
+    /// Folds the uniform `Self::PlacementWithoutClusters { estrategia:
+    /// placement.estrategia() }` one-field struct-literal onto one
+    /// substrate primitive so every wire-up on this variant reads through
+    /// one dispatch rather than the pre-lift three-line open-coded
+    /// `AplicacaoError::PlacementWithoutClusters { estrategia:
+    /// p.estrategia() }` block inside
+    /// [`AplicacaoSpec::validate_placement`]. Same substrate-primitive-
+    /// projection posture as the sibling
+    /// [`AplicacaoError::contrato_self_loop`] (b30edfe, projecting through
+    /// [`WitContract::source`] / [`WitContract::world_ref`] on the paired
+    /// per-`:contratos` self-edge envelope) and the peer
+    /// [`crate::UpgradeError::duplicate_from`] (7e52aec, projecting through
+    /// [`crate::UpgradeFromEntry::prior_versao`] on the sibling
+    /// per-`:upgrade-from :from` envelope) ctors — extended here onto the
+    /// last unlifted `{ estrategia: PlacementStrategy }` one-slot
+    /// per-`:placement` empty-clusters envelope inside
+    /// [`AplicacaoSpec::validate_placement`].
+    ///
+    /// `#[must_use]` and `const fn` alike: the ctor threads the paired
+    /// [`Placement::estrategia`] `Copy`-scalar return through one
+    /// zero-runtime-work construction — no allocation, no owned-string
+    /// materialization — so the pre-lift `Copy`-pass-through property the
+    /// open-coded `p.estrategia()` field expression carried survives
+    /// verbatim through the substrate primitive. The sibling
+    /// [`AplicacaoError::placement_cluster_duplicate`] (92b1c92) ctor
+    /// carries the paired `.to_string()`-owned-String allocation on the
+    /// `{ cluster: String }` envelope; this ctor's `Copy`-scalar envelope
+    /// preserves the zero-alloc posture at the substrate-primitive
+    /// dispatch, matching the peer
+    /// [`aplicacao_policy_scalar_ctors!`] (7ef425e, eight variants on
+    /// `{ <scalar>: Copy }`) family's `const fn` posture on the sibling
+    /// per-`:politicas` cap-scalar envelopes.
+    ///
+    /// Every future consumer that wants to construct this variant outside
+    /// [`AplicacaoSpec::validate_placement`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a `:placement :clusters` overlay against a
+    /// per-tenant cluster-topology snapshot when the overlay resolves to
+    /// an empty list, a future `feira validate --placement` per-caixa
+    /// admission verb re-running the empty-clusters check on demand, an
+    /// M4 per-cluster placement resolver rejecting an empty cluster pool
+    /// after a fleet-local overlay strips every declared cluster — now
+    /// reaches this variant through one call rather than re-inlining the
+    /// three-line struct-literal in lockstep with the one in-crate
+    /// wire-up site.
+    #[must_use]
+    pub const fn placement_without_clusters(placement: &Placement) -> Self {
+        Self::PlacementWithoutClusters {
+            estrategia: placement.estrategia(),
         }
     }
 }
@@ -33754,5 +33821,121 @@ mod tests {
             }
             other => panic!("expected PlacementClusterDuplicate, got {other:?}"),
         }
+    }
+
+    // Per-variant equivalence + routing pins for the
+    // [`AplicacaoError::placement_without_clusters`] standalone ctor
+    // (see the paired doc-block above the ctor definition) — the
+    // generated `pub const fn placement_without_clusters(placement:
+    // &Placement) -> Self` inherent constructor folds the uniform
+    // `Self::PlacementWithoutClusters { estrategia: placement.estrategia()
+    // }` one-field `Copy`-pass-through struct-literal onto one substrate
+    // primitive. Same shape as the sibling
+    // `placement_cluster_duplicate_ctor_matches_struct_literal_wrap`
+    // (92b1c92) / `contrato_self_loop_ctor_matches_struct_literal_wrap`
+    // (b30edfe) equivalence pins on the paired standalone `AplicacaoError`
+    // ctors — extended here onto the one-slot per-`:placement`
+    // empty-clusters envelope.
+
+    #[test]
+    fn placement_without_clusters_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::PlacementWithoutClusters` to the pre-lift
+        // open-coded struct-literal that read the same field through
+        // `p.estrategia()` at the caller site inside
+        // [`AplicacaoSpec::validate_placement`]. Guards any future
+        // field-addition / reordering / accessor-return tweak on the
+        // variant.
+        let placement = Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec![],
+            affinity: None,
+            shard_key: None,
+        };
+        let lifted = AplicacaoError::placement_without_clusters(&placement);
+        let struct_literal = AplicacaoError::PlacementWithoutClusters {
+            estrategia: placement.estrategia(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn placement_without_clusters_ctor_routes_estrategia_through_accessor() {
+        // Routing pin: sweep the sole constructor input axis
+        // (`placement: &Placement`) through every variant in the closed
+        // [`PlacementStrategy::ALL`] accept-set so any wrapper-side
+        // re-derivation / off-by-one arm-swap / stale-field read on the
+        // `placement.estrategia()` sole-field projection surfaces here
+        // rather than at a downstream diagnostic-shape mismatch. Peer of
+        // the sibling
+        // `validate_placement_reads_through_lifted_estrategia_accessor`
+        // three-consumer coherence pin — extended here onto the ctor
+        // itself so the accessor-projection posture is byte-witnessed at
+        // the substrate primitive rather than only at the caller-site
+        // fan-out. Sweeps all three [`PlacementStrategy`] variants so any
+        // future addition to the closed accept-set surfaces as an
+        // exhaustiveness gap on this iteration list.
+        for estrategia in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            let placement = Placement {
+                estrategia,
+                clusters: vec![],
+                affinity: None,
+                shard_key: None,
+            };
+            let built = AplicacaoError::placement_without_clusters(&placement);
+            match built {
+                AplicacaoError::PlacementWithoutClusters { estrategia: e } => {
+                    assert_eq!(
+                        e,
+                        placement.estrategia(),
+                        "estrategia slot must thread the caller's `Placement` verbatim \
+                         through Placement::estrategia() — the ctor reads through the \
+                         lifted accessor",
+                    );
+                    assert_eq!(
+                        e, estrategia,
+                        "estrategia slot must byte-equal the fixture-declared variant",
+                    );
+                }
+                other => panic!("expected PlacementWithoutClusters, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn placement_without_clusters_ctor_is_const_fn() {
+        // Fail-before-pass-after pin on
+        // [`AplicacaoError::placement_without_clusters`]'s `const`-eval-
+        // surface posture. The ctor threads the paired
+        // [`Placement::estrategia`] `const fn` `Copy`-scalar accessor's
+        // return through one `const fn` construction — any future
+        // accidental downgrade to non-`const` (a `.clone()` on the
+        // `Copy`-scalar `estrategia:` field expression, an owned-`String`
+        // materialization on the sibling non-`estrategia:` axis) fails
+        // `placement_without_clusters_via_const_fn` at caixa-core build
+        // time with E0015 (`cannot call non-const method`), strictly
+        // stronger than a runtime `assert!`. Sibling of the peer
+        // [`aplicacao_policy_scalar_ctors!`] (7ef425e) family's `const fn`
+        // posture on the sibling per-`:politicas` cap-scalar envelopes
+        // and the peer [`Placement::estrategia`] const-fn accessor pin at
+        // [`placement_estrategia_accessor_is_const_fn`] on the paired
+        // substrate primitive.
+        const fn placement_without_clusters_via_const_fn(p: &Placement) -> AplicacaoError {
+            AplicacaoError::placement_without_clusters(p)
+        }
+        let placement = Placement {
+            estrategia: PlacementStrategy::Sharded,
+            clusters: vec![],
+            affinity: None,
+            shard_key: Some("tenantId".into()),
+        };
+        assert_eq!(
+            placement_without_clusters_via_const_fn(&placement),
+            AplicacaoError::placement_without_clusters(&placement),
+        );
     }
 }
