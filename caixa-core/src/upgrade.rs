@@ -320,10 +320,8 @@ impl UpgradeFromEntry {
     /// total — see [`Self::validate_cleanup_singularity`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
-        Version::parse(self.prior_versao()).map_err(|e| UpgradeError::FromInvalid {
-            from: self.prior_versao().to_string(),
-            reason: e.to_string(),
-        })?;
+        Version::parse(self.prior_versao())
+            .map_err(|e| UpgradeError::from_invalid(self.prior_versao(), &e.to_string()))?;
         // Per-instruction typed shape: kind-tagged `:module` /
         // `:script` value-shape gates fire here, *before* the
         // within-entry restart-exclusivity gate below — so a
@@ -1122,10 +1120,10 @@ impl UpgradeFromEntry {
                 .declared_module()
                 .expect("is_load_module() implies declared_module() is Some");
             if seen.contains(&module) {
-                return Err(UpgradeError::DuplicateLoadModule {
-                    from: self.prior_versao().to_string(),
-                    module: module.to_string(),
-                });
+                return Err(UpgradeError::duplicate_load_module(
+                    self.prior_versao(),
+                    module,
+                ));
             }
             seen.push(module);
         }
@@ -1437,10 +1435,10 @@ pub fn validate_upgrade_from_against_versao(
             continue;
         };
         if prior >= current {
-            return Err(UpgradeError::FromNotBeforeVersao {
-                from: entry.prior_versao().to_string(),
-                versao: versao.to_string(),
-            });
+            return Err(UpgradeError::from_not_before_versao(
+                entry.prior_versao(),
+                versao,
+            ));
         }
     }
     Ok(())
@@ -2410,6 +2408,168 @@ upgrade_script_only_ctors! {
     absolute_script => AbsoluteScript,
     parent_escape_script => ParentEscapeScript,
     non_lisp_extension_script => NonLispExtensionScript,
+}
+
+// Fold the three `UpgradeError::{FromInvalid, FromNotBeforeVersao,
+// DuplicateLoadModule} { from: <from>.to_string(), <axis>:
+// <value>.to_string() }` two-slot struct-variant wire-up sites at
+// [`UpgradeFromEntry::validate`]'s per-`:from` SemVer-2 parse gate
+// (`Version::parse(self.prior_versao()).map_err(|e| … FromInvalid
+// { from: self.prior_versao().to_string(), reason: e.to_string() })`),
+// [`UpgradeFromEntry::validate_load_singularity`]'s per-module
+// dedup gate (`return Err(UpgradeError::DuplicateLoadModule { from:
+// self.prior_versao().to_string(), module: module.to_string() });`),
+// and [`validate_upgrade_from_against_versao`]'s per-`:from >= :versao`
+// self-upgrade gate (`return Err(UpgradeError::FromNotBeforeVersao
+// { from: entry.prior_versao().to_string(), versao: versao.to_string()
+// });`) onto one substrate-primitive family per typed variant — the
+// missing paired two-slot rung on the `UpgradeError`-side four-family
+// ladder ([`upgrade_script_only_ctors!`] (7468ca9) one-slot
+// `{ script: PathBuf }` → this two-slot `{ from: String, <axis>: String }`
+// → [`upgrade_from_script_ctors!`] (8e67041) two-slot `{ from: String,
+// script: PathBuf }`), and mirror-symmetric sibling of the peer
+// [`crate::dep::dep_nome_axis_ctors!`] (7f7c950) two-slot `{ nome:
+// String, <axis>: String }` fold on the `DepError` envelope — same
+// `<axis>: <value>.to_string()` owned-forward payload shape, `nome`
+// axis renamed `from` at the per-`:upgrade-from :from`-owned altitude
+// the `UpgradeError` envelope keys off (every `UpgradeError` variant
+// carries the offending prior-version `:from` verbatim so the author
+// can grep their caixa.lisp for the offending `(:from "<value>")` /
+// `(:load-module …)` / `:versao` block in one edit). The three
+// variants share the same `{ from: String, <axis>: String }` two-slot
+// shape: the `from` field names the offending per-`:upgrade-from` block's
+// prior-version tag the diagnostic points the author back at, and the
+// middle `<axis>: String` field carries the offending per-envelope axis
+// value verbatim (`reason` on `FromInvalid` carries the wrapped
+// `semver::Version::parse` error message that pinpoints why the tag
+// failed SemVer-2; `versao` on `FromNotBeforeVersao` carries the caixa's
+// own current-`:versao` the entry's `:from` failed to precede; `module`
+// on `DuplicateLoadModule` carries the caixa name the second
+// `(:load-module …)` instruction re-loaded within the same entry).
+// The middle axis-field name differs across variants (`reason` /
+// `versao` / `module`) so the ctor family below takes the axis field
+// name as a macro parameter (`$axis:ident`) alongside the ctor +
+// variant names, generating one `pub fn $ctor(from: &str, $axis: &str)
+// -> Self` inherent constructor per typed variant that spells the
+// uniform two-field construction (`from.to_string()` /
+// `<axis>.to_string()`) exactly once.
+//
+// Peer of the sibling [`upgrade_from_script_ctors!`] (8e67041, 3
+// variants on `{ from: String, script: PathBuf }`) two-slot family on
+// the same envelope — both key off the same `from: String` axis at the
+// same per-`:upgrade-from :from`-owned altitude; this family carries the
+// owned-`String` second axis (per-`reason` / per-`versao` / per-`module`
+// carrier) where the script-slot family carries the owned-`PathBuf`
+// second axis. Peer also of the sibling [`upgrade_script_only_ctors!`]
+// (7468ca9, 3 variants on `{ script: PathBuf }`) one-slot family on the
+// same envelope, of the sibling
+// [`crate::supervisor::supervisor_caixa_only_ctors!`] (db09650, 3
+// variants on `{ caixa: String }`) and
+// [`crate::dep::dep_nome_only_ctors!`] (792aa92, 5 variants on
+// `{ nome: String }`) single-slot families on the sibling
+// `SupervisorError` / `DepError` envelopes, and of the peer
+// [`crate::aplicacao::contrato_empty_pair_ctors!`] (8580068, 4 variants
+// on `{ de, para }`), [`crate::aplicacao::contrato_target_ctors!`]
+// (14b81d5, 2 variants on `{ de, para, wit, expected }`),
+// [`crate::aplicacao::aplicacao_field_reason_ctors!`] (981060b, 7
+// variants on `{ <field>: String, reason: String }`),
+// [`crate::aplicacao::aplicacao_caixa_only_ctors!`] (d9f6867, 5
+// variants on `{ caixa: String }`),
+// [`crate::aplicacao::aplicacao_path_only_ctors!`] (3ba8de6, 3 variants
+// on `{ path: String }`), and
+// [`crate::aplicacao::contrato_pair_value_reason_ctors!`] (14e13f1, 3
+// variants on `{ de, para, <field>: String, reason: String }`) on the
+// sibling `AplicacaoError` envelopes, plus the peer four `LayoutError`
+// families ([`crate::layout::layout_violation_ctors!`] 131ca0d;
+// [`crate::layout::layout_slot_kind_ctors!`] 0419438;
+// [`crate::LayoutError::missing_entry`] 1b09f9d;
+// [`crate::layout::layout_nome_only_ctors!`] 3fe3dd7), the three
+// `LimitsError` codec families (81c856c), the sibling
+// [`crate::dep::fonte_caminho_ctors!`] (f85f145, 11 variants on
+// `{ nome, caminho }`), [`crate::dep::fonte_caminho_byte_ctors!`]
+// (0e35793, 12 variants on `{ nome, caminho, byte }`),
+// [`crate::dep::dep_nome_list_ctors!`] (6f5e0cd, 4 variants on
+// `{ nome, list: &'static str }`), and
+// [`crate::dep::dep_nome_axis_reason_ctors!`] (5621f8a, 3 variants on
+// `{ nome, <axis>: String, reason: String }`) families.
+//
+// Each of the three wire-up sites on this shape opens the identical
+// `UpgradeError::<Variant> { from: <from>.to_string(), <axis>:
+// <value>.to_string() }` four-line struct-literal against a local
+// `(prior_versao(), <axis-value>)` pair threaded from
+// [`UpgradeFromEntry::prior_versao`] (or, at the
+// [`validate_upgrade_from_against_versao`] site, directly from the
+// caller-supplied `versao: &str` argument) — the exact "same block
+// re-inlined at every consumer" shape the PRIME DIRECTIVE names as a
+// bug, on the same altitude the peer sibling `upgrade_from_script_ctors!`
+// / `upgrade_script_only_ctors!` families closed on the sibling
+// `{ from, script }` / `{ script }` shape-envelopes. The three variant /
+// axis-field discriminators are the only things that vary between them;
+// the rest of the struct-literal is a byte-for-byte re-inline.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(from: &str, <axis>: &str) -> Self`, so
+// every wire-up site collapses onto one dispatch:
+// `UpgradeError::<ctor>(<from>, <axis-value>)`, byte-equal to the
+// pre-lift struct-literal on the same `(&str, &str)` fixture. Both
+// parameters accept `&str` literals and `&String` (via Deref coercion)
+// so every existing wire-up threads through the ctor without a
+// pre-conversion.
+//
+// Every future consumer that wants to construct one of these three
+// variants outside the three in-crate `UpgradeFromEntry::validate` /
+// `validate_load_singularity` / `validate_upgrade_from_against_versao`
+// gates (a deferred wasm-operator's `install_release/1` per-entry
+// `:from`-parse / per-`:load-module` singularity / per-entry
+// `:from < :versao` re-checker at hot-upgrade dispatch time, a future
+// `feira validate --upgrade-from` per-caixa admission verb re-checking
+// the three axes, a per-`Caixa` overlay resolver rejecting a
+// `:from`-shape / `:load-module`-singularity / `:from < :versao`
+// invariant against a cluster-local snapshot) now reaches each variant
+// through one call rather than re-inlining the four-line struct-literal
+// in lockstep with the three in-crate wire-up sites.
+macro_rules! upgrade_from_axis_ctors {
+    ($($ctor:ident => $variant:ident { $axis:ident }),* $(,)?) => {
+        impl UpgradeError {
+            $(
+                #[doc = concat!(
+                    "Construct an [`UpgradeError::",
+                    stringify!($variant),
+                    "`] naming the offending `(:from <prior-versao>)` and ",
+                    "the offending `:", stringify!($axis), "` axis value. ",
+                    "Folds the uniform `Self::",
+                    stringify!($variant),
+                    " { from: from.to_string(), ",
+                    stringify!($axis),
+                    ": ",
+                    stringify!($axis),
+                    ".to_string() }` two-field struct-literal onto one ",
+                    "substrate primitive so every in-crate wire-up on ",
+                    "this variant reads through one dispatch rather than ",
+                    "the pre-lift four-line open-coded block. Both `from: ",
+                    "&str` and `",
+                    stringify!($axis),
+                    ": &str` parameters accept `&str` literals and ",
+                    "`&String` (via Deref coercion) so every existing ",
+                    "wire-up threads through the ctor without a pre-",
+                    "conversion."
+                )]
+                #[must_use]
+                pub fn $ctor(from: &str, $axis: &str) -> Self {
+                    Self::$variant {
+                        from: from.to_string(),
+                        $axis: $axis.to_string(),
+                    }
+                }
+            )*
+        }
+    };
+}
+
+upgrade_from_axis_ctors! {
+    from_invalid => FromInvalid { reason },
+    from_not_before_versao => FromNotBeforeVersao { versao },
+    duplicate_load_module => DuplicateLoadModule { module },
 }
 
 #[cfg(test)]
@@ -8058,6 +8218,153 @@ mod tests {
                 UpgradeError::NonLispExtensionScript {
                     script: script.to_path_buf(),
                 },
+            );
+        }
+    }
+
+    // Per-variant equivalence pins for the [`upgrade_from_axis_ctors!`]
+    // macro definition (see the paired doc-block above the macro
+    // definition) — every generated `<ctor>(from: &str, <axis>: &str)
+    // -> Self` constructor folds the uniform `Self::<Variant> { from:
+    // from.to_string(), <axis>: <axis>.to_string() }` two-field
+    // struct-literal onto one substrate primitive. The three per-variant
+    // equivalence pins below (fail-before-pass-after by construction — a
+    // byte-mismatched macro arm would trip its equivalence pin first)
+    // lock each generated constructor to its struct-literal peer under
+    // `PartialEq`, so every wire-up in
+    // [`UpgradeFromEntry::validate`]'s `:from` SemVer-2 parse gate,
+    // [`UpgradeFromEntry::validate_load_singularity`]'s per-module dedup
+    // gate, and [`validate_upgrade_from_against_versao`]'s per-entry
+    // `:from < :versao` gate on that variant produces a byte-equal
+    // `UpgradeError` to the pre-lift open-coded struct-literal. The
+    // cross-axis pin that follows (distinct-per-axis `from` / `<axis>`
+    // pair) routes both constructor input axes through `.to_string()`
+    // in declared field order, so the fold does not silently swap `from`
+    // and the middle `<axis>` field, or silently collapse onto a fixed
+    // `from` / `<axis>` value on any one variant.
+    //
+    // Peer of the sibling `state_change_without_prior_load_ctor_matches_
+    // struct_literal_wrap` / `duplicate_state_change_ctor_matches_
+    // struct_literal_wrap` / `state_change_without_on_state_change_
+    // callback_ctor_matches_struct_literal_wrap` / `upgrade_from_script_
+    // ctors_route_from_and_script_verbatim` equivalence + cross-axis
+    // pins the sibling [`upgrade_from_script_ctors!`] family (8e67041)
+    // established on the sibling `{ from: String, script: PathBuf }`
+    // two-slot envelope shape; extended here onto the `{ from: String,
+    // <axis>: String }` two-slot envelope shape so every substrate-
+    // primitive ctor family on `UpgradeError` guarantees the same-shape
+    // fold every wire-up on the family reads through one dispatch. Also
+    // mirror-symmetric peer of the sibling
+    // `dep_nome_axis_ctors_route_nome_and_axis_through_to_string_uniformly`
+    // (7f7c950) cross-axis pin on the peer `DepError` `{ nome: String,
+    // <axis>: String }` two-slot envelope shape.
+
+    #[test]
+    fn from_invalid_ctor_matches_struct_literal_wrap() {
+        let from = "not-a-semver";
+        let reason = "unexpected character '-' at position 3";
+        assert_eq!(
+            UpgradeError::from_invalid(from, reason),
+            UpgradeError::FromInvalid {
+                from: from.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated from_invalid ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same (&str, &str) fixture",
+        );
+    }
+
+    #[test]
+    fn from_not_before_versao_ctor_matches_struct_literal_wrap() {
+        let from = "0.2.0";
+        let versao = "0.1.0";
+        assert_eq!(
+            UpgradeError::from_not_before_versao(from, versao),
+            UpgradeError::FromNotBeforeVersao {
+                from: from.to_string(),
+                versao: versao.to_string(),
+            },
+            "generated from_not_before_versao ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same (&str, &str) fixture",
+        );
+    }
+
+    #[test]
+    fn duplicate_load_module_ctor_matches_struct_literal_wrap() {
+        let from = "0.1.0";
+        let module = "hello-rio";
+        assert_eq!(
+            UpgradeError::duplicate_load_module(from, module),
+            UpgradeError::DuplicateLoadModule {
+                from: from.to_string(),
+                module: module.to_string(),
+            },
+            "generated duplicate_load_module ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same (&str, &str) fixture",
+        );
+    }
+
+    #[test]
+    fn upgrade_from_axis_ctors_route_from_and_axis_through_to_string_uniformly() {
+        // Cross-axis routing pin: sweep the two constructor input axes
+        // (`from: &str`, `<axis>: &str`) through distinct-per-axis
+        // fixtures against every generated arm in the
+        // [`upgrade_from_axis_ctors!`] macro, so any wrapper-side
+        // lowercase / trim / truncate at codegen time — a silent field
+        // swap between `from` and the middle `<axis>` field, or a
+        // `<axis>` axis silently rerouted through the wrong field on any
+        // one variant — surfaces here rather than at a downstream
+        // diagnostic-shape mismatch. Peer of the sibling
+        // `upgrade_from_script_ctors_route_from_and_script_verbatim`
+        // (8e67041) cross-axis pin on the same envelope's sibling
+        // `{ from: String, script: PathBuf }` two-slot family, and of the
+        // sibling
+        // `dep_nome_axis_ctors_route_nome_and_axis_through_to_string_uniformly`
+        // (7f7c950) cross-axis pin on the peer `DepError` `{ nome:
+        // String, <axis>: String }` two-slot envelope. Distinct-per-
+        // axis fixtures rule out any two-axis swap (`from` ↔ `<axis>`)
+        // that would still pass a same-fixture-per-axis pin. Both
+        // `&str`-literal and `&String` (via Deref coercion) carriers
+        // are exercised because the three wire-up sites hand a mix of
+        // both (the `from_invalid` site hands `&e.to_string()` — an
+        // owned `String` — for `reason`; the `duplicate_load_module`
+        // site hands a `&str` slice for `module`; the
+        // `from_not_before_versao` site hands the caller-supplied
+        // `versao: &str` for `versao`).
+        let from = "0.1.0";
+        let axis = "distinct-axis-value";
+        let from_owned: String = from.to_string();
+        let axis_owned: String = axis.to_string();
+        for (from_in, axis_in) in [(from, axis), (from_owned.as_str(), axis_owned.as_str())] {
+            assert_eq!(
+                UpgradeError::from_invalid(from_in, axis_in),
+                UpgradeError::FromInvalid {
+                    from: from.to_string(),
+                    reason: axis.to_string(),
+                },
+                "from_invalid must route `from` → `from`, `axis` → `reason` \
+                 in declared field order",
+            );
+            assert_eq!(
+                UpgradeError::from_not_before_versao(from_in, axis_in),
+                UpgradeError::FromNotBeforeVersao {
+                    from: from.to_string(),
+                    versao: axis.to_string(),
+                },
+                "from_not_before_versao must route `from` → `from`, \
+                 `axis` → `versao` in declared field order",
+            );
+            assert_eq!(
+                UpgradeError::duplicate_load_module(from_in, axis_in),
+                UpgradeError::DuplicateLoadModule {
+                    from: from.to_string(),
+                    module: axis.to_string(),
+                },
+                "duplicate_load_module must route `from` → `from`, \
+                 `axis` → `module` in declared field order",
             );
         }
     }
