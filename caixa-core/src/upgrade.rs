@@ -837,12 +837,12 @@ impl UpgradeFromEntry {
                 // each consumer" trajectory the sibling
                 // [`UpgradeInstruction::declared_module`] `String`-axis
                 // per-variant unifier already established.
-                return Err(UpgradeError::StateChangeAfterCleanup {
-                    from: self.prior_versao().to_string(),
-                    script: script.clone(),
-                    prior_cleanup_kind: prior_kind,
-                    prior_cleanup_module: prior_module.to_string(),
-                });
+                return Err(UpgradeError::state_change_after_cleanup(
+                    self.prior_versao(),
+                    script,
+                    prior_kind,
+                    prior_module,
+                ));
             }
         }
         Ok(())
@@ -2698,6 +2698,90 @@ impl UpgradeError {
             from: from.to_string(),
             kind,
             module: module.to_string(),
+        }
+    }
+
+    /// Construct an [`UpgradeError::StateChangeAfterCleanup`] naming the
+    /// offending `(:from <prior-versao>)` entry, the offending
+    /// `(:state-change …)` `:script` path, and the prior cleanup
+    /// instruction's `:kind` lisp-form (`:soft-purge` / `:purge`) +
+    /// `:module` target. Folds the uniform
+    /// `Self::StateChangeAfterCleanup { from: from.to_string(), script:
+    /// script.to_path_buf(), prior_cleanup_kind, prior_cleanup_module:
+    /// prior_cleanup_module.to_string() }` four-field struct-literal
+    /// onto one substrate primitive so every wire-up on this sole-
+    /// variant migrate-after-cleanup ordering-refusal envelope reads
+    /// through one dispatch rather than the pre-lift seven-line open-
+    /// coded block. Closes the last unlifted `{ from: String, script:
+    /// PathBuf, prior_cleanup_kind: &'static str, prior_cleanup_module:
+    /// String }` four-slot open-coded struct-literal wire-up on the
+    /// OTP-appup migrate-before-cleanup ordering axis, filling the
+    /// missing four-slot rung on the `UpgradeError`-side ctor-family
+    /// ladder alongside the sibling one-slot
+    /// [`UpgradeError::duplicate_from`] (7e52aec) and three-slot
+    /// [`UpgradeError::purge_without_prior_load`] (9752da1) standalone
+    /// ctors, the two-slot [`upgrade_from_axis_ctors!`] (41d08db) /
+    /// [`upgrade_from_script_ctors!`] (8e67041) macro-generated
+    /// families, and the one-slot [`upgrade_script_only_ctors!`]
+    /// (7468ca9) family. Sole in-crate wire-up site is inside
+    /// [`UpgradeFromEntry::validate_state_change_before_cleanup`]'s
+    /// migrate-family sticky-latch dispatch — the third of three
+    /// within-entry cross-instruction OTP-appup ordering gates the
+    /// module doc pins (`validate_state_change_ordering` on the load →
+    /// migrate boundary via [`upgrade_from_script_ctors!`]-generated
+    /// `state_change_without_prior_load`; `validate_purge_ordering` on
+    /// the load → cleanup boundary via `purge_without_prior_load`;
+    /// `validate_state_change_before_cleanup` on the migrate → cleanup
+    /// boundary via this ctor — now).
+    ///
+    /// The `from: &str` parameter accepts `&str` literals and `&String`
+    /// via Deref coercion so the sole in-crate wire-up site threads
+    /// [`UpgradeFromEntry::prior_versao`] (a `&str` accessor) verbatim
+    /// without a pre-conversion. The `script: &std::path::Path`
+    /// parameter accepts `&Path` (direct `Path::new(…)`) and `&PathBuf`
+    /// (from [`UpgradeInstruction::declared_path`]'s `Option<&PathBuf>`
+    /// via Deref coercion) so the wire-up threads the sticky-latch
+    /// script projection through the ctor without a pre-conversion; the
+    /// uniform `script.to_path_buf()` one-field construction is spelled
+    /// once — inside the ctor body — rather than at every wire-up site.
+    /// The `prior_cleanup_kind: &'static str` parameter accepts the
+    /// lisp-form `&'static str` [`UpgradeInstruction::lisp_form`]
+    /// returns for the two [`UpgradeInstruction::is_cleanup`] arms —
+    /// `M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE` /
+    /// `M2_UPGRADE_INSTRUCTION_KIND_PURGE` — verbatim without a per-arm
+    /// re-projection at the ctor path. The `prior_cleanup_module: &str`
+    /// parameter takes the `&str` [`UpgradeInstruction::declared_module`]
+    /// returns via `.expect("is_cleanup() implies declared_module() is
+    /// Some")` at the caller — the `is_cleanup`-implies-`declared_module`-
+    /// is-`Some` composition pin at
+    /// [`tests::upgrade_instruction_is_cleanup_implies_declared_module_is_some`]
+    /// makes the `.expect(…)` structurally infallible at build time.
+    ///
+    /// Every future consumer that raises this refusal outside
+    /// [`UpgradeFromEntry::validate_state_change_before_cleanup`] — a
+    /// deferred wasm-operator's `install_release/1` per-entry
+    /// migrate-before-cleanup re-checker at hot-upgrade dispatch time,
+    /// a future `feira validate --upgrade-from` per-caixa admission verb
+    /// re-running the migrate-before-cleanup gate on demand, a
+    /// per-`Caixa` overlay resolver rejecting a cluster-local
+    /// `:state-change` overlay authored after a `:soft-purge` /
+    /// `:purge`, the M4 `mesh.pleme.io/v1alpha1/Caixa` CR admission
+    /// webhook re-checking a per-`:upgrade-from`-patched candidate
+    /// before the migrate-before-cleanup gate re-fires — reaches the
+    /// variant through one call rather than re-inlining the seven-line
+    /// struct-literal in lockstep with the sole in-crate wire-up site.
+    #[must_use]
+    pub fn state_change_after_cleanup(
+        from: &str,
+        script: &std::path::Path,
+        prior_cleanup_kind: &'static str,
+        prior_cleanup_module: &str,
+    ) -> Self {
+        Self::StateChangeAfterCleanup {
+            from: from.to_string(),
+            script: script.to_path_buf(),
+            prior_cleanup_kind,
+            prior_cleanup_module: prior_cleanup_module.to_string(),
         }
     }
 }
@@ -8775,6 +8859,210 @@ mod tests {
                  module) on a bare-cleanup {kind:?} entry, byte-equal \
                  to the pre-lift open-coded struct-literal wrap on the \
                  same fixture",
+            );
+        }
+    }
+
+    // Per-variant equivalence + cross-axis + end-to-end wire-up pins for
+    // the standalone [`UpgradeError::state_change_after_cleanup`]
+    // inherent ctor (see the paired doc-block above the ctor
+    // definition) — the fold of the last open-coded four-slot `{ from:
+    // String, script: PathBuf, prior_cleanup_kind: &'static str,
+    // prior_cleanup_module: String }` struct-literal wire-up on
+    // [`UpgradeError`] closes the sole in-crate wire-up site inside
+    // [`UpgradeFromEntry::validate_state_change_before_cleanup`]'s
+    // migrate-family sticky-latch dispatch onto one substrate primitive.
+    // A byte-mismatched ctor body would trip the equivalence pin first,
+    // ahead of any downstream diagnostic-shape drift. Peer of the
+    // sibling standalone-ctor equivalence + routing pins on the sibling
+    // one-off variants across `UpgradeError`
+    // (`purge_without_prior_load_ctor_matches_struct_literal_wrap` /
+    // `purge_without_prior_load_ctor_routes_from_kind_and_module_through_verbatim`
+    // / `validate_purge_ordering_arm_routes_through_purge_without_prior_load_ctor`
+    // on the paired three-slot `{ from, kind, module }` envelope;
+    // `duplicate_from_ctor_matches_struct_literal_wrap` on the paired
+    // one-slot `{ from }` envelope).
+
+    #[test]
+    fn state_change_after_cleanup_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `UpgradeError::StateChangeAfterCleanup` to the pre-lift
+        // open-coded four-field struct-literal on the same `(&str,
+        // &Path, &'static str, &str)` fixture. Guards any future
+        // field-addition / reordering / string-conversion tweak on the
+        // variant. Same equivalence-pin shape as the sibling
+        // `purge_without_prior_load_ctor_matches_struct_literal_wrap`
+        // (9752da1) on the peer three-slot envelope.
+        let from = "0.1.0";
+        let script = Path::new("lib/m.lisp");
+        let prior_cleanup_kind = crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE;
+        let prior_cleanup_module = "x-old";
+        assert_eq!(
+            UpgradeError::state_change_after_cleanup(
+                from,
+                script,
+                prior_cleanup_kind,
+                prior_cleanup_module,
+            ),
+            UpgradeError::StateChangeAfterCleanup {
+                from: from.to_string(),
+                script: script.to_path_buf(),
+                prior_cleanup_kind,
+                prior_cleanup_module: prior_cleanup_module.to_string(),
+            },
+            "generated state_change_after_cleanup ctor must produce \
+             byte-equal UpgradeError to the open-coded struct-literal \
+             wrap on the same (&str, &Path, &'static str, &str) fixture",
+        );
+    }
+
+    #[test]
+    fn state_change_after_cleanup_ctor_routes_from_script_kind_and_module_through_verbatim() {
+        // Cross-axis routing pin: sweep the four constructor input
+        // axes (`from: &str`, `script: &Path`, `prior_cleanup_kind:
+        // &'static str`, `prior_cleanup_module: &str`) through
+        // distinct-per-axis fixtures across every cleanup-family
+        // [`UpgradeInstruction::lisp_form`] variant + a boundary mix of
+        // SemVer-2 `from` shapes (release, pre-release, pre-release +
+        // build-metadata, zero), sibling-`.lisp` script-path shapes
+        // (leaf, nested, deeply-nested), and DNS-1123 module shapes
+        // (leaf, hyphenated, deeply-hyphenated) so any wrapper-side
+        // lowercase / trim / truncate / silent axis-swap
+        // (`from` ↔ `prior_cleanup_module`, `script` misrouted onto
+        // `from`, `prior_cleanup_kind` misrouted onto
+        // `prior_cleanup_module`) on the four-field construction
+        // surfaces at assert time rather than at a downstream diagnostic
+        // consumer that reads the fields back and gets a different value
+        // than the one it stored. Both `&str`-literal and `&String` (via
+        // Deref coercion) carriers are exercised for `from` /
+        // `prior_cleanup_module` because the sole wire-up hands
+        // `self.prior_versao()` (a `&str` accessor) and `prior_module`
+        // (also `&str`, from `declared_module().expect(…)`) — the ctor
+        // must accept both shapes without a pre-conversion. Both
+        // `&Path`-direct and `&PathBuf` (via Deref coercion) carriers
+        // are exercised for `script` because the sole wire-up hands a
+        // `&PathBuf` sticky-latch projection from `declared_path()`'s
+        // `Option<&PathBuf>` return — the ctor must accept both shapes
+        // without a pre-conversion.
+        let kinds: [&'static str; 2] = [
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+        ];
+        let froms: [&str; 4] = ["0.1.0", "1.2.3-rc.1", "0.2.0-alpha.7+build.5", "0.0.0"];
+        let scripts: [&str; 3] = [
+            "m.lisp",
+            "lib/migrations.lisp",
+            "lib/migrations/v01/step-1.lisp",
+        ];
+        let modules: [&str; 3] = ["x", "hello-rio-old", "cache-v2-ancient"];
+        for kind in kinds {
+            for from in froms {
+                for script_str in scripts {
+                    for module in modules {
+                        let from_owned: String = from.to_string();
+                        let module_owned: String = module.to_string();
+                        let script_path = Path::new(script_str);
+                        let script_pathbuf = PathBuf::from(script_str);
+                        for (from_in, module_in, script_in) in [
+                            (from, module, script_path),
+                            (
+                                from_owned.as_str(),
+                                module_owned.as_str(),
+                                script_pathbuf.as_path(),
+                            ),
+                        ] {
+                            assert_eq!(
+                                UpgradeError::state_change_after_cleanup(
+                                    from_in, script_in, kind, module_in,
+                                ),
+                                UpgradeError::StateChangeAfterCleanup {
+                                    from: from.to_string(),
+                                    script: PathBuf::from(script_str),
+                                    prior_cleanup_kind: kind,
+                                    prior_cleanup_module: module.to_string(),
+                                },
+                                "state_change_after_cleanup must route from → from, \
+                                 script → script, prior_cleanup_kind → prior_cleanup_kind, \
+                                 prior_cleanup_module → prior_cleanup_module in declared \
+                                 field order verbatim on ({from:?}, {script_str:?}, \
+                                 {kind:?}, {module:?})",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn validate_state_change_before_cleanup_arm_routes_through_state_change_after_cleanup_ctor() {
+        // End-to-end wire-up pin: build an entry whose declared
+        // `:instructions` list places a `:soft-purge` (and separately a
+        // `:purge`) before a `:state-change` so
+        // [`UpgradeFromEntry::validate_state_change_before_cleanup`]'s
+        // migrate-family sticky-latch dispatch surfaces
+        // `UpgradeError::StateChangeAfterCleanup`, then pin that the
+        // observed `Err` byte-equals the substrate-primitive
+        // [`UpgradeError::state_change_after_cleanup`] ctor's output on
+        // the same fixture. A future silent de-lift of the wire-up back
+        // to the open-coded struct-literal (or a silent axis-swap on
+        // the four-field construction at the wire-up site) trips at
+        // caixa-core test time rather than at a downstream diagnostic
+        // consumer far from the wire-up commit. Same end-to-end-wire-up
+        // discipline as the sibling
+        // `validate_purge_ordering_arm_routes_through_purge_without_prior_load_ctor`
+        // on the peer load → cleanup ordering gate; both key off
+        // exactly one typed dispatch on the substrate primitive. Every
+        // entry here front-loads a `:load-module` so the sole surviving
+        // ordering refusal is the migrate → cleanup one this gate
+        // owns — the peer `validate_purge_ordering` load → cleanup gate
+        // returns `Ok(())` on these fixtures, so the migrate-after-
+        // cleanup arm is the only path to an `Err`.
+        let cases: [(&str, UpgradeInstruction, &'static str, &str, &str); 2] = [
+            (
+                "0.1.0",
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                "hello-rio-old",
+                "lib/migrations/v01.lisp",
+            ),
+            (
+                "1.2.3-rc.1",
+                UpgradeInstruction::Purge {
+                    module: "cache-v2-ancient".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                "cache-v2-ancient",
+                "lib/migrations/v02.lisp",
+            ),
+        ];
+        for (from, cleanup, kind, module, script_str) in cases {
+            let script = PathBuf::from(script_str);
+            let e = entry(
+                from,
+                vec![
+                    UpgradeInstruction::LoadModule {
+                        module: "hello-rio".into(),
+                    },
+                    cleanup,
+                    UpgradeInstruction::StateChange {
+                        script: script.clone(),
+                    },
+                ],
+            );
+            let observed = e.validate().unwrap_err();
+            assert_eq!(
+                observed,
+                UpgradeError::state_change_after_cleanup(from, &script, kind, module),
+                "validate_state_change_before_cleanup must route its \
+                 refusal through \
+                 UpgradeError::state_change_after_cleanup(from, script, \
+                 prior_cleanup_kind, prior_cleanup_module) on a \
+                 `:state-change` after a bare-cleanup {kind:?} entry, \
+                 byte-equal to the pre-lift open-coded struct-literal \
+                 wrap on the same fixture",
             );
         }
     }
