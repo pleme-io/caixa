@@ -8566,7 +8566,7 @@ impl AplicacaoSpec {
                         }
                         cycle.reverse();
                         cycle.push(nxt.to_string());
-                        return Err(AplicacaoError::ContratoCycle { cycle });
+                        return Err(AplicacaoError::contrato_cycle(cycle));
                     }
                     Mark::White => {
                         parent.insert(nxt, node);
@@ -9821,6 +9821,73 @@ impl AplicacaoError {
         Self::EntradaMemberMissing {
             para: entrada.destination().to_string(),
         }
+    }
+
+    /// Construct an [`AplicacaoError::ContratoCycle`] naming the
+    /// synchronous-`:contratos` cycle path the DFS-with-three-coloring
+    /// sync-only-subgraph gate at
+    /// [`AplicacaoSpec::detect_sync_cycles`] reconstructed from the
+    /// gray-arm's back-edge target through the parent chain, folding the
+    /// uniform `Self::ContratoCycle { cycle }` one-field struct-literal
+    /// onto one substrate primitive so every wire-up on this variant
+    /// reads through one dispatch rather than the pre-lift open-coded
+    /// `AplicacaoError::ContratoCycle { cycle }` block at the sole
+    /// in-crate wire-up site inside
+    /// [`AplicacaoSpec::detect_sync_cycles`]'s gray-arm cycle-close
+    /// return. Same substrate-primitive-projection posture as the
+    /// sibling [`AplicacaoError::entrada_member_missing`] (deeae5c,
+    /// projecting through [`Entrada::destination`] on the peer `{ para:
+    /// String }` one-slot per-`:entrada :para` phantom-reference
+    /// envelope) and [`AplicacaoError::placement_without_clusters`]
+    /// (b0d24ba, projecting through [`Placement::estrategia`] on the
+    /// sibling `{ estrategia: PlacementStrategy }` one-slot
+    /// per-`:placement` empty-clusters envelope) ctors — extended here
+    /// onto the last unlifted `{ cycle: Vec<String> }` one-slot
+    /// per-`:contratos` cross-edge sync-cycle envelope on the same
+    /// [`AplicacaoError`] type. Closes the last unlifted `AplicacaoError`
+    /// struct-literal wire-up under
+    /// [`AplicacaoSpec::detect_sync_cycles`].
+    ///
+    /// The `cycle: Vec<String>` parameter threads verbatim from the
+    /// caller-side DFS traversal's reconstructed cycle path (built up by
+    /// walking `parent` from the gray-back-edge's source node back to
+    /// its target, reversing, then appending the target once more so the
+    /// first and last elements coincide by construction and the
+    /// `Display` rendering under the [`AplicacaoError::ContratoCycle`]
+    /// `cycle.join(" → ")` formatter reads as a closed loop), matching
+    /// the pre-lift open-coded body's field selection exactly. Taking
+    /// the owned [`Vec<String>`] rather than a borrowed slice + collect
+    /// on the ctor side keeps the pre-lift wire-up byte-identical (the
+    /// caller already owns the reconstructed [`Vec<String>`] at the
+    /// gray-arm return, so no per-arm re-allocation lands on the ctor
+    /// path).
+    ///
+    /// Peer of the sibling per-`:contratos` single-slot / two-slot ctor
+    /// families on the same [`AplicacaoError`] type — same "one typed
+    /// dispatch on the substrate primitive, thin projections at each
+    /// consumer" discipline extended here onto the last unlifted
+    /// per-`:contratos` cross-edge cycle envelope inside
+    /// [`AplicacaoSpec::detect_sync_cycles`].
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`AplicacaoSpec::detect_sync_cycles`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a per-tenant `:contratos` overlay's
+    /// sync-cycle invariant after a fleet-local overlay adds or removes
+    /// a synchronous edge, a future `feira validate --contratos`
+    /// per-caixa admission verb re-running the cross-edge cycle detector
+    /// on demand, the M4 per-edge policy resolver MESH-COMPOSITION §III.2
+    /// #3 acknowledges (whose per-edge patch mutates one `:contratos`
+    /// entry and needs to re-probe *just* the cycle invariant against
+    /// the post-patch adjacency), a future authoring-surface widening
+    /// the field into a `(Vec<String>, Vec<WitTarget>)` pair carrying
+    /// the per-hop WIT shape for a richer "break here" hint — now
+    /// reaches this variant through one call rather than re-inlining the
+    /// open-coded struct-literal in lockstep with the one in-crate
+    /// wire-up site.
+    #[must_use]
+    pub fn contrato_cycle(cycle: Vec<String>) -> Self {
+        Self::ContratoCycle { cycle }
     }
 }
 
@@ -34310,6 +34377,135 @@ mod tests {
             observed, expected,
             "validate_entrada's phantom-reference-arm Err must byte-equal \
              entrada_member_missing(&entrada)"
+        );
+        assert_eq!(
+            observed.to_string(),
+            expected.to_string(),
+            "Display byte-string parity"
+        );
+    }
+
+    #[test]
+    fn contrato_cycle_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::ContratoCycle` to the pre-lift open-coded
+        // struct-literal that stored the caller-side reconstructed
+        // cycle path verbatim at the gray-arm cycle-close return inside
+        // [`AplicacaoSpec::detect_sync_cycles`]. Guards any future
+        // field-addition / reordering / re-collect divergence on the
+        // variant. Sibling of the peer
+        // `entrada_member_missing_ctor_matches_struct_literal_wrap`
+        // (deeae5c) pin on the sibling per-`:entrada :para`
+        // phantom-reference envelope, and sibling of the peer
+        // `placement_without_clusters_ctor_matches_struct_literal_wrap`
+        // pin on the sibling per-`:placement` empty-clusters envelope.
+        let cycle = vec![
+            "cart".to_string(),
+            "catalog".to_string(),
+            "cart".to_string(),
+        ];
+        let via_ctor = AplicacaoError::contrato_cycle(cycle.clone());
+        let via_literal = AplicacaoError::ContratoCycle {
+            cycle: cycle.clone(),
+        };
+        assert_eq!(
+            via_ctor, via_literal,
+            "contrato_cycle(cycle) must byte-equal the open-coded \
+             ContratoCycle struct-literal on the same Vec<String> fixture"
+        );
+        assert_eq!(
+            via_ctor.to_string(),
+            via_literal.to_string(),
+            "Display byte-string must byte-equal the open-coded struct-literal"
+        );
+    }
+
+    #[test]
+    fn contrato_cycle_ctor_routes_path_verbatim() {
+        // Boundary-sweep pin on the ctor's substrate-primitive
+        // pass-through: the `cycle` slot is stored verbatim across a
+        // representative set of reconstructed cycle paths (two-node
+        // closed loop; three-node loop; long chain with repeated
+        // interior nodes; a fixture whose first/last coincide by the
+        // gray-arm's own append-target-once-more discipline), so any
+        // wrapper-side silent normalization, dedup, sort, `.into()`
+        // divergence, accidental field rebrand, or re-collect on the
+        // sole-field pass-through surfaces at caixa-core build time
+        // rather than at a downstream diagnostic consumer that reads
+        // `err.cycle` back and gets a different value than the one it
+        // stored. Peer of the sibling
+        // `entrada_member_missing_ctor_routes_para_through_entrada_accessor`
+        // (deeae5c) boundary-sweep pin on the sibling per-`:entrada
+        // :para` envelope — extended here onto the owned-[`Vec<String>`]
+        // pass-through on the sibling per-`:contratos` cycle envelope.
+        for cycle in [
+            vec![
+                "cart".to_string(),
+                "catalog".to_string(),
+                "cart".to_string(),
+            ],
+            vec![
+                "cart".to_string(),
+                "catalog".to_string(),
+                "payment".to_string(),
+                "cart".to_string(),
+            ],
+            vec![
+                "a".to_string(),
+                "b".to_string(),
+                "c".to_string(),
+                "d".to_string(),
+                "b".to_string(),
+            ],
+            vec!["only".to_string(), "only".to_string()],
+        ] {
+            let err = AplicacaoError::contrato_cycle(cycle.clone());
+            let AplicacaoError::ContratoCycle { cycle: stored } = err else {
+                panic!("contrato_cycle must construct ContratoCycle for {cycle:?}");
+            };
+            assert_eq!(
+                stored, cycle,
+                "cycle slot must round-trip the caller-side Vec<String> verbatim \
+                 for {cycle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn detect_sync_cycles_arm_routes_through_contrato_cycle_ctor() {
+        // End-to-end pin: the sole in-crate wire-up site
+        // (`AplicacaoSpec::detect_sync_cycles`'s gray-arm cycle-close
+        // return) routes through [`AplicacaoError::contrato_cycle`] and
+        // the observed `Err` byte-equals the ctor's output on the same
+        // reconstructed cycle path. A future silent de-lift of the
+        // wire-up back to the open-coded `AplicacaoError::ContratoCycle
+        // { cycle }` struct-literal trips this test at caixa-core build
+        // time rather than at a downstream diagnostic consumer far from
+        // the wire-up commit. Sibling of the peer
+        // `validate_entrada_phantom_arm_routes_through_entrada_member_missing_ctor`
+        // (deeae5c) end-to-end pin on the sibling per-`:entrada :para`
+        // envelope, and sibling of the peer
+        // `validate_placement_non_sharded_arm_routes_through_shard_key_on_non_sharded_ctor`
+        // (14bafca) end-to-end pin on the sibling per-`:placement
+        // :shard-key` envelope — extended here from a bare
+        // `matches!(err, AplicacaoError::ContratoCycle { .. })` shape
+        // check to a byte-identity route through the ctor.
+        let mut s = three_member_spec();
+        // Reset to a clean 3-cycle: catalog → cart → payment → catalog
+        s.contratos = vec![
+            contract_http("catalog", "cart", "/x"),
+            contract_http("cart", "payment", "/y"),
+            contract_http("payment", "catalog", "/z"),
+        ];
+        let observed = s.validate().unwrap_err();
+        let AplicacaoError::ContratoCycle { ref cycle } = observed else {
+            panic!("expected ContratoCycle from the sync-cycle detector, got {observed:?}");
+        };
+        let expected = AplicacaoError::contrato_cycle(cycle.clone());
+        assert_eq!(
+            observed, expected,
+            "detect_sync_cycles's gray-arm Err must byte-equal \
+             contrato_cycle(cycle) on the reconstructed cycle path"
         );
         assert_eq!(
             observed.to_string(),
