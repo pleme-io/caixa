@@ -6010,7 +6010,7 @@ impl Caixa {
                 match is_sandboxed_relative_path(path) {
                     Ok(()) => {}
                     Err(PathShapeViolation::Empty) => {
-                        return Err(ManifestError::CodePathEmpty { slot });
+                        return Err(ManifestError::code_path_empty(slot));
                     }
                     Err(PathShapeViolation::Absolute) => {
                         return Err(ManifestError::code_path_absolute(slot, path));
@@ -7333,6 +7333,79 @@ manifest_code_path_slot_path_ctors! {
     code_path_non_lisp_extension => CodePathNonLispExtension,
     code_path_non_computeunit_yaml_extension => CodePathNonComputeUnitYamlExtension,
     code_path_duplicate => CodePathDuplicate,
+}
+
+// Fold the last `ManifestError::CodePathEmpty { slot: <&'static str> }` single-
+// slot struct-variant wire-up site at [`Caixa::validate_code_path_lists`]'s
+// per-slot [`PathShapeViolation::Empty`] arm onto one substrate primitive on
+// `ManifestError` — the last open-coded single-slot `{ slot: &'static str }`
+// struct-literal on the `:bibliotecas` / `:exe` / `:servicos` code-path-list
+// value-shape trajectory this envelope carries, matching the peer five-variant
+// [`manifest_code_path_slot_path_ctors!`] family fold (de11917, 5 variants on
+// `{ slot: &'static str, path: PathBuf }`) already closed on the sibling
+// two-slot envelope of the same `ManifestError`, and mirror-symmetric sibling
+// of the peer [`crate::behavior::BehaviorError::empty_path`] (0e33b37,
+// `EmptyPath { slot: &'static str }`) ctor on the sibling M2 `:behavior`
+// envelope's identical one-slot shape. After this lift every wire-up on every
+// `ManifestError` variant carried by [`Caixa::validate_code_path_lists`]'s
+// per-slot [`PathShapeViolation`] cascade reads through one substrate-primitive
+// ctor dispatch per typed variant rather than one macro closing four sites
+// plus a hand-written empty-slot open-coding the fifth.
+//
+// A macro is not warranted on the one-variant envelope shape
+// `{ slot: &'static str }` — unlike the peer five-variant
+// `{ slot: &'static str, path: PathBuf }` shape the
+// [`manifest_code_path_slot_path_ctors!`] macro closes — but the same
+// substrate-primitive discipline applies: every future consumer that wants to
+// construct a `CodePathEmpty` outside [`Caixa::validate_code_path_lists`] (a
+// deferred `feira validate --code-paths` per-caixa admission verb re-checking
+// each declared `:bibliotecas` / `:exe` / `:servicos` entry against the same
+// sandbox-shape + file-type + duplicate cascade, a future caixa-registry
+// per-lacre code-path re-validator at lacre-resolve time, a per-`Caixa`
+// overlay resolver rejecting an author-supplied empty code-path against a
+// cluster-local snapshot) reaches the variant through one call rather than
+// re-inlining the one-line struct-literal in lockstep with the in-crate
+// wire-up site.
+//
+// The `slot` parameter stays `&'static str` (not `&str`) so the constructor
+// continues to carry a program-lifetime `:bibliotecas` / `:exe` / `:servicos`
+// author-key label — one of the three `&'static str` literals threaded through
+// the outer per-slot iterator at [`Caixa::validate_code_path_lists`] — matching
+// the enum-field type and the peer [`manifest_code_path_slot_path_ctors!`]-
+// generated arms' `slot: &'static str` parameter verbatim. A runtime-borrowed
+// `&str` would silently downgrade the label lifetime and let a caller stash a
+// non-`'static` borrow into the returned error. `const fn` preserves the
+// zero-runtime-work property of the pre-lift struct-literal verbatim, matching
+// the peer [`crate::behavior::BehaviorError::empty_path`] `const fn` on the
+// sibling M2 envelope and the sibling
+// [`crate::supervisor::supervisor_scalar_ctors!`] / peer
+// [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] `Copy`-scalar
+// discipline on their sibling envelopes.
+impl ManifestError {
+    /// Construct a [`ManifestError::CodePathEmpty`] naming the offending
+    /// `:bibliotecas` / `:exe` / `:servicos` code-path list `slot` label.
+    /// Folds the uniform `Self::CodePathEmpty { slot }` one-field
+    /// struct-literal onto one substrate primitive so the wire-up at
+    /// [`Caixa::validate_code_path_lists`]'s per-slot
+    /// [`PathShapeViolation::Empty`] arm on this variant reads through one
+    /// dispatch rather than the pre-lift open-coded struct-literal block.
+    /// Peer of the sibling [`ManifestError::code_path_absolute`] /
+    /// [`ManifestError::code_path_parent_escape`] /
+    /// [`ManifestError::code_path_non_lisp_extension`] /
+    /// [`ManifestError::code_path_non_computeunit_yaml_extension`] /
+    /// [`ManifestError::code_path_duplicate`] ctors the
+    /// [`manifest_code_path_slot_path_ctors!`] macro closed on the paired
+    /// two-slot `{ slot: &'static str, path: PathBuf }` envelope of the same
+    /// `ManifestError`, and mirror-symmetric sibling of the peer
+    /// [`crate::behavior::BehaviorError::empty_path`] ctor on the sibling M2
+    /// `:behavior` envelope's identical one-slot shape — the per-slot
+    /// [`PathShapeViolation`] cascade at [`Caixa::validate_code_path_lists`]
+    /// now routes every arm through one substrate-primitive ctor per typed
+    /// variant.
+    #[must_use]
+    pub const fn code_path_empty(slot: &'static str) -> Self {
+        Self::CodePathEmpty { slot }
+    }
 }
 
 // Fold the ten `ManifestError::{Nome, NomeChartNameBudgetExceeded, Versao,
@@ -23391,6 +23464,77 @@ mod tests {
                  field — a field-rename, silent-conversion, or \
                  axis-swap regression surfaces here rather than at a \
                  downstream diagnostic-shape mismatch",
+            );
+        }
+    }
+
+    // Per-variant equivalence pin for the [`ManifestError::code_path_empty`]
+    // one-slot inherent constructor (see the paired doc-block above the impl
+    // definition) — the constructor folds the uniform
+    // `Self::CodePathEmpty { slot }` one-field struct-literal onto one
+    // substrate primitive. The equivalence pin below (fail-before-pass-after
+    // by construction — a byte-mismatched constructor body would trip this pin
+    // first) locks the generated constructor to its struct-literal peer under
+    // `PartialEq`, so the wire-up at
+    // [`Caixa::validate_code_path_lists`]'s per-slot
+    // [`PathShapeViolation::Empty`] arm on this variant produces a byte-equal
+    // `ManifestError` to the pre-lift open-coded struct-literal. The
+    // cross-axis pin that follows (`slot: &'static str` sweep over every
+    // canonical `:bibliotecas` / `:exe` / `:servicos` code-path author-key
+    // label) routes the constructor input axis verbatim (`slot` as
+    // `&'static str` without conversion), so the fold does not silently
+    // collapse onto a fixed `slot` value.
+    //
+    // Peer of the sibling `code_path_absolute_ctor_matches_struct_literal_wrap`
+    // / `code_path_parent_escape_ctor_matches_struct_literal_wrap` /
+    // `code_path_non_lisp_extension_ctor_matches_struct_literal_wrap` /
+    // `code_path_non_computeunit_yaml_extension_ctor_matches_struct_literal_wrap`
+    // / `code_path_duplicate_ctor_matches_struct_literal_wrap` /
+    // `manifest_code_path_slot_path_ctors_route_slot_and_path_through_uniformly`
+    // equivalence + cross-axis pins the peer
+    // [`manifest_code_path_slot_path_ctors!`] family (de11917) established on
+    // the paired `{ slot: &'static str, path: PathBuf }` two-slot envelope of
+    // the same `ManifestError` — the per-slot [`PathShapeViolation`] cascade
+    // at [`Caixa::validate_code_path_lists`] now carries a substrate-primitive
+    // equivalence pin at every arm rather than five pinned arms plus a
+    // hand-written open-coded sixth. Mirror-symmetric sibling of the peer
+    // [`crate::behavior::tests::empty_path_ctor_matches_struct_literal_wrap`]
+    // / `empty_path_ctor_routes_slot_verbatim_across_every_on_star_key` pins
+    // on the sibling M2 `:behavior` envelope's identical one-slot shape.
+
+    #[test]
+    fn code_path_empty_ctor_matches_struct_literal_wrap() {
+        let slot = ":bibliotecas";
+        assert_eq!(
+            ManifestError::code_path_empty(slot),
+            ManifestError::CodePathEmpty { slot },
+            "generated code_path_empty ctor must produce byte-equal \
+             `ManifestError::CodePathEmpty` to the open-coded struct-literal \
+             wrap on the same `&'static str` fixture",
+        );
+    }
+
+    #[test]
+    fn code_path_empty_ctor_routes_slot_verbatim_across_every_code_path_key() {
+        // Cross-axis pin: sweep the constructor's single input axis
+        // (`slot: &'static str`) through every canonical code-path
+        // author-key label the outer per-slot iterator at
+        // [`Caixa::validate_code_path_lists`] threads through so any
+        // wrapper-side lowercase / trim / truncate / fixed-slot substitution
+        // on the one-field construction surfaces here rather than at a
+        // downstream diagnostic-shape mismatch. Peer of the sibling
+        // [`manifest_code_path_slot_path_ctors_route_slot_and_path_through_uniformly`]
+        // cross-axis pin on the two-slot envelope of the same
+        // `ManifestError` — extended here onto the one-slot envelope so
+        // both slot-only and slot+path constructor input axes carry a
+        // per-code-path-label sweep. Mirror-symmetric sibling of the peer
+        // [`crate::behavior::tests::empty_path_ctor_routes_slot_verbatim_across_every_on_star_key`]
+        // sweep on the sibling M2 `:behavior` envelope's identical one-slot
+        // shape.
+        for slot in [":bibliotecas", ":exe", ":servicos"] {
+            assert_eq!(
+                ManifestError::code_path_empty(slot),
+                ManifestError::CodePathEmpty { slot },
             );
         }
     }
