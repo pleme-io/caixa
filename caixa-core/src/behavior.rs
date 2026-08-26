@@ -766,7 +766,7 @@ fn validate_callback_path(slot: &'static str, path: &Path) -> Result<(), Behavio
     // three-path drift-detection posture the helper's docstring pins.
     crate::render::require_sandboxed_lisp_path(
         path,
-        || BehaviorError::EmptyPath { slot },
+        || BehaviorError::empty_path(slot),
         || BehaviorError::absolute_path(slot, path),
         || BehaviorError::parent_escape(slot, path),
         || BehaviorError::non_lisp_extension(slot, path),
@@ -938,6 +938,71 @@ behavior_slot_path_ctors! {
     absolute_path => AbsolutePath,
     parent_escape => ParentEscape,
     non_lisp_extension => NonLispExtension,
+}
+
+// Fold the last `BehaviorError::EmptyPath { slot: <&'static str> }` single-
+// slot struct-variant wire-up site at [`validate_callback_path`]'s empty-path
+// arm closure passed to [`crate::render::require_sandboxed_lisp_path`] onto
+// one substrate primitive on `BehaviorError` — the last open-coded single-
+// slot `{ slot: &'static str }` struct-literal on the `BehaviorError`
+// envelope, matching the peer three-variant [`behavior_slot_path_ctors!`]
+// family fold (b0c8389, 3 variants on `{ slot: &'static str, path: PathBuf }`)
+// already closed on the sibling two-slot envelope of the same `BehaviorError`.
+// After this lift every wire-up on every `BehaviorError` variant carried by
+// [`validate_callback_path`] reads through one substrate-primitive ctor
+// dispatch per typed variant rather than one macro closing three sites plus a
+// hand-written empty-path closure open-coding the fourth.
+//
+// A macro is not warranted on the one-variant envelope shape
+// `{ slot: &'static str }` — unlike the peer three-variant
+// `{ slot: &'static str, path: PathBuf }` shape the [`behavior_slot_path_ctors!`]
+// macro closes — but the same substrate-primitive discipline applies: every
+// future consumer that wants to construct an `EmptyPath` outside
+// [`validate_callback_path`] (a deferred wasm-engine per-slot callback-shape
+// re-checker at instance-start time re-consulting the same four-arm
+// sandboxed-lisp-path cascade the closure already shares via
+// [`crate::render::require_sandboxed_lisp_path`], a future
+// `feira validate --behavior` per-caixa admission verb re-checking each
+// declared `:behavior :on-*` slot's path shape against the same axis, a
+// per-`Caixa` overlay resolver rejecting an author-supplied empty
+// `:behavior :on-*` path against a cluster-local snapshot) reaches the
+// variant through one call rather than re-inlining the one-line struct-
+// literal in lockstep with the in-crate closure site.
+//
+// The `slot` parameter stays `&'static str` (not `&str`) so the constructor
+// continues to carry a program-lifetime M2 `:behavior :on-*` author-key label
+// routed through the [`crate::M2_BEHAVIOR_AUTHOR_KEY_ON_*`] const roster,
+// matching the enum-field type, the [`BehaviorSpec::declared_slots`]
+// iterator's per-arm slot axis, and the peer
+// [`behavior_slot_path_ctors!`]-generated arms' `slot: &'static str`
+// parameter verbatim — a runtime-borrowed `&str` would silently downgrade the
+// label lifetime and let a caller stash a non-`'static` borrow into the
+// returned error. `const fn` preserves the zero-runtime-work property of the
+// pre-lift struct-literal verbatim, matching the sibling
+// [`crate::supervisor::supervisor_scalar_ctors!`] / peer
+// [`crate::aplicacao::aplicacao_policy_scalar_ctors!`] `Copy`-scalar
+// discipline on their sibling envelopes.
+impl BehaviorError {
+    /// Construct a [`BehaviorError::EmptyPath`] naming the offending
+    /// `:behavior :on-*` slot label. Folds the uniform
+    /// `Self::EmptyPath { slot }` one-field struct-literal onto one
+    /// substrate primitive so the closure passed to
+    /// [`crate::render::require_sandboxed_lisp_path`] at
+    /// [`validate_callback_path`] on this variant reads through one
+    /// dispatch rather than the pre-lift open-coded struct-literal
+    /// block. Peer of the sibling
+    /// [`BehaviorError::absolute_path`] /
+    /// [`BehaviorError::parent_escape`] /
+    /// [`BehaviorError::non_lisp_extension`] ctors the
+    /// [`behavior_slot_path_ctors!`] macro closed on the paired two-slot
+    /// `{ slot: &'static str, path: PathBuf }` envelope of the same
+    /// `BehaviorError` — the four-arm sandboxed-lisp-path cascade at
+    /// [`validate_callback_path`] now routes every arm through one
+    /// substrate-primitive ctor per typed variant.
+    #[must_use]
+    pub const fn empty_path(slot: &'static str) -> Self {
+        Self::EmptyPath { slot }
+    }
 }
 
 #[cfg(test)]
@@ -2548,6 +2613,74 @@ mod tests {
                     },
                 );
             }
+        }
+    }
+
+    // Per-variant equivalence pin for the [`BehaviorError::empty_path`]
+    // one-slot inherent constructor (see the paired doc-block above the
+    // impl definition) — the constructor folds the uniform
+    // `Self::EmptyPath { slot }` one-field struct-literal onto one
+    // substrate primitive. The equivalence pin below (fail-before-pass-
+    // after by construction — a byte-mismatched constructor body would
+    // trip this pin first) locks the generated constructor to its
+    // struct-literal peer under `PartialEq`, so the closure passed to
+    // [`crate::render::require_sandboxed_lisp_path`] at
+    // [`validate_callback_path`] on this variant produces a byte-equal
+    // `BehaviorError` to the pre-lift open-coded struct-literal. The
+    // cross-axis pin that follows (`slot: &'static str` sweep over every
+    // `M2_BEHAVIOR_AUTHOR_KEY_ON_*` label) routes the constructor input
+    // axis verbatim (`slot` as `&'static str` without conversion), so
+    // the fold does not silently collapse onto a fixed `slot` value.
+    //
+    // Peer of the sibling `absolute_path_ctor_matches_struct_literal_wrap`
+    // / `parent_escape_ctor_matches_struct_literal_wrap` /
+    // `non_lisp_extension_ctor_matches_struct_literal_wrap` /
+    // `behavior_slot_path_ctors_route_slot_and_path_verbatim`
+    // equivalence + cross-axis pins the peer
+    // [`behavior_slot_path_ctors!`] family (b0c8389) established on the
+    // paired `{ slot: &'static str, path: PathBuf }` two-slot envelope
+    // of the same `BehaviorError` — the four-arm sandboxed-lisp-path
+    // cascade at [`validate_callback_path`] now carries a
+    // substrate-primitive equivalence pin at every arm rather than three
+    // pinned arms plus a hand-written open-coded fourth.
+
+    #[test]
+    fn empty_path_ctor_matches_struct_literal_wrap() {
+        let slot = M2_BEHAVIOR_AUTHOR_KEY_ON_INIT;
+        assert_eq!(
+            BehaviorError::empty_path(slot),
+            BehaviorError::EmptyPath { slot },
+            "generated empty_path ctor must produce byte-equal \
+             BehaviorError to the open-coded struct-literal wrap on the \
+             same &'static str fixture",
+        );
+    }
+
+    #[test]
+    fn empty_path_ctor_routes_slot_verbatim_across_every_on_star_key() {
+        // Cross-axis pin: sweep the constructor's single input axis
+        // (`slot: &'static str`) through every M2 `:behavior :on-*`
+        // author-key label so any wrapper-side lowercase / trim /
+        // truncate / fixed-slot substitution on the one-field
+        // construction surfaces here rather than at a downstream
+        // diagnostic-shape mismatch. Peer of the sibling
+        // [`behavior_slot_path_ctors_route_slot_and_path_verbatim`]
+        // cross-axis pin on the two-slot envelope of the same
+        // `BehaviorError` — extended here onto the one-slot envelope so
+        // both slot-only and slot+path constructor input axes carry a
+        // per-`:on-*`-label sweep.
+        for slot in [
+            M2_BEHAVIOR_AUTHOR_KEY_ON_INIT,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_CALL,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_CAST,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_INFO,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE,
+            M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
+        ] {
+            assert_eq!(
+                BehaviorError::empty_path(slot),
+                BehaviorError::EmptyPath { slot },
+            );
         }
     }
 }
