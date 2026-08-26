@@ -8257,7 +8257,17 @@ impl AplicacaoSpec {
             // layer.
             validate_placement_cluster(c)?;
             crate::render::insert_first_seen(&mut seen, c.as_str(), || {
-                AplicacaoError::PlacementClusterDuplicate { cluster: c.clone() }
+                // Route the per-`:placement :clusters` dedup diagnostic
+                // through the substrate-primitive
+                // [`AplicacaoError::placement_cluster_duplicate`] ctor
+                // rather than the pre-lift three-line open-coded
+                // `AplicacaoError::PlacementClusterDuplicate { cluster:
+                // c.clone() }` struct-literal — folds the sole in-crate
+                // wire-up on this variant onto one dispatch matching the
+                // sibling per-`:membros :caixa` / per-`:entrada :paths` /
+                // per-`:politicas <scalar>` single-slot ctor families on
+                // the same [`AplicacaoError`] envelope.
+                AplicacaoError::placement_cluster_duplicate(c)
             })?;
         }
         // Route the per-`:placement :affinity` per-hint value-shape
@@ -9558,6 +9568,50 @@ impl AplicacaoError {
             caixa: caixa.to_string(),
             versao: versao.to_string(),
             reason: reason.into(),
+        }
+    }
+
+    /// Construct an [`AplicacaoError::PlacementClusterDuplicate`] naming
+    /// the offending `:placement :clusters` entry.
+    ///
+    /// Folds the uniform `Self::PlacementClusterDuplicate { cluster:
+    /// cluster.to_string() }` one-field struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one
+    /// dispatch rather than the pre-lift three-line open-coded
+    /// struct-literal block. The `cluster` slot threads verbatim from the
+    /// caller-side `for c in p.clusters()` iteration at the sole in-crate
+    /// wire-up site [`AplicacaoSpec::validate_placement_shape`], via the
+    /// per-entry dedup closure passed to
+    /// [`crate::render::insert_first_seen`] whose `FnOnce`-shaped ctor
+    /// bracket accepts the free function pointer as-is.
+    ///
+    /// Sibling of the per-`:membros :caixa` / per-`:entrada :paths` /
+    /// per-`:politicas <scalar>` single-slot ctor families
+    /// ([`aplicacao_caixa_only_ctors!`] on `{ caixa: String }` at the
+    /// peer per-membership envelope, [`aplicacao_path_only_ctors!`] on
+    /// `{ path: String }` at the peer per-gateway envelope,
+    /// [`aplicacao_policy_scalar_ctors!`] on `{ <field>: Copy-scalar }`
+    /// at the peer per-`:politicas` cap-scalar envelope) on the same
+    /// [`AplicacaoError`] type — extends the "one typed dispatch per
+    /// substrate primitive on every single-slot per-M3-slot envelope"
+    /// discipline onto the last unlifted `{ cluster: String }` one-slot
+    /// per-`:placement :clusters` dedup-envelope inside
+    /// [`AplicacaoSpec::validate_placement_shape`].
+    ///
+    /// Every future consumer that wants to construct this variant outside
+    /// [`AplicacaoSpec::validate_placement_shape`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a `:placement :clusters` overlay against a
+    /// per-tenant cluster-topology snapshot, a future `feira validate
+    /// --placement` per-caixa admission verb re-running the dedup check
+    /// on demand, an M4 per-cluster placement resolver rejecting a
+    /// duplicate cluster-name entry introduced by a fleet-local overlay
+    /// the M4 CR materializer projects — now reaches this variant through
+    /// one call rather than re-inlining the three-line struct-literal.
+    #[must_use]
+    pub fn placement_cluster_duplicate(cluster: &str) -> Self {
+        Self::PlacementClusterDuplicate {
+            cluster: cluster.to_string(),
         }
     }
 }
@@ -33642,5 +33696,63 @@ mod tests {
             RL_WIN_NC,
             AplicacaoError::PolicyRateLimitWindowNotCanonical { .. }
         ));
+    }
+
+    // Per-variant equivalence + routing pins for the
+    // [`AplicacaoError::placement_cluster_duplicate`] standalone ctor
+    // (see the paired doc-block above the ctor definition) — the
+    // generated `pub fn placement_cluster_duplicate(cluster: &str) ->
+    // Self` inherent constructor folds the uniform
+    // `Self::PlacementClusterDuplicate { cluster: cluster.to_string() }`
+    // one-field struct-literal onto one substrate primitive. Same
+    // shape as the sibling
+    // `contrato_self_loop_ctor_matches_struct_literal_wrap` (b30edfe) /
+    // `contrato_endpoint_not_absolute_ctor_matches_struct_literal_wrap`
+    // (cdf1a2c) equivalence pins on the paired standalone `AplicacaoError`
+    // ctors — extended here onto the single-slot per-`:placement
+    // :clusters` dedup-envelope.
+
+    #[test]
+    fn placement_cluster_duplicate_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::PlacementClusterDuplicate` to the pre-lift
+        // open-coded struct-literal that read the same field through
+        // `c.clone()` at the caller site inside
+        // [`AplicacaoSpec::validate_placement_shape`]. Guards any future
+        // field-addition / reordering / string-conversion tweak on the
+        // variant.
+        let cluster = "rio";
+        let lifted = AplicacaoError::placement_cluster_duplicate(cluster);
+        let struct_literal = AplicacaoError::PlacementClusterDuplicate {
+            cluster: cluster.to_string(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn placement_cluster_duplicate_ctor_routes_cluster_through_to_string() {
+        // Routing pin: sweep the sole constructor input axis
+        // (`cluster: &str`) through a non-default fixture name so any
+        // wrapper-side lowercase / trim / truncate / re-order on the
+        // `cluster.to_string()` sole-field construction surfaces here
+        // rather than at a downstream diagnostic-shape mismatch. Peer of
+        // the sibling
+        // `aplicacao_caixa_only_ctors_route_caixa_through_to_string`
+        // (d9f6867) cross-axis pin on the sibling one-slot
+        // `{ caixa: String }` envelope — extended here onto the sibling
+        // `{ cluster: String }` envelope so the sole `String`-slot
+        // construction routes the caller's `&str` through `.to_string()`
+        // verbatim.
+        let cluster = "sao-paulo-2";
+        let built = AplicacaoError::placement_cluster_duplicate(cluster);
+        match built {
+            AplicacaoError::PlacementClusterDuplicate { cluster: c } => {
+                assert_eq!(
+                    c, cluster,
+                    "cluster slot must thread the caller's `&str` verbatim through .to_string()"
+                );
+            }
+            other => panic!("expected PlacementClusterDuplicate, got {other:?}"),
+        }
     }
 }
