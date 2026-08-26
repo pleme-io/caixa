@@ -7967,9 +7967,7 @@ impl AplicacaoSpec {
             // per-consumer rewrite across the M3 mesh validator.
             validate_entrada_para(e.destination())?;
             if !names.contains(e.destination()) {
-                return Err(AplicacaoError::EntradaMemberMissing {
-                    para: e.destination().to_string(),
-                });
+                return Err(AplicacaoError::entrada_member_missing(e));
             }
             // Route the per-`:entrada :host` byte-string reads through
             // the lifted [`Entrada::hostname`] accessor rather than
@@ -9749,6 +9747,79 @@ impl AplicacaoError {
         Self::ShardKeyOnNonSharded {
             estrategia: placement.estrategia(),
             shard_key: shard_key.to_string(),
+        }
+    }
+
+    /// Construct an [`AplicacaoError::EntradaMemberMissing`] naming the
+    /// offending `:entrada :para` value the membership lookup against the
+    /// [`AplicacaoSpec::membro_names`] oracle refused, projecting the
+    /// slot through the paired [`Entrada::destination`] byte-string
+    /// accessor on the substrate primitive.
+    ///
+    /// Folds the uniform `Self::EntradaMemberMissing { para:
+    /// entrada.destination().to_string() }` one-field struct-literal onto
+    /// one substrate primitive so every wire-up on this variant reads
+    /// through one dispatch rather than the pre-lift three-line
+    /// open-coded `AplicacaoError::EntradaMemberMissing { para:
+    /// e.destination().to_string() }` block inside
+    /// [`AplicacaoSpec::validate_entrada`]. Same substrate-primitive-
+    /// projection posture as the sibling
+    /// [`AplicacaoError::placement_without_clusters`] (b0d24ba,
+    /// projecting through [`Placement::estrategia`] on the peer
+    /// `{ estrategia: PlacementStrategy }` one-slot per-`:placement`
+    /// empty-clusters envelope) and the sibling
+    /// [`AplicacaoError::contrato_self_loop`] (b30edfe, projecting
+    /// through [`WitContract::source`] / [`WitContract::world_ref`] on
+    /// the paired per-`:contratos` self-edge envelope) ctors — extended
+    /// here onto the last unlifted `{ para: String }` one-slot
+    /// per-`:entrada :para` phantom-reference envelope on the sibling
+    /// per-`:entrada` slot.
+    ///
+    /// The `entrada: &Entrada` parameter threads verbatim from the
+    /// caller-side `if let Some(e) = self.entrada() { … }` traversal at
+    /// the sole in-crate wire-up site
+    /// [`AplicacaoSpec::validate_entrada`], matching the sibling
+    /// per-`:entrada` byte-string reads that already route through
+    /// [`Entrada::destination`] one accessor call earlier in the same
+    /// gate (`validate_entrada_para(e.destination())?;` +
+    /// `if !names.contains(e.destination()) …`). Carrying the [`Entrada`]
+    /// borrow through one accessor call at the substrate primitive is
+    /// strictly stronger than accepting the bare `&str` as a separate
+    /// argument — a future consumer that constructs the error against a
+    /// candidate [`Entrada`] whose [`Entrada::destination`] value the
+    /// caller re-derives from another source (a raw `e.para` field
+    /// access that skipped the accessor, a stale snapshot of the
+    /// pre-normalization storage) can silently disagree with the
+    /// storage the [`Entrada`] carries; the accessor-projected primitive
+    /// cannot. Matches the peer
+    /// [`AplicacaoError::placement_without_clusters`] and
+    /// [`AplicacaoError::shard_key_on_non_sharded`]
+    /// [`Placement`]-borrow-projection discipline on the sibling
+    /// per-`:placement` envelope, and matches the peer
+    /// [`AplicacaoError::contrato_self_loop`] and
+    /// [`AplicacaoError::contrato_endpoint_not_absolute`]
+    /// [`WitContract`]-borrow-projection discipline on the sibling
+    /// per-`:contratos` envelope.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`AplicacaoSpec::validate_entrada`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a `:entrada :para` overlay against a
+    /// per-tenant `:membros` snapshot after a fleet-local overlay
+    /// renames a member, a future `feira validate --entrada` per-caixa
+    /// admission verb re-running the phantom-reference lookup on
+    /// demand, an M4 per-cluster Gateway API pre-emitter rejecting a
+    /// `:entrada :para` whose target Servico was stripped from the
+    /// cluster-local `:membros` overlay, a future authoring-surface
+    /// widening the field into a `(String, Vec<Suggestion>)` pair
+    /// carrying a "did-you-mean-<nearest-member>" hint — now reaches
+    /// this variant through one call rather than re-inlining the
+    /// three-line struct-literal in lockstep with the one in-crate
+    /// wire-up site.
+    #[must_use]
+    pub fn entrada_member_missing(entrada: &Entrada) -> Self {
+        Self::EntradaMemberMissing {
+            para: entrada.destination().to_string(),
         }
     }
 }
@@ -34120,6 +34191,130 @@ mod tests {
         assert_eq!(
             placement_without_clusters_via_const_fn(&placement),
             AplicacaoError::placement_without_clusters(&placement),
+        );
+    }
+
+    #[test]
+    fn entrada_member_missing_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::EntradaMemberMissing` to the pre-lift
+        // open-coded struct-literal that read the same `:para` value
+        // through `e.destination().to_string()` at the caller site
+        // inside [`AplicacaoSpec::validate_entrada`]. Guards any future
+        // field-addition / reordering / accessor-return tweak on the
+        // variant. Sibling of the peer
+        // `placement_without_clusters_ctor_matches_struct_literal_wrap`
+        // and `shard_key_on_non_sharded_ctor_matches_struct_literal_wrap`
+        // pins on the sibling per-`:placement` envelope, and sibling of
+        // the peer `contrato_member_missing_ctor_matches_struct_literal_wrap`
+        // pin on the sibling per-`:membros :caixa` envelope.
+        let entrada = Entrada {
+            host: "checkout.quero.cloud".into(),
+            para: "phantom-shim".into(),
+            paths: vec!["/api".into()],
+            port: 8080,
+        };
+        let via_ctor = AplicacaoError::entrada_member_missing(&entrada);
+        let via_literal = AplicacaoError::EntradaMemberMissing {
+            para: entrada.destination().to_string(),
+        };
+        assert_eq!(
+            via_ctor, via_literal,
+            "entrada_member_missing(&entrada) must byte-equal the open-coded \
+             EntradaMemberMissing struct-literal on the same &Entrada fixture"
+        );
+        assert_eq!(
+            via_ctor.to_string(),
+            via_literal.to_string(),
+            "Display byte-string must byte-equal the open-coded struct-literal"
+        );
+    }
+
+    #[test]
+    fn entrada_member_missing_ctor_routes_para_through_entrada_accessor() {
+        // Boundary-sweep pin on the ctor's substrate-primitive
+        // projection: the `para` slot is stored verbatim from
+        // [`Entrada::destination`] across a representative set of
+        // `:entrada :para` byte-strings, so any wrapper-side silent
+        // normalization, `.into()` divergence, accidental field
+        // rebrand, or per-arm ctor divergence on the sole-field
+        // projection surfaces at caixa-core build time rather than at
+        // a downstream diagnostic consumer that reads `err.para` back
+        // and gets a different value than the one it stored. Peer of
+        // the sibling
+        // `shard_key_on_non_sharded_routes_estrategia_through_placement_accessor`
+        // boundary-sweep pin on the sibling per-`:placement :shard-key`
+        // envelope and the peer `placement_without_clusters_ctor_routes_estrategia_through_accessor`
+        // sweep on the sibling per-`:placement` empty-clusters envelope
+        // — extended here onto the [`Entrada`]-borrow-projected sole
+        // `para` slot on the sibling per-`:entrada :para` envelope. The
+        // sweep list carries a mixed set (well-shaped phantom, hyphen-
+        // digit tail, single-character floor, and the digit-start form
+        // the peer `accepts_canonical_entrada_para_forms` positive-
+        // control test also sweeps) so a future silent per-input
+        // normalization surfaces on the arm that diverges.
+        for para in [
+            "phantom-shim",
+            "cart-v2",
+            "a",
+            "c0",
+            "3rd-party-shim",
+            "x-1-2-3-4",
+        ] {
+            let entrada = Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: para.into(),
+                paths: vec!["/api".into()],
+                port: 8080,
+            };
+            let err = AplicacaoError::entrada_member_missing(&entrada);
+            let AplicacaoError::EntradaMemberMissing { para: stored_para } = err else {
+                panic!("entrada_member_missing must construct EntradaMemberMissing for {para:?}");
+            };
+            assert_eq!(
+                stored_para,
+                entrada.destination(),
+                "para slot must round-trip verbatim through Entrada::destination() \
+                 for {para:?}"
+            );
+            assert_eq!(
+                stored_para, para,
+                "para slot must byte-equal the fixture-declared value for {para:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_entrada_phantom_arm_routes_through_entrada_member_missing_ctor() {
+        // End-to-end pin: the sole in-crate wire-up site
+        // (`AplicacaoSpec::validate_entrada`'s membership-lookup arm)
+        // routes through [`AplicacaoError::entrada_member_missing`] and
+        // the observed `Err` byte-equals the ctor's output on the same
+        // well-shaped-phantom `:para` fixture. A future silent de-lift
+        // of the wire-up back to the open-coded struct-literal trips
+        // this test at caixa-core build time rather than at a
+        // downstream diagnostic consumer far from the wire-up commit.
+        // Sibling of the peer
+        // `validate_placement_non_sharded_arm_routes_through_shard_key_on_non_sharded_ctor`
+        // end-to-end pin on the sibling per-`:placement :shard-key`
+        // envelope, and sibling of the peer
+        // `entrada_para_well_shaped_phantom_still_raises_member_missing`
+        // pattern-match pin on the same wire-up — extended here from a
+        // `matches!` shape check to a byte-identity + Display parity
+        // route through the ctor.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "phantom-shim".into();
+        let observed = s.validate().unwrap_err();
+        let expected = AplicacaoError::entrada_member_missing(s.entrada.as_ref().unwrap());
+        assert_eq!(
+            observed, expected,
+            "validate_entrada's phantom-reference-arm Err must byte-equal \
+             entrada_member_missing(&entrada)"
+        );
+        assert_eq!(
+            observed.to_string(),
+            expected.to_string(),
+            "Display byte-string parity"
         );
     }
 }
