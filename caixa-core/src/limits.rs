@@ -1337,7 +1337,7 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
         "MiB" => 1024 * 1024,
         "GiB" => 1024 * 1024 * 1024,
         other => {
-            return Err(LimitsError::UnknownByteUnit { unit: other.into() });
+            return Err(LimitsError::unknown_byte_unit(other));
         }
     };
     // Overflow surfaces as `BadByteMagnitude` (a u64-saturating
@@ -1534,9 +1534,9 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
                     "{num_trim}{unit_trim} overflows u64 (magnitude × {multiplier} > 2^64-1)"
                 ))
             }
-            crate::render::DurationUnitError::UnknownUnit => LimitsError::UnknownDurationUnit {
-                unit: unit_trim.into(),
-            },
+            crate::render::DurationUnitError::UnknownUnit => {
+                LimitsError::unknown_duration_unit(unit_trim)
+            }
         },
     )?;
     Ok(dur)
@@ -1822,6 +1822,79 @@ limits_codec_value_only_ctors! {
     leading_zero_duration_magnitude => LeadingZeroDurationMagnitude,
     non_integer_millicore_magnitude => NonIntegerMillicoreMagnitude,
     leading_zero_millicore_magnitude => LeadingZeroMillicoreMagnitude,
+}
+
+// Fold the two `LimitsError::Unknown<Kind>Unit { unit: <val>.into() }`
+// wire-up sites on the two alpha-unit typed-magnitude codec surfaces
+// (`parse_byte_size` at the `KB | MB | GB | KiB | MiB | GiB | "" | B`
+// unit-dispatch table's fallthrough arm; `parse_duration` at the
+// `crate::render::DurationUnitError::UnknownUnit` reverse-map arm of the
+// `ms | s | "" | m | h` unit-dispatch table) onto one substrate-primitive
+// family per typed variant — the paired `{ unit: String }` single-slot
+// family on [`LimitsError`]. Direct peer of the sibling
+// [`limits_codec_value_only_ctors!`] single-slot family on the same
+// [`LimitsError`] envelope (6 variants on the `{ value: String }` axis
+// of the codec surface) and of the peer [`limits_codec_value_byte_ctors!`]
+// / [`limits_codec_value_char_ctors!`] families on the wider two-slot /
+// three-slot whitespace-class axes of the same three codec surfaces.
+//
+// Every one of the two wire-up sites — the fallthrough of
+// [`parse_byte_size`]'s unit-dispatch `match` on the caller-scoped
+// `other: &str` binding; the [`crate::render::DurationUnitError::UnknownUnit`]
+// reverse-map arm of [`parse_duration`]'s codec-scoped `unit_trim: &str`
+// binding — opened the identical two-line
+// `LimitsError::Unknown<Kind>Unit { unit: <val>.into() }` block against
+// the codec-scoped unit binding — the exact "same block re-inlined at
+// every consumer" shape the PRIME DIRECTIVE names as a bug, on the same
+// altitude the peer [`limits_codec_value_only_ctors!`] family closed on
+// the sibling `{ value: String }` axis of the same codec surface.
+//
+// The macro below generates one `#[must_use]` inherent constructor per
+// variant of shape `fn <ctor>(unit: &str) -> LimitsError`, collapsing
+// the two sites onto one dispatch per arm: `LimitsError::<ctor>(<val>)`,
+// byte-equal to the pre-lift struct-literal on the same `unit` argument.
+// The uniform single-field construction (`unit: unit.to_string()`) is
+// spelled once — inside the macro — rather than at every wire-up site.
+// `#[must_use]` fires a compile warning at any wire-up that mistakenly
+// discards the constructed error.
+//
+// Every future consumer that wants to construct one of these two
+// variants outside the two current codec surfaces (a deferred
+// `feira lint --canonical-units` per-caixa admission verb probing each
+// authored `:memory` / `:wall-clock` value against the same
+// unit-dispatch table, an M4 typed `mesh.pleme.io/v1alpha1/Servico` CR
+// materializer's per-`:limits` admission validators pre-checking a
+// per-slot unit alphabet against a cluster-local snapshot, a future
+// unit-alphabet widening on either codec that shares the same
+// unknown-unit fallthrough shape) now reaches each variant through one
+// call rather than re-inlining the two-line struct-literal in lockstep
+// with the pre-existing two sites.
+macro_rules! limits_codec_unit_only_ctors {
+    ($($ctor:ident => $variant:ident),* $(,)?) => {
+        impl LimitsError {
+            $(
+                #[doc = concat!(
+                    "Construct a [`LimitsError::",
+                    stringify!($variant),
+                    "`] naming the offending magnitude `unit`. Folds the ",
+                    "uniform `{ unit: unit.to_string() }` single-slot ",
+                    "construction onto one substrate primitive so every ",
+                    "wire-up on this variant reads through one dispatch ",
+                    "rather than the pre-lift two-line struct-literal ",
+                    "block."
+                )]
+                #[must_use]
+                pub fn $ctor(unit: &str) -> Self {
+                    Self::$variant { unit: unit.to_string() }
+                }
+            )*
+        }
+    };
+}
+
+limits_codec_unit_only_ctors! {
+    unknown_byte_unit => UnknownByteUnit,
+    unknown_duration_unit => UnknownDurationUnit,
 }
 
 // Fold the three `LimitsError::WhitespaceIn<Kind> { value: <val>.into(),
@@ -6861,6 +6934,82 @@ mod tests {
                 value: value.to_string(),
             },
         );
+    }
+
+    #[test]
+    fn unknown_byte_unit_ctor_matches_struct_literal_wrap() {
+        // Per-variant byte-equality pin on the `limits_codec_unit_only_ctors!`
+        // macro's `unknown_byte_unit => UnknownByteUnit` arm. Pins the ctor's
+        // byte-identity against the open-coded pre-lift struct-literal on the
+        // same `unit: &str` fixture (the `parse_byte_size` unit-dispatch
+        // fallthrough hits this arm on any authored unit outside the
+        // `KB | MB | GB | KiB | MiB | GiB | "" | B` alphabet — pick a
+        // typography-space suffix so the pin exercises the same Unicode-
+        // whitespace-in-alpha class the two codecs share). A silent regression
+        // that de-folded the variant and re-inlined the struct-literal at the
+        // wire-up (or swapped `.to_string()` for a different `String`
+        // conversion, or dropped the field) trips the assertion under
+        // `PartialEq`.
+        let unit = "TiB";
+        assert_eq!(
+            LimitsError::unknown_byte_unit(unit),
+            LimitsError::UnknownByteUnit {
+                unit: unit.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn unknown_duration_unit_ctor_matches_struct_literal_wrap() {
+        // Per-variant byte-equality pin on the `limits_codec_unit_only_ctors!`
+        // macro's `unknown_duration_unit => UnknownDurationUnit` arm. Pins the
+        // ctor's byte-identity against the open-coded pre-lift struct-literal
+        // on the same `unit: &str` fixture (the `parse_duration` reverse-map
+        // arm on [`crate::render::DurationUnitError::UnknownUnit`] hits this
+        // arm on any authored unit outside the `ms | s | "" | m | h`
+        // alphabet). Peer of the sibling `unknown_byte_unit` pin above on the
+        // same shared `{ unit: String }` envelope.
+        let unit = "d";
+        assert_eq!(
+            LimitsError::unknown_duration_unit(unit),
+            LimitsError::UnknownDurationUnit {
+                unit: unit.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn limits_codec_unit_only_ctors_route_unit_verbatim_across_every_variant() {
+        // Cross-variant sweep: routes each per-variant `unit: &str` scalar
+        // through the sole `$ctor => $variant` axis the
+        // `limits_codec_unit_only_ctors!` macro exposes across a boundary-
+        // covering fixture set (empty string; the ASCII fallthrough shape the
+        // two codec wire-up sites actually raise; a Unicode-whitespace-in-
+        // alpha shape covered by the sibling `parse_*` reject-whitespace
+        // primitive but plausibly reachable from a future consumer that
+        // pre-strips whitespace before invoking the ctor directly; a
+        // multi-byte non-ASCII unit alphabet extension). Any wrapper-side
+        // truncation, silent `.into()` divergence, per-arm constant
+        // substitution, or accidental cross-variant field swap on either
+        // ctor surfaces here on the first fixture the two implementations
+        // disagree on rather than at a downstream diagnostic-shape drift
+        // (`LimitsError::to_string()` embeds the offending unit verbatim
+        // through the `Display`/`Error` derive — a divergence at the ctor
+        // layer flows straight to the surface diagnostic).
+        for unit in ["", "TiB", "\u{00A0}", "μs"] {
+            assert_eq!(
+                LimitsError::unknown_byte_unit(unit),
+                LimitsError::UnknownByteUnit {
+                    unit: unit.to_string(),
+                },
+            );
+            assert_eq!(
+                LimitsError::unknown_duration_unit(unit),
+                LimitsError::UnknownDurationUnit {
+                    unit: unit.to_string(),
+                },
+            );
+        }
     }
 
     #[test]
