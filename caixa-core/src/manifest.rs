@@ -274,6 +274,49 @@ pub enum LeituraError {
     Dialeto(#[from] crate::dialeto::DialetoError),
 }
 
+impl LeituraError {
+    /// Construct a [`LeituraError::DialetoEstrangeiro`] naming the
+    /// foreign-dialect classification the [`Caixa::from_lisp`] gate
+    /// refused a `(defcaixa …)` source as.
+    ///
+    /// Substrate primitive every foreign-dialect emission on the
+    /// [`Caixa::from_lisp`] classification-gate surface routes through,
+    /// folding the pre-lift uniform three-line
+    /// `Self::DialetoEstrangeiro { dialeto }` one-field struct-literal
+    /// onto one substrate primitive matching the peer
+    /// [`crate::dialeto::DialetoError::cabeca_errada`] (38d5159)
+    /// single-slot inherent-ctor discipline on the sibling
+    /// [`crate::dialeto::DialetoError`] envelope's `{ encontrado: String }`
+    /// axis, and matching the peer `LimitsError::unknown_byte_unit` /
+    /// `LimitsError::unknown_duration_unit` (`limits_codec_unit_only_ctors!`
+    /// — 29fac09) / `ManifestError::code_path_empty` (94dabc8) /
+    /// `BehaviorError::empty_path` (0e33b37) /
+    /// `UpgradeError::duplicate_from` (7e52aec) /
+    /// `AplicacaoError::placement_cluster_duplicate` (92b1c92) single-slot
+    /// inherent-ctor discipline every sibling `{ <field>: <T> }`
+    /// error-envelope variant on caixa-core's error surface now carries.
+    ///
+    /// The one open-coded wire-up site — [`Caixa::from_lisp`]'s
+    /// [`crate::dialeto::CaixaDialeto::is_molde_family`] branch after the
+    /// [`crate::dialeto::classify_form`] classification — opened the
+    /// uniform two-line `Self::DialetoEstrangeiro { dialeto }` block
+    /// against the codec-scoped `dialeto: CaixaDialeto` binding. Routes
+    /// through `LeituraError::dialeto_estrangeiro(dialeto)`, byte-equal
+    /// to the pre-lift struct-literal on the same [`Copy`]-bound
+    /// [`crate::dialeto::CaixaDialeto`] fixture, so any future widening
+    /// of the diagnostic shape (a stored source-file path alongside the
+    /// classified dialect, an authoring-surface caret offset into the
+    /// top-level form, a promotion of the plain `dialeto:` field into a
+    /// richer projection carrying both the typed dialect and a
+    /// `Vec<Suggestion>` neighborhood) lands at exactly one dispatch on
+    /// the substrate primitive rather than re-inlining the struct-literal
+    /// at every foreign-dialect emission on the classification gate.
+    #[must_use]
+    pub fn dialeto_estrangeiro(dialeto: crate::dialeto::CaixaDialeto) -> Self {
+        Self::DialetoEstrangeiro { dialeto }
+    }
+}
+
 /// Substrate-canonical universal-axis per-[`Caixa`] `:licenca` SPDX-shaped
 /// license-expression fallback for the `Option<String>` `:licenca` slot —
 /// the `"MIT"` SPDX identifier every [`caixa-helm`]-rendered
@@ -403,7 +446,7 @@ impl Caixa {
         // closes both drift surfaces.
         let dialeto = crate::dialeto::classify_form(first)?;
         if dialeto.is_molde_family() {
-            return Err(LeituraError::DialetoEstrangeiro { dialeto });
+            return Err(LeituraError::dialeto_estrangeiro(dialeto));
         }
 
         Self::compile_from_sexp(first).map_err(LeituraError::Leitura)
@@ -23962,5 +24005,159 @@ mod tests {
             ManifestError::autor_duplicate("pleme-io"),
             ManifestError::autor_duplicate(&autor),
         );
+    }
+
+    #[test]
+    fn dialeto_estrangeiro_ctor_matches_struct_literal_wrap() {
+        // Byte-identity pin against the pre-lift open-coded
+        // `Self::DialetoEstrangeiro { dialeto }` one-field struct-literal —
+        // a future silent de-lift of [`Caixa::from_lisp`]'s foreign-dialect
+        // wire-up back to an inline struct-literal (or a divergence between
+        // the ctor's stored-field wrapping and the struct-literal shape
+        // downstream consumers still read through `matches!`
+        // destructuring) trips at caixa-core test time rather than at a
+        // downstream `LeituraError::to_string()` diagnostic-shape drift on
+        // a consumer far from the wire-up commit. Peer of the sibling
+        // [`crate::dialeto::tests::cabeca_errada_ctor_matches_struct_literal_wrap`]
+        // (38d5159) byte-identity pin the peer single-slot
+        // [`crate::dialeto::DialetoError::cabeca_errada`] ctor carries.
+        for dialeto in [
+            crate::dialeto::CaixaDialeto::Molde,
+            crate::dialeto::CaixaDialeto::MoldePosicional,
+        ] {
+            let via_ctor = LeituraError::dialeto_estrangeiro(dialeto);
+            let via_struct_literal = LeituraError::DialetoEstrangeiro { dialeto };
+            assert!(
+                matches!(
+                    (&via_ctor, &via_struct_literal),
+                    (
+                        LeituraError::DialetoEstrangeiro { dialeto: a },
+                        LeituraError::DialetoEstrangeiro { dialeto: b },
+                    ) if a == b && *a == dialeto
+                ),
+                "LeituraError::dialeto_estrangeiro({dialeto:?}) must \
+                 byte-match the open-coded `LeituraError::DialetoEstrangeiro \
+                 {{ dialeto: {dialeto:?} }}` struct-literal — a future \
+                 silent de-lift back to the struct-literal, or a divergence \
+                 in the field's stored shape, would surface here",
+            );
+            assert_eq!(
+                via_ctor.to_string(),
+                via_struct_literal.to_string(),
+                "Display byte-string must be identical between the ctor \
+                 and struct-literal forms — a divergence would mean the \
+                 ctor wired the field through a different projection than \
+                 the struct-literal, silently splitting the two paths' \
+                 diagnostic shape. dialect: {dialeto:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn dialeto_estrangeiro_routes_dialeto_verbatim_across_every_caixa_dialeto_arm() {
+        // Boundary-covering fixture sweep on the sole
+        // [`crate::dialeto::CaixaDialeto`] axis the variant carries —
+        // every arm in [`crate::dialeto::CaixaDialeto::ALL`] (including the
+        // non-[`crate::dialeto::CaixaDialeto::is_molde_family`] arms the
+        // [`Caixa::from_lisp`] wire-up never reaches today, since the ctor
+        // is a substrate primitive independent of any single caller's
+        // dispatch gate) round-trips through the ctor byte-equal to the
+        // input and byte-equal to the open-coded struct-literal wrap. Any
+        // wrapper-side silent transformation (a `dialeto.normalize()`
+        // rewrite, a `dialeto.into()` divergence, an accidental field
+        // rebrand on the ctor body) surfaces at assert time rather than
+        // at a downstream consumer that reads `err.dialeto` back and
+        // gets a different arm than the one it stored. Peer of the sibling
+        // [`crate::dialeto::tests::cabeca_errada_routes_encontrado_verbatim_across_boundary_inputs`]
+        // (38d5159) boundary-sweep pin on the peer single-slot ctor.
+        for &dialeto in crate::dialeto::CaixaDialeto::ALL {
+            let via_ctor = LeituraError::dialeto_estrangeiro(dialeto);
+            match via_ctor {
+                LeituraError::DialetoEstrangeiro { dialeto: stored } => {
+                    assert_eq!(
+                        stored, dialeto,
+                        "LeituraError::dialeto_estrangeiro({dialeto:?}) \
+                         must route the input arm verbatim into the \
+                         stored `dialeto:` field — any silent \
+                         normalization on the ctor path would surface \
+                         here rather than at a downstream consumer that \
+                         branches on `err.dialeto`",
+                    );
+                }
+                other => panic!(
+                    "dialeto_estrangeiro({dialeto:?}) must construct the \
+                     DialetoEstrangeiro variant; got: {other:?}"
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn from_lisp_foreign_dialect_gate_routes_through_dialeto_estrangeiro_ctor() {
+        // End-to-end pin refusing a silent regression that de-folds the
+        // [`Caixa::from_lisp`] production wire-up back to
+        // `Err(LeituraError::DialetoEstrangeiro { dialeto })` at the
+        // foreign-dialect classification arm — for every arm in
+        // [`crate::dialeto::CaixaDialeto::ALL`] the
+        // [`crate::dialeto::CaixaDialeto::is_molde_family`] partition
+        // returns `true` for (the [`crate::dialeto::CaixaDialeto::Molde`]
+        // and [`crate::dialeto::CaixaDialeto::MoldePosicional`]
+        // canonical two-arity closure), the observed
+        // [`Caixa::from_lisp`] `Err` byte-equals the value returned by
+        // `LeituraError::dialeto_estrangeiro(dialeto)`. Peer of the sibling
+        // [`crate::dialeto::tests::classify_form_wrong_head_routes_through_cabeca_errada_ctor`]
+        // (38d5159) end-to-end wire-up pin on the sibling
+        // [`crate::dialeto::classify_form`] wrong-head gate.
+        let fixtures: &[(crate::dialeto::CaixaDialeto, &str)] = &[
+            (
+                crate::dialeto::CaixaDialeto::Molde,
+                r#"
+                  (defcaixa
+                    :name "base64"
+                    :kind :Biblioteca
+                    :ecosystem :rust-single-crate
+                    :package {:name "base64" :version "0.22.1"})
+                "#,
+            ),
+            (
+                crate::dialeto::CaixaDialeto::MoldePosicional,
+                r#"
+                  (defcaixa todoku-go
+                    :kind :Biblioteca
+                    :ecosystem :go
+                    :package {:name "todoku-go" :version "0.3.0"})
+                "#,
+            ),
+        ];
+
+        for &(expected, src) in fixtures {
+            let observed = Caixa::from_lisp(src.trim())
+                .expect_err("foreign-dialect source must not parse as Pacote");
+            let via_ctor = LeituraError::dialeto_estrangeiro(expected);
+            assert!(
+                matches!(
+                    (&observed, &via_ctor),
+                    (
+                        LeituraError::DialetoEstrangeiro { dialeto: a },
+                        LeituraError::DialetoEstrangeiro { dialeto: b },
+                    ) if a == b && *a == expected
+                ),
+                "Caixa::from_lisp on {expected:?} source must byte-equal \
+                 LeituraError::dialeto_estrangeiro({expected:?}) — a silent \
+                 de-lift of the production wire-up back to the open-coded \
+                 struct-literal, or a divergence between the ctor and the \
+                 gate's construction shape, would surface here rather than \
+                 at a downstream diagnostic consumer",
+            );
+            assert_eq!(
+                observed.to_string(),
+                via_ctor.to_string(),
+                "from_lisp's observed `Err` and \
+                 `dialeto_estrangeiro({expected:?})` must render the same \
+                 Display byte-string — any drift means the two \
+                 construction paths projected the same axis through \
+                 different display shapes",
+            );
+        }
     }
 }
