@@ -3077,10 +3077,7 @@ impl MeshPolicy {
         if let (Some(t), Some(cb)) = (self.timeout(), self.circuit_breaker())
             && !self.breaker_window_observes_timeout()
         {
-            return Some(AplicacaoError::PolicyBreakerWindowBelowTimeout {
-                window: cb.window(),
-                timeout: t,
-            });
+            return Some(AplicacaoError::policy_breaker_window_below_timeout(&cb, t));
         }
         if let (Some(rl), Some(cb)) = (self.rate_limit(), self.circuit_breaker())
             && !self.breaker_can_trip_under_rate_limit()
@@ -9888,6 +9885,96 @@ impl AplicacaoError {
     #[must_use]
     pub fn contrato_cycle(cycle: Vec<String>) -> Self {
         Self::ContratoCycle { cycle }
+    }
+
+    /// Construct an [`AplicacaoError::PolicyBreakerWindowBelowTimeout`]
+    /// naming the offending `:politicas :circuit-breaker :window` and
+    /// the paired `:politicas :timeout` scalars under the first-firing
+    /// cross-axis-violation gate at
+    /// [`MeshPolicy::first_cross_axis_violation`], projecting the
+    /// `window` slot through the [`CircuitBreaker::window`] scalar
+    /// accessor on the substrate primitive.
+    ///
+    /// Folds the uniform `{ window: cb.window(), timeout: t }`
+    /// two-slot `Copy`-`Duration` struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one
+    /// dispatch rather than the pre-lift four-line struct-literal
+    /// block. The `cb` borrow threads verbatim from the caller-side
+    /// `if let (Some(t), Some(cb)) = (self.timeout(),
+    /// self.circuit_breaker())` pair-destructure at the sole in-crate
+    /// wire-up site inside [`MeshPolicy::first_cross_axis_violation`]'s
+    /// window-below-timeout arm; `timeout` threads verbatim from the
+    /// paired [`MeshPolicy::timeout`] accessor return already
+    /// destructured out of the same `if let` pair. `const fn`
+    /// preserves the pre-lift `Copy`-pass-through's zero-runtime-work
+    /// property verbatim (both fields are [`Duration`], the
+    /// [`CircuitBreaker::window`] accessor is itself `const fn`, and
+    /// no `.to_string()` / `.into()` allocation lands on the ctor
+    /// path).
+    ///
+    /// The `window` slot is projected through [`CircuitBreaker::window`]
+    /// (not spelled out as a bare `Duration` parameter) so a future
+    /// widening of the `:circuit-breaker :window` axis — a
+    /// per-`:contratos`-edge `:circuit-breaker :window` override the
+    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges, a promotion of
+    /// the plain [`Duration`] window to a richer per-status-class
+    /// window tuple once Envoy's `outlier_detection.interval` peers
+    /// come into scope — reaches the diagnostic through one accessor
+    /// swap rather than every wire-up in lockstep, matching the peer
+    /// substrate-primitive-projection posture of
+    /// [`AplicacaoError::contrato_self_loop`] (b30edfe, projecting
+    /// through [`WitContract::source`] / [`WitContract::world_ref`] on
+    /// the sibling `{ caixa: String, wit: String }` two-slot
+    /// per-`:contratos` self-edge envelope),
+    /// [`AplicacaoError::entrada_member_missing`] (deeae5c, projecting
+    /// through [`Entrada::destination`] on the sibling `{ para: String }`
+    /// one-slot per-`:entrada :para` phantom-reference envelope), and
+    /// [`AplicacaoError::shard_key_on_non_sharded`] (14bafca, projecting
+    /// through [`Placement::estrategia`] on the sibling `{ estrategia:
+    /// PlacementStrategy, shard_key: String }` two-slot per-`:placement`
+    /// envelope) ctors carry on the sibling `:contratos` / `:entrada`
+    /// / `:placement` envelopes.
+    ///
+    /// Peer of the sibling per-axis [`aplicacao_policy_scalar_ctors!`]
+    /// (7ef425e) macro that folds the eight one-slot per-`:politicas`
+    /// `{ <field>: Copy-scalar }` envelopes on the per-axis
+    /// [`MeshPolicy::validate`] gate — extended here onto the
+    /// first-firing cross-axis compound variant, whose multi-slot
+    /// `{ window: Duration, timeout: Duration }` shape does not fit
+    /// that macro's one-`Copy`-scalar-per-variant arity. The three
+    /// remaining cross-axis variants
+    /// ([`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`] on
+    /// the four-slot `{ rate, rl_window, max_failures, cb_window }`
+    /// envelope, [`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
+    /// on the two-slot `{ retries, max_failures }` envelope, and
+    /// [`AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst`] on the
+    /// two-slot `{ retries, rate }` envelope) each carry a distinct
+    /// substrate-primitive-projection shape and are folded on their
+    /// own axis by their own per-variant ctors as those wire-ups are
+    /// lifted.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`MeshPolicy::first_cross_axis_violation`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a per-tenant `:politicas` overlay's
+    /// window-vs-timeout cross-axis invariant after a cluster-local
+    /// `:politicas` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// acknowledges resolves an *effective* per-edge [`MeshPolicy`], a
+    /// future per-`:contratos`-edge `:politicas` override the M4 CR
+    /// resolver projects, an M4 per-cluster `:politicas`-cap resolver
+    /// projecting a per-tenant per-axis ceiling into the same
+    /// diagnostic shape — now reaches this variant through one call
+    /// rather than re-inlining the open-coded struct-literal in
+    /// lockstep with the one in-crate wire-up site.
+    #[must_use]
+    pub const fn policy_breaker_window_below_timeout(
+        cb: &CircuitBreaker,
+        timeout: Duration,
+    ) -> Self {
+        Self::PolicyBreakerWindowBelowTimeout {
+            window: cb.window(),
+            timeout,
+        }
     }
 }
 
@@ -34506,6 +34593,174 @@ mod tests {
             observed, expected,
             "detect_sync_cycles's gray-arm Err must byte-equal \
              contrato_cycle(cycle) on the reconstructed cycle path"
+        );
+        assert_eq!(
+            observed.to_string(),
+            expected.to_string(),
+            "Display byte-string parity"
+        );
+    }
+
+    // ── policy_breaker_window_below_timeout standalone ctor pins ────────
+    //
+    // Fail-before-pass-after pins for the standalone
+    // [`AplicacaoError::policy_breaker_window_below_timeout`] inherent
+    // ctor (see the paired doc-block above the ctor definition) — the
+    // fold of the last open-coded two-slot `{ window: cb.window(),
+    // timeout: t }` struct-literal inside
+    // [`MeshPolicy::first_cross_axis_violation`]'s window-below-timeout
+    // arm onto one substrate primitive on the [`AplicacaoError`]
+    // envelope, projecting through the [`CircuitBreaker::window`] scalar
+    // accessor on the substrate primitive. A byte-mismatched ctor body
+    // would trip the equivalence pin first, ahead of any downstream
+    // diagnostic-shape drift.
+    //
+    // Peer of the sibling standalone-ctor equivalence pins on the peer
+    // per-envelope substrate-primitive-projection ctors across
+    // caixa-core: `contrato_self_loop_ctor_matches_struct_literal_wrap`
+    // (b30edfe) on the sibling `{ caixa: String, wit: String }` two-slot
+    // per-`:contratos` self-edge envelope,
+    // `entrada_member_missing_ctor_matches_struct_literal_wrap` (deeae5c)
+    // on the sibling `{ para: String }` one-slot per-`:entrada :para`
+    // phantom-reference envelope, and
+    // `shard_key_on_non_sharded_ctor_matches_struct_literal_wrap`
+    // (14bafca) on the sibling `{ estrategia, shard_key }` two-slot
+    // per-`:placement :shard-key` envelope.
+
+    #[test]
+    fn policy_breaker_window_below_timeout_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::PolicyBreakerWindowBelowTimeout` to the pre-
+        // lift open-coded struct-literal that read the same two fields
+        // through [`CircuitBreaker::window`] and the paired
+        // `:politicas :timeout` destructure. Guards any future
+        // field-addition / reordering / accessor-swap tweak on the
+        // variant. Same equivalence-pin shape as the sibling
+        // `contrato_self_loop_ctor_matches_struct_literal_wrap`
+        // (b30edfe) on the sibling per-`:contratos` self-edge envelope.
+        let cb = CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        };
+        let timeout = Duration::from_secs(30);
+        let via_ctor = AplicacaoError::policy_breaker_window_below_timeout(&cb, timeout);
+        let via_literal = AplicacaoError::PolicyBreakerWindowBelowTimeout {
+            window: cb.window(),
+            timeout,
+        };
+        assert_eq!(
+            via_ctor, via_literal,
+            "policy_breaker_window_below_timeout(&cb, t) must byte-equal \
+             the open-coded PolicyBreakerWindowBelowTimeout struct-literal \
+             on the same Copy-Duration fixture"
+        );
+        assert_eq!(
+            via_ctor.to_string(),
+            via_literal.to_string(),
+            "Display byte-string must byte-equal the open-coded struct-literal"
+        );
+    }
+
+    #[test]
+    fn policy_breaker_window_below_timeout_ctor_routes_cb_window_and_timeout_verbatim() {
+        // Routing pin sweeping non-default `:circuit-breaker :window`
+        // and `:timeout` pairs (below-boundary window / above-boundary
+        // window; sub-second window / multi-minute timeout;
+        // millisecond-precision fixture) through the paired
+        // [`CircuitBreaker::window`] accessor and the direct `timeout`
+        // parameter, so any wrapper-side silent normalization,
+        // rounding, argument re-order, or accidental slot rebrand on
+        // the two-slot pass-through surfaces at caixa-core build time
+        // rather than at a downstream diagnostic consumer that reads
+        // the two [`Duration`]s back and gets different values than
+        // the ones it stored.
+        //
+        // Deliberately routes through a fixture whose `cb.window` and
+        // `timeout` are distinct — a silent accessor swap
+        // (`cb.max_failures` casting to `Duration` would fail to
+        // compile; a hypothetical field-rename swap swapping the two
+        // slots at the ctor body would land `timeout` in the `window`
+        // slot instead of `cb.window()` and vice-versa, tripping the
+        // per-field assertion here). Peer of the sibling
+        // `contrato_self_loop_ctor_routes_source_and_world_ref_through_verbatim`
+        // (b30edfe) routing pin on the sibling two-slot per-`:contratos`
+        // envelope.
+        for (max_failures, window, timeout) in [
+            (5_u32, Duration::from_secs(10), Duration::from_secs(30)),
+            (
+                1_u32,
+                Duration::from_millis(29_999),
+                Duration::from_secs(30),
+            ),
+            (42_u32, Duration::from_millis(500), Duration::from_secs(120)),
+            (7_u32, Duration::from_secs(1), Duration::from_secs(60)),
+        ] {
+            let cb = CircuitBreaker {
+                max_failures,
+                window,
+            };
+            let built = AplicacaoError::policy_breaker_window_below_timeout(&cb, timeout);
+            let AplicacaoError::PolicyBreakerWindowBelowTimeout {
+                window: stored_window,
+                timeout: stored_timeout,
+            } = built
+            else {
+                panic!(
+                    "policy_breaker_window_below_timeout must construct \
+                     PolicyBreakerWindowBelowTimeout for cb={cb:?}/timeout={timeout:?}"
+                );
+            };
+            assert_eq!(
+                stored_window, window,
+                "window slot must thread CircuitBreaker::window() verbatim \
+                 for cb={cb:?}/timeout={timeout:?}"
+            );
+            assert_eq!(
+                stored_timeout, timeout,
+                "timeout slot must thread the caller-side :timeout scalar verbatim \
+                 for cb={cb:?}/timeout={timeout:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_cross_axis_violation_arm_routes_through_policy_breaker_window_below_timeout_ctor() {
+        // End-to-end pin: the sole in-crate wire-up site
+        // ([`MeshPolicy::first_cross_axis_violation`]'s
+        // window-below-timeout arm) routes through
+        // [`AplicacaoError::policy_breaker_window_below_timeout`] and
+        // the observed `Err` byte-equals the ctor's output on the same
+        // sub-boundary `(:window, :timeout)` fixture. A future silent
+        // de-lift of the wire-up back to the open-coded
+        // `AplicacaoError::PolicyBreakerWindowBelowTimeout { window,
+        // timeout }` struct-literal trips this test at caixa-core build
+        // time rather than at a downstream diagnostic consumer far from
+        // the wire-up commit. Sibling of the peer
+        // `detect_sync_cycles_arm_routes_through_contrato_cycle_ctor`
+        // (5cfcab8) end-to-end pin on the sibling per-`:contratos`
+        // cross-edge cycle envelope,
+        // `validate_entrada_phantom_arm_routes_through_entrada_member_missing_ctor`
+        // (deeae5c) on the sibling per-`:entrada :para` phantom-
+        // reference envelope, and
+        // `validate_placement_non_sharded_arm_routes_through_shard_key_on_non_sharded_ctor`
+        // (14bafca) on the sibling per-`:placement :shard-key`
+        // envelope — extended here from a bare `matches!(err,
+        // AplicacaoError::PolicyBreakerWindowBelowTimeout { .. })`
+        // shape check to a byte-identity route through the ctor.
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::from_secs(30));
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        let observed = s.validate().unwrap_err();
+        let cb = s.politicas.circuit_breaker.unwrap();
+        let timeout = s.politicas.timeout.unwrap();
+        let expected = AplicacaoError::policy_breaker_window_below_timeout(&cb, timeout);
+        assert_eq!(
+            observed, expected,
+            "MeshPolicy::first_cross_axis_violation's window-below-timeout \
+             arm's Err must byte-equal policy_breaker_window_below_timeout(&cb, t)"
         );
         assert_eq!(
             observed.to_string(),
