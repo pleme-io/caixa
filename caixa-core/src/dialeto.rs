@@ -352,6 +352,47 @@ pub enum DialetoError {
     Leitura(String),
 }
 
+impl DialetoError {
+    /// Construct a [`DialetoError::CabecaErrada`] naming the offending
+    /// head symbol found at the top-level form.
+    ///
+    /// Substrate primitive every [`classify_form`] wrong-head fallthrough
+    /// wire-up site now routes through, folding the pre-lift uniform
+    /// three-line `Self::CabecaErrada { encontrado: <head>.to_string() }`
+    /// one-field struct-literal onto one substrate primitive matching the
+    /// peer `LimitsError::unknown_byte_unit(unit: &str)` /
+    /// `LimitsError::unknown_duration_unit(unit: &str)`
+    /// (`limits_codec_unit_only_ctors!` — 29fac09) single-slot
+    /// discipline on the sibling one-field `{ <field>: String }` envelope
+    /// axis, and matching the peer `ManifestError::code_path_empty` /
+    /// `BehaviorError::empty_path` / `UpgradeError::duplicate_from` /
+    /// `AplicacaoError::placement_cluster_duplicate` (94dabc8 / 0e33b37 /
+    /// 7e52aec / 92b1c92) single-slot inherent-ctor discipline every
+    /// sibling `{ <field>: <T> }` error-envelope variant on caixa-core's
+    /// error surface now carries.
+    ///
+    /// The one open-coded wire-up site — `classify_form`'s wrong-head
+    /// fallthrough arm on the `head: &str` binding read from the
+    /// top-level form via [`tatara_lisp::Sexp::as_symbol`] — opened the
+    /// identical three-line
+    /// `Self::CabecaErrada { encontrado: <head>.to_string() }` block
+    /// against the codec-scoped `<head>: &str` binding. Now routes
+    /// through `DialetoError::cabeca_errada(head)`, byte-equal to the
+    /// pre-lift struct-literal on the same `&str` fixture, so any future
+    /// widening of the diagnostic shape (e.g. carrying the source-file
+    /// path alongside the head symbol, carrying the head symbol's
+    /// position offset for an authoring-surface caret pointer) lands at
+    /// exactly one dispatch on the substrate primitive rather than re-
+    /// inlining the struct-literal at every wrong-head fallthrough
+    /// consumer.
+    #[must_use]
+    pub fn cabeca_errada(encontrado: &str) -> Self {
+        Self::CabecaErrada {
+            encontrado: encontrado.to_string(),
+        }
+    }
+}
+
 /// Classify a manifest source without committing to either schema.
 ///
 /// Deliberately reads only the head symbol and the set of top-level keywords —
@@ -392,9 +433,7 @@ pub fn classify_form(form: &Sexp) -> Result<CaixaDialeto, DialetoError> {
         }
         "defcaixa" => {}
         other => {
-            return Err(DialetoError::CabecaErrada {
-                encontrado: other.to_string(),
-            });
+            return Err(DialetoError::cabeca_errada(other));
         }
     }
 
@@ -535,9 +574,7 @@ mod tests {
     fn a_form_that_is_not_a_manifest_is_an_error_not_a_dialect() {
         assert_eq!(
             classify("(defflake :nome \"x\")"),
-            Err(DialetoError::CabecaErrada {
-                encontrado: "defflake".into()
-            })
+            Err(DialetoError::cabeca_errada("defflake"))
         );
         assert_eq!(classify(""), Err(DialetoError::Vazio));
     }
@@ -990,6 +1027,129 @@ mod tests {
         const { assert!(CaixaDialeto::Molde.is_molde()) };
         const { assert!(CaixaDialeto::MoldePosicional.is_molde_posicional()) };
         const { assert!(CaixaDialeto::Desconhecido.is_desconhecido()) };
+    }
+
+    #[test]
+    fn cabeca_errada_ctor_matches_struct_literal_wrap() {
+        // Fail-before-pass-after byte-identity pin: the lifted
+        // [`DialetoError::cabeca_errada`] ctor MUST land on the exact
+        // same struct-literal shape the pre-lift open-coded wire-up
+        // block wrote by hand — `DialetoError::CabecaErrada {
+        // encontrado: <head>.to_string() }`. A future accidental
+        // divergence (`.into()` swap, per-arm constant substitution, an
+        // added default field, an `.to_ascii_lowercase()` normalization
+        // silently injected into the ctor body, a rebrand of the
+        // `encontrado` field carrying a distinct byte-shape) trips this
+        // pin at caixa-core build time rather than surfacing far from
+        // the ctor declaration as a downstream `classify_form`
+        // wrong-head consumer emitting one diagnostic shape while a
+        // hand-written test peer opens another. Peer of the sibling
+        // `unknown_byte_unit_ctor_matches_struct_literal_wrap`
+        // (limits.rs; 29fac09) / `duplicate_from_ctor_matches_struct_
+        // literal_wrap` (upgrade.rs; 7e52aec) shape on the sibling
+        // single-slot `{ <field>: String }` envelope constructors.
+        assert_eq!(
+            DialetoError::cabeca_errada("defflake"),
+            DialetoError::CabecaErrada {
+                encontrado: "defflake".to_string(),
+            },
+            "DialetoError::cabeca_errada must byte-equal the pre-lift \
+             open-coded struct-literal — a drift here means the ctor \
+             stopped being a substrate primitive for the wrong-head \
+             fallthrough site"
+        );
+    }
+
+    #[test]
+    fn cabeca_errada_routes_encontrado_verbatim_across_boundary_inputs() {
+        // Fail-before-pass-after boundary-sweep pin: the lifted
+        // [`DialetoError::cabeca_errada`] ctor MUST route its
+        // `encontrado: &str` argument verbatim into the
+        // [`DialetoError::CabecaErrada`] `encontrado: String` field
+        // for every boundary-covering `&str` input — empty string, a
+        // canonical `defcaixa`-adjacent head, a non-ASCII head, a
+        // whitespace-carrying head, a Unicode-full-width head. Any
+        // wrapper-side truncation, silent `.trim()`, accidental
+        // `.to_ascii_lowercase()` normalization, or `.into()` divergence
+        // on the ctor body surfaces here as a byte-mismatch against the
+        // input rather than at a downstream
+        // [`DialetoError::to_string()`] diagnostic-shape drift at a
+        // wrong-head fallthrough consumer far from the ctor declaration.
+        // Peer of the sibling `limits_codec_unit_only_ctors_route_unit_
+        // verbatim_across_every_variant` (limits.rs; 29fac09) shape on
+        // the sibling single-slot `{ <field>: String }` envelope
+        // boundary-sweep discipline.
+        for encontrado in [
+            "",
+            "defflake",
+            "def-molde",
+            "defcaixa ",
+            " defcaixa",
+            "μdefcaixa",
+            "\u{00A0}defcaixa",
+            "\u{3000}defcaixa",
+            "def\u{2028}caixa",
+        ] {
+            let via_ctor = DialetoError::cabeca_errada(encontrado);
+            let via_literal = DialetoError::CabecaErrada {
+                encontrado: encontrado.to_string(),
+            };
+            assert_eq!(
+                via_ctor, via_literal,
+                "DialetoError::cabeca_errada({encontrado:?}) must byte- \
+                 equal the open-coded struct-literal on the same input — \
+                 a drift here would let the ctor silently normalize / \
+                 truncate the head symbol before it reached the \
+                 CabecaErrada envelope"
+            );
+            let DialetoError::CabecaErrada { encontrado: routed } = via_ctor else {
+                panic!(
+                    "DialetoError::cabeca_errada must construct the \
+                     CabecaErrada arm — got a different variant on \
+                     input {encontrado:?}"
+                );
+            };
+            assert_eq!(
+                routed, encontrado,
+                "DialetoError::cabeca_errada must route the input \
+                 {encontrado:?} verbatim into the encontrado field — \
+                 any wrapper-side truncation / normalization surfaces \
+                 here rather than at a downstream diagnostic shape drift"
+            );
+        }
+    }
+
+    #[test]
+    fn classify_form_wrong_head_routes_through_cabeca_errada_ctor() {
+        // Fail-before-pass-after routing pin: [`classify`]'s wrong-head
+        // fallthrough site MUST construct its `Err(DialetoError::…)`
+        // through the substrate-primitive [`DialetoError::cabeca_errada`]
+        // ctor rather than through an open-coded struct-literal. Pre-
+        // lift the wire-up hand-rolled a three-line
+        // `Self::CabecaErrada { encontrado: other.to_string() }` block
+        // with no compile-time link back to the substrate primitive; a
+        // future accidental rebrand of the ctor body (an added
+        // `.trim()` on `encontrado`, a per-arm constant prefix like
+        // `"unknown-head:"`, a widening of the field into a
+        // `(String, usize)` tuple carrying a caret offset) would then
+        // silently split the two paths — the ctor consumers pick up
+        // the new shape, the open-coded wire-up does not. Pinning
+        // byte-equality between the observed `Err` and the ctor-
+        // constructed `Err` refuses that split at caixa-core build
+        // time rather than surfacing far from the wire-up commit as a
+        // downstream diagnostic-consumer split.
+        for head in ["defflake", "deffoobar", "defcaixaz", "let", "defmoldez"] {
+            let src = format!("({head} :nome \"x\")");
+            let observed = classify(&src);
+            let via_ctor = Err(DialetoError::cabeca_errada(head));
+            assert_eq!(
+                observed, via_ctor,
+                "classify({src:?}) must return the same Err shape as \
+                 DialetoError::cabeca_errada({head:?}) — a drift here \
+                 means the wire-up de-lifted its wrong-head fallthrough \
+                 arm off the substrate primitive"
+            );
+        }
     }
 
     #[test]
