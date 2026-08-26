@@ -7820,10 +7820,7 @@ impl AplicacaoSpec {
             // emits a K8s object that fails or no-ops far from the source
             // caixa.lisp.
             if c.is_self_loop() {
-                return Err(AplicacaoError::ContratoSelfLoop {
-                    caixa: c.source().to_string(),
-                    wit: c.world_ref().to_string(),
-                });
+                return Err(AplicacaoError::contrato_self_loop(c));
             }
             if c.world_ref().is_empty() {
                 return Err(AplicacaoError::empty_wit(c.edge_pair()));
@@ -9478,6 +9475,61 @@ impl AplicacaoError {
             de,
             para,
             endpoint: endpoint.to_string(),
+        }
+    }
+
+    /// Construct an [`AplicacaoError::ContratoSelfLoop`] naming the
+    /// offending self-edge's owning `caixa` and its `:wit` world
+    /// reference, projecting both slots through the [`WitContract`]'s
+    /// own [`WitContract::source`] and [`WitContract::world_ref`]
+    /// scalar accessors on the substrate primitive.
+    ///
+    /// Folds the uniform `{ caixa: contract.source().to_string(), wit:
+    /// contract.world_ref().to_string() }` two-slot struct-literal onto
+    /// one substrate primitive so every wire-up on this variant reads
+    /// through one dispatch rather than the pre-lift four-line
+    /// twin-`.to_string()` struct-literal block. The `contract` borrow
+    /// threads verbatim from the caller-side `for c in
+    /// self.contratos()` iteration at the sole in-crate wire-up site
+    /// [`AplicacaoSpec::validate_contratos`], matching the sibling
+    /// per-`:contratos` `WitContract`-projection ctor discipline the
+    /// peer [`AplicacaoError::empty_wit`] /
+    /// [`AplicacaoError::contrato_endpoint_empty`] /
+    /// [`AplicacaoError::contrato_subject_empty`] /
+    /// [`AplicacaoError::contrato_slot_empty`] ctors carry through
+    /// [`WitContract::edge_pair`] on the sibling two-slot `{ de, para }`
+    /// envelope.
+    ///
+    /// The `caixa` slot is projected through [`WitContract::source`]
+    /// rather than [`WitContract::destination`] to preserve byte-equal
+    /// diagnostic ordering with the pre-lift open-coded body — a
+    /// [`WitContract::is_self_loop`]-gated call site has
+    /// `source() == destination()` by that predicate's own contract, so
+    /// the two accessors are exchange-symmetric at this call site, but
+    /// naming `source` at the ctor definition matches the pre-lift
+    /// site's field selection and pins the discipline for any future
+    /// consumer that constructs the variant against a not-yet-gated
+    /// candidate contract (e.g. an M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a per-`(:de, :para)` patched contract, a
+    /// future `feira validate --contratos` per-caixa verb re-running
+    /// the self-loop diagnostic on demand, a per-tenant per-Aplicacao
+    /// overlay resolver rejecting a self-edge introduced by a
+    /// cluster-local `:contratos` override the M4 CR materializer
+    /// projects).
+    ///
+    /// Peer of the sibling `WitContract`-projection ctors on the
+    /// per-`:contratos` envelopes on the same [`AplicacaoError`] type —
+    /// same "one typed dispatch on the substrate primitive, projecting
+    /// through the paired [`WitContract`] accessors, thin projections
+    /// at each consumer" discipline extended here onto the last unlifted
+    /// two-slot `{ caixa: String, wit: String }` per-self-edge envelope
+    /// inside [`AplicacaoSpec::validate_contratos`].
+    #[must_use]
+    pub fn contrato_self_loop(contract: &WitContract) -> Self {
+        Self::ContratoSelfLoop {
+            caixa: contract.source().to_string(),
+            wit: contract.world_ref().to_string(),
         }
     }
 }
@@ -32912,6 +32964,141 @@ mod tests {
             AplicacaoError::contrato_endpoint_not_absolute(edge(), via_literal),
             AplicacaoError::contrato_endpoint_not_absolute(edge(), via_string.as_str()),
         );
+    }
+
+    // ── contrato_self_loop standalone ctor pins ─────────────────────────
+    //
+    // Fail-before-pass-after pins for the standalone
+    // [`AplicacaoError::contrato_self_loop`] inherent ctor (see the paired
+    // doc-block above the ctor definition) — the fold of the last
+    // open-coded two-slot `{ caixa: <ct>.source().to_string(), wit:
+    // <ct>.world_ref().to_string() }` struct-literal inside
+    // [`AplicacaoSpec::validate_contratos`]'s per-`:contratos` self-edge
+    // arm onto one substrate primitive on the [`AplicacaoError`]
+    // envelope, projecting through the paired [`WitContract::source`] /
+    // [`WitContract::world_ref`] scalar accessors on the substrate
+    // primitive. A byte-mismatched ctor body would trip the equivalence
+    // pin first, ahead of any downstream diagnostic-shape drift.
+    //
+    // Peer of the sibling standalone-ctor equivalence pins on the peer
+    // one-off variants across caixa-core:
+    // `contrato_endpoint_not_absolute_ctor_matches_struct_literal_wrap`
+    // (cdf1a2c) above on the paired three-slot `{ de, para, endpoint }`
+    // envelope, the sibling
+    // `contrato_endpoint_empty_ctor_matches_struct_literal_wrap` +
+    // `contrato_endpoint_invalid_ctor_matches_struct_literal_wrap` on
+    // the paired two-slot and four-slot per-`:contratos :endpoint`
+    // envelopes, and the sibling
+    // `entrada_host_invalid_ctor_matches_struct_literal_wrap` (17dd504)
+    // pin on the sibling standalone `{ host, reason }` two-slot ctor.
+    fn contrato_self_loop_ctor_fixture() -> WitContract {
+        WitContract {
+            de: "cart".to_string(),
+            para: "cart".to_string(),
+            wit: "wasi:http/proxy".to_string(),
+            endpoint: Some("/self".to_string()),
+            subject: None,
+            slot: None,
+        }
+    }
+
+    #[test]
+    fn contrato_self_loop_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::ContratoSelfLoop` to the pre-lift open-coded
+        // struct-literal that read the same two fields through
+        // [`WitContract::source`] and [`WitContract::world_ref`]. Guards
+        // any future field-addition / reordering / string-conversion
+        // tweak on the variant. Same equivalence-pin shape as the
+        // sibling `contrato_endpoint_not_absolute_ctor_matches_
+        // struct_literal_wrap` (cdf1a2c) on the paired three-slot
+        // per-`:contratos :endpoint` envelope.
+        let contract = contrato_self_loop_ctor_fixture();
+        let lifted = AplicacaoError::contrato_self_loop(&contract);
+        let struct_literal = AplicacaoError::ContratoSelfLoop {
+            caixa: contract.source().to_string(),
+            wit: contract.world_ref().to_string(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn contrato_self_loop_ctor_routes_source_and_world_ref_through_verbatim() {
+        // Routing pin sweeping non-default `caixa` and `:wit` values
+        // (`"catalog-v2"` / `"nats:pub-sub"`) through the paired
+        // [`WitContract::source`] / [`WitContract::world_ref`] accessor
+        // axes so any wrapper-side lowercase / trim / re-order surfaces
+        // here rather than at a downstream diagnostic-shape drift.
+        // Peer of the sibling
+        // `contrato_endpoint_not_absolute_ctor_routes_edge_pair_through_verbatim`
+        // (cdf1a2c) routing pin on the sibling three-slot envelope.
+        let contract = WitContract {
+            de: "catalog-v2".to_string(),
+            para: "catalog-v2".to_string(),
+            wit: "nats:pub-sub".to_string(),
+            endpoint: None,
+            subject: Some("orders.>".to_string()),
+            slot: None,
+        };
+        let built = AplicacaoError::contrato_self_loop(&contract);
+        match built {
+            AplicacaoError::ContratoSelfLoop { caixa, wit } => {
+                assert_eq!(
+                    caixa, "catalog-v2",
+                    "caixa slot must thread WitContract::source() verbatim"
+                );
+                assert_eq!(
+                    wit, "nats:pub-sub",
+                    "wit slot must thread WitContract::world_ref() verbatim"
+                );
+            }
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn contrato_self_loop_ctor_projects_source_field_not_destination() {
+        // Accessor-fidelity pin: the ctor's `caixa` slot keys off the
+        // [`WitContract::source`] accessor (matching the pre-lift open-
+        // coded body's field selection), not [`WitContract::destination`].
+        // Under today's `WitContract::is_self_loop()`-gated call site
+        // the two are equal by that predicate's own contract, but a
+        // future consumer that constructs the ctor against a not-yet-
+        // gated candidate contract — an M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR admission webhook re-
+        // checking a per-`(:de, :para)`-patched candidate before the
+        // self-loop gate re-fires, a per-tenant per-Aplicacao overlay
+        // resolver rejecting a self-edge introduced by a cluster-local
+        // `:contratos` override — needs the pre-lift field selection
+        // pinned so a silent `.destination()` swap at the ctor body
+        // surfaces here rather than at a downstream diagnostic mis-
+        // attribution far from the self-loop diagnostic's owner
+        // (the `caller` side per MESH-COMPOSITION §III.1's typed edge
+        // direction).
+        //
+        // Deliberately constructs a non-self-loop pair (`"cart" →
+        // "catalog"`) so the two accessors yield distinct bytes on the
+        // fixture — a `.destination()` swap at the ctor body would land
+        // `"catalog"` in the `caixa` slot instead of `"cart"` and trip
+        // the assertion here.
+        let contract = WitContract {
+            de: "cart".to_string(),
+            para: "catalog".to_string(),
+            wit: "wasi:http/proxy".to_string(),
+            endpoint: Some("/charge".to_string()),
+            subject: None,
+            slot: None,
+        };
+        let built = AplicacaoError::contrato_self_loop(&contract);
+        match built {
+            AplicacaoError::ContratoSelfLoop { caixa, .. } => {
+                assert_eq!(
+                    caixa, "cart",
+                    "caixa slot must project WitContract::source() (not destination)"
+                );
+            }
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
     }
 
     // Per-variant equivalence pins for the [`aplicacao_caixa_only_ctors!`]
