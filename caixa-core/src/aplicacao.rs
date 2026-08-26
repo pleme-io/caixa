@@ -8387,10 +8387,7 @@ impl AplicacaoSpec {
                 // `:shard-key` axis now flows through the same typed
                 // dispatch as the sibling `Sharded`-arm shape gate.
                 if let Some(k) = p.shard_key() {
-                    return Err(AplicacaoError::ShardKeyOnNonSharded {
-                        estrategia: p.estrategia(),
-                        shard_key: k.to_string(),
-                    });
+                    return Err(AplicacaoError::shard_key_on_non_sharded(p, k));
                 }
             }
         }
@@ -9679,6 +9676,79 @@ impl AplicacaoError {
     pub const fn placement_without_clusters(placement: &Placement) -> Self {
         Self::PlacementWithoutClusters {
             estrategia: placement.estrategia(),
+        }
+    }
+
+    /// Construct an [`AplicacaoError::ShardKeyOnNonSharded`] naming the
+    /// offending `:placement :estrategia` scalar and the declared-but-
+    /// inert `:shard-key` value the non-`Sharded` arm refused, projecting
+    /// the strategy through the paired [`Placement::estrategia`]
+    /// `Copy`-scalar accessor on the substrate primitive.
+    ///
+    /// Folds the uniform `Self::ShardKeyOnNonSharded { estrategia:
+    /// placement.estrategia(), shard_key: shard_key.to_string() }`
+    /// two-slot struct-literal onto one substrate primitive so every
+    /// wire-up on this variant reads through one dispatch rather than
+    /// the pre-lift four-line open-coded struct-literal block inside
+    /// [`AplicacaoSpec::validate_placement`]'s
+    /// `PlacementStrategy::Replicated | PlacementStrategy::SingleNode`
+    /// arm. Same substrate-primitive-projection posture as the sibling
+    /// [`AplicacaoError::placement_without_clusters`] (b0d24ba,
+    /// projecting through [`Placement::estrategia`] on the peer
+    /// `{ estrategia: PlacementStrategy }` one-slot per-`:placement`
+    /// empty-clusters envelope) and the peer
+    /// [`AplicacaoError::contrato_self_loop`] (b30edfe, projecting
+    /// through [`WitContract::source`] / [`WitContract::world_ref`] on
+    /// the paired per-`:contratos` self-edge envelope) ctors — extended
+    /// here onto the last unlifted `{ estrategia: PlacementStrategy,
+    /// shard_key: String }` two-slot per-`:placement :shard-key`
+    /// declared-but-inert envelope on the sibling non-`Sharded`-arm
+    /// partition.
+    ///
+    /// The `shard_key: &str` parameter accepts both the `Some(k)`-bound
+    /// `&str` from the sole in-crate wire-up site (narrowed from
+    /// `Option<&str>` via [`Placement::shard_key`]) and any future
+    /// `&String` deref from a downstream consumer that reaches for the
+    /// slot through the paired accessor, materializing the owned
+    /// [`String`] via one `.to_string()` at the substrate primitive so
+    /// no per-arm `.to_string()` allocation lives at the caller. The
+    /// `estrategia` slot threads through [`Placement::estrategia`]'s
+    /// `Copy`-scalar return rather than accepting a bare
+    /// [`PlacementStrategy`] argument, matching the peer
+    /// [`AplicacaoError::placement_without_clusters`] discipline —
+    /// carrying the [`Placement`] borrow through one accessor call at
+    /// the substrate primitive is strictly stronger than accepting the
+    /// scalar as a separate argument (a future caller that constructs
+    /// the error against a candidate [`Placement`] whose
+    /// [`Placement::estrategia`] value the caller re-derives from
+    /// another source can silently disagree with the storage the
+    /// [`Placement`] carries; the accessor-projected primitive cannot).
+    ///
+    /// Peer of the sibling per-`:placement` single-slot / two-slot ctor
+    /// families on the same [`AplicacaoError`] type — same "one typed
+    /// dispatch on the substrate primitive, projecting through the
+    /// paired [`Placement`] accessors, thin projections at each
+    /// consumer" discipline extended here onto the last unlifted
+    /// per-`:placement :shard-key` non-`Sharded`-arm envelope inside
+    /// [`AplicacaoSpec::validate_placement`].
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`AplicacaoSpec::validate_placement`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a `:placement (:estrategia Replicated
+    /// :shard-key …)` overlay against a per-tenant cluster-topology
+    /// snapshot, a future `feira validate --placement` per-caixa
+    /// admission verb re-running the non-`Sharded`-arm refusal on
+    /// demand, an M4 per-cluster placement resolver rejecting a
+    /// declared-but-inert `:shard-key` introduced by a fleet-local
+    /// overlay the M4 CR materializer projects — now reaches this
+    /// variant through one call rather than re-inlining the four-line
+    /// struct-literal in lockstep with the one in-crate wire-up site.
+    #[must_use]
+    pub fn shard_key_on_non_sharded(placement: &Placement, shard_key: &str) -> Self {
+        Self::ShardKeyOnNonSharded {
+            estrategia: placement.estrategia(),
+            shard_key: shard_key.to_string(),
         }
     }
 }
@@ -23100,6 +23170,120 @@ mod tests {
         s.placement.estrategia = PlacementStrategy::SingleNode;
         s.placement.shard_key = None;
         s.validate().unwrap();
+    }
+
+    #[test]
+    fn shard_key_on_non_sharded_ctor_matches_struct_literal_wrap() {
+        // Fail-before-pass-after pin on
+        // [`AplicacaoError::shard_key_on_non_sharded`]'s
+        // substrate-primitive posture: byte-identity + `Display`
+        // byte-string parity against the open-coded struct-literal
+        // for every non-`Sharded` [`PlacementStrategy`] arm across a
+        // representative `:shard-key` value the sole in-crate wire-up
+        // site (`AplicacaoSpec::validate_placement`'s
+        // `PlacementStrategy::Replicated | PlacementStrategy::SingleNode`
+        // arm) emits. Any wrapper-side silent normalization, `.into()`
+        // divergence, or accidental field rebrand on the ctor body
+        // surfaces at assert time rather than at a downstream consumer
+        // that reads `err.estrategia` / `err.shard_key` back and gets a
+        // different value than the one it stored.
+        for estrategia in [PlacementStrategy::Replicated, PlacementStrategy::SingleNode] {
+            let placement = Placement {
+                estrategia,
+                clusters: vec!["cluster-a".to_string()],
+                shard_key: Some("$tenantId".to_string()),
+                affinity: None,
+            };
+            let via_ctor = AplicacaoError::shard_key_on_non_sharded(&placement, "$tenantId");
+            let via_literal = AplicacaoError::ShardKeyOnNonSharded {
+                estrategia,
+                shard_key: "$tenantId".to_string(),
+            };
+            assert_eq!(
+                via_ctor, via_literal,
+                "shard_key_on_non_sharded(&placement, k) must byte-equal the \
+                 open-coded ShardKeyOnNonSharded struct-literal for {estrategia:?}"
+            );
+            assert_eq!(
+                via_ctor.to_string(),
+                via_literal.to_string(),
+                "Display byte-string must byte-equal the open-coded struct-literal \
+                 for {estrategia:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn shard_key_on_non_sharded_routes_estrategia_through_placement_accessor() {
+        // Boundary-sweep pin on the ctor's substrate-primitive
+        // projection: the `estrategia` slot is stored verbatim from
+        // [`Placement::estrategia`] on every arm the accessor can
+        // return, and the `shard_key` slot preserves the caller-side
+        // `&str` byte-for-byte. Sweeping every arm of
+        // [`PlacementStrategy::ALL`] (including the `Sharded` arm the
+        // current caller never reaches, since the ctor is a substrate
+        // primitive independent of any single caller's dispatch gate)
+        // catches a future silent field-rebrand or per-arm ctor
+        // divergence at caixa-core build time rather than at a
+        // downstream consumer far from the wire-up commit.
+        for &estrategia in PlacementStrategy::ALL {
+            let placement = Placement {
+                estrategia,
+                clusters: vec!["cluster-a".to_string()],
+                shard_key: Some("$tenantId".to_string()),
+                affinity: None,
+            };
+            let err = AplicacaoError::shard_key_on_non_sharded(&placement, "$tenantId");
+            let AplicacaoError::ShardKeyOnNonSharded {
+                estrategia: stored_estrategia,
+                shard_key: stored_shard_key,
+            } = err
+            else {
+                panic!(
+                    "shard_key_on_non_sharded must construct ShardKeyOnNonSharded for {estrategia:?}"
+                );
+            };
+            assert_eq!(
+                stored_estrategia, estrategia,
+                "estrategia slot must round-trip verbatim through Placement::estrategia \
+                 for {estrategia:?}"
+            );
+            assert_eq!(
+                stored_shard_key, "$tenantId",
+                "shard_key slot must preserve the caller-side &str byte-for-byte \
+                 for {estrategia:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_placement_non_sharded_arm_routes_through_shard_key_on_non_sharded_ctor() {
+        // End-to-end pin: the sole in-crate wire-up site
+        // (`AplicacaoSpec::validate_placement`'s non-`Sharded`-arm
+        // refusal) routes through
+        // [`AplicacaoError::shard_key_on_non_sharded`] and the observed
+        // `Err` byte-equals the ctor's output on the same non-`Sharded`
+        // fixture. A future silent de-lift of the wire-up back to the
+        // open-coded struct-literal trips this test at caixa-core build
+        // time rather than at a downstream diagnostic consumer far from
+        // the wire-up commit.
+        for estrategia in [PlacementStrategy::Replicated, PlacementStrategy::SingleNode] {
+            let mut s = three_member_spec();
+            s.placement.estrategia = estrategia;
+            s.placement.shard_key = Some("$tenantId".to_string());
+            let observed = s.validate().unwrap_err();
+            let expected = AplicacaoError::shard_key_on_non_sharded(&s.placement, "$tenantId");
+            assert_eq!(
+                observed, expected,
+                "validate_placement's non-Sharded-arm Err must byte-equal \
+                 shard_key_on_non_sharded(&placement, k) for {estrategia:?}"
+            );
+            assert_eq!(
+                observed.to_string(),
+                expected.to_string(),
+                "Display byte-string parity for {estrategia:?}"
+            );
+        }
     }
 
     fn sharded_spec_with_key(key: &str) -> AplicacaoSpec {
