@@ -1337,9 +1337,7 @@ pub fn validate_upgrade_from(entries: &[UpgradeFromEntry]) -> Result<(), Upgrade
              two gates aligned",
         );
         if seen.contains(&parsed) {
-            return Err(UpgradeError::DuplicateFrom {
-                from: entry.prior_versao().to_string(),
-            });
+            return Err(UpgradeError::duplicate_from(entry));
         }
         seen.push(parsed);
     }
@@ -2570,6 +2568,78 @@ upgrade_from_axis_ctors! {
     from_invalid => FromInvalid { reason },
     from_not_before_versao => FromNotBeforeVersao { versao },
     duplicate_load_module => DuplicateLoadModule { module },
+}
+
+// Fold the last open-coded `UpgradeError::DuplicateFrom { from:
+// entry.prior_versao().to_string() }` one-slot struct-literal inside
+// [`validate_upgrade_from`]'s cross-entry `:from`-duplicate gate onto
+// one substrate primitive on the [`UpgradeError`] envelope, projecting
+// through the paired [`UpgradeFromEntry::prior_versao`] scalar accessor
+// on the substrate primitive. The `DuplicateFrom` variant is the last
+// unlifted single-slot `{ from: String }` envelope on `UpgradeError` —
+// every peer envelope shape (`{ script: PathBuf }` one-slot via
+// [`upgrade_script_only_ctors!`] 7468ca9; `{ from: String, <axis>:
+// String }` two-slot via [`upgrade_from_axis_ctors!`] 41d08db; `{ from:
+// String, script: PathBuf }` two-slot via [`upgrade_from_script_ctors!`]
+// 8e67041) already reads through one substrate-primitive dispatch, so
+// this fold closes the last one-off single-slot on the envelope.
+//
+// Peer of the sibling standalone-ctor `AplicacaoError::contrato_self_loop`
+// (b30edfe) on the paired [`WitContract`] projection — same
+// `pub fn <ctor>(primitive: &<Primitive>) -> Self` shape, projecting
+// through the substrate primitive's own scalar accessor rather than
+// re-inlining the `.to_string()` at the call site. Extended here onto
+// the sibling [`UpgradeFromEntry`] scalar-accessor family the closed
+// M2 companion of the M3 mesh-slot accessors (see
+// [`UpgradeFromEntry::prior_versao`] doc — sibling in shape to
+// [`crate::Membro::versao_requirement`] a40b0e3, [`crate::Membro::nome`]
+// 4a32abf, and the [`crate::WitContract::{source, destination,
+// world_ref}`] 7f0fd43 / 0804823 / [`crate::Entrada::{hostname,
+// destination}`] 11f3dfe / 6db982c `&str` accessors) established.
+//
+// The one wire-up site this fold closes opens the identical
+// `UpgradeError::DuplicateFrom { from: entry.prior_versao().to_string() }`
+// three-line struct-literal against the `entry: &UpgradeFromEntry` local
+// threaded from [`validate_upgrade_from`]'s per-entry loop — the exact
+// "same block re-inlined at every consumer" shape the PRIME DIRECTIVE
+// names as a bug, on the same altitude the peer `contrato_self_loop`
+// closed on the sibling `{ caixa: String, wit: String }` two-slot
+// envelope inside `impl AplicacaoSpec`. The `entry: &UpgradeFromEntry`
+// parameter accepts the borrowed entry verbatim so the wire-up site
+// threads through the ctor without a pre-projection — the ctor body
+// spells the paired `prior_versao().to_string()` projection once.
+//
+// Every future consumer that wants to construct this variant outside
+// `validate_upgrade_from`'s cross-entry duplicate gate — a deferred
+// wasm-operator's `install_release/1` cross-entry `:from`-duplicate
+// re-checker at hot-upgrade dispatch time rejecting a second entry
+// with the same prior-versao tag, a future `feira validate --upgrade-
+// from` per-caixa admission verb re-running the cross-entry duplicate
+// pass on demand, a per-`Caixa` overlay resolver rejecting an author-
+// supplied duplicate `(:from "<value>")` against a cluster-local
+// snapshot — now reaches the variant through one call rather than
+// re-inlining the three-line struct-literal in lockstep with the one
+// in-crate wire-up site.
+impl UpgradeError {
+    /// Construct an [`UpgradeError::DuplicateFrom`] naming the offending
+    /// duplicate `(:from <prior-versao>)` entry, projecting through the
+    /// paired [`UpgradeFromEntry::prior_versao`] scalar accessor on the
+    /// substrate primitive. Folds the uniform `Self::DuplicateFrom {
+    /// from: entry.prior_versao().to_string() }` one-field struct-literal
+    /// onto one substrate primitive so every wire-up on this variant
+    /// reads through one dispatch, matching the sibling
+    /// [`crate::AplicacaoError::contrato_self_loop`] (b30edfe)
+    /// substrate-primitive-projection ctor's shape on the peer
+    /// [`AplicacaoError`] envelope. The `entry: &UpgradeFromEntry`
+    /// parameter accepts the borrowed entry verbatim so the paired
+    /// `prior_versao().to_string()` projection is spelled once — inside
+    /// the ctor body — rather than at every wire-up site.
+    #[must_use]
+    pub fn duplicate_from(entry: &UpgradeFromEntry) -> Self {
+        Self::DuplicateFrom {
+            from: entry.prior_versao().to_string(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -8366,6 +8436,138 @@ mod tests {
                 "duplicate_load_module must route `from` → `from`, \
                  `axis` → `module` in declared field order",
             );
+        }
+    }
+
+    // Per-variant equivalence + accessor-fidelity + cross-axis pins for
+    // the standalone [`UpgradeError::duplicate_from`] inherent ctor (see
+    // the paired doc-block above the ctor definition) — the fold of the
+    // last open-coded one-slot `{ from: entry.prior_versao().to_string() }`
+    // struct-literal inside [`validate_upgrade_from`]'s cross-entry
+    // duplicate gate onto one substrate primitive on the
+    // [`UpgradeError`] envelope, projecting through the paired
+    // [`UpgradeFromEntry::prior_versao`] scalar accessor on the substrate
+    // primitive. A byte-mismatched ctor body would trip the equivalence
+    // pin first, ahead of any downstream diagnostic-shape drift.
+    //
+    // Peer of the sibling standalone-ctor equivalence pins on the peer
+    // one-off variants across caixa-core:
+    // `contrato_self_loop_ctor_matches_struct_literal_wrap` (b30edfe) on
+    // the paired two-slot `{ caixa, wit }` [`AplicacaoError`] envelope,
+    // `contrato_endpoint_not_absolute_ctor_matches_struct_literal_wrap`
+    // (cdf1a2c) on the paired three-slot `{ de, para, endpoint }`
+    // envelope, the sibling
+    // `contrato_endpoint_empty_ctor_matches_struct_literal_wrap` +
+    // `contrato_endpoint_invalid_ctor_matches_struct_literal_wrap` pins,
+    // and the sibling `entrada_host_invalid_ctor_matches_struct_literal_wrap`
+    // pin on the sibling standalone `{ host, reason }` two-slot ctor.
+
+    #[test]
+    fn duplicate_from_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `UpgradeError::DuplicateFrom` to the pre-lift open-coded
+        // struct-literal that read the same `from` field through
+        // [`UpgradeFromEntry::prior_versao`]. Guards any future field-
+        // addition / reordering / string-conversion tweak on the
+        // variant. Same equivalence-pin shape as the sibling
+        // `contrato_self_loop_ctor_matches_struct_literal_wrap`
+        // (b30edfe) on the paired two-slot `{ caixa, wit }`
+        // envelope inside `impl AplicacaoSpec`.
+        let entry = entry("0.1.0", vec![UpgradeInstruction::Restart]);
+        let lifted = UpgradeError::duplicate_from(&entry);
+        let struct_literal = UpgradeError::DuplicateFrom {
+            from: entry.prior_versao().to_string(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    #[test]
+    fn duplicate_from_ctor_routes_prior_versao_through_verbatim() {
+        // Routing pin sweeping a non-default `:from` value
+        // (`"1.2.3-rc.4+build.5"` — a full SemVer-2 identity with pre-
+        // release and build metadata) through the paired
+        // [`UpgradeFromEntry::prior_versao`] scalar accessor axis so any
+        // wrapper-side lowercase / trim / truncate on the one-field
+        // construction surfaces here rather than at a downstream
+        // diagnostic-shape drift. Peer of the sibling
+        // `contrato_self_loop_ctor_routes_source_and_world_ref_through_verbatim`
+        // (b30edfe) routing pin on the sibling two-slot envelope.
+        //
+        // The pre-release + build-metadata carrier value is deliberately
+        // chosen to exercise the `.to_string()` path against a `:from`
+        // shape [`semver::Version::PartialEq`] treats as distinct from
+        // its release-only sibling (per the
+        // `validate_upgrade_from_treats_pre_release_as_distinct` and
+        // build-metadata-tightening-note doc-block on
+        // [`validate_upgrade_from`]) — so any silent normalization at
+        // the ctor body (a `.trim_matches('+')` / `.split_once('+')` /
+        // `.split_once('-')` collapse) would drop bytes from the
+        // rendered diagnostic and surface here.
+        let entry = entry("1.2.3-rc.4+build.5", vec![UpgradeInstruction::Restart]);
+        let built = UpgradeError::duplicate_from(&entry);
+        match built {
+            UpgradeError::DuplicateFrom { from } => {
+                assert_eq!(
+                    from, "1.2.3-rc.4+build.5",
+                    "from slot must thread UpgradeFromEntry::prior_versao() verbatim, \
+                     preserving pre-release + build-metadata bytes"
+                );
+            }
+            other => panic!("expected DuplicateFrom, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn duplicate_from_ctor_projects_prior_versao_scalar_accessor() {
+        // Accessor-fidelity pin: the ctor's `from` slot keys off the
+        // [`UpgradeFromEntry::prior_versao`] scalar accessor (matching
+        // the pre-lift open-coded body's field selection), not any
+        // stringified rendering of the full entry (e.g. the
+        // `impl Display for UpgradeFromEntry` output, if one were later
+        // added, or a `format!("{:?}", entry)` debug dump). Pins the
+        // projection axis so a silent swap at the ctor body — say, a
+        // future refactor that projects through `entry.instructions()`
+        // in shape (dropping the `:from` axis entirely) or through a
+        // whole-entry `format!` — surfaces here rather than at a
+        // downstream diagnostic mis-attribution far from the duplicate
+        // gate's owner.
+        //
+        // A future consumer that constructs the ctor against a not-yet-
+        // gated candidate entry (an M4 `mesh.pleme.io/v1alpha1/Caixa`
+        // CR admission webhook re-checking a per-`:upgrade-from`-patched
+        // candidate before the cross-entry duplicate gate re-fires, a
+        // per-tenant per-`Caixa` overlay resolver rejecting a duplicate
+        // `(:from …)` introduced by a cluster-local `:upgrade-from`
+        // override) needs the pre-lift projection axis pinned.
+        //
+        // The fixture threads a distinctive `:from` (`"0.2.0-alpha.7"`)
+        // paired with a distinctive multi-instruction sequence so a
+        // silent swap that projects through the whole-entry rendering
+        // instead of the paired scalar accessor would land debug bytes
+        // from the `:instructions` list into the `from` slot and trip
+        // the assertion here.
+        let entry = entry(
+            "0.2.0-alpha.7",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "distinctive-load-target".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/distinctive-migrate.lisp"),
+                },
+                UpgradeInstruction::Restart,
+            ],
+        );
+        let built = UpgradeError::duplicate_from(&entry);
+        match built {
+            UpgradeError::DuplicateFrom { from } => {
+                assert_eq!(
+                    from, "0.2.0-alpha.7",
+                    "from slot must project UpgradeFromEntry::prior_versao() \
+                     (not any whole-entry rendering)"
+                );
+            }
+            other => panic!("expected DuplicateFrom, got {other:?}"),
         }
     }
 }
