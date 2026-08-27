@@ -16,7 +16,7 @@ impl CaixaVersion {
     /// Parse and validate the wrapped string as semver.
     pub fn parse(&self) -> Result<semver::Version, VersionError> {
         semver::Version::parse(&self.0)
-            .map_err(|e| VersionError::Semver(self.0.clone(), e.to_string()))
+            .map_err(|e| VersionError::semver(self.0.clone(), e.to_string()))
     }
 
     /// Borrow the string form.
@@ -263,12 +263,82 @@ pub fn parse_requirement(s: &str) -> Result<semver::VersionReq, VersionError> {
         .map_err(|e| VersionError::Requirement(s.to_string(), e.to_string()))
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum VersionError {
     #[error("invalid version '{0}': {1}")]
     Semver(String, String),
     #[error("invalid version requirement '{0}': {1}")]
     Requirement(String, String),
+}
+
+// Fold the sole `VersionError::Semver(<into-String-expr>, <into-String-expr>)`
+// wire-up site on [`CaixaVersion::parse`]'s [`semver::Version::parse`]
+// `map_err` arm onto one substrate primitive — the paired
+// `(String, String)` two-slot tuple-newtype [`VersionError::Semver`] on
+// the [`CaixaVersion`] parser surface, the first of the two variants on
+// the [`VersionError`] envelope's paired `(String, String)` tuple-newtype
+// codec-magnitude family (its peer is [`VersionError::Requirement`] on
+// the sibling [`parse_requirement`] surface). Same discipline the peer
+// per-variant lifts on [`AplicacaoError`] / [`SupervisorError`] /
+// [`UpgradeError`] / [`LayoutError`] / [`DepError`] / [`ManifestError`]
+// / [`LimitsError`] / [`BehaviorError`] / [`DialetoError`] have
+// converged through the "one substrate primitive per emit-site variant"
+// ratchet: the sole wire-up site opens the identical
+// `VersionError::Semver(<into-String-expr>, <into-String-expr>)` block
+// against the parser-scoped `String` binding (`self.0.clone()`) and the
+// derived `String` binding (`e.to_string()`) on the failing
+// [`semver::Version::parse`] arm, so the fold routes the site through
+// one dispatch on a uniform pair of `impl Into<String>` params,
+// byte-equal to the pre-lift tuple-newtype construction on the same
+// arguments. The `impl Into<String>` bound covers both the pre-lift
+// `String` bindings and any future `&str` binding a downstream consumer
+// might carry without forcing the caller to spell the `.into()`
+// conversion at the wire-up site — the same shape the peer
+// [`LimitsError::empty_byte_size`] / [`LimitsError::empty_duration`] /
+// [`DialetoError::leitura`] folds carry on the single-slot `(String)`
+// tuple-newtype cousins of the same tuple-newtype error-envelope family
+// on the sibling parser surfaces. `#[must_use]` fires a compile warning
+// at any wire-up that mistakenly discards the constructed error. The
+// added [`PartialEq`] / [`Eq`] derives on the envelope (peer with the
+// sibling [`LimitsError`] / [`DialetoError`] / [`DepError`] envelopes
+// on the same axis) let the fail-before-pass-after byte-equality pins
+// below trip a de-lift regression at caixa-core test time under
+// `PartialEq` rather than at a downstream diagnostic shape drift.
+//
+// Every future consumer that wants to construct this variant outside
+// [`CaixaVersion::parse`] (a deferred `feira lint --canonical-versao`
+// per-caixa admission verb probing each authored top-level `:versao`
+// value against the same [`semver::Version::parse`] gate, an M4 typed
+// `mesh.pleme.io/v1alpha1/Servico` CR materializer's per-manifest
+// admission validator re-checking one edited `:versao` slot against
+// the [`CaixaVersion::parse`] semver floor, a per-`caixa.lisp` value-
+// shape pre-emitter probing each declared `:versao` magnitude ahead of
+// the operator's admit-cycle) now reaches the variant through one call
+// rather than re-inlining the two-slot tuple-newtype block in lockstep.
+impl VersionError {
+    /// Construct a [`VersionError::Semver`] carrying the offending
+    /// authoring string `value` and the underlying [`semver::Version::parse`]
+    /// `reason` verbatim in the variant's two-slot tuple-newtype payload.
+    /// Folds the uniform `Self::Semver(value.into(), reason.into())`
+    /// tuple-newtype construction onto one substrate primitive so every
+    /// wire-up on the variant reads through one dispatch rather than the
+    /// pre-lift open-coded
+    /// `VersionError::Semver(<into-String-expr>, <into-String-expr>)`
+    /// block. The paired `impl Into<String>` bounds cover the pre-lift
+    /// `String` wire-up shape on [`CaixaVersion::parse`]
+    /// (`self.0.clone()` on the parser-scoped `String` field, `e.to_string()`
+    /// on the derived `String` from the failing
+    /// [`semver::Version::parse`] arm) without forcing the caller to
+    /// spell the conversion at the wire-up site. Peer to the sibling
+    /// [`VersionError::Requirement`] variant on the [`parse_requirement`]
+    /// surface — the same `(String, String)` two-slot tuple-newtype axis
+    /// of the paired [`VersionError`] envelope, but on the `SemVer`
+    /// version-body parser surface rather than the version-requirement
+    /// parser surface.
+    #[must_use]
+    pub fn semver(value: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::Semver(value.into(), reason.into())
+    }
 }
 
 #[cfg(test)]
@@ -338,6 +408,98 @@ mod tests {
     fn invalid_version_errors() {
         let v: CaixaVersion = "not-a-version".into();
         assert!(v.parse().is_err());
+    }
+
+    #[test]
+    fn semver_ctor_matches_tuple_literal_wrap_on_str_binding() {
+        // Fail-before-pass-after byte-equality pin: the lifted
+        // [`VersionError::semver`] inherent ctor projects a `&str`
+        // binding pair through the paired `impl Into<String>` bounds
+        // byte-equal to the pre-lift open-coded
+        // `VersionError::Semver(<into-String-expr>, <into-String-expr>)`
+        // tuple-literal on the same fixture, so any future silent
+        // regression that swaps `.into()` for a divergent conversion
+        // (a stray `String::from(str::trim(v))` normalization, a
+        // parity-lossy `.to_lowercase()` fold, a `Cow<'_, str>` detour)
+        // trips at caixa-core test time under `PartialEq` rather than
+        // at a downstream diagnostic-shape drift on a consumer surface.
+        // Same shape the peer
+        // [`crate::LimitsError::empty_byte_size_ctor_matches_tuple_literal_wrap_on_str_binding`]
+        // / [`crate::DialetoError::leitura_ctor_matches_tuple_literal_wrap_on_str_binding`]
+        // pins carry on the sibling single-slot `(String)` tuple-newtype
+        // cousins of the same tuple-newtype error-envelope family on the
+        // sibling parser surfaces.
+        let value: &str = "not-a-version";
+        let reason: &str = "unexpected character 'n' while parsing major version number";
+        assert_eq!(
+            VersionError::semver(value, reason),
+            VersionError::Semver(value.to_string(), reason.to_string()),
+            "generated semver ctor over `&str` bindings must match \
+             the pre-lift tuple-literal wrap on the same fixture",
+        );
+    }
+
+    #[test]
+    fn semver_ctor_matches_tuple_literal_wrap_on_string_binding() {
+        // Fail-before-pass-after byte-equality pin on the paired owned-
+        // `String` shape — the actual wire-up shape on
+        // [`CaixaVersion::parse`] (`self.0.clone()` +
+        // `e.to_string()`). Peer to the `&str` variant above; refuses
+        // any future de-lift that inlines a divergent construction on
+        // the owned-`String` path (a stray `.trim().to_string()`
+        // normalization on either slot, a swap that routes the ctor
+        // through the sibling [`VersionError::Requirement`] variant on
+        // the paired parser surface).
+        let value: String = String::from("1.2");
+        let reason: String =
+            String::from("unexpected end of input while parsing minor version number");
+        assert_eq!(
+            VersionError::semver(value.clone(), reason.clone()),
+            VersionError::Semver(value, reason),
+            "generated semver ctor over owned-`String` bindings must \
+             match the pre-lift tuple-literal wrap on the same fixture",
+        );
+    }
+
+    #[test]
+    fn parse_semver_error_routes_through_semver_ctor() {
+        // Fail-before-pass-after routes-through pin: refuses any future
+        // de-lift of [`CaixaVersion::parse`]'s
+        // [`semver::Version::parse`] `map_err` arm off the substrate
+        // primitive. Sweeps three malformed authoring shapes (a bare
+        // non-numeric, a partial `major.minor` shape, a stray leading
+        // `v`-prefix that the [`DEFAULT_PUBLISH_TAG_PREFIX`] git-tag
+        // convention rejects at the version-body slot) through the
+        // parser and asserts the emitted [`VersionError`] equals the
+        // ctor-built error verbatim under `PartialEq`, so any future
+        // swap of the wire-up (an inline `Self::Semver(...)`
+        // re-inlining, a routing detour through the sibling
+        // [`VersionError::Requirement`] variant on the paired parser
+        // surface, a swap of the ordering on the paired arguments)
+        // trips at caixa-core test time rather than at a downstream
+        // diagnostic drift on a `feira lint` / operator admission
+        // callsite.
+        for bad in ["not-a-version", "1.2", "v0.1.0"] {
+            let v: CaixaVersion = bad.into();
+            let err = v
+                .parse()
+                .expect_err("malformed versao fixture must fail semver parsing");
+            let semver_reason = match semver::Version::parse(bad) {
+                Err(e) => e.to_string(),
+                Ok(_) => unreachable!(
+                    "fixture `{bad}` is documented as a `SemVer` \
+                     rejection but parsed cleanly — the pin's oracle \
+                     drifted from `semver`'s current shape",
+                ),
+            };
+            assert_eq!(
+                err,
+                VersionError::semver(bad, semver_reason),
+                "CaixaVersion::parse must route its semver `map_err` \
+                 arm through the lifted VersionError::semver ctor on \
+                 the same offending value and semver reason",
+            );
+        }
     }
 
     #[test]
