@@ -291,7 +291,7 @@ impl LayoutInvariants for StandardLayout {
     fn verify(&self, caixa: &Caixa, root: &Path) -> Result<(), LayoutError> {
         let manifest = root.join("caixa.lisp");
         if !self.exists(&manifest) {
-            return Err(LayoutError::MissingManifest(manifest));
+            return Err(LayoutError::missing_manifest(manifest));
         }
 
         // Caixa-identity value-shape gates on the two universal axes
@@ -1862,6 +1862,59 @@ layout_slot_kind_ctors! {
 // the four-line struct-literal block in lockstep with the five
 // layout-pipeline wire-up sites.
 impl LayoutError {
+    /// Construct a [`LayoutError::MissingManifest`] naming the resolved
+    /// `caixa.lisp` path the layout gate probed for at
+    /// [`StandardLayout::verify`]'s top-of-body manifest-existence
+    /// check.
+    ///
+    /// Folds the uniform `Self::MissingManifest(path)` one-slot
+    /// tuple-literal onto one substrate primitive so the sole
+    /// [`StandardLayout::verify`] wire-up on this variant reads through
+    /// one dispatch rather than the pre-lift open-coded tuple-literal
+    /// block. Peer of the sibling [`Self::missing_entry`] `{ kind, path }`
+    /// ctor on the same envelope's declared-entry-existence axis, and
+    /// mirror-symmetric sibling of the sibling [`Self::missing_lib`]
+    /// `{ caixa, expected }` ctor on the enclosing envelope's per-caixa
+    /// required-fallback-path axis: the top-level manifest-existence
+    /// gate now routes its emit-site through the same substrate-
+    /// primitive discipline every sibling variant on the same
+    /// [`LayoutError`] envelope carries, closing the last un-lifted
+    /// `<Variant>(PathBuf)` tuple-newtype variant on the envelope
+    /// carried through a direct open-coded construction (the peer
+    /// [`Self::ExeOutsideDir`] / [`Self::ServicoOutsideDir`]
+    /// `<Variant>(PathBuf)` variants stay on their pre-lift
+    /// tuple-variant-constructor coercion inside
+    /// [`StandardLayout::probe_sandboxed_declared_entry`]'s
+    /// `outside_ctor: fn(PathBuf) -> LayoutError` function-pointer
+    /// parameter — the substrate primitive on that axis is the
+    /// sandbox-probe helper itself, so the paired variant ctors are
+    /// already substrate-canonical at their wire-up site by
+    /// construction).
+    ///
+    /// The `PathBuf` parameter takes ownership of the resolved
+    /// `root.join("caixa.lisp")` path from the wire-up site's
+    /// [`Path::join`] product — byte-equal to the pre-lift
+    /// `Self::MissingManifest(manifest)` tuple-literal on the same
+    /// owned `PathBuf` fixture. `#[must_use]` fires a compile warning
+    /// at any wire-up that mistakenly discards the constructed error
+    /// rather than routing it through `return Err(…)`.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`StandardLayout::verify`] — a deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR materializer's admission-
+    /// webhook re-check probing the resolved manifest path against a
+    /// mounted cluster-local filesystem snapshot, a future
+    /// `feira validate --manifest-exists` per-caixa admission verb
+    /// re-running the manifest-existence gate on demand, a per-cluster
+    /// overlay resolver rejecting a `:placement`-scoped manifest
+    /// omission against a cluster-local snapshot — now reaches the
+    /// variant through one call rather than re-inlining the two-line
+    /// tuple-literal in lockstep with the in-crate wire-up site.
+    #[must_use]
+    pub const fn missing_manifest(path: PathBuf) -> Self {
+        Self::MissingManifest(path)
+    }
+
     /// Construct a [`LayoutError::MissingEntry`] naming the missing
     /// declared entry at `path` under the canonical `kind` label from
     /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
@@ -2048,6 +2101,78 @@ mod tests {
             .verify(&caixa(CaixaKind::Biblioteca), Path::new("/tmp/x"))
             .unwrap_err();
         assert!(matches!(err, LayoutError::MissingManifest(_)));
+    }
+
+    #[test]
+    fn missing_manifest_ctor_matches_tuple_literal_wrap() {
+        // Equivalence pin locking [`LayoutError::missing_manifest`] to
+        // its tuple-literal peer under PartialEq. The pre-lift wire-up
+        // at [`StandardLayout::verify`]'s top-of-body manifest-existence
+        // gate read `LayoutError::MissingManifest(manifest)` — a two-
+        // line open-coded tuple-literal against the resolved
+        // `root.join("caixa.lisp")` `PathBuf`. The post-lift dispatch
+        // reads `LayoutError::missing_manifest(manifest)`. Both must
+        // produce byte-equal variants — a silent divergence (a
+        // `.canonicalize()` slip on the ctor body, a stray `.clone()`
+        // that duplicates the payload's underlying buffer, an
+        // accidental `.into()` that reshapes the `PathBuf` bytes on
+        // one side and not the other) surfaces here rather than at a
+        // downstream diagnostic-shape drift far from the ctor
+        // definition.
+        //
+        // Peer of the sibling
+        // [`missing_entry_ctor_matches_struct_literal_wrap`] /
+        // [`missing_lib_ctor_matches_struct_literal_wrap`] /
+        // [`ci_on_non_acao_ctor_matches_struct_literal_wrap`] pins on
+        // the same [`LayoutError`] envelope — closes the last
+        // un-pinned inherent-ctor equivalence-against-open-coded-
+        // literal pin on the envelope.
+        let path = PathBuf::from("/tmp/x/caixa.lisp");
+        assert_eq!(
+            LayoutError::missing_manifest(path.clone()),
+            LayoutError::MissingManifest(path),
+            "missing_manifest ctor must byte-equal the pre-lift tuple-literal",
+        );
+    }
+
+    #[test]
+    fn verify_missing_manifest_gate_routes_through_missing_manifest_ctor() {
+        // Fail-before-pass-after routing pin: the pre-lift
+        // [`StandardLayout::verify`] wire-up hand-rolled
+        // `LayoutError::MissingManifest(manifest)` at its top-of-body
+        // manifest-existence arm; the post-lift dispatch routes the
+        // same arm through
+        // [`LayoutError::missing_manifest`]. This pin sweeps a fixture
+        // whose oracle refuses every path (`with_path_exists(|_| false)`
+        // — the same shape [`missing_manifest_errors`] uses to prove
+        // the gate fires at all) and asserts that the emitted
+        // [`LayoutError`] equals the ctor-built error verbatim under
+        // [`PartialEq`]. A future de-lift of this wire-up (a
+        // hand-rolled `Self::MissingManifest(_)` reintroduced at the
+        // gate, an intercept that unwraps the ctor's payload before
+        // re-emitting) trips this pin at layout.rs build time rather
+        // than surfacing as a drift-detection failure at a downstream
+        // diagnostic-shape consumer far from the wire-up site.
+        //
+        // Same discipline the peer
+        // [`ci_on_non_acao_ctor_matches_struct_literal_wrap`] /
+        // [`missing_entry_ctor_routes_kind_through_arg_verbatim`] /
+        // [`missing_lib_ctor_projects_nome_through_accessor`] pins on
+        // the sibling [`LayoutError`] envelope's per-variant substrate-
+        // primitive ctor family already carry — extended here onto
+        // the last un-pinned wire-up-routing gate on the envelope.
+        let root = Path::new("/tmp/routing-pin");
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let err = layout
+            .verify(&caixa(CaixaKind::Biblioteca), root)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            LayoutError::missing_manifest(root.join("caixa.lisp")),
+            "StandardLayout::verify's manifest-existence gate must route through \
+             LayoutError::missing_manifest with the resolved `root.join(\"caixa.lisp\")` \
+             payload verbatim",
+        );
     }
 
     // ── LayoutError::*_violation constructor family ──────────────────────
