@@ -39,6 +39,42 @@ pub enum ResolveError {
     Cycle(String),
 }
 
+impl ResolveError {
+    /// Substrate primitive constructor for the per-`Dep`
+    /// `:fonte (:tipo path :caminho …)` on-disk-absence refusal
+    /// diagnostic. Folds the pre-lift open-coded four-line
+    /// `Err(ResolveError::MissingPath { nome: dep.nome().to_string(),
+    /// path })` two-slot struct-literal inside [`fetch_path`] onto one
+    /// dispatch. Peer with the sibling one-slot `MissingPin` `{ nome:
+    /// String }` variant on the same envelope, which stays open-coded
+    /// at [`fetch_git`]'s `.ok_or_else` closure arm pending its own
+    /// dedicated lift. Every future consumer that surfaces the same
+    /// on-disk-absence diagnostic outside `fetch_path` — a deferred
+    /// `feira lock --path`-only pre-flight probe, a per-lacre overlay
+    /// resolver rejecting a cluster-local `:caminho` overlay that
+    /// vanished between resolve passes, the M4 `mesh.pleme.io/v1alpha1/
+    /// Caixa` CR admission webhook re-checking a per-`:fonte`-patched
+    /// candidate before the closure walker re-fires — reaches the
+    /// variant through one call rather than re-inlining the two-slot
+    /// struct-literal in lockstep with [`fetch_path`]'s wire-up.
+    ///
+    /// The `nome: &str` parameter accepts `&str` literals and `&String`
+    /// via Deref coercion so the sole in-crate wire-up threads
+    /// `dep.nome()` (a `&str` accessor via [`Dep::nome`]) through the
+    /// ctor without a pre-conversion; the `path: impl Into<PathBuf>`
+    /// parameter takes the observed on-disk-absent [`PathBuf`] built
+    /// at the caller from `PathBuf::from(caminho)` and forwards it
+    /// through the [`From<PathBuf>`] identity into the variant slot
+    /// without an extra allocation.
+    #[must_use]
+    pub fn missing_path(nome: &str, path: impl Into<PathBuf>) -> ResolveError {
+        ResolveError::MissingPath {
+            nome: nome.to_string(),
+            path: path.into(),
+        }
+    }
+}
+
 /// Resolve a root caixa's deps into a canonical lacre, offline if the cache
 /// is warm, otherwise cloning/fetching from git.
 pub fn resolve_lacre(
@@ -225,10 +261,7 @@ fn fetch_dep(
 fn fetch_path(dep: &Dep, caminho: &str) -> Result<FetchedDep, ResolveError> {
     let path = PathBuf::from(caminho);
     if !path.exists() {
-        return Err(ResolveError::MissingPath {
-            nome: dep.nome().to_string(),
-            path,
-        });
+        return Err(ResolveError::missing_path(dep.nome(), path));
     }
     let manifest = std::fs::read_to_string(path.join("caixa.lisp"))?;
     let target = Caixa::from_lisp(&manifest)?;
@@ -1012,5 +1045,237 @@ mod tests {
              surface `devchild` via the `cfg.include_dev`-gated \
              `:deps-dev` arm — got {names:?}"
         );
+    }
+
+    /// Pin that [`ResolveError::missing_path`] is byte-equal to the
+    /// pre-lift open-coded four-line `{ nome: nome.to_string(), path }`
+    /// two-slot struct-literal on a representative
+    /// `("caixa-teia", PathBuf("/nonexistent/child"))` fixture. Catches
+    /// any future ctor-side silent field-swap, `.to_string()` /
+    /// `.into()` cascade drop, or variant rename that would leave the
+    /// wire-up compiling but surface a different two-slot payload than
+    /// the pre-lift struct-literal.
+    #[test]
+    fn missing_path_ctor_matches_struct_literal_wrap() {
+        let ctor = ResolveError::missing_path("caixa-teia", PathBuf::from("/nonexistent/child"));
+        let literal = ResolveError::MissingPath {
+            nome: "caixa-teia".to_string(),
+            path: PathBuf::from("/nonexistent/child"),
+        };
+        assert_eq!(
+            format!("{ctor:?}"),
+            format!("{literal:?}"),
+            "missing_path ctor must debug-render byte-equal to the \
+             open-coded two-slot struct-literal on the same fixture — \
+             any silent field-swap or cascade drop surfaces here"
+        );
+        assert_eq!(
+            format!("{ctor}"),
+            format!("{literal}"),
+            "missing_path ctor must display-render byte-equal to the \
+             open-coded struct-literal on the same fixture — pins the \
+             thiserror #[error] template's routing through both slots"
+        );
+    }
+
+    /// Sweep [`ResolveError::missing_path`] across a boundary matrix of
+    /// `nome` shapes × `path` shapes so any wrapper-side silent
+    /// lowercase, trim, truncate, two-axis field-swap, or `.into()`
+    /// cascade divergence on the two-field construction surfaces at
+    /// assert time rather than at a downstream diagnostic consumer that
+    /// reads the fields back and gets a different value than the one it
+    /// stored.
+    ///
+    /// - `nome` axis: canonical DNS-1123 identifier (`"caixa-teia"`),
+    ///   single-char (`"a"`), and an inner-hyphen + digit shape
+    ///   (`"hello-rio-42"`) — the three canonical `Dep::nome`-return
+    ///   shapes the `caixa-core::Dep::nome` accessor surfaces at the
+    ///   wire-up.
+    /// - `path` axis: absolute UNIX-style (`"/absent/child"`), relative
+    ///   single-segment (`"child"`), and a nested relative with parent
+    ///   traversal (`"../sibling/child"`) — the three canonical
+    ///   `PathBuf::from(caminho)` shapes the `DepSource::Path
+    ///   { caminho }` arm surfaces at the wire-up.
+    ///
+    /// Both `&str`-literal and `&String` (via Deref coercion) carriers
+    /// are exercised for `nome` because the wire-up hands `dep.nome()`
+    /// (a `&str` accessor); both `PathBuf`-owned and `&Path` (via
+    /// `Into<PathBuf>`) carriers are exercised for `path` because the
+    /// wire-up hands a `PathBuf` built from `PathBuf::from(caminho)`.
+    #[test]
+    fn missing_path_ctor_routes_nome_and_path_through_verbatim() {
+        let nomes: &[&str] = &["caixa-teia", "a", "hello-rio-42"];
+        let paths: &[PathBuf] = &[
+            PathBuf::from("/absent/child"),
+            PathBuf::from("child"),
+            PathBuf::from("../sibling/child"),
+        ];
+        for nome in nomes {
+            for path in paths {
+                // &str carrier for nome × PathBuf-owned carrier for path.
+                let ctor = ResolveError::missing_path(nome, path.clone());
+                match &ctor {
+                    ResolveError::MissingPath {
+                        nome: got_nome,
+                        path: got_path,
+                    } => {
+                        assert_eq!(
+                            got_nome, nome,
+                            "missing_path ctor must carry nome byte-verbatim \
+                             — no silent lowercase/trim/truncate on the \
+                             &str-literal carrier at {nome}"
+                        );
+                        assert_eq!(
+                            got_path, path,
+                            "missing_path ctor must carry path byte-verbatim \
+                             — no silent normalization/canonicalization on \
+                             the PathBuf-owned carrier at {path:?}"
+                        );
+                    }
+                    other => panic!(
+                        "missing_path ctor must construct the MissingPath \
+                         variant — got {other:?} for ({nome:?}, {path:?})"
+                    ),
+                }
+                // &String (Deref coercion) carrier for nome × &Path
+                // (Into<PathBuf>) carrier for path — pins that the ctor
+                // signature accepts both without a pre-conversion at the
+                // call site.
+                let owned_nome = String::from(*nome);
+                let ctor2 = ResolveError::missing_path(&owned_nome, path.as_path());
+                match &ctor2 {
+                    ResolveError::MissingPath {
+                        nome: got_nome,
+                        path: got_path,
+                    } => {
+                        assert_eq!(
+                            got_nome, nome,
+                            "missing_path ctor must carry nome byte-verbatim \
+                             on the &String Deref-coercion carrier at {nome}"
+                        );
+                        assert_eq!(
+                            got_path, path,
+                            "missing_path ctor must carry path byte-verbatim \
+                             on the &Path Into<PathBuf> carrier at {path:?}"
+                        );
+                    }
+                    other => panic!(
+                        "missing_path ctor must construct the MissingPath \
+                         variant on the &String/&Path carriers — got \
+                         {other:?} for ({nome:?}, {path:?})"
+                    ),
+                }
+            }
+        }
+    }
+
+    /// Pin the end-to-end route from [`fetch_path`]'s on-disk-absence
+    /// arm through [`ResolveError::missing_path`]: authoring a `:deps`
+    /// entry whose `:fonte (:tipo path :caminho …)` points at a path
+    /// that does not exist on disk must surface a
+    /// `ResolveError::MissingPath { nome, path }` byte-equal to the
+    /// substrate-primitive ctor on the same fixture, so a future silent
+    /// de-lift of the wire-up back to the open-coded struct-literal
+    /// trips at caixa-resolver test time rather than at a downstream
+    /// diagnostic consumer far from the wire-up commit.
+    #[test]
+    fn fetch_path_absent_dir_routes_through_missing_path_ctor() {
+        let td = tempdir().expect("tempdir");
+        // Root caixa points at a `:caminho` under the tempdir that
+        // was never created — the closure walker's `fetch_path` arm
+        // must refuse before it opens the (nonexistent)
+        // `caixa.lisp`.
+        let absent = td.path().join("absent-child");
+        assert!(
+            !absent.exists(),
+            "test precondition: the child path must be absent on disk \
+             so fetch_path's `!path.exists()` refusal arm fires"
+        );
+        let root = Caixa {
+            nome: "root".into(),
+            versao: "0.1.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![Dep {
+                nome: "absent-child".into(),
+                versao: "0.1.0".into(),
+                fonte: Some(DepSource::Path {
+                    caminho: absent.to_string_lossy().into_owned(),
+                }),
+                opcional: false,
+                caracteristicas: vec![],
+            }],
+            deps_dev: vec![],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+            ci: None,
+        };
+        let cache_root = td.path().join("cache");
+        std::fs::create_dir_all(&cache_root).unwrap();
+        let cache = CacheDir::at(&cache_root);
+        let cfg = ResolverConfig::default();
+        let err = resolve_lacre(&root, &cfg, &cache)
+            .expect_err("resolve_lacre must refuse when a :caminho points at an absent path");
+        let expected = ResolveError::missing_path("absent-child", absent.clone());
+        assert_eq!(
+            format!("{err:?}"),
+            format!("{expected:?}"),
+            "fetch_path absent-dir refusal must debug-render byte-equal \
+             to the substrate-primitive missing_path ctor on the same \
+             fixture — a silent de-lift of the wire-up back to the \
+             open-coded struct-literal would still pass this arm today \
+             (both routes are byte-equal at emit time) but a future \
+             ctor-side extension (a per-cluster :caminho overlay \
+             rewrite, a per-scope alias table) would silently diverge \
+             here as soon as the ctor's construction path widens"
+        );
+        assert_eq!(
+            format!("{err}"),
+            format!("{expected}"),
+            "fetch_path absent-dir refusal must display-render \
+             byte-equal to the substrate-primitive missing_path ctor \
+             — pins the #[error(...)] template routing on both slots"
+        );
+        match err {
+            ResolveError::MissingPath {
+                nome: got_nome,
+                path: got_path,
+            } => {
+                assert_eq!(
+                    got_nome, "absent-child",
+                    "fetch_path refusal must surface the offending Dep::nome \
+                     verbatim in the MissingPath::nome slot"
+                );
+                assert_eq!(
+                    got_path, absent,
+                    "fetch_path refusal must surface the offending \
+                     PathBuf::from(caminho) verbatim in the \
+                     MissingPath::path slot"
+                );
+            }
+            other => panic!(
+                "fetch_path absent-dir refusal must construct the \
+                 MissingPath variant on the ResolveError envelope — got \
+                 {other:?}"
+            ),
+        }
     }
 }
