@@ -3096,10 +3096,9 @@ impl MeshPolicy {
         if let (Some(retries), Some(rl)) = (self.retries(), self.rate_limit())
             && !self.rate_limit_admits_retry_burst()
         {
-            return Some(AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
-                retries,
-                rate: rl.rate(),
-            });
+            return Some(AplicacaoError::policy_rate_limit_cannot_admit_retry_burst(
+                retries, &rl,
+            ));
         }
         None
     }
@@ -10192,6 +10191,94 @@ impl AplicacaoError {
         Self::PolicyBreakerTripsBeforeRetriesExhausted {
             retries,
             max_failures: cb.max_failures(),
+        }
+    }
+
+    /// Construct an
+    /// [`AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst`] naming
+    /// the offending `:politicas :retries` and the paired `:politicas
+    /// :rate-limit` `:rate` scalars under the fourth-firing (and last-
+    /// remaining) cross-axis-violation gate at
+    /// [`MeshPolicy::first_cross_axis_violation`], projecting the `rate`
+    /// slot through the [`RateLimit::rate`] scalar accessor on the
+    /// substrate primitive.
+    ///
+    /// Folds the uniform `{ retries, rate: rl.rate() }` two-slot
+    /// `Copy`-`u32` struct-literal onto one substrate primitive so every
+    /// wire-up on this variant reads through one dispatch rather than
+    /// the pre-lift four-line struct-literal block. The `rl` borrow
+    /// threads verbatim from the caller-side `if let (Some(retries),
+    /// Some(rl)) = (self.retries(), self.rate_limit())` pair-destructure
+    /// at the sole in-crate wire-up site inside
+    /// [`MeshPolicy::first_cross_axis_violation`]'s starve-under-rate-
+    /// limit arm; `retries` threads verbatim from the paired
+    /// [`MeshPolicy::retries`] accessor return already destructured out
+    /// of the same `if let` pair. `const fn` preserves the pre-lift
+    /// `Copy`-pass-through's zero-runtime-work property verbatim (both
+    /// fields are `u32`, the [`RateLimit::rate`] accessor is itself
+    /// `const fn`, and no `.to_string()` / `.into()` allocation lands on
+    /// the ctor path).
+    ///
+    /// The `rate` slot is projected through [`RateLimit::rate`] (not
+    /// spelled out as a bare `u32` parameter) so a future widening of
+    /// the `:rate-limit` `:rate` axis — a per-`:contratos`-edge
+    /// `:rate-limit` `:rate` override the MESH-COMPOSITION §III.2 #3
+    /// roadmap acknowledges, a per-tenant `:rate` ceiling the M4
+    /// per-cluster `:politicas`-cap resolver projects, a promotion of
+    /// the plain `u32` token capacity to a richer
+    /// `{max_tokens, tokens_per_fill}` tuple once Envoy's
+    /// `local_rate_limit.token_bucket` block's peer `tokens_per_fill`
+    /// axis comes into scope — reaches the diagnostic through one
+    /// accessor swap rather than every wire-up in lockstep, matching
+    /// the peer substrate-primitive-projection posture of
+    /// [`AplicacaoError::policy_breaker_window_below_timeout`] (9b30c07,
+    /// projecting through [`CircuitBreaker::window`] on the sibling
+    /// two-slot `{ window, timeout }` first cross-axis envelope),
+    /// [`AplicacaoError::policy_breaker_cannot_trip_under_rate_limit`]
+    /// (6bb4e46, projecting through [`RateLimit::rate`] /
+    /// [`RateLimit::window`] / [`CircuitBreaker::max_failures`] /
+    /// [`CircuitBreaker::window`] on the sibling four-slot second
+    /// cross-axis envelope), and
+    /// [`AplicacaoError::policy_breaker_trips_before_retries_exhausted`]
+    /// (f54c539, projecting through [`CircuitBreaker::max_failures`] on
+    /// the sibling two-slot `{ retries, max_failures }` third cross-axis
+    /// envelope). `retries` remains a bare `u32` parameter, matching
+    /// the sibling third-arm ctor's bare `retries: u32` parameter
+    /// discipline: [`MeshPolicy::retries`] returns `Option<u32>` and the
+    /// caller-side `if let` already destructures the inner `u32` out, so
+    /// the ctor takes the destructured scalar verbatim rather than
+    /// re-wrapping it into an accessor call.
+    ///
+    /// Peer of the sibling per-axis [`aplicacao_policy_scalar_ctors!`]
+    /// (7ef425e) macro that folds the eight one-slot per-`:politicas`
+    /// `{ <field>: Copy-scalar }` envelopes on the per-axis
+    /// [`MeshPolicy::validate`] gate — extended here onto the
+    /// fourth-firing (and final) cross-axis compound variant, whose
+    /// multi-slot `{ retries: u32, rate: u32 }` shape does not fit that
+    /// macro's one-`Copy`-scalar-per-variant arity. After this lift all
+    /// four cross-axis [`MeshPolicy::first_cross_axis_violation`] arms
+    /// read through one substrate-primitive ctor dispatch each; the
+    /// per-envelope compound cross-axis Policy* family closes on this
+    /// variant.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`MeshPolicy::first_cross_axis_violation`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a per-tenant `:politicas` overlay's
+    /// retries-vs-rate cross-axis invariant after a cluster-local
+    /// `:politicas` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// acknowledges resolves an *effective* per-edge [`MeshPolicy`], a
+    /// future per-`:contratos`-edge `:politicas` override the M4 CR
+    /// resolver projects, an M4 per-cluster `:politicas`-cap resolver
+    /// projecting a per-tenant per-axis ceiling into the same diagnostic
+    /// shape — now reaches this variant through one call rather than
+    /// re-inlining the open-coded struct-literal in lockstep with the
+    /// one in-crate wire-up site.
+    #[must_use]
+    pub const fn policy_rate_limit_cannot_admit_retry_burst(retries: u32, rl: &RateLimit) -> Self {
+        Self::PolicyRateLimitCannotAdmitRetryBurst {
+            retries,
+            rate: rl.rate(),
         }
     }
 
@@ -35500,6 +35587,150 @@ mod tests {
             "MeshPolicy::first_cross_axis_violation's retries-saturate arm's \
              Err must byte-equal \
              policy_breaker_trips_before_retries_exhausted(retries, &cb)"
+        );
+        assert_eq!(
+            observed.to_string(),
+            expected.to_string(),
+            "Display byte-string parity"
+        );
+    }
+
+    #[test]
+    fn policy_rate_limit_cannot_admit_retry_burst_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst` to the
+        // pre-lift open-coded struct-literal that read the same two fields
+        // through the bare `retries` destructure and [`RateLimit::rate`].
+        // Guards any future field-addition / reordering / accessor-swap
+        // tweak on the variant. Same equivalence-pin shape as the sibling
+        // `policy_breaker_trips_before_retries_exhausted_ctor_matches_struct_literal_wrap`
+        // (f54c539) on the sibling per-`(:retries, :circuit-breaker)`
+        // third cross-axis envelope,
+        // `policy_breaker_cannot_trip_under_rate_limit_ctor_matches_struct_literal_wrap`
+        // (6bb4e46) on the sibling per-`(:rate-limit, :circuit-breaker)`
+        // second cross-axis envelope, and
+        // `policy_breaker_window_below_timeout_ctor_matches_struct_literal_wrap`
+        // (9b30c07) on the sibling per-`(:timeout, :circuit-breaker)`
+        // first cross-axis envelope.
+        let retries = 3_u32;
+        let rl = RateLimit {
+            rate: 3,
+            window: Duration::from_secs(1),
+        };
+        let via_ctor = AplicacaoError::policy_rate_limit_cannot_admit_retry_burst(retries, &rl);
+        let via_literal = AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
+            retries,
+            rate: rl.rate(),
+        };
+        assert_eq!(
+            via_ctor, via_literal,
+            "policy_rate_limit_cannot_admit_retry_burst(retries, &rl) must \
+             byte-equal the open-coded PolicyRateLimitCannotAdmitRetryBurst \
+             struct-literal on the same Copy-u32 fixture"
+        );
+        assert_eq!(
+            via_ctor.to_string(),
+            via_literal.to_string(),
+            "Display byte-string must byte-equal the open-coded struct-literal"
+        );
+    }
+
+    #[test]
+    fn policy_rate_limit_cannot_admit_retry_burst_ctor_routes_retries_and_rl_verbatim() {
+        // Routing pin sweeping non-default `(retries, rate)` tuples across
+        // the production-playbook rate-limit-starve band — boundary
+        // `retries==rate` (a rejecting arm on the `>=` invariant stated as
+        // `rate >= retries + 1`), one-below-boundary pair, multi-tenant
+        // high-retries-vs-low-rate ratio, and sub-cap high-rate ceiling —
+        // through the paired bare-`retries` destructure and
+        // [`RateLimit::rate`] accessor, so any wrapper-side silent
+        // normalization, rounding, argument re-order, or accidental slot
+        // rebrand on the two-slot pass-through surfaces at caixa-core
+        // build time rather than at a downstream diagnostic consumer that
+        // reads the two scalars back and gets different values than the
+        // ones it stored.
+        //
+        // Deliberately routes through fixtures whose two scalars are
+        // pairwise distinct on every non-boundary arm — a hypothetical
+        // field-rename swap swapping the two slots at the ctor body would
+        // land the value from the wrong axis, tripping the per-field
+        // assertion here. Peer of the sibling
+        // `policy_breaker_trips_before_retries_exhausted_ctor_routes_retries_and_cb_verbatim`
+        // (f54c539) routing pin on the sibling two-slot per-`(:retries,
+        // :circuit-breaker)` third cross-axis envelope.
+        for (retries, rate) in [
+            (3_u32, 3_u32),
+            (5_u32, 4_u32),
+            (100_u32, 50_u32),
+            (2_u32, POLICY_RATE_LIMIT_MAX),
+        ] {
+            let rl = RateLimit {
+                rate,
+                window: Duration::from_secs(1),
+            };
+            let built = AplicacaoError::policy_rate_limit_cannot_admit_retry_burst(retries, &rl);
+            let AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst {
+                retries: stored_retries,
+                rate: stored_rate,
+            } = built
+            else {
+                panic!(
+                    "policy_rate_limit_cannot_admit_retry_burst must \
+                     construct PolicyRateLimitCannotAdmitRetryBurst for \
+                     retries={retries}/rl={rl:?}"
+                );
+            };
+            assert_eq!(
+                stored_retries, retries,
+                "retries slot must thread the bare-`retries` destructure \
+                 verbatim for retries={retries}/rl={rl:?}"
+            );
+            assert_eq!(
+                stored_rate, rate,
+                "rate slot must thread RateLimit::rate() verbatim for \
+                 retries={retries}/rl={rl:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_cross_axis_violation_arm_routes_through_policy_rate_limit_cannot_admit_retry_burst_ctor()
+     {
+        // End-to-end pin: the sole in-crate wire-up site
+        // ([`MeshPolicy::first_cross_axis_violation`]'s starve-under-rate-
+        // limit arm) routes through
+        // [`AplicacaoError::policy_rate_limit_cannot_admit_retry_burst`]
+        // and the observed `Err` byte-equals the ctor's output on the same
+        // rate-limit-starve fixture. A future silent de-lift of the
+        // wire-up back to the open-coded
+        // `AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst { retries,
+        // rate }` struct-literal trips this test at caixa-core build time
+        // rather than at a downstream diagnostic consumer far from the
+        // wire-up commit. Sibling of the peer
+        // `first_cross_axis_violation_arm_routes_through_policy_breaker_trips_before_retries_exhausted_ctor`
+        // (f54c539) end-to-end pin on the sibling per-`(:retries,
+        // :circuit-breaker)` third cross-axis envelope. Clears `:timeout`
+        // and `:circuit-breaker` so the sibling window-below-timeout /
+        // starve-under-rate-limit / trips-before-retries-exhausted arms
+        // do not fire first on the ordering-precedent they hold over this
+        // arm.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = None;
+        s.politicas.retries = Some(5);
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 3,
+            window: Duration::from_secs(1),
+        });
+        let observed = s.validate().unwrap_err();
+        let retries = s.politicas.retries.unwrap();
+        let rl = s.politicas.rate_limit.unwrap();
+        let expected = AplicacaoError::policy_rate_limit_cannot_admit_retry_burst(retries, &rl);
+        assert_eq!(
+            observed, expected,
+            "MeshPolicy::first_cross_axis_violation's starve-under-rate-limit arm's \
+             Err must byte-equal \
+             policy_rate_limit_cannot_admit_retry_burst(retries, &rl)"
         );
         assert_eq!(
             observed.to_string(),
