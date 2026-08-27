@@ -391,6 +391,66 @@ impl DialetoError {
             encontrado: encontrado.to_string(),
         }
     }
+
+    /// Construct a [`DialetoError::Leitura`] carrying the offending
+    /// tatara-lisp reader-error message `reason` verbatim in the
+    /// variant's tuple-newtype payload.
+    ///
+    /// Substrate primitive every [`classify`] tatara-lisp-reader
+    /// map-err wire-up site now routes through, folding the pre-lift
+    /// uniform `Self::Leitura(<into-String-expr>)` tuple-newtype
+    /// construction onto one substrate primitive matching the peer
+    /// `LimitsError::empty_byte_size` / `LimitsError::empty_duration`
+    /// (7a4b003 / 319216c) `(String)` single-slot tuple-newtype
+    /// discipline on the sibling
+    /// [`crate::limits::LimitsError`] envelope's empty-shape axis of
+    /// the paired codec-magnitude family. Peer to the sibling
+    /// [`DialetoError::cabeca_errada`] ctor on the same envelope's
+    /// wrong-head axis but on the tatara-lisp-reader axis rather than
+    /// the classifier-fallthrough axis. Closes the last un-lifted
+    /// variant on [`DialetoError`] — every one of the sole wire-up
+    /// sites (the [`classify`] tatara-lisp-reader `.map_err(|e|
+    /// Self::Leitura(e.to_string()))` arm) opened the identical
+    /// `DialetoError::Leitura(<into-String-expr>)` block against the
+    /// codec-scoped `String` (`e.to_string()`) binding, so the fold
+    /// routes the site through one dispatch on a uniform
+    /// `impl Into<String>` param, byte-equal to the pre-lift
+    /// tuple-newtype construction on the same argument.
+    ///
+    /// The `impl Into<String>` bound covers both wire-up shapes on
+    /// [`classify`] — a `String` binding (`e.to_string()` on the
+    /// [`tatara_lisp::Error`]-carrying `e` binding) and a `&str`
+    /// binding (a future admission-webhook consumer probing a
+    /// caller-scoped `&'static str` fixture, a future
+    /// `feira lint --tatara-reader-round-trip` verb sweeping every
+    /// `tatara_lisp::read` return through the same shape gate) —
+    /// without forcing the caller to spell the conversion at the
+    /// wire-up site. Same shape the peer
+    /// [`crate::limits::LimitsError::empty_byte_size`] /
+    /// [`crate::limits::LimitsError::empty_duration`] /
+    /// [`crate::limits::LimitsError::bad_millicores`] /
+    /// [`crate::limits::LimitsError::bad_byte_magnitude`] /
+    /// [`crate::limits::LimitsError::bad_duration_magnitude`] folds
+    /// carry on the peer bad-magnitude and empty-shape axes of the
+    /// same paired `(String)` tuple-newtype codec-magnitude family.
+    /// `#[must_use]` fires a compile warning at any wire-up that
+    /// mistakenly discards the constructed error.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`classify`] (a deferred `feira lint --tatara-reader-
+    /// round-trip` per-caixa admission verb probing each authored
+    /// manifest against the tatara-lisp-reader shape gate, an M4
+    /// typed `mesh.pleme.io/v1alpha1/Servico` CR materializer's
+    /// per-manifest admission validator re-checking one edited
+    /// `caixa.lisp` against the reader floor, a per-`caixa.lisp`
+    /// value-shape pre-emitter probing each declared manifest ahead
+    /// of the operator's admit-cycle) now reaches the variant
+    /// through one call rather than re-inlining the tuple-newtype
+    /// block in lockstep with the pre-existing wire-up.
+    #[must_use]
+    pub fn leitura(reason: impl Into<String>) -> Self {
+        Self::Leitura(reason.into())
+    }
 }
 
 /// Classify a manifest source without committing to either schema.
@@ -403,7 +463,7 @@ impl DialetoError {
 /// # Errors
 /// [`DialetoError`] when the source is not a manifest declaration at all.
 pub fn classify(src: &str) -> Result<CaixaDialeto, DialetoError> {
-    let forms = tatara_lisp::read(src).map_err(|e| DialetoError::Leitura(e.to_string()))?;
+    let forms = tatara_lisp::read(src).map_err(|e| DialetoError::leitura(e.to_string()))?;
     let first = forms.first().ok_or(DialetoError::Vazio)?;
     classify_form(first)
 }
@@ -1147,6 +1207,182 @@ mod tests {
                 "classify({src:?}) must return the same Err shape as \
                  DialetoError::cabeca_errada({head:?}) — a drift here \
                  means the wire-up de-lifted its wrong-head fallthrough \
+                 arm off the substrate primitive"
+            );
+        }
+    }
+
+    #[test]
+    fn leitura_ctor_matches_tuple_literal_wrap_on_str_binding() {
+        // Fail-before-pass-after byte-identity pin: the lifted
+        // [`DialetoError::leitura`] ctor MUST land on the exact same
+        // tuple-newtype wrap the pre-lift open-coded wire-up block wrote by
+        // hand — `DialetoError::Leitura(<into-String-expr>)`. A future
+        // accidental divergence (an added `.trim()` on the reader reason,
+        // a per-arm constant prefix like `"tatara-lisp:"`, a widening of
+        // the tuple carrying a caret offset, a rebrand of the payload
+        // carrying a distinct byte-shape) trips this pin at caixa-core
+        // build time rather than surfacing far from the ctor declaration
+        // as a downstream [`classify`] tatara-lisp-reader consumer
+        // emitting one diagnostic shape while a hand-written test peer
+        // opens another. Peer of the sibling
+        // `cabeca_errada_ctor_matches_struct_literal_wrap` pin above on
+        // the same [`DialetoError`] envelope's wrong-head axis, and of
+        // the peer `LimitsError::empty_byte_size` /
+        // `LimitsError::empty_duration` (7a4b003 / 319216c) shape on the
+        // sibling `(String)` single-slot tuple-newtype envelope
+        // constructors.
+        let reason: &str = "unclosed paren at 1:12";
+        assert_eq!(
+            DialetoError::leitura(reason),
+            DialetoError::Leitura(reason.to_string()),
+            "DialetoError::leitura must byte-equal the pre-lift open-coded \
+             tuple-newtype wrap — a drift here means the ctor stopped \
+             being a substrate primitive for the tatara-lisp-reader \
+             fallthrough site"
+        );
+    }
+
+    #[test]
+    fn leitura_ctor_matches_tuple_literal_wrap_on_string_binding() {
+        // Fail-before-pass-after byte-identity pin on the `String` wire-up
+        // shape: the lifted [`DialetoError::leitura`] ctor MUST land on
+        // the same tuple-newtype wrap when the caller passes an owned
+        // `String` (the actual [`classify`] wire-up shape — `e.to_string()`
+        // on a [`tatara_lisp::Error`]-carrying binding). Pins that the
+        // `impl Into<String>` param covers the owned-`String` path with no
+        // silent double-allocation or intermediate `&str` reslicing. Peer
+        // of the sibling `_on_str_binding` pin above — together they close
+        // the `impl Into<String>` bound's two authored wire-up shapes on
+        // the ctor's substrate primitive.
+        let reason: String = String::from("read: unexpected EOF at 3:1");
+        let via_ctor = DialetoError::leitura(reason.clone());
+        let via_literal = DialetoError::Leitura(reason.clone());
+        assert_eq!(
+            via_ctor, via_literal,
+            "DialetoError::leitura must byte-equal the pre-lift open-coded \
+             tuple-newtype wrap on the same owned-String fixture — a drift \
+             here would let the ctor silently reshape the reader reason \
+             before it reached the Leitura envelope"
+        );
+        let DialetoError::Leitura(routed) = via_ctor else {
+            panic!(
+                "DialetoError::leitura must construct the Leitura arm — \
+                 got a different variant on input {reason:?}"
+            );
+        };
+        assert_eq!(
+            routed, reason,
+            "DialetoError::leitura must route the input {reason:?} \
+             verbatim into the tuple-newtype payload — any wrapper-side \
+             truncation / normalization surfaces here rather than at a \
+             downstream diagnostic shape drift"
+        );
+    }
+
+    #[test]
+    fn leitura_routes_reason_verbatim_across_boundary_inputs() {
+        // Fail-before-pass-after boundary-sweep pin: the lifted
+        // [`DialetoError::leitura`] ctor MUST route its
+        // `reason: impl Into<String>` argument verbatim into the
+        // [`DialetoError::Leitura`] tuple-newtype `String` payload for
+        // every boundary-covering input — empty string, a canonical
+        // tatara-lisp reader error, a non-ASCII reason, a
+        // whitespace-carrying reason, a Unicode-full-width reason. Any
+        // wrapper-side truncation, silent `.trim()`, accidental
+        // `.to_ascii_lowercase()` normalization, or `.into()` divergence
+        // on the ctor body surfaces here as a byte-mismatch against the
+        // input rather than at a downstream [`DialetoError::to_string()`]
+        // diagnostic-shape drift at a tatara-lisp-reader fallthrough
+        // consumer far from the ctor declaration. Peer of the sibling
+        // `cabeca_errada_routes_encontrado_verbatim_across_boundary_inputs`
+        // pin above on the same [`DialetoError`] envelope's wrong-head
+        // axis.
+        for reason in [
+            "",
+            "unclosed paren at 1:12",
+            "unexpected token ')'",
+            "read: eof",
+            " leading whitespace",
+            "trailing whitespace ",
+            "μnicode reason",
+            "\u{00A0}NBSP-prefixed reason",
+            "\u{3000}ideographic-space reason",
+            "reason\u{2028}with-line-separator",
+        ] {
+            let via_ctor = DialetoError::leitura(reason);
+            let via_literal = DialetoError::Leitura(reason.to_string());
+            assert_eq!(
+                via_ctor, via_literal,
+                "DialetoError::leitura({reason:?}) must byte-equal the \
+                 open-coded tuple-newtype wrap on the same input — a \
+                 drift here would let the ctor silently normalize / \
+                 truncate the reader reason before it reached the \
+                 Leitura envelope"
+            );
+            let DialetoError::Leitura(routed) = via_ctor else {
+                panic!(
+                    "DialetoError::leitura must construct the Leitura \
+                     arm — got a different variant on input {reason:?}"
+                );
+            };
+            assert_eq!(
+                routed, reason,
+                "DialetoError::leitura must route the input {reason:?} \
+                 verbatim into the tuple-newtype payload — any \
+                 wrapper-side truncation / normalization surfaces here \
+                 rather than at a downstream diagnostic shape drift"
+            );
+        }
+    }
+
+    #[test]
+    fn classify_reader_error_routes_through_leitura_ctor() {
+        // Fail-before-pass-after routing pin: [`classify`]'s
+        // tatara-lisp-reader map-err site MUST construct its
+        // `Err(DialetoError::…)` through the substrate-primitive
+        // [`DialetoError::leitura`] ctor rather than through an
+        // open-coded tuple-newtype wrap. Pre-lift the wire-up hand-rolled
+        // a `Self::Leitura(e.to_string())` block with no compile-time
+        // link back to the substrate primitive; a future accidental
+        // rebrand of the ctor body (an added `.trim()` on the reader
+        // reason, a per-arm constant prefix like `"tatara-lisp:"`, a
+        // widening of the payload into a `(String, usize)` tuple
+        // carrying a caret offset) would then silently split the two
+        // paths — the ctor consumers pick up the new shape, the
+        // open-coded wire-up does not. Pinning byte-equality between
+        // the observed `Err` and the ctor-constructed `Err` refuses
+        // that split at caixa-core build time rather than surfacing far
+        // from the wire-up commit as a downstream diagnostic-consumer
+        // split. Peer of the sibling
+        // `classify_form_wrong_head_routes_through_cabeca_errada_ctor`
+        // pin above on the same [`DialetoError`] envelope's wrong-head
+        // fallthrough axis.
+        //
+        // The malformed sources below each name a distinct
+        // tatara-lisp-reader failure shape (unclosed paren, stray close
+        // paren, unterminated string), so together they sweep the
+        // reader's rejection surface rather than pinning against one
+        // specific error message the reader upstream is free to reword.
+        for src in [
+            "(defcaixa :nome \"x\"",
+            "defcaixa :nome \"x\")",
+            "(defcaixa :nome \"unterminated",
+        ] {
+            let observed = classify(src);
+            let Err(DialetoError::Leitura(reason)) = observed.clone() else {
+                panic!(
+                    "classify({src:?}) must return the Leitura arm — got \
+                     {observed:?}"
+                );
+            };
+            let via_ctor: Result<CaixaDialeto, DialetoError> =
+                Err(DialetoError::leitura(reason.clone()));
+            assert_eq!(
+                observed, via_ctor,
+                "classify({src:?}) must return the same Err shape as \
+                 DialetoError::leitura({reason:?}) — a drift here means \
+                 the wire-up de-lifted its tatara-lisp-reader fallthrough \
                  arm off the substrate primitive"
             );
         }
