@@ -690,11 +690,7 @@ impl Node {
     #[must_use]
     pub fn kwarg(&self, key: &str) -> Option<&Node> {
         let items = self.kind.as_list()?;
-        let start = if items.first().is_some_and(|n| n.kind.is_symbol()) {
-            1
-        } else {
-            0
-        };
+        let start = usize::from(items.first().is_some_and(|n| n.kind.is_symbol()));
         let mut i = start;
         while i + 1 < items.len() {
             // Route the per-`:key value` pair-loop's per-item keyword-
