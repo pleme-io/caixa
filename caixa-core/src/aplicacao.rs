@@ -3082,12 +3082,9 @@ impl MeshPolicy {
         if let (Some(rl), Some(cb)) = (self.rate_limit(), self.circuit_breaker())
             && !self.breaker_can_trip_under_rate_limit()
         {
-            return Some(AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
-                rate: rl.rate(),
-                rl_window: rl.window(),
-                max_failures: cb.max_failures(),
-                cb_window: cb.window(),
-            });
+            return Some(AplicacaoError::policy_breaker_cannot_trip_under_rate_limit(
+                &rl, &cb,
+            ));
         }
         if let (Some(retries), Some(cb)) = (self.retries(), self.circuit_breaker())
             && !self.retries_fit_under_breaker_trip_threshold()
@@ -10027,6 +10024,82 @@ impl AplicacaoError {
         Self::PolicyBreakerWindowBelowTimeout {
             window: cb.window(),
             timeout,
+        }
+    }
+
+    /// Construct an [`AplicacaoError::PolicyBreakerCannotTripUnderRateLimit`]
+    /// naming the `(:politicas :rate-limit, :politicas :circuit-breaker)`
+    /// cross-axis pair whose token-bucket window structurally starves the
+    /// breaker so `:max-failures` cannot be reached inside `:circuit-breaker
+    /// :window`.
+    ///
+    /// Folds the uniform `{ rate: rl.rate(), rl_window: rl.window(),
+    /// max_failures: cb.max_failures(), cb_window: cb.window() }`
+    /// four-slot `Copy`-`(u32 | Duration)` struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one dispatch
+    /// rather than the pre-lift six-line struct-literal block. Both `rl` and
+    /// `cb` borrows thread verbatim from the caller-side `if let (Some(rl),
+    /// Some(cb)) = (self.rate_limit(), self.circuit_breaker())`
+    /// pair-destructure at the sole in-crate wire-up site inside
+    /// [`MeshPolicy::first_cross_axis_violation`]'s starve-under-rate-limit
+    /// arm. `const fn` preserves the pre-lift `Copy`-pass-through's
+    /// zero-runtime-work property verbatim (all four fields are `u32` /
+    /// [`Duration`], every projected accessor is itself `const fn`, and no
+    /// `.to_string()` / `.into()` allocation lands on the ctor path).
+    ///
+    /// Every slot is projected through its paired substrate-primitive
+    /// accessor ([`RateLimit::rate`], [`RateLimit::window`],
+    /// [`CircuitBreaker::max_failures`], [`CircuitBreaker::window`]) rather
+    /// than spelled out as bare `u32` / [`Duration`] parameters so a future
+    /// widening of either axis — a per-`:contratos`-edge `:rate-limit` or
+    /// `:circuit-breaker` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// acknowledges, a promotion of the plain scalar rate to a richer
+    /// per-status-class token bucket once Envoy's per-descriptor
+    /// `local_rate_limit` peers come into scope — reaches the diagnostic
+    /// through one accessor swap rather than every wire-up in lockstep.
+    /// Matches the peer substrate-primitive-projection posture of
+    /// [`AplicacaoError::policy_breaker_window_below_timeout`] (9b30c07,
+    /// projecting through [`CircuitBreaker::window`] on the sibling
+    /// two-slot `{ window, timeout }` cross-axis
+    /// `(:timeout, :circuit-breaker)` envelope) on the sibling
+    /// first-firing cross-axis compound variant.
+    ///
+    /// Second cross-axis Policy* variant folded onto its own per-variant
+    /// substrate primitive — extending the peer
+    /// [`AplicacaoError::policy_breaker_window_below_timeout`] discipline
+    /// onto the second-firing cross-axis compound variant, whose four-slot
+    /// `{ rate, rl_window, max_failures, cb_window }` shape does not fit
+    /// the sibling two-slot ctor's arity. The two remaining cross-axis
+    /// variants ([`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
+    /// on the two-slot `{ retries, max_failures }` envelope and
+    /// [`AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst`] on the
+    /// two-slot `{ retries, rate }` envelope) each carry a distinct
+    /// substrate-primitive-projection shape and are folded on their own
+    /// axis by their own per-variant ctors as those wire-ups are lifted.
+    ///
+    /// Every future consumer that wants to construct this variant outside
+    /// [`MeshPolicy::first_cross_axis_violation`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a per-tenant `:politicas` overlay's
+    /// starve-under-rate-limit cross-axis invariant after a cluster-local
+    /// `:politicas` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// acknowledges resolves an *effective* per-edge [`MeshPolicy`], a
+    /// future per-`:contratos`-edge `:politicas` override the M4 CR
+    /// resolver projects, an M4 per-cluster `:politicas`-cap resolver
+    /// projecting a per-tenant per-axis ceiling into the same diagnostic
+    /// shape — now reaches this variant through one call rather than
+    /// re-inlining the open-coded struct-literal in lockstep with the one
+    /// in-crate wire-up site.
+    #[must_use]
+    pub const fn policy_breaker_cannot_trip_under_rate_limit(
+        rl: &RateLimit,
+        cb: &CircuitBreaker,
+    ) -> Self {
+        Self::PolicyBreakerCannotTripUnderRateLimit {
+            rate: rl.rate(),
+            rl_window: rl.window(),
+            max_failures: cb.max_failures(),
+            cb_window: cb.window(),
         }
     }
 
@@ -35011,6 +35084,186 @@ mod tests {
             observed, expected,
             "MeshPolicy::first_cross_axis_violation's window-below-timeout \
              arm's Err must byte-equal policy_breaker_window_below_timeout(&cb, t)"
+        );
+        assert_eq!(
+            observed.to_string(),
+            expected.to_string(),
+            "Display byte-string parity"
+        );
+    }
+
+    #[test]
+    fn policy_breaker_cannot_trip_under_rate_limit_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::PolicyBreakerCannotTripUnderRateLimit` to the
+        // pre-lift open-coded struct-literal that read the same four fields
+        // through [`RateLimit::rate`], [`RateLimit::window`],
+        // [`CircuitBreaker::max_failures`], and [`CircuitBreaker::window`].
+        // Guards any future field-addition / reordering / accessor-swap
+        // tweak on the variant. Same equivalence-pin shape as the sibling
+        // `policy_breaker_window_below_timeout_ctor_matches_struct_literal_wrap`
+        // (9b30c07) on the sibling per-`(:timeout, :circuit-breaker)`
+        // cross-axis envelope.
+        let rl = RateLimit {
+            rate: 1,
+            window: Duration::from_secs(3600),
+        };
+        let cb = CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        };
+        let via_ctor = AplicacaoError::policy_breaker_cannot_trip_under_rate_limit(&rl, &cb);
+        let via_literal = AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+            rate: rl.rate(),
+            rl_window: rl.window(),
+            max_failures: cb.max_failures(),
+            cb_window: cb.window(),
+        };
+        assert_eq!(
+            via_ctor, via_literal,
+            "policy_breaker_cannot_trip_under_rate_limit(&rl, &cb) must \
+             byte-equal the open-coded PolicyBreakerCannotTripUnderRateLimit \
+             struct-literal on the same Copy-(u32|Duration) fixture"
+        );
+        assert_eq!(
+            via_ctor.to_string(),
+            via_literal.to_string(),
+            "Display byte-string must byte-equal the open-coded struct-literal"
+        );
+    }
+
+    #[test]
+    fn policy_breaker_cannot_trip_under_rate_limit_ctor_routes_rl_and_cb_verbatim() {
+        // Routing pin sweeping non-default `(:rate, :rate-limit :window,
+        // :max-failures, :circuit-breaker :window)` tuples across the
+        // production-playbook starve band — Envoy 5-in-10s vs 1/hour,
+        // sub-second breaker window, multi-minute rate-limit window,
+        // multi-tenant per-cluster ratio — through the paired
+        // [`RateLimit::rate`] / [`RateLimit::window`] /
+        // [`CircuitBreaker::max_failures`] / [`CircuitBreaker::window`]
+        // accessors, so any wrapper-side silent normalization, rounding,
+        // argument re-order, or accidental slot rebrand on the four-slot
+        // pass-through surfaces at caixa-core build time rather than at a
+        // downstream diagnostic consumer that reads the four scalars back
+        // and gets different values than the ones it stored.
+        //
+        // Deliberately routes through fixtures whose four scalars are
+        // pairwise distinct (`rate ≠ max_failures`, `rl_window ≠
+        // cb_window`) — a hypothetical field-rename swap swapping any
+        // two adjacent slots at the ctor body would land the value from
+        // the wrong axis, tripping the per-field assertion here. Peer of
+        // the sibling
+        // `policy_breaker_window_below_timeout_ctor_routes_cb_window_and_timeout_verbatim`
+        // (9b30c07) routing pin on the sibling two-slot per-`(:timeout,
+        // :circuit-breaker)` cross-axis envelope.
+        for (rate, rl_window, max_failures, cb_window) in [
+            (
+                1_u32,
+                Duration::from_secs(3600),
+                5_u32,
+                Duration::from_secs(10),
+            ),
+            (4_u32, Duration::from_secs(1), 5_u32, Duration::from_secs(1)),
+            (
+                2_u32,
+                Duration::from_millis(500),
+                10_u32,
+                Duration::from_secs(300),
+            ),
+            (
+                7_u32,
+                Duration::from_secs(120),
+                42_u32,
+                Duration::from_millis(750),
+            ),
+        ] {
+            let rl = RateLimit {
+                rate,
+                window: rl_window,
+            };
+            let cb = CircuitBreaker {
+                max_failures,
+                window: cb_window,
+            };
+            let built = AplicacaoError::policy_breaker_cannot_trip_under_rate_limit(&rl, &cb);
+            let AplicacaoError::PolicyBreakerCannotTripUnderRateLimit {
+                rate: stored_rate,
+                rl_window: stored_rl_window,
+                max_failures: stored_max_failures,
+                cb_window: stored_cb_window,
+            } = built
+            else {
+                panic!(
+                    "policy_breaker_cannot_trip_under_rate_limit must \
+                     construct PolicyBreakerCannotTripUnderRateLimit for \
+                     rl={rl:?}/cb={cb:?}"
+                );
+            };
+            assert_eq!(
+                stored_rate, rate,
+                "rate slot must thread RateLimit::rate() verbatim for \
+                 rl={rl:?}/cb={cb:?}"
+            );
+            assert_eq!(
+                stored_rl_window, rl_window,
+                "rl_window slot must thread RateLimit::window() verbatim \
+                 for rl={rl:?}/cb={cb:?}"
+            );
+            assert_eq!(
+                stored_max_failures, max_failures,
+                "max_failures slot must thread CircuitBreaker::max_failures() \
+                 verbatim for rl={rl:?}/cb={cb:?}"
+            );
+            assert_eq!(
+                stored_cb_window, cb_window,
+                "cb_window slot must thread CircuitBreaker::window() verbatim \
+                 for rl={rl:?}/cb={cb:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_cross_axis_violation_arm_routes_through_policy_breaker_cannot_trip_under_rate_limit_ctor()
+     {
+        // End-to-end pin: the sole in-crate wire-up site
+        // ([`MeshPolicy::first_cross_axis_violation`]'s
+        // starve-under-rate-limit arm) routes through
+        // [`AplicacaoError::policy_breaker_cannot_trip_under_rate_limit`]
+        // and the observed `Err` byte-equals the ctor's output on the same
+        // token-bucket-starves-breaker fixture. A future silent de-lift of
+        // the wire-up back to the open-coded
+        // `AplicacaoError::PolicyBreakerCannotTripUnderRateLimit { rate,
+        // rl_window, max_failures, cb_window }` struct-literal trips this
+        // test at caixa-core build time rather than at a downstream
+        // diagnostic consumer far from the wire-up commit. Sibling of the
+        // peer
+        // `first_cross_axis_violation_arm_routes_through_policy_breaker_window_below_timeout_ctor`
+        // (9b30c07) end-to-end pin on the sibling per-`(:timeout,
+        // :circuit-breaker)` cross-axis envelope — extended here from a
+        // bare `matches!(err,
+        // AplicacaoError::PolicyBreakerCannotTripUnderRateLimit { .. })`
+        // shape check to a byte-identity route through the ctor. Clears
+        // `:timeout` so the sibling window-below-timeout arm does not
+        // fire first on the ordering-precedent it holds over this arm.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(10),
+        });
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 1,
+            window: Duration::from_secs(3600),
+        });
+        let observed = s.validate().unwrap_err();
+        let rl = s.politicas.rate_limit.unwrap();
+        let cb = s.politicas.circuit_breaker.unwrap();
+        let expected = AplicacaoError::policy_breaker_cannot_trip_under_rate_limit(&rl, &cb);
+        assert_eq!(
+            observed, expected,
+            "MeshPolicy::first_cross_axis_violation's starve-under-rate-limit \
+             arm's Err must byte-equal \
+             policy_breaker_cannot_trip_under_rate_limit(&rl, &cb)"
         );
         assert_eq!(
             observed.to_string(),
