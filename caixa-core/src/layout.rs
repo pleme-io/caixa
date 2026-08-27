@@ -1898,6 +1898,32 @@ impl LayoutError {
             expected,
         }
     }
+
+    /// Construct a [`LayoutError::CiOnNonAcao`] naming the offending
+    /// `caixa.nome()` and its declared `:kind`.
+    ///
+    /// Folds the uniform `Self::CiOnNonAcao { caixa: caixa.nome()
+    /// .to_string(), kind: caixa.kind() }` two-slot struct-literal
+    /// onto one substrate primitive so every wire-up on this variant
+    /// (today the sole [`crate::Caixa::validate_ci_kind_coherence`]
+    /// call site at `caixa-core/src/manifest.rs:5586` — the deferred
+    /// `caixa.pleme.io/v1alpha1/Caixa` CR admission webhook and a
+    /// future `feira validate --ci-kind` per-caixa verb sit at the
+    /// same axis) reads through one dispatch rather than the pre-lift
+    /// open-coded struct-literal block. Both slots project through
+    /// the paired [`crate::Caixa::nome`] / [`crate::Caixa::kind`]
+    /// accessors — the same discipline every sibling ctor on this
+    /// envelope ([`Self::missing_lib`] on `{ caixa, expected }`, the
+    /// [`layout_nome_only_ctors!`] family on `{ caixa }`-only
+    /// tuple-variants, the [`layout_slot_kind_ctors!`] family on
+    /// `{ caixa, kind, slots }`) already takes.
+    #[must_use]
+    pub fn ci_on_non_acao(caixa: &crate::Caixa) -> Self {
+        Self::CiOnNonAcao {
+            caixa: caixa.nome().to_string(),
+            kind: caixa.kind(),
+        }
+    }
 }
 
 // Fold the six `LayoutError::<Variant>(caixa.nome().to_string())` nome-
@@ -8796,6 +8822,101 @@ mod tests {
             "StandardLayout::verify must reach MissingLib through the missing_lib ctor \
              — a residual struct-literal block would silently diverge on any future \
              accessor projection change"
+        );
+    }
+
+    #[test]
+    fn ci_on_non_acao_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin locking [`LayoutError::ci_on_non_acao`] to
+        // its struct-literal peer under `PartialEq`. The pre-lift
+        // wire-up at `caixa-core/src/manifest.rs:5586` read
+        // `LayoutError::CiOnNonAcao { caixa: self.nome().to_string(),
+        // kind: self.kind() }`; the post-lift dispatch reads
+        // `LayoutError::ci_on_non_acao(self)`. Both must produce
+        // byte-equal variants — a silent divergence (a `to_lowercase()`,
+        // a lost `.to_string()` copy, a swapped kind-copy) surfaces
+        // here rather than at a downstream diagnostic-shape drift.
+        let bib = caixa(CaixaKind::Biblioteca);
+        let struct_lit = LayoutError::CiOnNonAcao {
+            caixa: bib.nome().to_string(),
+            kind: bib.kind(),
+        };
+        let ctor = LayoutError::ci_on_non_acao(&bib);
+        assert_eq!(
+            struct_lit, ctor,
+            "ci_on_non_acao ctor must byte-equal the pre-lift struct-literal"
+        );
+    }
+
+    #[test]
+    fn ci_on_non_acao_ctor_projects_nome_and_kind_through_accessors() {
+        // Accessor-fidelity pin: any future `:nome` axis extension
+        // (namespace-qualified rewrite `pleme-io/<nome>`, per-cluster
+        // alias overlay, case-normalization pass) that lands on
+        // [`crate::Caixa::nome`] and any future `:kind` re-projection
+        // (an overlay pass returning a different `CaixaKind` copy)
+        // that lands on [`crate::Caixa::kind`] must reach the
+        // `caixa:` / `kind:` carriers through these projections
+        // rather than raw field accesses. The neighbour
+        // [`LayoutError::missing_lib`] ctor (b4d5a49) projects nome
+        // the same way; this pin locks the `:ci` axis onto the same
+        // discipline so the whole `LayoutError` family stays coherent
+        // under any future rewrite.
+        //
+        // Deliberately uses a byte-distinctive nome ("ci-on-binario")
+        // and a non-Acao kind (`Binario`) so a regression that
+        // hard-codes a fixture literal at the ctor body (rather than
+        // projecting through the accessors) drops the bytes or the
+        // kind and trips the assertion.
+        let mut bin = caixa(CaixaKind::Binario);
+        bin.nome = "ci-on-binario".into();
+        let err = LayoutError::ci_on_non_acao(&bin);
+        let LayoutError::CiOnNonAcao {
+            caixa: cname,
+            kind: cknd,
+        } = err
+        else {
+            panic!("ci_on_non_acao ctor must construct the CiOnNonAcao variant, got a foreign arm");
+        };
+        assert_eq!(
+            cname,
+            bin.nome(),
+            "ci_on_non_acao `caixa:` carrier must project through Caixa::nome()"
+        );
+        assert_eq!(
+            cknd,
+            bin.kind(),
+            "ci_on_non_acao `kind:` carrier must project through Caixa::kind()"
+        );
+    }
+
+    #[test]
+    fn ci_on_non_acao_verify_wire_up_routes_through_ctor() {
+        // Behavioural pin: [`StandardLayout::verify`] must reach the
+        // `CiOnNonAcao` variant through the newly lifted ctor rather
+        // than a residual struct-literal block. The end-to-end
+        // observable — a non-Acao caixa with `:ci` declared — must
+        // surface a `CiOnNonAcao` whose `caixa:` and `kind:` carriers
+        // are byte-equal to what the ctor would produce when called
+        // directly.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_only = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_only);
+        let mut bib = caixa(CaixaKind::Biblioteca);
+        bib.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![],
+        });
+
+        let observed = layout.verify(&bib, &root).unwrap_err();
+        let synthesized = LayoutError::ci_on_non_acao(&bib);
+        assert_eq!(
+            observed, synthesized,
+            "Caixa::validate_ci_kind_coherence must reach CiOnNonAcao through the \
+             ci_on_non_acao ctor — a residual struct-literal block would silently \
+             diverge on any future accessor projection change"
         );
     }
 }
