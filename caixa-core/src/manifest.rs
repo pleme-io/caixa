@@ -5583,10 +5583,7 @@ impl Caixa {
     /// declared `:ci` (the fold's two identity-element arms).
     pub fn validate_ci_kind_coherence(&self) -> Result<(), crate::LayoutError> {
         if self.ci().is_some() && !self.kind().is_acao() {
-            return Err(crate::LayoutError::CiOnNonAcao {
-                caixa: self.nome().to_string(),
-                kind: self.kind(),
-            });
+            return Err(crate::LayoutError::ci_on_non_acao(self));
         }
         Ok(())
     }
