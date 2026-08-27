@@ -4932,7 +4932,7 @@ fn validate_contrato_caixa(slot: &'static str, caixa: &str) -> Result<(), Aplica
     // per-edge axis (`:de` vs `:para`) the offending value came from.
     crate::render::require_valid_dns_1123_label(
         caixa,
-        || AplicacaoError::ContratoCaixaEmpty { slot },
+        || AplicacaoError::contrato_caixa_empty(slot),
         |reason| AplicacaoError::contrato_caixa_invalid(slot, caixa, reason),
     )
 }
@@ -10351,6 +10351,67 @@ impl AplicacaoError {
             caixa: caixa.to_string(),
             reason: reason.into(),
         }
+    }
+
+    /// Construct an [`AplicacaoError::ContratoCaixaEmpty`] naming the
+    /// offending `:contratos <slot>` (`:de` / `:para`) at which the
+    /// caixa-reference value is the empty string. Folds the uniform
+    /// `Self::ContratoCaixaEmpty { slot }` one-slot struct-literal onto
+    /// one substrate primitive so the sole in-crate closure passed to
+    /// [`crate::render::require_valid_dns_1123_label`] at
+    /// [`validate_contrato_caixa`] on this variant reads through one
+    /// dispatch rather than the pre-lift open-coded block. The `slot`
+    /// label threads verbatim from the caller-side
+    /// [`crate::render::CONTRATO_AUTHOR_KEY_DE`] /
+    /// [`crate::render::CONTRATO_AUTHOR_KEY_PARA`] `const` strings the
+    /// wire-up feeds through [`validate_contrato_caixa`]'s
+    /// `slot: &'static str` parameter.
+    ///
+    /// Sibling of the paired three-slot [`Self::contrato_caixa_invalid`]
+    /// substrate primitive on the same
+    /// [`crate::render::require_valid_dns_1123_label`] two-closure
+    /// cascade — the empty-arm and invalid-arm now both reach the
+    /// `AplicacaoError` envelope through one substrate primitive per
+    /// typed variant, closing the pair. Same shape discipline as the
+    /// peer [`crate::behavior::BehaviorError::empty_path`] one-slot
+    /// `{ slot: &'static str }` sibling on the `BehaviorError`
+    /// envelope's four-arm sandboxed-lisp-path cascade
+    /// ([`crate::render::require_sandboxed_lisp_path`]) — extended here
+    /// onto the sibling `AplicacaoError` envelope's two-arm
+    /// DNS-1123-label cascade at the `:contratos <slot>` per-edge axis.
+    ///
+    /// `slot` stays `&'static str` (not `&str`) — every `:contratos
+    /// <slot>` tag comes from the [`crate::render::CONTRATO_AUTHOR_KEY_*`]
+    /// `const` roster carrying program-lifetime storage, matching the
+    /// enum-field type and the [`validate_contrato_caixa`] wire-up's
+    /// per-axis dispatch. A runtime-borrowed `&str` would silently
+    /// downgrade the label lifetime and let a caller stash a
+    /// non-`'static` borrow into the returned error. `#[must_use]` fires
+    /// a compile warning at any wire-up that mistakenly discards the
+    /// constructed error rather than routing it through `return Err(…)`
+    /// / `.map_err(…)` / a closure return. `pub const fn` matches the
+    /// peer per-envelope one-slot `Copy`-scalar ctor family discipline
+    /// (`aplicacao_placement_scalar_ctors!`, `layout_nome_only_ctors!`,
+    /// `dep_nome_only_ctors!`) so the ctor is usable in `const` position
+    /// at every wire-up site.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside the current in-crate wire-up (the deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// per-`:contratos`-edge admission validator projecting the same
+    /// diagnostic through the caller-facing `slot: &'static str` tag,
+    /// a future `feira validate --contratos` per-caixa admission verb,
+    /// an M4 per-`:contratos`-edge pre-emitter running the same
+    /// DNS-1123-label floor's empty-arm against a caller-supplied
+    /// `:de` / `:para` pair before hitting the apiserver-side selector,
+    /// a per-`Caixa` overlay resolver rejecting an author-supplied
+    /// `:contratos` overlay's empty `:de` / `:para` against a
+    /// cluster-local snapshot) — now reaches this variant through one
+    /// call rather than re-inlining the open-coded closure block in
+    /// lockstep with the one in-crate wire-up site.
+    #[must_use]
+    pub const fn contrato_caixa_empty(slot: &'static str) -> Self {
+        Self::ContratoCaixaEmpty { slot }
     }
 }
 
@@ -18148,6 +18209,109 @@ mod tests {
                 AplicacaoError::contrato_caixa_invalid(slot, "c", via_format.clone()),
             );
         }
+    }
+
+    // Pin the paired one-slot empty-arm sibling of the three-slot
+    // `contrato_caixa_invalid` per-`:contratos <slot>` ctor — the sole
+    // closure-form empty-arm on the shared
+    // [`crate::render::require_valid_dns_1123_label`] two-closure
+    // cascade at [`validate_contrato_caixa`], carrying the same
+    // `slot: &'static str` axis-tag that distinguishes the two-arm
+    // `:de` / `:para` cascade. Sweeps both canonical author-side slot
+    // tags through the ctor and asserts byte-equality against the
+    // pre-lift struct-literal shape so no per-arm wrapper transformation
+    // drifts in against the sole in-crate wire-up. Peer of the sibling
+    // [`crate::behavior::BehaviorError::empty_path`] one-slot
+    // `{ slot: &'static str }` equivalence pin on the paired
+    // `BehaviorError` envelope's four-arm sandboxed-lisp-path cascade
+    // ([`crate::render::require_sandboxed_lisp_path`]) — extended here
+    // onto the sibling `AplicacaoError` envelope's two-arm
+    // DNS-1123-label cascade so both empty-arm axes carry a
+    // substrate-primitive equivalence pin rather than the pre-lift
+    // hand-open struct-literal.
+    #[test]
+    fn contrato_caixa_empty_ctor_matches_struct_literal_wrap() {
+        for slot in [
+            crate::render::CONTRATO_AUTHOR_KEY_DE,
+            crate::render::CONTRATO_AUTHOR_KEY_PARA,
+        ] {
+            assert_eq!(
+                AplicacaoError::contrato_caixa_empty(slot),
+                AplicacaoError::ContratoCaixaEmpty { slot },
+                "generated contrato_caixa_empty ctor must produce \
+                 byte-equal AplicacaoError to the open-coded \
+                 struct-literal wrap on the same &'static str fixture \
+                 (slot = {slot:?})",
+            );
+        }
+    }
+
+    // Cross-axis pin: sweep the constructor's single input axis (`slot:
+    // &'static str`) through every canonical
+    // [`crate::render::CONTRATO_AUTHOR_KEY_*`] tag *plus* a non-canonical
+    // `&'static str` value (`":phantom"`), so any wrapper-side lowercase
+    // / trim / truncate / re-order / fixed-slot substitution on the
+    // one-field construction surfaces here rather than at a downstream
+    // diagnostic-shape mismatch. The non-canonical arm proves the
+    // constructor does not silently clamp `slot` to the `:de` /
+    // `:para` roster (a future third `:contratos <slot>` axis lands on
+    // this ctor without a per-arm rewrite), matching the discipline the
+    // sibling [`Self::contrato_caixa_invalid`] ctor's tri-slot sweep
+    // establishes at
+    // `contrato_caixa_invalid_ctor_matches_struct_literal_wrap`
+    // (18114) on the paired three-slot invalid-arm envelope.
+    #[test]
+    fn contrato_caixa_empty_ctor_routes_slot_verbatim_across_both_axes() {
+        for slot in [
+            crate::render::CONTRATO_AUTHOR_KEY_DE,
+            crate::render::CONTRATO_AUTHOR_KEY_PARA,
+            ":phantom",
+        ] {
+            assert_eq!(
+                AplicacaoError::contrato_caixa_empty(slot),
+                AplicacaoError::ContratoCaixaEmpty { slot },
+            );
+        }
+    }
+
+    // End-to-end wire-up pin: `AplicacaoSpec::validate` on an empty
+    // `:contratos :de` value must surface a diagnostic byte-equal to
+    // the substrate primitive `AplicacaoError::contrato_caixa_empty`'s
+    // output on the same slot fixture. Proves the sole in-crate
+    // closure-form wire-up inside [`validate_contrato_caixa`]'s
+    // [`crate::render::require_valid_dns_1123_label`] empty-arm routes
+    // through the ctor rather than the pre-lift open-coded
+    // struct-literal block, matching the sibling per-arm
+    // `end_to_end_wire_up_routes_through_ctor` discipline the peer
+    // per-envelope ctor pins the recent
+    // [`Self::policy_rate_limit_cannot_admit_retry_burst`] (9703bd6),
+    // [`Self::policy_breaker_trips_before_retries_exhausted`] (f54c539),
+    // [`Self::policy_breaker_cannot_trip_under_rate_limit`] (6bb4e46),
+    // and [`Self::policy_breaker_window_below_timeout`] (9b30c07)
+    // cross-axis Policy* variants carry. Complements the two axis-tag
+    // arms already pinned above the `:contratos` value-shape gate
+    // block (`rejects_contrato_de_empty`, `rejects_contrato_para_empty`)
+    // which anchor via the shape; this pin additionally verifies the
+    // ctor is the exclusive construction path.
+    #[test]
+    fn contrato_caixa_empty_end_to_end_wire_up_routes_through_ctor() {
+        // Empty `:de` — the sole in-crate wire-up hits the empty-arm
+        // closure at the first `:contratos` value-shape gate, threading
+        // the `CONTRATO_AUTHOR_KEY_DE` label through the ctor.
+        let mut s_de = three_member_spec();
+        s_de.contratos.push(contract_http("", "catalog", "/x"));
+        assert_eq!(
+            s_de.validate().unwrap_err(),
+            AplicacaoError::contrato_caixa_empty(crate::render::CONTRATO_AUTHOR_KEY_DE),
+        );
+        // Symmetric arm: an empty `:para` on a valid `:de` fires the
+        // same closure with the `CONTRATO_AUTHOR_KEY_PARA` label.
+        let mut s_para = three_member_spec();
+        s_para.contratos.push(contract_http("cart", "", "/x"));
+        assert_eq!(
+            s_para.validate().unwrap_err(),
+            AplicacaoError::contrato_caixa_empty(crate::render::CONTRATO_AUTHOR_KEY_PARA),
+        );
     }
 
     // Cross-family invariance pin — the six sibling ctors and
