@@ -443,11 +443,11 @@ impl UpgradeFromEntry {
             .filter(|i| !i.is_restart())
             .map(UpgradeInstruction::lisp_form)
             .collect();
-        Err(UpgradeError::RestartNotExclusive {
-            from: self.prior_versao().to_string(),
+        Err(UpgradeError::restart_not_exclusive(
+            self.prior_versao(),
             restart_count,
             other_kinds,
-        })
+        ))
     }
 
     /// Reject an entry whose `(:state-change …)` is not preceded by a
@@ -2850,6 +2850,84 @@ impl UpgradeError {
             from: from.to_string(),
             module: module.to_string(),
             kinds,
+        }
+    }
+
+    /// Construct an [`UpgradeError::RestartNotExclusive`] naming the
+    /// offending `(:from <prior-versao>)` entry, the observed `(:restart)`
+    /// instruction count, and the ordered list of non-`:restart`
+    /// instruction lisp-forms the entry mixed with the terminal fallback.
+    /// Folds the uniform `Self::RestartNotExclusive { from: from.to_string(),
+    /// restart_count, other_kinds }` three-field struct-literal onto one
+    /// substrate primitive so every wire-up on this sole-variant within-
+    /// entry `(:restart)`-exclusivity refusal envelope reads through one
+    /// dispatch rather than the pre-lift five-line open-coded block. Closes
+    /// the last unlifted `{ from: String, restart_count: usize, other_kinds:
+    /// Vec<&'static str> }` three-slot open-coded struct-literal wire-up on
+    /// the OTP-appup within-entry `(:restart)`-fallback-exclusivity axis —
+    /// the last-remaining open-coded emission site the sibling
+    /// [`UpgradeError::duplicate_cleanup`] (10a5b48) commit body pinned as
+    /// the natural next lift on the `UpgradeError` envelope. Fills a peer
+    /// three-slot rung on the `UpgradeError`-side ctor-family ladder
+    /// alongside the sibling three-slot
+    /// [`UpgradeError::purge_without_prior_load`] (9752da1) standalone
+    /// ctor on the paired within-entry load → cleanup ordering axis and
+    /// [`UpgradeError::duplicate_cleanup`] (10a5b48) standalone ctor on
+    /// the per-module cleanup-singularity axis, the one-slot
+    /// [`UpgradeError::duplicate_from`] (7e52aec) standalone ctor on the
+    /// cross-entry duplicate-`:from` gate, the four-slot
+    /// [`UpgradeError::state_change_after_cleanup`] (be68237) standalone
+    /// ctor on the migrate → cleanup boundary, the two-slot
+    /// [`upgrade_from_axis_ctors!`] (41d08db) /
+    /// [`upgrade_from_script_ctors!`] (8e67041) macro-generated families,
+    /// and the one-slot [`upgrade_script_only_ctors!`] (7468ca9) family.
+    /// Sole in-crate wire-up site is inside
+    /// [`UpgradeFromEntry::validate_restart_exclusive`]'s mixed-`(:restart)`
+    /// arm.
+    ///
+    /// The `from: &str` parameter accepts `&str` literals and `&String`
+    /// via Deref coercion so the sole in-crate wire-up threads
+    /// [`UpgradeFromEntry::prior_versao`] (a `&str` accessor) verbatim
+    /// without a pre-conversion. The `restart_count: usize` parameter
+    /// takes the observed `(:restart)` occurrence count built at the
+    /// caller from `instructions.iter().filter(|i| i.is_restart()).count()`
+    /// — the same `IsVariant`-derived arm-discriminator dispatch the
+    /// paired `other_kinds` projection routes through — so the diagnostic
+    /// surfaces the duplication mode unambiguously even when `other_kinds`
+    /// is empty (the `((:restart) (:restart))` shape the sibling
+    /// `validate_rejects_restart_duplicated` test pins with
+    /// `restart_count: 2, other_kinds: vec![]`). The `other_kinds:
+    /// Vec<&'static str>` parameter takes the ordered list of non-
+    /// `:restart` instruction lisp-forms built at the caller from
+    /// `instructions.iter().filter(|i| !i.is_restart()).map(
+    /// UpgradeInstruction::lisp_form).collect()` — the same substrate-
+    /// primitive `&'static str` projection the peer three-slot
+    /// [`UpgradeError::purge_without_prior_load`] /
+    /// [`UpgradeError::duplicate_cleanup`] ctors thread on the sibling
+    /// within-entry cleanup axes.
+    ///
+    /// Every future consumer that raises this refusal outside
+    /// [`UpgradeFromEntry::validate_restart_exclusive`] — a deferred
+    /// wasm-operator's `install_release/1` per-entry `(:restart)`-
+    /// exclusivity re-checker at hot-upgrade dispatch time, a future
+    /// `feira validate --upgrade-from` per-caixa admission verb re-running
+    /// the exclusivity pass on demand, a per-`Caixa` overlay resolver
+    /// rejecting a cluster-local `(:restart)` overlay that mixes with a
+    /// base-entry typed sequence, the M4 `mesh.pleme.io/v1alpha1/Caixa`
+    /// CR admission webhook re-checking a per-`:upgrade-from`-patched
+    /// candidate before the exclusivity gate re-fires — reaches the
+    /// variant through one call rather than re-inlining the five-line
+    /// struct-literal in lockstep with the sole in-crate wire-up site.
+    #[must_use]
+    pub fn restart_not_exclusive(
+        from: &str,
+        restart_count: usize,
+        other_kinds: Vec<&'static str>,
+    ) -> Self {
+        Self::RestartNotExclusive {
+            from: from.to_string(),
+            restart_count,
+            other_kinds,
         }
     }
 }
@@ -9350,6 +9428,179 @@ mod tests {
                  kinds) on a two-cleanup {kinds:?} entry targeting the \
                  same module, byte-equal to the pre-lift open-coded \
                  struct-literal wrap on the same fixture",
+            );
+        }
+    }
+
+    #[test]
+    fn restart_not_exclusive_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `UpgradeError::RestartNotExclusive` to the pre-lift open-coded
+        // three-field struct-literal on the same `(&str, usize,
+        // Vec<&'static str>)` fixture. Guards any future field-addition /
+        // reordering / string-conversion tweak on the variant. Same
+        // equivalence-pin shape as the sibling
+        // `duplicate_cleanup_ctor_matches_struct_literal_wrap` (10a5b48)
+        // on the peer three-slot envelope.
+        let from = "0.1.0";
+        let restart_count: usize = 1;
+        let other_kinds: Vec<&'static str> =
+            vec![crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE];
+        assert_eq!(
+            UpgradeError::restart_not_exclusive(from, restart_count, other_kinds.clone()),
+            UpgradeError::RestartNotExclusive {
+                from: from.to_string(),
+                restart_count,
+                other_kinds,
+            },
+            "generated restart_not_exclusive ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same (&str, usize, Vec<&'static str>) fixture",
+        );
+    }
+
+    #[test]
+    fn restart_not_exclusive_ctor_routes_from_restart_count_and_other_kinds_through_verbatim() {
+        // Cross-axis routing pin: sweep the three constructor input axes
+        // (`from: &str`, `restart_count: usize`, `other_kinds:
+        // Vec<&'static str>`) through distinct-per-axis fixtures across a
+        // boundary matrix of SemVer-2 `from` shapes (release, pre-release,
+        // pre-release + build-metadata, zero) × non-degenerate
+        // `restart_count` values (1 — the mixed-with-typed shape, 2 — the
+        // pure-duplication shape, 3 — the deeply-duplicated shape) ×
+        // ordered `other_kinds` lisp-form lists spanning the four
+        // non-`:restart` [`UpgradeInstruction::lisp_form`] arms
+        // (`:load-module`, `:state-change`, `:soft-purge`, `:purge`) —
+        // empty (the `((:restart) (:restart))` shape), singleton
+        // (`((:load-module …) (:restart))`), and the full typed sequence
+        // (`((:load-module …) (:state-change …) (:soft-purge …) (:purge
+        // …) (:restart))`) — so any wrapper-side silent lowercase / trim
+        // / truncate / silent axis-swap (`from` ↔ swap onto
+        // `restart_count`'s numeric axis, `other_kinds`-vec drop-or-
+        // duplicate on the four-element owned `Vec<&'static str>`,
+        // `other_kinds` reorder against declared instruction order) on
+        // the three-field construction surfaces at assert time rather
+        // than at a downstream diagnostic consumer that reads the fields
+        // back and gets a different value than the one it stored. Both
+        // `&str`-literal and `&String` (via Deref coercion) carriers are
+        // exercised for `from` because the sole wire-up hands
+        // `self.prior_versao()` (a `&str` accessor).
+        let all_typed_kinds: [&'static str; 4] = [
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+        ];
+        let other_kinds_matrix: [Vec<&'static str>; 3] =
+            [vec![], vec![all_typed_kinds[0]], all_typed_kinds.to_vec()];
+        let froms: [&str; 4] = ["0.1.0", "1.2.3-rc.1", "0.2.0-alpha.7+build.5", "0.0.0"];
+        let restart_counts: [usize; 3] = [1, 2, 3];
+        for other_kinds in &other_kinds_matrix {
+            for restart_count in restart_counts {
+                for from in froms {
+                    let from_owned: String = from.to_string();
+                    for from_in in [from, from_owned.as_str()] {
+                        assert_eq!(
+                            UpgradeError::restart_not_exclusive(
+                                from_in,
+                                restart_count,
+                                other_kinds.clone(),
+                            ),
+                            UpgradeError::RestartNotExclusive {
+                                from: from.to_string(),
+                                restart_count,
+                                other_kinds: other_kinds.clone(),
+                            },
+                            "restart_not_exclusive must route from → from, \
+                             restart_count → restart_count, other_kinds → \
+                             other_kinds in declared field order verbatim \
+                             on ({from:?}, {restart_count:?}, \
+                             {other_kinds:?})",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn validate_restart_exclusive_arm_routes_through_restart_not_exclusive_ctor() {
+        // End-to-end wire-up pin: sweep the three canonical exclusivity-
+        // violation shapes the `validate_restart_exclusive` gate can
+        // refuse — restart + one typed instruction (`restart_count: 1,
+        // other_kinds: [load-module]`), restart + full typed sequence
+        // (`restart_count: 1, other_kinds: [load-module, state-change,
+        // soft-purge, purge]`), and duplicated restart only
+        // (`restart_count: 2, other_kinds: []`) — and pin that each
+        // observed `Err` byte-equals the substrate-primitive
+        // [`UpgradeError::restart_not_exclusive`] ctor's output on the
+        // same fixture. A future silent de-lift of the wire-up back to
+        // the open-coded struct-literal (or a silent axis-swap on the
+        // three-field construction at the wire-up site, or an
+        // `other_kinds` reorder / drop) trips at caixa-core test time
+        // rather than at a downstream diagnostic consumer far from the
+        // wire-up commit. Same end-to-end-wire-up discipline as the
+        // sibling
+        // `validate_cleanup_singularity_arm_routes_through_duplicate_cleanup_ctor`
+        // (10a5b48) on the peer per-module cleanup-singularity axis and
+        // `validate_purge_ordering_arm_routes_through_purge_without_prior_load_ctor`
+        // on the peer load → cleanup ordering gate; all three key off
+        // exactly one typed dispatch on the substrate primitive.
+        let cases: [(&str, Vec<UpgradeInstruction>, usize, Vec<&'static str>); 3] = [
+            (
+                "0.1.0",
+                vec![
+                    UpgradeInstruction::LoadModule {
+                        module: "hello-rio".into(),
+                    },
+                    UpgradeInstruction::Restart,
+                ],
+                1,
+                vec![crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE],
+            ),
+            (
+                "1.2.3-rc.1",
+                vec![
+                    UpgradeInstruction::LoadModule {
+                        module: "hello-rio".into(),
+                    },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/m.lisp"),
+                    },
+                    UpgradeInstruction::SoftPurge {
+                        module: "hello-rio-old".into(),
+                    },
+                    UpgradeInstruction::Purge {
+                        module: "hello-rio-old".into(),
+                    },
+                    UpgradeInstruction::Restart,
+                ],
+                1,
+                vec![
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                ],
+            ),
+            (
+                "0.0.0",
+                vec![UpgradeInstruction::Restart, UpgradeInstruction::Restart],
+                2,
+                vec![],
+            ),
+        ];
+        for (from, instructions, restart_count, other_kinds) in cases {
+            let e = entry(from, instructions);
+            let observed = e.validate().unwrap_err();
+            assert_eq!(
+                observed,
+                UpgradeError::restart_not_exclusive(from, restart_count, other_kinds.clone()),
+                "validate_restart_exclusive must route its refusal \
+                 through UpgradeError::restart_not_exclusive(from, \
+                 restart_count, other_kinds) on a mixed-`(:restart)` \
+                 entry, byte-equal to the pre-lift open-coded struct-\
+                 literal wrap on the same fixture",
             );
         }
     }
