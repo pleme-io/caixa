@@ -46,9 +46,10 @@ impl ResolveError {
     /// `Err(ResolveError::MissingPath { nome: dep.nome().to_string(),
     /// path })` two-slot struct-literal inside [`fetch_path`] onto one
     /// dispatch. Peer with the sibling one-slot `MissingPin` `{ nome:
-    /// String }` variant on the same envelope, which stays open-coded
-    /// at [`fetch_git`]'s `.ok_or_else` closure arm pending its own
-    /// dedicated lift. Every future consumer that surfaces the same
+    /// String }` variant on the same envelope, which the paired
+    /// [`Self::missing_pin`] ctor now folds onto its own substrate
+    /// primitive on [`fetch_git`]'s `.ok_or_else` closure-form emission
+    /// arm. Every future consumer that surfaces the same
     /// on-disk-absence diagnostic outside `fetch_path` — a deferred
     /// `feira lock --path`-only pre-flight probe, a per-lacre overlay
     /// resolver rejecting a cluster-local `:caminho` overlay that
@@ -71,6 +72,44 @@ impl ResolveError {
         ResolveError::MissingPath {
             nome: nome.to_string(),
             path: path.into(),
+        }
+    }
+
+    /// Substrate primitive constructor for the per-`Dep`
+    /// `:fonte (:tipo git …)`-arm sole-set-pin absence refusal
+    /// diagnostic. Folds the pre-lift open-coded three-line
+    /// `ResolveError::MissingPin { nome: dep.nome().to_string() }`
+    /// one-slot struct-literal inside [`fetch_git`]'s `.ok_or_else`
+    /// closure-form emission arm onto one dispatch. Peer with the
+    /// sibling two-slot [`Self::missing_path`] ctor on the same
+    /// envelope's on-disk-absence refusal axis — this ctor closes the
+    /// paired closure-form emission axis on the `:fonte (:tipo git
+    /// …)`-arm's pin-precedence projection ([`DepSource::sole_pin`])
+    /// through which every author-omitted-and-default-host-shorthand-
+    /// expanded Git source (`expand_fonte(dep, default_host)` on a
+    /// `Dep::simple(...)` bare dep) reaches [`fetch_git`] with all
+    /// three `tag`/`rev`/`branch` pins `None`. Every future consumer
+    /// that surfaces the same sole-set-pin absence diagnostic outside
+    /// [`fetch_git`] — a deferred `feira lock --dry-run` pre-flight
+    /// per-`:deps` pin-presence probe that refuses before the
+    /// closure walker fires a single `git clone`, a per-lacre overlay
+    /// resolver rejecting a cluster-local `:fonte` overlay whose pin
+    /// axis was dropped between resolve passes, the M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR admission webhook re-checking
+    /// a per-`:fonte`-patched candidate before the closure walker
+    /// re-fires — reaches the variant through one call rather than
+    /// re-inlining the one-slot struct-literal in lockstep with
+    /// [`fetch_git`]'s closure-form emission arm.
+    ///
+    /// The `nome: &str` parameter accepts `&str` literals and `&String`
+    /// via Deref coercion so the sole in-crate wire-up threads
+    /// `dep.nome()` (a `&str` accessor via [`Dep::nome`]) through the
+    /// ctor without a pre-conversion, byte-parallel to the sibling
+    /// [`Self::missing_path`] ctor's `nome` parameter.
+    #[must_use]
+    pub fn missing_pin(nome: &str) -> ResolveError {
+        ResolveError::MissingPin {
+            nome: nome.to_string(),
         }
     }
 }
@@ -303,9 +342,7 @@ fn fetch_git(
     cache: &CacheDir,
     original_fonte: DepSource,
 ) -> Result<FetchedDep, ResolveError> {
-    let gitref = sole_pin.ok_or_else(|| ResolveError::MissingPin {
-        nome: dep.nome().to_string(),
-    })?;
+    let gitref = sole_pin.ok_or_else(|| ResolveError::missing_pin(dep.nome()))?;
     let full_url = expand_shorthand(repo);
     let key_bytes = format!("{full_url}#{gitref}");
     let key = hash_bytes(key_bytes.as_bytes());
@@ -1275,6 +1312,226 @@ mod tests {
                 "fetch_path absent-dir refusal must construct the \
                  MissingPath variant on the ResolveError envelope — got \
                  {other:?}"
+            ),
+        }
+    }
+
+    /// Pin that [`ResolveError::missing_pin`] is byte-equal to the
+    /// pre-lift open-coded three-line `{ nome: nome.to_string() }`
+    /// one-slot struct-literal on a representative `"caixa-teia"`
+    /// fixture. Catches any future ctor-side silent `.to_string()`
+    /// cascade drop, variant rename, or slot-widening that would
+    /// leave the wire-up compiling but surface a different one-slot
+    /// payload than the pre-lift struct-literal.
+    #[test]
+    fn missing_pin_ctor_matches_struct_literal_wrap() {
+        let ctor = ResolveError::missing_pin("caixa-teia");
+        let literal = ResolveError::MissingPin {
+            nome: "caixa-teia".to_string(),
+        };
+        assert_eq!(
+            format!("{ctor:?}"),
+            format!("{literal:?}"),
+            "missing_pin ctor must debug-render byte-equal to the \
+             open-coded one-slot struct-literal on the same fixture — \
+             any silent cascade drop or slot-widening surfaces here"
+        );
+        assert_eq!(
+            format!("{ctor}"),
+            format!("{literal}"),
+            "missing_pin ctor must display-render byte-equal to the \
+             open-coded struct-literal on the same fixture — pins the \
+             thiserror #[error] template's routing through the sole slot"
+        );
+    }
+
+    /// Sweep [`ResolveError::missing_pin`] across the boundary matrix
+    /// of `nome` shapes so any wrapper-side silent lowercase, trim,
+    /// truncate, or `.to_string()`-cascade divergence on the one-field
+    /// construction surfaces at assert time rather than at a downstream
+    /// diagnostic consumer that reads the field back and gets a
+    /// different value than the one it stored.
+    ///
+    /// - `nome` axis: canonical DNS-1123 identifier (`"caixa-teia"`),
+    ///   single-char (`"a"`), and an inner-hyphen + digit shape
+    ///   (`"hello-rio-42"`) — the three canonical [`Dep::nome`]-return
+    ///   shapes the [`caixa_core::Dep::nome`] accessor surfaces at the
+    ///   [`fetch_git`] wire-up. Byte-parallel to the sibling
+    ///   [`missing_path_ctor_routes_nome_and_path_through_verbatim`]
+    ///   sweep on the peer [`ResolveError::missing_path`] ctor.
+    ///
+    /// Both `&str`-literal and `&String` (via Deref coercion) carriers
+    /// are exercised because the wire-up hands `dep.nome()` (a `&str`
+    /// accessor).
+    #[test]
+    fn missing_pin_ctor_routes_nome_through_verbatim() {
+        let nomes: &[&str] = &["caixa-teia", "a", "hello-rio-42"];
+        for nome in nomes {
+            // &str carrier.
+            let ctor = ResolveError::missing_pin(nome);
+            match &ctor {
+                ResolveError::MissingPin { nome: got_nome } => {
+                    assert_eq!(
+                        got_nome, nome,
+                        "missing_pin ctor must carry nome byte-verbatim \
+                         — no silent lowercase/trim/truncate on the \
+                         &str-literal carrier at {nome}"
+                    );
+                }
+                other => panic!(
+                    "missing_pin ctor must construct the MissingPin \
+                     variant — got {other:?} for {nome:?}"
+                ),
+            }
+            // &String (Deref coercion) carrier — pins that the ctor
+            // signature accepts both without a pre-conversion at the
+            // call site.
+            let owned_nome = String::from(*nome);
+            let ctor2 = ResolveError::missing_pin(&owned_nome);
+            match &ctor2 {
+                ResolveError::MissingPin { nome: got_nome } => {
+                    assert_eq!(
+                        got_nome, nome,
+                        "missing_pin ctor must carry nome byte-verbatim \
+                         on the &String Deref-coercion carrier at {nome}"
+                    );
+                }
+                other => panic!(
+                    "missing_pin ctor must construct the MissingPin \
+                     variant on the &String carrier — got {other:?} \
+                     for {nome:?}"
+                ),
+            }
+        }
+    }
+
+    /// Pin the end-to-end route from [`fetch_git`]'s sole-set-pin
+    /// absence arm through [`ResolveError::missing_pin`]: authoring a
+    /// `:deps` entry whose expanded `:fonte (:tipo git …)` shape lands
+    /// with every `tag`/`rev`/`branch` pin `None` (the shape
+    /// [`expand_fonte`] materializes for an author-omitted-`:fonte`
+    /// bare [`Dep::simple`] dep under the canonical
+    /// `"github:pleme-io"` default-host) must surface a
+    /// `ResolveError::MissingPin { nome }` byte-equal to the
+    /// substrate-primitive ctor on the same fixture, so a future
+    /// silent de-lift of the wire-up back to the open-coded
+    /// struct-literal trips at caixa-resolver test time rather than
+    /// at a downstream diagnostic consumer far from the wire-up
+    /// commit. The refusal fires inside [`fetch_git`]'s
+    /// `sole_pin.ok_or_else(...)?` arm before any `git::clone_or_fetch`
+    /// call, so the test is fully hermetic — no network, no `git`
+    /// binary on the runner, no on-disk source directory beyond the
+    /// empty cache root.
+    #[test]
+    fn fetch_git_unpinned_dep_routes_through_missing_pin_ctor() {
+        let td = tempdir().expect("tempdir");
+        // Root caixa with one bare, registry-shaped dep whose `:fonte`
+        // the author omitted — [`expand_fonte`] materializes the
+        // `github:pleme-io/absent-child` shorthand with every pin
+        // (`tag`, `rev`, `branch`) `None`, so
+        // `DepSource::sole_pin()` projects `None` at the fetch site
+        // and `fetch_git`'s `.ok_or_else` closure-form emission arm
+        // fires before any git operation.
+        let root = Caixa {
+            nome: "root".into(),
+            versao: "0.1.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![Dep::simple("absent-child", "^0.1")],
+            deps_dev: vec![],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+            ci: None,
+        };
+
+        // Test precondition: the bare `Dep::simple(...)` shape must
+        // reach `fetch_git` with every pin `None` after `expand_fonte`
+        // materializes the default-host shorthand. Pinning this
+        // upstream so a future `Dep::simple` extension (e.g. auto-
+        // pinning to a lockfile-derived rev) surfaces here rather
+        // than at the ctor-route assert below.
+        let expanded = expand_fonte(&root.deps[0], "github:pleme-io");
+        assert!(
+            matches!(
+                &expanded,
+                DepSource::Git {
+                    tag: None,
+                    rev: None,
+                    branch: None,
+                    ..
+                }
+            ),
+            "test precondition: expand_fonte on a bare Dep::simple \
+             under the canonical default-host must land with every \
+             pin `None` — got {expanded:?}"
+        );
+        assert_eq!(
+            expanded.sole_pin(),
+            None,
+            "test precondition: DepSource::sole_pin on the unpinned \
+             git-shape must project None so fetch_git's ok_or_else \
+             fires before any git operation"
+        );
+
+        let cache_root = td.path().join("cache");
+        std::fs::create_dir_all(&cache_root).unwrap();
+        let cache = CacheDir::at(&cache_root);
+        let cfg = ResolverConfig::default();
+        let err = resolve_lacre(&root, &cfg, &cache).expect_err(
+            "resolve_lacre must refuse when a bare :deps entry expands \
+             to a git source with no :tag/:rev/:branch pin",
+        );
+        let expected = ResolveError::missing_pin("absent-child");
+        assert_eq!(
+            format!("{err:?}"),
+            format!("{expected:?}"),
+            "fetch_git unpinned-dep refusal must debug-render \
+             byte-equal to the substrate-primitive missing_pin ctor \
+             on the same fixture — a silent de-lift of the wire-up \
+             back to the open-coded struct-literal would still pass \
+             this arm today (both routes are byte-equal at emit time) \
+             but a future ctor-side extension (a per-scope pin \
+             overlay, a per-cluster :fonte rewrite) would silently \
+             diverge here as soon as the ctor's construction path \
+             widens"
+        );
+        assert_eq!(
+            format!("{err}"),
+            format!("{expected}"),
+            "fetch_git unpinned-dep refusal must display-render \
+             byte-equal to the substrate-primitive missing_pin ctor \
+             — pins the #[error(...)] template routing on the sole slot"
+        );
+        match err {
+            ResolveError::MissingPin { nome: got_nome } => {
+                assert_eq!(
+                    got_nome, "absent-child",
+                    "fetch_git refusal must surface the offending \
+                     Dep::nome verbatim in the MissingPin::nome slot"
+                );
+            }
+            other => panic!(
+                "fetch_git unpinned-dep refusal must construct the \
+                 MissingPin variant on the ResolveError envelope — \
+                 got {other:?}"
             ),
         }
     }
