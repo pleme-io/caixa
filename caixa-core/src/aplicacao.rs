@@ -7835,13 +7835,7 @@ impl AplicacaoSpec {
             // identity keys via the differing endpoint payloads.
             let key = c.identity();
             crate::render::insert_first_seen(&mut seen_contracts, key, || {
-                let (de, para, wit) = c.edge_triple();
-                AplicacaoError::ContratoDuplicate {
-                    de,
-                    para,
-                    wit,
-                    target: target_view.label(),
-                }
+                AplicacaoError::contrato_duplicate(c, &target_view)
             })?;
         }
 
@@ -9535,6 +9529,69 @@ impl AplicacaoError {
         Self::ContratoSelfLoop {
             caixa: contract.source().to_string(),
             wit: contract.world_ref().to_string(),
+        }
+    }
+
+    /// Construct an [`AplicacaoError::ContratoDuplicate`] naming the
+    /// offending duplicate edge's `(:de, :para, :wit)` triple and the
+    /// per-payload `:target` byte-string, projecting the first three slots
+    /// through the paired [`WitContract::edge_triple`] typed-accessor and
+    /// the trailing `target:` slot through [`WitTarget::label`] on the
+    /// substrate primitive.
+    ///
+    /// Folds the uniform `let (de, para, wit) = contract.edge_triple();
+    /// Self::ContratoDuplicate { de, para, wit, target: target.label() }`
+    /// six-line pair-destructure + struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one
+    /// dispatch rather than the pre-lift open-coded block inside the
+    /// [`AplicacaoSpec::validate_contratos`] whole-edge dedup closure
+    /// passed to [`crate::render::insert_first_seen`]. Peer of the sibling
+    /// [`AplicacaoError::contrato_self_loop`] (b30edfe, projecting through
+    /// [`WitContract::source`] / [`WitContract::world_ref`] on the paired
+    /// per-`:contratos` self-edge two-slot envelope) and the sibling
+    /// [`AplicacaoError::empty_wit`] (projecting through
+    /// [`WitContract::edge_pair`] on the sibling per-`:contratos` empty-
+    /// `:wit` two-slot envelope) `WitContract`-projection ctors on the
+    /// same [`AplicacaoError`] type — extended here onto the last unlifted
+    /// four-slot `{ de: String, para: String, wit: String, target: String }`
+    /// per-`:contratos` whole-edge-dedup envelope inside
+    /// [`AplicacaoSpec::validate_contratos`], closing the paired
+    /// duplicate-gate diagnostic constructor site the peer
+    /// [`WitContract::edge_triple`] (5dbcfaf) lift's doc-block flagged as
+    /// the last unlifted composite-projection wire-up.
+    ///
+    /// The `contract` borrow threads verbatim from the caller-side `for c
+    /// in self.contratos()` iteration at the sole in-crate wire-up site
+    /// [`AplicacaoSpec::validate_contratos`], and `target` threads
+    /// verbatim from the paired `let target_view = c.target()?` local
+    /// materialized upstream of the [`crate::render::insert_first_seen`]
+    /// dedup dispatch — both project onto their respective substrate-
+    /// primitive accessors ([`WitContract::edge_triple`] +
+    /// [`WitTarget::label`]) inside the ctor body, matching the sibling
+    /// [`AplicacaoError::contrato_self_loop`] `WitContract`-projection
+    /// posture verbatim on the paired self-edge envelope.
+    ///
+    /// Every future consumer that wants to construct this variant outside
+    /// [`AplicacaoSpec::validate_contratos`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a per-`(:de, :para, :wit, :target)`-patched
+    /// candidate against a per-tenant `:contratos` overlay before the
+    /// whole-edge dedup gate re-fires, a future `feira validate
+    /// --contratos` per-caixa admission verb re-running the dedup check on
+    /// demand, an M4 per-cluster contrato-cap resolver rejecting a
+    /// cross-tenant duplicate-edge collision introduced by a fleet-local
+    /// overlay the M4 CR materializer projects — now reaches this variant
+    /// through one call rather than re-inlining the six-line pair-
+    /// destructure + struct-literal block in lockstep with the existing
+    /// wire-up.
+    #[must_use]
+    pub fn contrato_duplicate(contract: &WitContract, target: &WitTarget<'_>) -> Self {
+        let (de, para, wit) = contract.edge_triple();
+        Self::ContratoDuplicate {
+            de,
+            para,
+            wit,
+            target: target.label(),
         }
     }
 
@@ -33771,6 +33828,84 @@ mod tests {
                 );
             }
             other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    // Pin the four-slot `{ de, para, wit, target }` per-`:contratos`
+    // whole-edge-dedup sibling of the two-slot per-`:contratos` envelope
+    // family — the sole per-axis ctor projecting through both
+    // [`WitContract::edge_triple`] (on the leading `de` / `para` / `wit`
+    // triple) and [`WitTarget::label`] (on the trailing `target` slot).
+    // Equivalence pin locks the ctor body to the pre-lift struct-literal
+    // shape under `PartialEq`, so any accessor-side field-selection drift
+    // or per-arm wrapper transformation surfaces here as a build-time
+    // test failure rather than at a downstream diagnostic-shape mismatch
+    // far from the substrate primitive. Peer of the sibling
+    // `contrato_self_loop_ctor_matches_struct_literal_wrap` (b30edfe)
+    // equivalence pin on the paired two-slot `{ caixa, wit }` per-self-
+    // edge envelope's `WitContract`-projection ctor.
+    #[test]
+    fn contrato_duplicate_ctor_matches_struct_literal_wrap() {
+        let contract = contrato_self_loop_ctor_fixture();
+        let target = contract.target_projected();
+        let lifted = AplicacaoError::contrato_duplicate(&contract, &target);
+        let (de, para, wit) = contract.edge_triple();
+        let struct_literal = AplicacaoError::ContratoDuplicate {
+            de,
+            para,
+            wit,
+            target: target.label(),
+        };
+        assert_eq!(lifted, struct_literal);
+    }
+
+    // Routing pin sweeping a non-self-loop pair (`"cart" → "catalog"`) so
+    // the paired [`WitContract::edge_triple`] projection's three axes
+    // (`de`, `para`, `wit`) and the [`WitTarget::label`] projection on
+    // the `target` axis all yield distinct bytes on the fixture — any
+    // wrapper-side re-order / accessor-swap on the four axes surfaces
+    // here rather than at a downstream diagnostic-shape drift. Peer of
+    // the sibling
+    // `contrato_self_loop_ctor_routes_source_and_world_ref_through_verbatim`
+    // (b30edfe) routing pin on the paired two-slot envelope.
+    #[test]
+    fn contrato_duplicate_ctor_routes_edge_triple_and_target_label_verbatim() {
+        let contract = WitContract {
+            de: "cart".to_string(),
+            para: "catalog".to_string(),
+            wit: "wasi:http/proxy".to_string(),
+            endpoint: Some("/charge".to_string()),
+            subject: None,
+            slot: None,
+        };
+        let target = contract.target_projected();
+        let built = AplicacaoError::contrato_duplicate(&contract, &target);
+        match built {
+            AplicacaoError::ContratoDuplicate {
+                de,
+                para,
+                wit,
+                target,
+            } => {
+                assert_eq!(
+                    de, "cart",
+                    "de slot must thread WitContract::edge_triple().0 verbatim"
+                );
+                assert_eq!(
+                    para, "catalog",
+                    "para slot must thread WitContract::edge_triple().1 verbatim"
+                );
+                assert_eq!(
+                    wit, "wasi:http/proxy",
+                    "wit slot must thread WitContract::edge_triple().2 verbatim"
+                );
+                assert!(
+                    target.contains("/charge"),
+                    "target slot must project through WitTarget::label() \
+                     (got target = {target:?})"
+                );
+            }
+            other => panic!("expected ContratoDuplicate, got {other:?}"),
         }
     }
 
