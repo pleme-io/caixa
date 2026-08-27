@@ -146,10 +146,82 @@ impl BehaviorSpec {
         self.declared_slots().map(|(_slot, p)| p)
     }
 
-    /// True when no callback is declared.
+    /// Substrate-canonical per-`:behavior` emptiness predicate every
+    /// M2 renderer that overlays the typed slot onto a cluster artifact
+    /// keys off — `true` iff every one of the six `Option<PathBuf>`-
+    /// carrying `:on-*` callback slots ([`Self::on_init`] /
+    /// [`Self::on_call`] / [`Self::on_cast`] / [`Self::on_info`] /
+    /// [`Self::on_state_change`] / [`Self::on_terminate`]) is unset, so
+    /// an authored-but-unset `:behavior (())` round-trips to a rendered
+    /// artifact that's structurally identical to one that omits the
+    /// slot entirely.
+    ///
+    /// Peer of the sibling per-typed-slot emptiness predicates on the
+    /// M2 / M3 typed-slot surface — [`crate::LimitsSpec::is_empty`]
+    /// (limits.rs:378) on the paired per-Servico Lunatic-per-process
+    /// sandbox-cap axis and [`crate::aplicacao::MeshPolicy::is_empty`]
+    /// (aplicacao.rs:2655) on the M3 per-Aplicacao `:politicas` mesh-
+    /// cap axis: same "one-line-per-axis `&& self.<axis>.is_none()`
+    /// chain, one substrate primitive per typed slot" discipline
+    /// extended onto the M2 `:behavior` slot family, so every future
+    /// axis added to `BehaviorSpec` (a per-cluster callback overlay the
+    /// M4 CR materializer resolves per-CR, a per-tenant callback alias
+    /// the operator pins through a future `:placement`-scoped slot, a
+    /// seventh OTP-shape `gen_server` callback the roadmap
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// grows once the six canonical arms stop covering the substrate's
+    /// discovered callback shape) reaches this predicate at one edit
+    /// (one added struct field + one added `&& self.<axis>.is_none()`
+    /// line) rather than a coordinated rewrite of every renderer that
+    /// reads the emptiness semantic through an open-coded per-field
+    /// chain.
+    ///
+    /// `pub const fn` — matches the sibling
+    /// [`crate::LimitsSpec::is_empty`] / [`crate::aplicacao::MeshPolicy::is_empty`]
+    /// `pub const fn` shape verbatim, so every downstream consumer that
+    /// wants to fold an emptiness decision into a `const` position (a
+    /// `const IS_EMPTY_DEFAULT: bool = BehaviorSpec { … }.is_empty();`
+    /// derivation the future M4 CR materializer's admission-time
+    /// default-overlay-emit gate reaches for, a `const`-context probe
+    /// the future wasm-operator's per-Servico startup-log skip-empty-
+    /// `:behavior` short-circuit consults, a compile-time lookup table
+    /// the LSP hover renderer materializes per typed-slot fixture)
+    /// reads through one const dispatch rather than being forced onto
+    /// the runtime code path.
+    ///
+    /// Reads the raw `Option<PathBuf>` field on each of the six slots
+    /// directly (via [`Option::is_none`], `const`-stable since Rust
+    /// 1.48) rather than routing through the paired
+    /// [`Self::on_init`] / [`Self::on_call`] / [`Self::on_cast`] /
+    /// [`Self::on_info`] / [`Self::on_state_change`] /
+    /// [`Self::on_terminate`] accessors, because those accessors
+    /// project through [`Option::as_deref`] onto
+    /// `Option<&std::path::Path>` and neither `Option::as_deref` nor
+    /// [`std::path::PathBuf::as_path`] is `const`-stable today (per the
+    /// tracking issue on `const` `Deref` — cannot be called from a
+    /// `const fn` body without an unstable feature gate). The
+    /// per-field emptiness answer is byte-equal to the accessor
+    /// projection's `Option::is_some` regardless (an `Option<T>` is
+    /// `None` iff its `as_deref`-projected image is `None`), so the
+    /// direct-field read preserves the sibling `LimitsSpec::is_empty`
+    /// / `MeshPolicy::is_empty` semantics verbatim. Pin test
+    /// [`tests::behavior_spec_is_empty_agrees_with_declared_paths_across_all_slot_permutations`]
+    /// sweeps every one of the 2^6 = 64 six-slot Some/None
+    /// permutations and asserts the direct-field predicate returns the
+    /// same `bool` as the iterator-based [`Self::declared_paths`] /
+    /// `.next().is_none()` chain the pre-promotion body inlined, so a
+    /// future slot addition that forgets to extend either side surfaces
+    /// as a build-time test failure at `behavior.rs`, not as a silent
+    /// per-consumer drift at renderer / operator / admission-webhook
+    /// dispatch time far from the added-field commit.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.declared_paths().next().is_none()
+    pub const fn is_empty(&self) -> bool {
+        self.on_init.is_none()
+            && self.on_call.is_none()
+            && self.on_cast.is_none()
+            && self.on_info.is_none()
+            && self.on_state_change.is_none()
+            && self.on_terminate.is_none()
     }
 
     /// Substrate-canonical per-`:behavior` `:on-state-change`
@@ -2680,6 +2752,85 @@ mod tests {
             assert_eq!(
                 BehaviorError::empty_path(slot),
                 BehaviorError::EmptyPath { slot },
+            );
+        }
+    }
+
+    // ── const-fn-widening pins on [`BehaviorSpec::is_empty`] ───────
+
+    #[test]
+    fn behavior_spec_is_empty_is_const_fn_usable_in_const_position() {
+        // Pin the `pub const fn` shape of [`BehaviorSpec::is_empty`] —
+        // the sibling of the M2 [`crate::LimitsSpec::is_empty`] /
+        // M3 [`crate::aplicacao::MeshPolicy::is_empty`] `pub const fn`
+        // emptiness predicates on the paired per-Servico / per-Aplicacao
+        // typed-slot surfaces — by calling it from a `const` position.
+        // A downgrade to `pub fn` (dropping `const`) or the pre-lift
+        // `self.declared_paths().next().is_none()` body (which routes
+        // through the iterator-alloc chain and is not `const`-callable)
+        // makes this pin fail to compile with "cannot call non-const fn
+        // `BehaviorSpec::is_empty` in constants", so any accidental
+        // downgrade trips at caixa-core build time, not at a downstream
+        // renderer / operator / admission-webhook const-context call
+        // site far from the drift's commit.
+        const EMPTY: BehaviorSpec = BehaviorSpec {
+            on_init: None,
+            on_call: None,
+            on_cast: None,
+            on_info: None,
+            on_state_change: None,
+            on_terminate: None,
+        };
+        const EMPTY_IS_EMPTY: bool = EMPTY.is_empty();
+        assert_eq!(
+            EMPTY_IS_EMPTY,
+            BehaviorSpec::default().is_empty(),
+            "const-position dispatch on the empty BehaviorSpec must \
+             yield the same bool as the runtime-position dispatch on \
+             the sibling default() fixture",
+        );
+    }
+
+    #[test]
+    fn behavior_spec_is_empty_agrees_with_declared_paths_across_all_slot_permutations() {
+        // Pin the semantic-equivalence contract between the lifted
+        // `pub const fn` [`BehaviorSpec::is_empty`] direct-field body
+        // and the pre-lift iterator-based
+        // `self.declared_paths().next().is_none()` chain across every
+        // one of the 2^6 = 64 six-slot Some/None permutations of the
+        // `BehaviorSpec` `Option<PathBuf>` fields. The direct-field
+        // body and the iterator-based projection must agree bit-for-bit
+        // on every permutation: `is_empty()` reads each raw
+        // `Option<PathBuf>` field via `Option::is_none`; the iterator
+        // projects each field through the paired `on_*()` accessor's
+        // `Option::as_deref`, which preserves `Some`/`None` shape
+        // regardless of the `Path` inside. A future slot addition that
+        // grows `BehaviorSpec` without extending the direct-field
+        // `&& self.<axis>.is_none()` chain in the `is_empty()` body
+        // makes some subset of permutations disagree (the `declared_slots`
+        // iterator picks up the new slot's `Some(_)` via the sibling
+        // accessor / tuple-table extension while the direct-field body
+        // silently ignores it), and this pin fires the exact permutation
+        // that first disagrees, so the drift surfaces at caixa-core test
+        // time at `behavior.rs`, not at a silent per-renderer emit-
+        // empty-slot vs. skip-slot split far from the added-field
+        // commit.
+        let path = PathBuf::from("lib/callback.lisp");
+        for mask in 0u8..64u8 {
+            let bit = |i: u8| (mask & (1u8 << i)) != 0;
+            let b = BehaviorSpec {
+                on_init: bit(0).then(|| path.clone()),
+                on_call: bit(1).then(|| path.clone()),
+                on_cast: bit(2).then(|| path.clone()),
+                on_info: bit(3).then(|| path.clone()),
+                on_state_change: bit(4).then(|| path.clone()),
+                on_terminate: bit(5).then(|| path.clone()),
+            };
+            assert_eq!(
+                b.is_empty(),
+                b.declared_paths().next().is_none(),
+                "is_empty() disagrees with declared_paths().next().is_none() \
+                 at slot-set mask {mask:#08b}"
             );
         }
     }
