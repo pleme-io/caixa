@@ -4938,11 +4938,7 @@ fn validate_contrato_caixa(slot: &'static str, caixa: &str) -> Result<(), Aplica
     crate::render::require_valid_dns_1123_label(
         caixa,
         || AplicacaoError::ContratoCaixaEmpty { slot },
-        |reason| AplicacaoError::ContratoCaixaInvalid {
-            slot,
-            caixa: caixa.to_string(),
-            reason,
-        },
+        |reason| AplicacaoError::contrato_caixa_invalid(slot, caixa, reason),
     )
 }
 
@@ -9974,6 +9970,77 @@ impl AplicacaoError {
         Self::PolicyBreakerWindowBelowTimeout {
             window: cb.window(),
             timeout,
+        }
+    }
+
+    /// Construct an [`AplicacaoError::ContratoCaixaInvalid`] naming the
+    /// offending `:contratos <slot>` (`:de` / `:para`) and the value
+    /// that broke the shared DNS-1123-label floor under the given
+    /// `reason`. Folds the uniform `Self::ContratoCaixaInvalid { slot,
+    /// caixa: caixa.to_string(), reason: reason.into() }` three-slot
+    /// struct-literal onto one substrate primitive so every wire-up on
+    /// this variant reads through one dispatch rather than the pre-lift
+    /// six-line struct-literal block inside
+    /// [`validate_contrato_caixa`]'s
+    /// [`crate::render::require_valid_dns_1123_label`]
+    /// `|reason| …` closure.
+    ///
+    /// Sibling of the per-axis [`aplicacao_field_reason_ctors!`]
+    /// (981060b) macro-generated ctor family
+    /// ([`AplicacaoError::membro_caixa_invalid`],
+    /// [`AplicacaoError::entrada_para_invalid`],
+    /// [`AplicacaoError::entrada_host_invalid`],
+    /// [`AplicacaoError::entrada_path_invalid`],
+    /// [`AplicacaoError::placement_cluster_invalid`],
+    /// [`AplicacaoError::placement_affinity_invalid`],
+    /// [`AplicacaoError::shard_key_invalid`]) — extends the "one typed
+    /// dispatch per substrate primitive on every `{ <field>: String,
+    /// reason: String }` per-axis parser-shaped envelope" discipline
+    /// onto the sole unlifted three-slot `{ slot: &'static str, caixa:
+    /// String, reason: String }` sibling whose extra `slot: &'static
+    /// str` axis-tag distinguishes the two-arm `:de` / `:para` cascade
+    /// on the per-`:contratos`-edge value axis and so does not fit the
+    /// two-slot macro's arity.
+    ///
+    /// `slot` carries the kebab-case `:de` / `:para` tag verbatim
+    /// (`&'static str` is `Copy`, no allocation), matching the caller-
+    /// side [`crate::render::CONTRATO_AUTHOR_KEY_DE`] /
+    /// [`crate::render::CONTRATO_AUTHOR_KEY_PARA`] `const` strings the
+    /// sole in-crate wire-up threads through. `reason: impl
+    /// Into<String>` accepts both `&str` literals and the shared
+    /// [`crate::render::require_valid_dns_1123_label`]-delivered
+    /// owned-`String` return verbatim so the closure picks the ctor up
+    /// without a per-arm wrapper transformation, matching the peer
+    /// [`aplicacao_field_reason_ctors!`] family's `reason: impl
+    /// Into<String>` bound. `#[must_use]` fires a compile warning at
+    /// any wire-up that mistakenly discards the constructed error
+    /// rather than routing it through `return Err(…)` / `.map_err(…)`
+    /// / a closure return.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside the current in-crate wire-up (the deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// per-`:contratos`-edge admission validator projecting the same
+    /// diagnostic through the caller-facing `slot: &'static str` tag,
+    /// a future `feira validate --contratos` per-caixa admission verb,
+    /// an M4 per-`:contratos`-edge pre-emitter running the same
+    /// DNS-1123-label floor against a caller-supplied `:de` / `:para`
+    /// pair before hitting the apiserver-side selector, an M4
+    /// per-cluster contrato-cap resolver rejecting a cross-tenant
+    /// selector projection into the same diagnostic shape) — now
+    /// reaches this variant through one call rather than re-inlining
+    /// the six-line struct-literal block in lockstep with the one
+    /// in-crate wire-up site.
+    #[must_use]
+    pub fn contrato_caixa_invalid(
+        slot: &'static str,
+        caixa: &str,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self::ContratoCaixaInvalid {
+            slot,
+            caixa: caixa.to_string(),
+            reason: reason.into(),
         }
     }
 }
@@ -17724,6 +17791,54 @@ mod tests {
                 reason: reason.to_string(),
             },
         );
+    }
+
+    // Pin the three-slot per-`:contratos <slot>` sibling of the
+    // two-slot `aplicacao_field_reason_ctors!` family — the sole
+    // per-axis ctor carrying the extra `slot: &'static str` axis-tag
+    // distinguishing the two-arm `:de` / `:para` cascade. Sweeps both
+    // canonical author-side slot tags through the ctor and asserts
+    // byte-equality against the pre-lift struct-literal shape so no
+    // per-arm wrapper transformation drifts in against the sole
+    // in-crate wire-up.
+    #[test]
+    fn contrato_caixa_invalid_ctor_matches_struct_literal_wrap() {
+        let caixa = "cart-svc";
+        let reason = "sample reason text";
+        for slot in [
+            crate::render::CONTRATO_AUTHOR_KEY_DE,
+            crate::render::CONTRATO_AUTHOR_KEY_PARA,
+        ] {
+            assert_eq!(
+                AplicacaoError::contrato_caixa_invalid(slot, caixa, reason),
+                AplicacaoError::ContratoCaixaInvalid {
+                    slot,
+                    caixa: caixa.to_string(),
+                    reason: reason.to_string(),
+                },
+            );
+        }
+    }
+
+    // The `reason: impl Into<String>` bound accepts both a `&str`
+    // literal and a `format!(…)` owned-`String` output verbatim,
+    // matching the peer `aplicacao_field_reason_ctors!` family's
+    // reason-axis invariance so the sole in-crate wire-up's
+    // `require_valid_dns_1123_label`-delivered owned-`String` return
+    // and any future `&str` literal caller land on the same variant.
+    #[test]
+    fn contrato_caixa_invalid_ctor_routes_reason_through_into_uniformly() {
+        let via_literal = "literal reason text";
+        let via_format = format!("{} reason text", "literal");
+        for slot in [
+            crate::render::CONTRATO_AUTHOR_KEY_DE,
+            crate::render::CONTRATO_AUTHOR_KEY_PARA,
+        ] {
+            assert_eq!(
+                AplicacaoError::contrato_caixa_invalid(slot, "c", via_literal),
+                AplicacaoError::contrato_caixa_invalid(slot, "c", via_format.clone()),
+            );
+        }
     }
 
     // Cross-family invariance pin — the six sibling ctors and
