@@ -1598,7 +1598,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     )?;
     let s_trim = s.trim();
     if s_trim.is_empty() {
-        return Err(LimitsError::BadMillicores(s.into()));
+        return Err(LimitsError::bad_millicores(s));
     }
     let (magnitude, has_m_suffix) = match s_trim.strip_suffix('m') {
         Some(stripped) => (stripped.trim(), true),
@@ -1610,7 +1610,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
         // front of the unit (`"500m"`, not `"m"`). Surface as
         // `BadMillicores` so the existing narrower-arm wording stays
         // load-bearing for "no recognizable magnitude" inputs.
-        return Err(LimitsError::BadMillicores(s.into()));
+        return Err(LimitsError::bad_millicores(s));
     }
     // The canonical authoring form for `:limits :cpu` is `<integer>m`
     // (Kubernetes millicores) or the bare-core shorthand `<integer>`
@@ -1660,7 +1660,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
         if numeric {
             return Err(LimitsError::non_integer_millicore_magnitude(magnitude));
         }
-        return Err(LimitsError::BadMillicores(s.into()));
+        return Err(LimitsError::bad_millicores(s));
     }
     // Leading-zero arm — peer with the `parse_byte_size` leading-zero
     // arm (cea9a78), the `parse_duration` leading-zero arm (39762d7),
@@ -1703,7 +1703,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // matches `parse_byte_size` / `parse_duration` / `rate_limit_codec`
     // overflow-arm shape on the peer typed codecs.
     let num: u32 = magnitude.parse::<u32>().map_err(|_| {
-        LimitsError::BadMillicores(format!("{magnitude} (digit-only magnitude overflows u32)"))
+        LimitsError::bad_millicores(format!("{magnitude} (digit-only magnitude overflows u32)"))
     })?;
     if has_m_suffix {
         Ok(num)
@@ -1718,7 +1718,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
         // grows). Matches `parse_byte_size`'s overflow-arm shape on
         // the magnitude × unit multiply.
         num.checked_mul(1000).ok_or_else(|| {
-            LimitsError::BadMillicores(format!(
+            LimitsError::bad_millicores(format!(
                 "{magnitude} cores × 1000 overflows u32 (write the value in millicores: max \"{}m\")",
                 u32::MAX
             ))
@@ -2123,6 +2123,65 @@ limits_scalar_ctors! {
     wall_clock_not_canonical => WallClockNotCanonical { wall_clock: Duration },
     wall_clock_exceeds_cap => WallClockExceedsCap { wall_clock: Duration },
     cpu_exceeds_cap => CpuExceedsCap { millicores: u32 },
+}
+
+// Fold the five `LimitsError::BadMillicores(<into-String-expr>)` wire-up
+// sites on the [`parse_millicores`] codec surface onto one substrate
+// primitive per typed variant — the paired `(String)` single-slot
+// tuple-newtype [`LimitsError::BadMillicores`] on the millicores codec
+// surface. Peer of the sibling [`limits_codec_value_only_ctors!`] /
+// [`limits_codec_unit_only_ctors!`] / [`limits_codec_value_byte_ctors!`]
+// / [`limits_codec_value_char_ctors!`] families on the same
+// [`LimitsError`] envelope (the paired `{ value: String }` /
+// `{ unit: String }` / `{ value: String, byte: u8 }` /
+// `{ value: String, ch: char, codepoint: u32 }` struct-shaped families
+// on the same codec surface) and of the peer [`limits_scalar_ctors!`]
+// family on the wider `Copy`-`{ <field>: <ty> }` typed-scalar axis of
+// the same [`LimitsError`] envelope. Closes the widest un-lifted variant
+// on [`LimitsError`] — every one of the five wire-up sites opened the
+// identical `LimitsError::BadMillicores(<into-String-expr>)` block
+// against the codec-scoped `&str` (`s`) or `String` (`format!(...)`)
+// binding, so the fold routes each site through one dispatch on a
+// uniform `impl Into<String>` param, byte-equal to the pre-lift tuple-
+// newtype construction on the same argument. The `impl Into<String>`
+// bound covers both wire-up shapes — the three `s.into()` `&str` sites
+// (empty-`:cpu`, bare-`m`-magnitude fallthrough, non-digit-only garbage
+// fallthrough) and the two `format!(...)` `String` sites (digit-only
+// magnitude overflows u32, bare-core-shorthand × 1000 overflow) —
+// without forcing either caller to spell the conversion at the wire-up
+// site. `#[must_use]` fires a compile warning at any wire-up that
+// mistakenly discards the constructed error.
+//
+// Every future consumer that wants to construct this variant outside
+// [`parse_millicores`] (a deferred `feira lint --canonical-magnitudes`
+// per-caixa admission verb probing each authored `:cpu` value against
+// the same canonical-form gate, an M4 typed
+// `mesh.pleme.io/v1alpha1/Servico` CR materializer's per-`:limits`
+// admission validator re-checking one edited `:cpu` slot against the
+// codec's parser floor, a per-`computeunit.yaml` value-shape pre-emitter
+// probing each declared millicores magnitude ahead of the operator's
+// admit-cycle) now reaches the variant through one call rather than
+// re-inlining the tuple-newtype block in lockstep with the pre-existing
+// five sites — same discipline the peer per-variant lifts on
+// [`AplicacaoError`] / [`SupervisorError`] / [`UpgradeError`] /
+// [`LayoutError`] / [`DepError`] / [`ManifestError`] have converged
+// through the "one substrate primitive per emit-site variant" ratchet.
+impl LimitsError {
+    /// Construct a [`LimitsError::BadMillicores`] carrying the offending
+    /// millicores authoring string `value` verbatim in the variant's
+    /// tuple-newtype payload. Folds the uniform
+    /// `Self::BadMillicores(value.into())` tuple-newtype construction
+    /// onto one substrate primitive so every wire-up on the variant
+    /// reads through one dispatch rather than the pre-lift open-coded
+    /// `LimitsError::BadMillicores(<into-String-expr>)` block. The
+    /// `impl Into<String>` bound covers both wire-up shapes on
+    /// [`parse_millicores`] — a `&str` binding (`s.into()`) and a
+    /// `String` binding (`format!(...)`) — without forcing the caller
+    /// to spell the conversion at the wire-up site.
+    #[must_use]
+    pub fn bad_millicores(value: impl Into<String>) -> Self {
+        Self::BadMillicores(value.into())
+    }
 }
 
 #[cfg(test)]
@@ -7350,5 +7409,51 @@ mod tests {
         assert!(matches!(WALL_NC, LimitsError::WallClockNotCanonical { .. }));
         assert!(matches!(WALL_CAP, LimitsError::WallClockExceedsCap { .. }));
         assert!(matches!(CPU_CAP, LimitsError::CpuExceedsCap { .. }));
+    }
+
+    #[test]
+    fn bad_millicores_ctor_matches_tuple_literal_wrap_on_str_binding() {
+        // Per-variant byte-equality pin on the newly lifted
+        // [`LimitsError::bad_millicores`] tuple-newtype ctor over its `&str`
+        // wire-up shape — the three [`parse_millicores`] sites that opened
+        // the pre-lift `LimitsError::BadMillicores(s.into())` block against
+        // the codec-scoped `s: &str` binding (empty-`:cpu`, bare-`m`-
+        // magnitude fallthrough, non-digit-only garbage fallthrough). A
+        // silent regression that de-folded the variant and re-inlined the
+        // tuple-newtype block at one of the three wire-ups (or swapped
+        // `.into()` for a divergent `String` conversion, or routed one arm
+        // through a peer variant) trips the assertion under `PartialEq`.
+        // Peer of the sibling `*_ctor_matches_struct_literal_wrap` pin
+        // family on the same [`LimitsError`] envelope.
+        let value = "500x";
+        assert_eq!(
+            LimitsError::bad_millicores(value),
+            LimitsError::BadMillicores(value.to_string()),
+            "generated bad_millicores ctor over a `&str` binding must \
+             produce byte-equal `LimitsError::BadMillicores` to the \
+             pre-lift tuple-newtype wrap on the same `&str` fixture",
+        );
+    }
+
+    #[test]
+    fn bad_millicores_ctor_matches_tuple_literal_wrap_on_string_binding() {
+        // Peer to the sibling `&str`-binding pin above, on the
+        // `String` wire-up shape — the two [`parse_millicores`] sites that
+        // opened the pre-lift `LimitsError::BadMillicores(format!(...))`
+        // block against a codec-scoped `String` binding (digit-only
+        // magnitude overflows u32, bare-core-shorthand × 1000 overflow).
+        // Pins that the `impl Into<String>` bound routes both wire-up
+        // shapes through the same substrate primitive without silently
+        // rerouting one arm through a divergent conversion. A silent
+        // regression that de-folded one of the two sites trips this pin
+        // under `PartialEq`.
+        let value: String = format!("{} (digit-only magnitude overflows u32)", u32::MAX);
+        assert_eq!(
+            LimitsError::bad_millicores(value.clone()),
+            LimitsError::BadMillicores(value.clone()),
+            "generated bad_millicores ctor over a `String` binding must \
+             produce byte-equal `LimitsError::BadMillicores` to the \
+             pre-lift tuple-newtype wrap on the same `String` fixture",
+        );
     }
 }
