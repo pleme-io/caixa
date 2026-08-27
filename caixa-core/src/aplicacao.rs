@@ -3089,10 +3089,9 @@ impl MeshPolicy {
         if let (Some(retries), Some(cb)) = (self.retries(), self.circuit_breaker())
             && !self.retries_fit_under_breaker_trip_threshold()
         {
-            return Some(AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
-                retries,
-                max_failures: cb.max_failures(),
-            });
+            return Some(
+                AplicacaoError::policy_breaker_trips_before_retries_exhausted(retries, &cb),
+            );
         }
         if let (Some(retries), Some(rl)) = (self.retries(), self.rate_limit())
             && !self.rate_limit_admits_retry_burst()
@@ -10100,6 +10099,99 @@ impl AplicacaoError {
             rl_window: rl.window(),
             max_failures: cb.max_failures(),
             cb_window: cb.window(),
+        }
+    }
+
+    /// Construct an
+    /// [`AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted`]
+    /// naming the offending `:politicas :retries` and the paired
+    /// `:politicas :circuit-breaker :max-failures` scalars under the
+    /// third-firing cross-axis-violation gate at
+    /// [`MeshPolicy::first_cross_axis_violation`], projecting the
+    /// `max_failures` slot through the [`CircuitBreaker::max_failures`]
+    /// scalar accessor on the substrate primitive.
+    ///
+    /// Folds the uniform `{ retries, max_failures: cb.max_failures() }`
+    /// two-slot `Copy`-`u32` struct-literal onto one substrate
+    /// primitive so every wire-up on this variant reads through one
+    /// dispatch rather than the pre-lift four-line struct-literal
+    /// block. The `cb` borrow threads verbatim from the caller-side
+    /// `if let (Some(retries), Some(cb)) = (self.retries(),
+    /// self.circuit_breaker())` pair-destructure at the sole in-crate
+    /// wire-up site inside [`MeshPolicy::first_cross_axis_violation`]'s
+    /// retries-saturate arm; `retries` threads verbatim from the paired
+    /// [`MeshPolicy::retries`] accessor return already destructured out
+    /// of the same `if let` pair. `const fn` preserves the pre-lift
+    /// `Copy`-pass-through's zero-runtime-work property verbatim (both
+    /// fields are `u32`, the [`CircuitBreaker::max_failures`] accessor
+    /// is itself `const fn`, and no `.to_string()` / `.into()`
+    /// allocation lands on the ctor path).
+    ///
+    /// The `max_failures` slot is projected through
+    /// [`CircuitBreaker::max_failures`] (not spelled out as a bare
+    /// `u32` parameter) so a future widening of the
+    /// `:circuit-breaker :max-failures` axis — a
+    /// per-`:contratos`-edge `:circuit-breaker :max-failures` override
+    /// the MESH-COMPOSITION §III.2 #3 roadmap acknowledges, a per-tenant
+    /// `:max-failures` ceiling the M4 per-cluster `:politicas`-cap
+    /// resolver projects, a promotion of the plain `u32` count to a
+    /// richer per-status-class trip counter once Envoy's
+    /// `outlier_detection.consecutive_5xx` peers come into scope —
+    /// reaches the diagnostic through one accessor swap rather than
+    /// every wire-up in lockstep, matching the peer
+    /// substrate-primitive-projection posture of
+    /// [`AplicacaoError::policy_breaker_window_below_timeout`]
+    /// (9b30c07, projecting through [`CircuitBreaker::window`] on the
+    /// sibling two-slot `{ window, timeout }` first cross-axis
+    /// envelope) and
+    /// [`AplicacaoError::policy_breaker_cannot_trip_under_rate_limit`]
+    /// (6bb4e46, projecting through [`RateLimit::rate`] /
+    /// [`RateLimit::window`] / [`CircuitBreaker::max_failures`] /
+    /// [`CircuitBreaker::window`] on the sibling four-slot second
+    /// cross-axis envelope). `retries` remains a bare `u32` parameter,
+    /// matching the sibling first-arm ctor's bare `timeout: Duration`
+    /// parameter discipline: [`MeshPolicy::retries`] returns
+    /// `Option<u32>` and the caller-side `if let` already destructures
+    /// the inner `u32` out, so the ctor takes the destructured scalar
+    /// verbatim rather than re-wrapping it into an accessor call.
+    ///
+    /// Peer of the sibling per-axis [`aplicacao_policy_scalar_ctors!`]
+    /// (7ef425e) macro that folds the eight one-slot per-`:politicas`
+    /// `{ <field>: Copy-scalar }` envelopes on the per-axis
+    /// [`MeshPolicy::validate`] gate — extended here onto the
+    /// third-firing cross-axis compound variant, whose multi-slot
+    /// `{ retries: u32, max_failures: u32 }` shape does not fit that
+    /// macro's one-`Copy`-scalar-per-variant arity. The one remaining
+    /// cross-axis variant
+    /// ([`AplicacaoError::PolicyRateLimitCannotAdmitRetryBurst`] on the
+    /// two-slot `{ retries, rate }` envelope) carries a distinct
+    /// substrate-primitive-projection shape (projecting through
+    /// [`RateLimit::rate`] rather than
+    /// [`CircuitBreaker::max_failures`]) and is folded on its own axis
+    /// by its own per-variant ctor as that wire-up is lifted in a
+    /// follow-up run.
+    ///
+    /// Every future consumer that wants to construct this variant
+    /// outside [`MeshPolicy::first_cross_axis_violation`] — a deferred
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+    /// webhook re-checking a per-tenant `:politicas` overlay's
+    /// retries-vs-max-failures cross-axis invariant after a
+    /// cluster-local `:politicas` override the MESH-COMPOSITION §III.2
+    /// #3 roadmap acknowledges resolves an *effective* per-edge
+    /// [`MeshPolicy`], a future per-`:contratos`-edge `:politicas`
+    /// override the M4 CR resolver projects, an M4 per-cluster
+    /// `:politicas`-cap resolver projecting a per-tenant per-axis
+    /// ceiling into the same diagnostic shape — now reaches this
+    /// variant through one call rather than re-inlining the open-coded
+    /// struct-literal in lockstep with the one in-crate wire-up site.
+    #[must_use]
+    pub const fn policy_breaker_trips_before_retries_exhausted(
+        retries: u32,
+        cb: &CircuitBreaker,
+    ) -> Self {
+        Self::PolicyBreakerTripsBeforeRetriesExhausted {
+            retries,
+            max_failures: cb.max_failures(),
         }
     }
 
@@ -35264,6 +35356,150 @@ mod tests {
             "MeshPolicy::first_cross_axis_violation's starve-under-rate-limit \
              arm's Err must byte-equal \
              policy_breaker_cannot_trip_under_rate_limit(&rl, &cb)"
+        );
+        assert_eq!(
+            observed.to_string(),
+            expected.to_string(),
+            "Display byte-string parity"
+        );
+    }
+
+    #[test]
+    fn policy_breaker_trips_before_retries_exhausted_ctor_matches_struct_literal_wrap() {
+        // Equivalence pin: the ctor produces byte-equal
+        // `AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted` to the
+        // pre-lift open-coded struct-literal that read the same two fields
+        // through the bare `retries` destructure and
+        // [`CircuitBreaker::max_failures`]. Guards any future field-addition
+        // / reordering / accessor-swap tweak on the variant. Same
+        // equivalence-pin shape as the sibling
+        // `policy_breaker_cannot_trip_under_rate_limit_ctor_matches_struct_literal_wrap`
+        // (6bb4e46) on the sibling per-`(:rate-limit, :circuit-breaker)`
+        // second cross-axis envelope and
+        // `policy_breaker_window_below_timeout_ctor_matches_struct_literal_wrap`
+        // (9b30c07) on the sibling per-`(:timeout, :circuit-breaker)` first
+        // cross-axis envelope.
+        let retries = 5_u32;
+        let cb = CircuitBreaker {
+            max_failures: 3,
+            window: Duration::from_secs(60),
+        };
+        let via_ctor = AplicacaoError::policy_breaker_trips_before_retries_exhausted(retries, &cb);
+        let via_literal = AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+            retries,
+            max_failures: cb.max_failures(),
+        };
+        assert_eq!(
+            via_ctor, via_literal,
+            "policy_breaker_trips_before_retries_exhausted(retries, &cb) must \
+             byte-equal the open-coded PolicyBreakerTripsBeforeRetriesExhausted \
+             struct-literal on the same Copy-u32 fixture"
+        );
+        assert_eq!(
+            via_ctor.to_string(),
+            via_literal.to_string(),
+            "Display byte-string must byte-equal the open-coded struct-literal"
+        );
+    }
+
+    #[test]
+    fn policy_breaker_trips_before_retries_exhausted_ctor_routes_retries_and_cb_verbatim() {
+        // Routing pin sweeping non-default `(retries, max_failures)` tuples
+        // across the production-playbook retries-saturate band — Envoy 5
+        // retries vs 3 max-failures, boundary retries==max_failures pair (a
+        // rejecting arm on the strict-inequality invariant), multi-tenant
+        // high-retries-vs-low-trip ratio, sub-cap high-max-failures ceiling —
+        // through the paired bare-`retries` destructure and
+        // [`CircuitBreaker::max_failures`] accessor, so any wrapper-side
+        // silent normalization, rounding, argument re-order, or accidental
+        // slot rebrand on the two-slot pass-through surfaces at caixa-core
+        // build time rather than at a downstream diagnostic consumer that
+        // reads the two scalars back and gets different values than the ones
+        // it stored.
+        //
+        // Deliberately routes through fixtures whose two scalars are
+        // pairwise distinct (`retries ≠ max_failures` on every non-boundary
+        // arm) — a hypothetical field-rename swap swapping the two slots at
+        // the ctor body would land the value from the wrong axis, tripping
+        // the per-field assertion here. Peer of the sibling
+        // `policy_breaker_cannot_trip_under_rate_limit_ctor_routes_rl_and_cb_verbatim`
+        // (6bb4e46) routing pin on the sibling four-slot per-`(:rate-limit,
+        // :circuit-breaker)` second cross-axis envelope.
+        for (retries, max_failures) in [
+            (5_u32, 3_u32),
+            (3_u32, 3_u32),
+            (100_u32, 1_u32),
+            (7_u32, 42_u32),
+        ] {
+            let cb = CircuitBreaker {
+                max_failures,
+                window: Duration::from_secs(60),
+            };
+            let built = AplicacaoError::policy_breaker_trips_before_retries_exhausted(retries, &cb);
+            let AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted {
+                retries: stored_retries,
+                max_failures: stored_max_failures,
+            } = built
+            else {
+                panic!(
+                    "policy_breaker_trips_before_retries_exhausted must \
+                     construct PolicyBreakerTripsBeforeRetriesExhausted for \
+                     retries={retries}/cb={cb:?}"
+                );
+            };
+            assert_eq!(
+                stored_retries, retries,
+                "retries slot must thread the bare-`retries` destructure \
+                 verbatim for retries={retries}/cb={cb:?}"
+            );
+            assert_eq!(
+                stored_max_failures, max_failures,
+                "max_failures slot must thread CircuitBreaker::max_failures() \
+                 verbatim for retries={retries}/cb={cb:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_cross_axis_violation_arm_routes_through_policy_breaker_trips_before_retries_exhausted_ctor()
+     {
+        // End-to-end pin: the sole in-crate wire-up site
+        // ([`MeshPolicy::first_cross_axis_violation`]'s retries-saturate
+        // arm) routes through
+        // [`AplicacaoError::policy_breaker_trips_before_retries_exhausted`]
+        // and the observed `Err` byte-equals the ctor's output on the same
+        // retries-saturate fixture. A future silent de-lift of the wire-up
+        // back to the open-coded
+        // `AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted { retries,
+        // max_failures }` struct-literal trips this test at caixa-core build
+        // time rather than at a downstream diagnostic consumer far from the
+        // wire-up commit. Sibling of the peer
+        // `first_cross_axis_violation_arm_routes_through_policy_breaker_cannot_trip_under_rate_limit_ctor`
+        // (6bb4e46) end-to-end pin on the sibling per-`(:rate-limit,
+        // :circuit-breaker)` second cross-axis envelope — extended here from
+        // a bare `matches!(err,
+        // AplicacaoError::PolicyBreakerTripsBeforeRetriesExhausted { .. })`
+        // shape check to a byte-identity route through the ctor. Clears
+        // `:timeout` and `:rate-limit` so the sibling window-below-timeout
+        // and starve-under-rate-limit arms do not fire first on the
+        // ordering-precedent they hold over this arm.
+        let mut s = three_member_spec();
+        s.politicas.timeout = None;
+        s.politicas.rate_limit = None;
+        s.politicas.retries = Some(5);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 3,
+            window: Duration::from_secs(60),
+        });
+        let observed = s.validate().unwrap_err();
+        let retries = s.politicas.retries.unwrap();
+        let cb = s.politicas.circuit_breaker.unwrap();
+        let expected = AplicacaoError::policy_breaker_trips_before_retries_exhausted(retries, &cb);
+        assert_eq!(
+            observed, expected,
+            "MeshPolicy::first_cross_axis_violation's retries-saturate arm's \
+             Err must byte-equal \
+             policy_breaker_trips_before_retries_exhausted(retries, &cb)"
         );
         assert_eq!(
             observed.to_string(),
