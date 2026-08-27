@@ -1199,7 +1199,7 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     )?;
     let s = s.trim();
     if s.is_empty() {
-        return Err(LimitsError::EmptyByteSize(s.into()));
+        return Err(LimitsError::empty_byte_size(s));
     }
     // Route the `<integer><ASCII-alphabetic-unit>` split through the
     // lifted [`crate::render::split_magnitude_and_alpha_unit`] primitive
@@ -2231,6 +2231,64 @@ impl LimitsError {
     #[must_use]
     pub fn bad_byte_magnitude(value: impl Into<String>) -> Self {
         Self::BadByteMagnitude(value.into())
+    }
+}
+
+// Fold the sole `LimitsError::EmptyByteSize(<into-String-expr>)` wire-up
+// site on the [`parse_byte_size`] codec surface onto one substrate
+// primitive — the paired `(String)` single-slot tuple-newtype
+// [`LimitsError::EmptyByteSize`] on the byte-size codec surface, the
+// peer to the sibling [`LimitsError::bad_byte_magnitude`] fold above on
+// the same [`parse_byte_size`] codec surface (837babc) but on the
+// empty-shape axis rather than the bad-magnitude axis of the same
+// `(String)` tuple-newtype codec-magnitude family. Same discipline the
+// peer per-variant lifts on [`AplicacaoError`] / [`SupervisorError`] /
+// [`UpgradeError`] / [`LayoutError`] / [`DepError`] / [`ManifestError`]
+// have converged through the "one substrate primitive per emit-site
+// variant" ratchet: the sole wire-up site opens the identical
+// `LimitsError::EmptyByteSize(<into-String-expr>)` block against the
+// codec-scoped `&str` (`s.into()`) binding after the outer `s.trim()` /
+// `is_empty()` gate on the codec entry surface, so the fold routes the
+// site through one dispatch on a uniform `impl Into<String>` param,
+// byte-equal to the pre-lift tuple-newtype construction on the same
+// argument. The `impl Into<String>` bound covers the pre-lift `&str`
+// binding without forcing the caller to spell the `.into()` conversion
+// at the wire-up site — same shape the peer [`LimitsError::bad_millicores`]
+// / [`LimitsError::bad_byte_magnitude`] / [`LimitsError::bad_duration_magnitude`]
+// folds carry on the peer bad-magnitude axis of the same paired codec-
+// magnitude family. `#[must_use]` fires a compile warning at any
+// wire-up that mistakenly discards the constructed error.
+//
+// Every future consumer that wants to construct this variant outside
+// [`parse_byte_size`] (a deferred `feira lint --canonical-magnitudes`
+// per-caixa admission verb probing each authored `:memory` value
+// against the same empty-shape gate, an M4 typed
+// `mesh.pleme.io/v1alpha1/Servico` CR materializer's per-`:limits`
+// admission validator re-checking one edited `:memory` slot against
+// the codec's parser floor, a per-`computeunit.yaml` value-shape
+// pre-emitter probing each declared byte-size magnitude ahead of the
+// operator's admit-cycle) now reaches the variant through one call
+// rather than re-inlining the tuple-newtype block in lockstep with
+// the pre-existing wire-up.
+impl LimitsError {
+    /// Construct a [`LimitsError::EmptyByteSize`] carrying the offending
+    /// empty-magnitude authoring string `value` verbatim in the variant's
+    /// tuple-newtype payload. Folds the uniform
+    /// `Self::EmptyByteSize(value.into())` tuple-newtype construction
+    /// onto one substrate primitive so every wire-up on the variant
+    /// reads through one dispatch rather than the pre-lift open-coded
+    /// `LimitsError::EmptyByteSize(<into-String-expr>)` block. The
+    /// `impl Into<String>` bound covers the pre-lift `&str` wire-up
+    /// shape on [`parse_byte_size`] (`s.into()` on the codec-scoped
+    /// `s: &str` binding after the outer `s.trim()` / `is_empty()` gate)
+    /// without forcing the caller to spell the conversion at the wire-up
+    /// site. Peer to the sibling [`LimitsError::bad_byte_magnitude`] on
+    /// the same [`parse_byte_size`] codec surface but on the empty-shape
+    /// axis rather than the bad-magnitude axis of the same `(String)`
+    /// tuple-newtype codec-magnitude family.
+    #[must_use]
+    pub fn empty_byte_size(value: impl Into<String>) -> Self {
+        Self::EmptyByteSize(value.into())
     }
 }
 
@@ -7662,6 +7720,32 @@ mod tests {
             "generated bad_duration_magnitude ctor over a `String` binding must \
              produce byte-equal `LimitsError::BadDurationMagnitude` to the \
              pre-lift tuple-newtype wrap on the same `String` fixture",
+        );
+    }
+
+    #[test]
+    fn empty_byte_size_ctor_matches_tuple_literal_wrap_on_str_binding() {
+        // Per-variant byte-equality pin on the newly lifted
+        // [`LimitsError::empty_byte_size`] tuple-newtype ctor over its `&str`
+        // wire-up shape — the sole [`parse_byte_size`] site that opened the
+        // pre-lift `LimitsError::EmptyByteSize(s.into())` block against the
+        // codec-scoped `s: &str` binding after the outer `s.trim()` /
+        // `is_empty()` gate on the codec entry surface. A silent regression
+        // that de-folded the variant and re-inlined the tuple-newtype block
+        // at the wire-up (or swapped `.into()` for a divergent `String`
+        // conversion, or routed the arm through a peer variant) trips the
+        // assertion under `PartialEq`. Direct sibling to the peer
+        // `bad_byte_magnitude_ctor_matches_tuple_literal_wrap_on_str_binding`
+        // pin on the same [`parse_byte_size`] codec surface but on the
+        // bad-magnitude axis rather than the empty-shape axis of the same
+        // `(String)` tuple-newtype codec-magnitude family.
+        let value = "";
+        assert_eq!(
+            LimitsError::empty_byte_size(value),
+            LimitsError::EmptyByteSize(value.to_string()),
+            "generated empty_byte_size ctor over a `&str` binding must \
+             produce byte-equal `LimitsError::EmptyByteSize` to the \
+             pre-lift tuple-newtype wrap on the same `&str` fixture",
         );
     }
 }
