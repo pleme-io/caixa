@@ -1917,7 +1917,7 @@ fn validate_module(kind: &'static str, module: &str) -> Result<(), UpgradeError>
     // offending value came from.
     crate::render::require_valid_dns_1123_label(
         module,
-        || UpgradeError::ModuleEmpty { kind },
+        || UpgradeError::module_empty(kind),
         |reason| UpgradeError::module_invalid(kind, module, reason),
     )
 }
@@ -2988,6 +2988,75 @@ impl UpgradeError {
             module: module.to_string(),
             reason: reason.into(),
         }
+    }
+
+    /// Construct an [`UpgradeError::ModuleEmpty`] naming the offending
+    /// instruction's `:kind` lisp-form (`:load-module` / `:soft-purge` /
+    /// `:purge`) at which the appup module reference is the empty
+    /// string. Folds the uniform `Self::ModuleEmpty { kind }` one-slot
+    /// struct-literal onto one substrate primitive so the sole in-crate
+    /// closure passed to [`crate::render::require_valid_dns_1123_label`]
+    /// at [`validate_module`] on this variant reads through one dispatch
+    /// rather than the pre-lift open-coded block. The `kind` label
+    /// threads verbatim from the caller-side
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE`] `const`
+    /// roster the wire-up feeds through [`validate_module`]'s
+    /// `kind: &'static str` parameter.
+    ///
+    /// Sibling of the paired three-slot [`Self::module_invalid`]
+    /// (3d0d64a) substrate primitive on the same
+    /// [`crate::render::require_valid_dns_1123_label`] two-closure
+    /// cascade at [`validate_module`] — the empty-arm and invalid-arm
+    /// now both reach the `UpgradeError` envelope through one substrate
+    /// primitive per typed variant, closing the pair on the OTP-appup
+    /// per-instruction `:module` caixa-reference axis. Same shape
+    /// discipline as the peer
+    /// [`crate::AplicacaoError::contrato_caixa_empty`] (815cc87)
+    /// one-slot `{ slot: &'static str }` sibling that closed the peer
+    /// pair on the `AplicacaoError` envelope's two-arm DNS-1123-label
+    /// cascade at the `:contratos <slot>` per-edge axis
+    /// ([`crate::aplicacao::validate_contrato_caixa`]) — the same
+    /// "one substrate primitive per typed arm on both sides of a
+    /// `require_valid_dns_1123_label` two-closure cascade, projecting
+    /// through the caller-supplied axis-tag" discipline now extended
+    /// onto the M2 (`:upgrade-from :instructions <kind> :module`) side
+    /// of the pair the M3 (`:contratos <slot>`) side already carries.
+    ///
+    /// `kind` stays `&'static str` (not `&str`) — every `:upgrade-from
+    /// :instructions <kind>` tag comes from the
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] `const` roster
+    /// carrying program-lifetime storage, matching the enum-field type
+    /// and the [`validate_module`] wire-up's per-arm dispatch. A
+    /// runtime-borrowed `&str` would silently downgrade the label
+    /// lifetime and let a caller stash a non-`'static` borrow into the
+    /// returned error. `#[must_use]` fires a compile warning at any
+    /// wire-up that mistakenly discards the constructed error rather
+    /// than routing it through `return Err(…)` / `.map_err(…)` / a
+    /// closure return. `pub const fn` matches the peer per-envelope
+    /// one-slot `Copy`-scalar ctor family discipline
+    /// (`aplicacao_placement_scalar_ctors!`, `layout_nome_only_ctors!`,
+    /// `dep_nome_only_ctors!`, [`Self::contrato_caixa_empty`]) so the
+    /// ctor is usable in `const` position at every wire-up site.
+    ///
+    /// Every future consumer that constructs `ModuleEmpty` outside
+    /// [`validate_module`]'s `require_valid_dns_1123_label` empty-arm
+    /// closure — a deferred wasm-operator's `install_release/1`
+    /// per-instruction `:module` re-validator at hot-upgrade dispatch
+    /// time re-running the same empty-arm floor against a candidate
+    /// module reference, a future `feira validate --upgrade-from`
+    /// per-caixa admission verb re-running the empty-module gate on
+    /// demand, an M4 `mesh.pleme.io/v1alpha1/Caixa` CR admission webhook
+    /// re-checking a per-`:upgrade-from`-patched candidate before the
+    /// empty-module gate re-fires, a per-`Caixa` overlay resolver
+    /// rejecting a cluster-local `(:load-module|:soft-purge|:purge "")`
+    /// overlay against a cluster-local snapshot — now reaches this
+    /// variant through one call rather than re-inlining the one-line
+    /// struct-literal in lockstep with the sole in-crate wire-up site.
+    #[must_use]
+    pub const fn module_empty(kind: &'static str) -> Self {
+        Self::ModuleEmpty { kind }
     }
 }
 
@@ -9787,6 +9856,109 @@ mod tests {
                  through UpgradeError::module_invalid(kind, module, \
                  reason) on {instr:?}, byte-equal to the pre-lift open-\
                  coded struct-literal wrap on the same fixture",
+            );
+        }
+    }
+
+    #[test]
+    fn module_empty_ctor_matches_struct_literal_wrap() {
+        // Fail-before-pass-after equivalence pin on
+        // [`UpgradeError::module_empty`] — the constructor must produce
+        // a byte-equal `UpgradeError` to the pre-lift open-coded
+        // `Self::ModuleEmpty { kind }` struct-literal on the same
+        // `(:load-module …)` `M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`
+        // axis-tag fixture. A byte-mismatched constructor body (a stray
+        // `.trim()` or `.to_lowercase()` on `kind`, a silent clamp to
+        // one of the three canonical arms, a fixed-slot substitution)
+        // would trip this pin first, matching the sibling
+        // [`crate::AplicacaoError::contrato_caixa_empty`] (815cc87) /
+        // [`crate::behavior::BehaviorError::empty_path`] per-envelope
+        // pin discipline on the peer one-slot `{ *: &'static str }`
+        // empty-arm ctor family.
+        let kind = crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE;
+        assert_eq!(
+            UpgradeError::module_empty(kind),
+            UpgradeError::ModuleEmpty { kind },
+            "generated module_empty ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same kind fixture",
+        );
+    }
+
+    #[test]
+    fn module_empty_ctor_routes_kind_verbatim_across_every_declared_module_variant() {
+        // Cross-axis pin: sweep the constructor's `kind: &'static str`
+        // input across every [`UpgradeInstruction::declared_module`]-
+        // bearing variant's canonical
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] tag —
+        // `:load-module` / `:soft-purge` / `:purge` — plus a non-
+        // canonical `":phantom"` fourth arm proving the ctor does not
+        // silently clamp `kind` to the three-arm roster (a future
+        // fourth `declared_module`-bearing `UpgradeInstruction` variant
+        // lands on this ctor without a per-arm rewrite). Matches the
+        // sibling [`Self::module_invalid`] cross-axis sweep at
+        // `module_invalid_ctor_routes_kind_verbatim_across_every_declared_module_variant`
+        // on the paired three-slot invalid-arm envelope so both arms of
+        // the [`validate_module`] two-closure cascade carry the same
+        // axis-invariance guarantee.
+        for kind in [
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            ":phantom",
+        ] {
+            assert_eq!(
+                UpgradeError::module_empty(kind),
+                UpgradeError::ModuleEmpty { kind },
+                "module_empty ctor must thread kind={kind:?} verbatim",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_module_wire_up_routes_empty_through_module_empty_ctor() {
+        // End-to-end wire-up pin: [`validate_module`]'s
+        // [`crate::render::require_valid_dns_1123_label`] empty-arm
+        // must emit a diagnostic byte-equal to the ctor's output on the
+        // same `(kind, "")` fixture — the fold's invariant that
+        // [`validate_module`]'s cascade reaches the
+        // [`UpgradeError::ModuleEmpty`] envelope through the substrate
+        // primitive [`UpgradeError::module_empty`] rather than the
+        // pre-lift open-coded struct-literal. Sweep every
+        // [`UpgradeInstruction::declared_module`]-bearing variant
+        // against the empty-string module value so every wire-up on the
+        // empty-arm cascade lands on the ctor's output. Closes the pair
+        // on the [`validate_module`] two-closure cascade the sibling
+        // `validate_module_wire_up_routes_invalid_through_module_invalid_ctor`
+        // (3d0d64a) already anchors on the invalid-arm.
+        let cases: &[(UpgradeInstruction, &'static str)] = &[
+            (
+                UpgradeInstruction::LoadModule {
+                    module: String::new(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            ),
+            (
+                UpgradeInstruction::SoftPurge {
+                    module: String::new(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            ),
+            (
+                UpgradeInstruction::Purge {
+                    module: String::new(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            ),
+        ];
+        for (instr, expected_kind) in cases {
+            assert_eq!(
+                instr.validate().unwrap_err(),
+                UpgradeError::module_empty(expected_kind),
+                "validate_module must route its empty-arm refusal \
+                 through UpgradeError::module_empty(kind) on {instr:?}, \
+                 byte-equal to the pre-lift open-coded struct-literal \
+                 wrap on the same fixture",
             );
         }
     }
