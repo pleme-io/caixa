@@ -1469,7 +1469,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
         if numeric {
             return Err(LimitsError::non_integer_duration_magnitude(num_trim));
         }
-        return Err(LimitsError::BadDurationMagnitude(num_part.into()));
+        return Err(LimitsError::bad_duration_magnitude(num_part));
     }
     // Leading-zero arm — peer with the `supervisor::duration_codec`
     // leading-zero arm (9178904) and the `rate_limit_codec`
@@ -1504,7 +1504,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // single byte `"0"` or starts with `[1-9]`, so the only way
     // `u64::from_str` can fail here is overflow.
     let num: u64 = num_trim.parse::<u64>().map_err(|_| {
-        LimitsError::BadDurationMagnitude(format!(
+        LimitsError::bad_duration_magnitude(format!(
             "{num_trim} (digit-only magnitude overflows u64)"
         ))
     })?;
@@ -1530,7 +1530,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     let dur = crate::render::duration_from_integer_magnitude_and_unit(num, unit_trim).map_err(
         |e| match e {
             crate::render::DurationUnitError::Overflow { multiplier } => {
-                LimitsError::BadDurationMagnitude(format!(
+                LimitsError::bad_duration_magnitude(format!(
                     "{num_trim}{unit_trim} overflows u64 (magnitude × {multiplier} > 2^64-1)"
                 ))
             }
@@ -2231,6 +2231,64 @@ impl LimitsError {
     #[must_use]
     pub fn bad_byte_magnitude(value: impl Into<String>) -> Self {
         Self::BadByteMagnitude(value.into())
+    }
+}
+
+// Fold the three `LimitsError::BadDurationMagnitude(<into-String-expr>)`
+// wire-up sites on the [`parse_duration`] codec surface onto one
+// substrate primitive — the paired `(String)` single-slot tuple-newtype
+// [`LimitsError::BadDurationMagnitude`] on the duration codec surface,
+// the direct sibling to the [`LimitsError::bad_millicores`] (da7602f)
+// and [`LimitsError::bad_byte_magnitude`] (837babc) folds above on the
+// peer [`parse_millicores`] / [`parse_byte_size`] codec surfaces. Same
+// discipline the peer per-variant lifts on [`AplicacaoError`] /
+// [`SupervisorError`] / [`UpgradeError`] / [`LayoutError`] /
+// [`DepError`] / [`ManifestError`] have converged through the
+// "one substrate primitive per emit-site variant" ratchet: the three
+// wire-up sites open the identical
+// `LimitsError::BadDurationMagnitude(<into-String-expr>)` block against
+// the codec-scoped `&str` (`num_part.into()` — non-digit-only garbage
+// fallthrough after the numeric-shape gate) or `String`
+// (`format!(...)` — digit-only magnitude overflows u64, magnitude ×
+// unit overflows u64) binding, so the fold routes each site through
+// one dispatch on a uniform `impl Into<String>` param, byte-equal to
+// the pre-lift tuple-newtype construction on the same argument. Closes
+// the last un-lifted variant of the paired `(String)` tuple-newtype
+// codec-magnitude family across the three typed-magnitude codec
+// surfaces the peer folds already own.
+//
+// Every future consumer that wants to construct this variant outside
+// [`parse_duration`] (a deferred `feira lint --canonical-magnitudes`
+// per-caixa admission verb probing each authored `:wall-clock` /
+// `:restart-window` / `:politicas :timeout` /
+// `:politicas :circuit-breaker :window` value against the same
+// canonical-form gate, an M4 typed `mesh.pleme.io/v1alpha1/Servico` CR
+// materializer's per-`:limits` admission validator re-checking one
+// edited `:wall-clock` slot against the codec's parser floor, a
+// per-`computeunit.yaml` value-shape pre-emitter probing each declared
+// duration magnitude ahead of the operator's admit-cycle) now reaches
+// the variant through one call rather than re-inlining the tuple-
+// newtype block in lockstep with the pre-existing three sites.
+impl LimitsError {
+    /// Construct a [`LimitsError::BadDurationMagnitude`] carrying the
+    /// offending duration authoring string `value` verbatim in the
+    /// variant's tuple-newtype payload. Folds the uniform
+    /// `Self::BadDurationMagnitude(value.into())` tuple-newtype
+    /// construction onto one substrate primitive so every wire-up on
+    /// the variant reads through one dispatch rather than the pre-lift
+    /// open-coded `LimitsError::BadDurationMagnitude(<into-String-expr>)`
+    /// block. The `impl Into<String>` bound covers both wire-up shapes
+    /// on [`parse_duration`] — a `&str` binding (`num_part.into()`)
+    /// and a `String` binding (`format!(...)`) — without forcing the
+    /// caller to spell the conversion at the wire-up site. Direct
+    /// sibling to [`LimitsError::bad_millicores`] on the peer
+    /// [`parse_millicores`] codec surface and to
+    /// [`LimitsError::bad_byte_magnitude`] on the peer [`parse_byte_size`]
+    /// codec surface — closes the last un-lifted `(String)` tuple-
+    /// newtype variant on the paired codec-magnitude family.
+    #[must_use]
+    pub fn bad_duration_magnitude(value: impl Into<String>) -> Self {
+        Self::BadDurationMagnitude(value.into())
     }
 }
 
@@ -7551,6 +7609,58 @@ mod tests {
             LimitsError::BadByteMagnitude(value.clone()),
             "generated bad_byte_magnitude ctor over a `String` binding must \
              produce byte-equal `LimitsError::BadByteMagnitude` to the \
+             pre-lift tuple-newtype wrap on the same `String` fixture",
+        );
+    }
+
+    #[test]
+    fn bad_duration_magnitude_ctor_matches_tuple_literal_wrap_on_str_binding() {
+        // Per-variant byte-equality pin on the newly lifted
+        // [`LimitsError::bad_duration_magnitude`] tuple-newtype ctor over its
+        // `&str` wire-up shape — the sole [`parse_duration`] site that opened
+        // the pre-lift `LimitsError::BadDurationMagnitude(num_part.into())`
+        // block against a codec-scoped `&str` binding (non-digit-only garbage
+        // fallthrough after the numeric-shape gate). A silent regression that
+        // de-folded the variant and re-inlined the tuple-newtype block at the
+        // wire-up (or swapped `.into()` for a divergent `String` conversion,
+        // or routed one arm through a peer variant) trips the assertion under
+        // `PartialEq`. Direct sibling to the peer
+        // `bad_millicores_ctor_matches_tuple_literal_wrap_on_str_binding` /
+        // `bad_byte_magnitude_ctor_matches_tuple_literal_wrap_on_str_binding`
+        // pins on the [`parse_millicores`] / [`parse_byte_size`] codec
+        // surfaces — closes the last un-lifted `(String)` tuple-newtype
+        // variant on the paired codec-magnitude family.
+        let value = "abc";
+        assert_eq!(
+            LimitsError::bad_duration_magnitude(value),
+            LimitsError::BadDurationMagnitude(value.to_string()),
+            "generated bad_duration_magnitude ctor over a `&str` binding must \
+             produce byte-equal `LimitsError::BadDurationMagnitude` to the \
+             pre-lift tuple-newtype wrap on the same `&str` fixture",
+        );
+    }
+
+    #[test]
+    fn bad_duration_magnitude_ctor_matches_tuple_literal_wrap_on_string_binding() {
+        // Peer to the sibling `&str`-binding pin above, on the
+        // `String` wire-up shape — the two [`parse_duration`] sites that
+        // opened the pre-lift `LimitsError::BadDurationMagnitude(format!(...))`
+        // block against a codec-scoped `String` binding (digit-only magnitude
+        // overflows u64, magnitude × unit overflows u64). Pins that the
+        // `impl Into<String>` bound routes both wire-up shapes through the
+        // same substrate primitive without silently rerouting one arm through
+        // a divergent conversion. A silent regression that de-folded one of
+        // the two sites trips this pin under `PartialEq`. Direct sibling to
+        // the peer `bad_millicores_ctor_matches_tuple_literal_wrap_on_string_binding`
+        // / `bad_byte_magnitude_ctor_matches_tuple_literal_wrap_on_string_binding`
+        // pins on the [`parse_millicores`] / [`parse_byte_size`] codec
+        // surfaces.
+        let value: String = format!("{} (digit-only magnitude overflows u64)", u64::MAX);
+        assert_eq!(
+            LimitsError::bad_duration_magnitude(value.clone()),
+            LimitsError::BadDurationMagnitude(value.clone()),
+            "generated bad_duration_magnitude ctor over a `String` binding must \
+             produce byte-equal `LimitsError::BadDurationMagnitude` to the \
              pre-lift tuple-newtype wrap on the same `String` fixture",
         );
     }
