@@ -1918,11 +1918,7 @@ fn validate_module(kind: &'static str, module: &str) -> Result<(), UpgradeError>
     crate::render::require_valid_dns_1123_label(
         module,
         || UpgradeError::ModuleEmpty { kind },
-        |reason| UpgradeError::ModuleInvalid {
-            kind,
-            module: module.to_string(),
-            reason,
-        },
+        |reason| UpgradeError::module_invalid(kind, module, reason),
     )
 }
 
@@ -2928,6 +2924,69 @@ impl UpgradeError {
             from: from.to_string(),
             restart_count,
             other_kinds,
+        }
+    }
+
+    /// Construct an [`UpgradeError::ModuleInvalid`] naming the offending
+    /// instruction's `:kind` lisp-form (`:load-module` / `:soft-purge` /
+    /// `:purge`), the malformed `:module` value, and the parser-shaped
+    /// `reason` from
+    /// [`crate::render::is_dns_1123_label`]. Folds the uniform
+    /// `Self::ModuleInvalid { kind, module: module.to_string(), reason }`
+    /// three-field struct-literal onto one substrate primitive so every
+    /// wire-up on this variant reads through one dispatch rather than the
+    /// pre-lift open-coded closure block inside [`validate_module`]'s
+    /// [`crate::render::require_valid_dns_1123_label`] shape-arm.
+    ///
+    /// The `kind: &'static str` parameter accepts the lisp-form
+    /// [`UpgradeInstruction::lisp_form`] returns for the three
+    /// [`UpgradeInstruction::declared_module`]-bearing arms —
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE`] — verbatim
+    /// without a per-arm re-projection at the ctor path. The `module: &str`
+    /// parameter threads the offending author-supplied `:module` value
+    /// verbatim from [`UpgradeInstruction::declared_module`]. The
+    /// `reason: impl Into<String>` bound accepts both `&str` literals and
+    /// the `String` [`crate::render::is_dns_1123_label`] returns via
+    /// `.into()`, matching the peer
+    /// [`crate::AplicacaoError::contrato_caixa_invalid`] /
+    /// [`crate::SupervisorError::child_caixa_invalid`] /
+    /// [`crate::DepError::nome_invalid`] `{ *, reason: String }`
+    /// three-slot invalid-arm ctor discipline on the sibling
+    /// DNS-1123-label per-envelope shape.
+    ///
+    /// Peer of the sibling standalone-ctor
+    /// [`crate::AplicacaoError::contrato_caixa_invalid`] (3d1e484) on the
+    /// paired [`crate::AplicacaoError`] envelope's `:contratos` per-edge
+    /// caixa-reference axis — same `pub fn <ctor>(kind, module: &str,
+    /// reason: impl Into<String>) -> Self` shape closing the invalid-arm
+    /// side of a `require_valid_dns_1123_label` two-closure cascade, so
+    /// [`validate_module`]'s cascade now reads through one substrate
+    /// primitive on the invalid-arm rather than an open-coded four-line
+    /// struct-literal in lockstep with the sole in-crate wire-up site.
+    ///
+    /// Every future consumer that raises this refusal outside
+    /// [`validate_module`] — a deferred wasm-operator's
+    /// `install_release/1` per-instruction `:module` re-validator at
+    /// hot-upgrade dispatch time re-running the same DNS-1123-label
+    /// floor against a candidate module reference, a future
+    /// `feira validate --upgrade-from` per-caixa admission verb
+    /// re-running the module-shape gate on demand, an M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR admission webhook re-checking a
+    /// per-`:upgrade-from`-patched candidate before the module-shape
+    /// gate re-fires, a per-`Caixa` overlay resolver rejecting a
+    /// cluster-local `(:load-module|:soft-purge|:purge <bad-module>)`
+    /// overlay against a cluster-local snapshot — now reaches this
+    /// variant through one call rather than re-inlining the four-line
+    /// struct-literal in lockstep with the [`validate_module`]
+    /// closure-form wire-up.
+    #[must_use]
+    pub fn module_invalid(kind: &'static str, module: &str, reason: impl Into<String>) -> Self {
+        Self::ModuleInvalid {
+            kind,
+            module: module.to_string(),
+            reason: reason.into(),
         }
     }
 }
@@ -9601,6 +9660,133 @@ mod tests {
                  restart_count, other_kinds) on a mixed-`(:restart)` \
                  entry, byte-equal to the pre-lift open-coded struct-\
                  literal wrap on the same fixture",
+            );
+        }
+    }
+
+    #[test]
+    fn module_invalid_ctor_matches_struct_literal_wrap() {
+        // Fail-before-pass-after equivalence pin on
+        // [`UpgradeError::module_invalid`] — the constructor must
+        // produce a byte-equal `UpgradeError` to the pre-lift open-
+        // coded `Self::ModuleInvalid { kind, module: module.to_string(),
+        // reason }` struct-literal on the same `(:load-module …)` /
+        // `:module "Hello-Rio"` / parser-shaped-reason fixture. A byte-
+        // mismatched constructor body (a stray `.trim()`, a rebased
+        // field order, a `String::new()` reason substitution) would
+        // trip this pin first, byte-for-byte against the sibling
+        // [`crate::AplicacaoError::contrato_caixa_invalid`] (3d1e484) /
+        // [`crate::SupervisorError::child_caixa_invalid`] /
+        // [`crate::DepError::nome_invalid`] (077aa3d) per-envelope pin
+        // discipline on the peer three-slot `{ *, reason: String }`
+        // invalid-arm ctor family.
+        let kind = crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE;
+        let module = "Hello-Rio";
+        let reason = "must be lowercase alphanumeric or `-`";
+        assert_eq!(
+            UpgradeError::module_invalid(kind, module, reason),
+            UpgradeError::ModuleInvalid {
+                kind,
+                module: module.to_string(),
+                reason: reason.to_string(),
+            },
+            "generated module_invalid ctor must produce byte-equal \
+             UpgradeError to the open-coded struct-literal wrap on the \
+             same (kind, module, reason) fixture",
+        );
+    }
+
+    #[test]
+    fn module_invalid_ctor_routes_kind_verbatim_across_every_declared_module_variant() {
+        // Cross-axis pin: sweep the constructor's `kind: &'static str`
+        // input across every [`UpgradeInstruction::declared_module`]-
+        // bearing variant's canonical
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] tag —
+        // `:load-module` / `:soft-purge` / `:purge` — plus a non-
+        // canonical `":phantom"` fourth arm proving the ctor does not
+        // silently clamp `kind` to the three-arm roster. The
+        // `reason: impl Into<String>` bound accepts both `&str`
+        // literals and the [`String`] the underlying
+        // [`crate::render::is_dns_1123_label`] predicate returns via
+        // `.into()`, matching the peer
+        // [`crate::AplicacaoError::contrato_caixa_invalid`] cross-axis
+        // sweep on the sibling `:contratos` per-edge envelope.
+        let module = "Hello-Rio";
+        let reason = "must be lowercase alphanumeric or `-`";
+        for kind in [
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            ":phantom",
+        ] {
+            assert_eq!(
+                UpgradeError::module_invalid(kind, module, reason),
+                UpgradeError::ModuleInvalid {
+                    kind,
+                    module: module.to_string(),
+                    reason: reason.to_string(),
+                },
+                "module_invalid ctor must thread kind={kind:?} verbatim",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_module_wire_up_routes_invalid_through_module_invalid_ctor() {
+        // End-to-end wire-up pin: [`validate_module`]'s
+        // [`crate::render::require_valid_dns_1123_label`] invalid-arm
+        // must emit a diagnostic byte-equal to the ctor's output on the
+        // same `(kind, module)` fixture — the fold's invariant that
+        // [`validate_module`]'s cascade reaches the
+        // [`UpgradeError::ModuleInvalid`] envelope through the
+        // substrate primitive [`UpgradeError::module_invalid`] rather
+        // than the pre-lift open-coded struct-literal. Sweep every
+        // [`UpgradeInstruction::declared_module`]-bearing variant
+        // against a canonical footgun (`"Hello-Rio"` — the uppercase-
+        // lead footgun the peer `validate_rejects_non_dns_1123_module`
+        // test above already carries) so every wire-up on the invalid-
+        // arm cascade lands on the ctor's output. Matches the peer
+        // sibling end-to-end pin
+        // [`crate::AplicacaoError::contrato_caixa_invalid`] (3d1e484)
+        // carries on `validate_contrato_caixa`'s
+        // `require_valid_dns_1123_label` invalid-arm.
+        let module = "Hello-Rio";
+        let cases: &[(UpgradeInstruction, &'static str)] = &[
+            (
+                UpgradeInstruction::LoadModule {
+                    module: module.to_string(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            ),
+            (
+                UpgradeInstruction::SoftPurge {
+                    module: module.to_string(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            ),
+            (
+                UpgradeInstruction::Purge {
+                    module: module.to_string(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            ),
+        ];
+        for (instr, expected_kind) in cases {
+            let observed = instr.validate().unwrap_err();
+            let UpgradeError::ModuleInvalid {
+                reason: observed_reason,
+                ..
+            } = &observed
+            else {
+                panic!("expected ModuleInvalid on {instr:?}, got {observed:?}");
+            };
+            assert_eq!(
+                observed,
+                UpgradeError::module_invalid(expected_kind, module, observed_reason.clone()),
+                "validate_module must route its invalid-arm refusal \
+                 through UpgradeError::module_invalid(kind, module, \
+                 reason) on {instr:?}, byte-equal to the pre-lift open-\
+                 coded struct-literal wrap on the same fixture",
             );
         }
     }
