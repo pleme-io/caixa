@@ -1612,15 +1612,80 @@ pub fn validate_upgrade_from_against_behavior(
 }
 
 impl UpgradeInstruction {
-    /// Kebab-case lisp form name for this instruction, used as the
-    /// `:kind` tag in [`UpgradeError::ModuleEmpty`] /
-    /// [`UpgradeError::ModuleInvalid`] diagnostics so the author can
-    /// grep their caixa.lisp for `(:load-module …)` / `(:soft-purge …)`
-    /// / `(:purge …)` and fix it in one edit. Mirrors the kebab-case
-    /// slot tags `BehaviorError::EmptyPath` (b0c8389) and
-    /// `UpgradeFromEntry`'s `:from` field already carry.
+    /// Substrate-canonical per-`UpgradeInstruction` OTP-appup kind-tag
+    /// projection every consumer that renders / classifies / grepping-
+    /// projects an instruction's lisp form keys off — returns the
+    /// kebab-case `:kind` tag verbatim as a `&'static str`, threaded
+    /// straight through the paired
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART`] `pub const`
+    /// roster the substrate already carries at the wire-form axis.
+    ///
+    /// Consumers today: [`Self::validate`] threads the label through the
+    /// per-variant [`UpgradeError::ModuleEmpty`] /
+    /// [`UpgradeError::ModuleInvalid`] / [`UpgradeError::PurgeWithoutPriorLoad`]
+    /// / [`UpgradeError::DuplicateCleanup`] diagnostics so the author can
+    /// grep their caixa.lisp for `(:load-module …)` / `(:soft-purge …)` /
+    /// `(:purge …)` and fix it in one edit; every within-entry cross-
+    /// instruction gate on `caixa-core/src/upgrade.rs` reaches for the
+    /// same accessor's `&'static str` return in place of hand-rolling
+    /// the per-arm match.
+    ///
+    /// Promoted from `pub(self)` to `pub`: every future consumer that
+    /// wants to render / classify / diagnose an [`UpgradeInstruction`]
+    /// by its OTP-appup lisp form outside caixa-core — a deferred
+    /// wasm-operator `install_release/1` per-instruction dispatch
+    /// logger tagging each executed instruction under its kebab-case
+    /// kind, a `feira lint --upgrade-from` per-instruction author-time
+    /// audit surface, an M4 `mesh.pleme.io/v1alpha1/Caixa` CR admission
+    /// webhook naming the offending instruction's kind in its rejection
+    /// body, a future `caixa-actions` renderer that surfaces the
+    /// declared appup instruction list in a workflow annotation, an
+    /// LSP hover projecting the per-instruction kind onto a text-
+    /// document diagnostic — reaches this projection through one call
+    /// on the substrate primitive rather than open-coding the same
+    /// five-arm match plus per-arm const imports at every consumer.
+    /// A future variant addition (a `Discard` peer the `code:delete/1`
+    /// analog inspires, an M4 `SoftPurge` split into
+    /// `SoftPurgeCoop` / `SoftPurgeForce` peers as the drain-cool-down
+    /// policy grows a two-arm shape) reaches every consumer at one edit
+    /// — this method's match — rather than fanning out through hand-
+    /// rolled per-arm dispatch across every downstream site.
+    ///
+    /// Peer of the sibling substrate-canonical arm-family accessors on
+    /// the same closed-set enum: [`Self::declared_module`] on the
+    /// `String`-carrying axis (`Some(_)` for [`Self::LoadModule`] /
+    /// [`Self::SoftPurge`] / [`Self::Purge`]; `None` for
+    /// [`Self::StateChange`] / [`Self::Restart`]),
+    /// [`Self::declared_path`] on the `PathBuf`-carrying axis
+    /// (`Some(_)` for [`Self::StateChange`]), and
+    /// the arm-discriminator predicates [`Self::is_cleanup`] on the
+    /// two-arm cleanup family and the [`gen_platform::IsVariant`]-derive-
+    /// generated per-variant `is_*` predicate family — every downstream
+    /// consumer that fans on an [`UpgradeInstruction`] axis now reaches
+    /// one typed dispatch on the substrate primitive rather than open-
+    /// coding a per-arm match.
+    ///
+    /// `const fn` preserves the zero-runtime-work property of the pre-
+    /// promotion body verbatim, and the `&'static str` return (not
+    /// `&str` tied to `&self`'s lifetime) matches the paired
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] `const` roster's
+    /// program-lifetime discipline so callers can stash the returned
+    /// label in `&'static`-bounded positions (a static logger's format
+    /// argument, a `HashMap<&'static str, _>` key, a `matches!`-style
+    /// slice-of-`&'static str` accept-set) without re-borrowing through
+    /// the instruction reference. Named `lisp_form` (not `kind_label` /
+    /// `discriminant_label`) to name the axis the substrate already
+    /// reaches for in the paired
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] const roster and
+    /// in every per-arm `UpgradeError` diagnostic that carries the
+    /// kebab-case tag verbatim — the lisp author-surface term, not the
+    /// Rust discriminant name.
     #[must_use]
-    const fn lisp_form(&self) -> &'static str {
+    pub const fn lisp_form(&self) -> &'static str {
         match self {
             Self::LoadModule { .. } => crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
             Self::StateChange { .. } => crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
@@ -8267,6 +8332,77 @@ mod tests {
                  const (expected {expected:?})",
             );
         }
+    }
+
+    #[test]
+    fn upgrade_instruction_lisp_form_return_is_static_str_stashable_in_program_lifetime_position() {
+        // Return-lifetime pin on the substrate primitive: because
+        // [`UpgradeInstruction::lisp_form`] returns `&'static str`
+        // (threaded verbatim from the paired
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] `pub const`
+        // roster's program-lifetime storage), the label survives
+        // dropping the borrow through `self` — a downstream logger
+        // that stashes the tag in a `&'static`-bounded position
+        // (a `HashMap<&'static str, _>` key, a slice-of-`&'static str`
+        // accept-set, a static formatter's `%s` argument) reads it
+        // without re-borrowing through the instruction reference. A
+        // future refactor that accidentally narrows the return to
+        // `&str` (lifetime-bound to `&self`) — say by projecting through
+        // an owned `String` intermediate — would fail this compile-time
+        // pin at build time far from the runtime-side lifetime
+        // regression at every downstream `&'static str` consumer. Peer
+        // pin discipline the sibling
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] const roster's
+        // `pub const _: &str = "..."` shape already carries at the
+        // paired wire-form axis.
+        //
+        // The pin fires by taking the label from an instruction that
+        // goes out of scope before the label is read — if
+        // `lisp_form` returned a `&str` tied to `&self`, this would
+        // fail to compile with "borrowed value does not live long
+        // enough". Fail-before-pass-after locally verified: narrowing
+        // the signature to `fn lisp_form(&self) -> &str { … }`
+        // reproduces the compile error.
+        fn stash_label_as_static(instr: &UpgradeInstruction) -> &'static str {
+            instr.lisp_form()
+        }
+        let label = {
+            let instr = UpgradeInstruction::LoadModule {
+                module: "ephemeral".into(),
+            };
+            stash_label_as_static(&instr)
+            // instr drops here; label must survive
+        };
+        assert_eq!(
+            label,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            "the &'static str return must survive the borrowed \
+             UpgradeInstruction going out of scope — a lifetime narrowing \
+             to &str would fail this pin at build time",
+        );
+    }
+
+    #[test]
+    fn upgrade_instruction_lisp_form_is_pub_const_fn_usable_in_const_position() {
+        // Const-position pin on the substrate primitive: because
+        // [`UpgradeInstruction::lisp_form`] is `pub const fn`, downstream
+        // consumers can call it in `const` contexts — a `const`
+        // declaration threading the label through, a `static` lookup
+        // table pre-computed at compile time, a `match` arm's
+        // `const`-eligible branch label. `pub` matters here: a
+        // `pub(crate) const fn` would compile in-crate const contexts
+        // but no external caixa-<target> renderer or feira verb could
+        // reach the projection in a const context. Fail-before-pass-
+        // after locally verified: reverting the visibility to
+        // `pub(crate) const fn` (or removing `pub`) makes this pin
+        // fail to compile at the const-context call site below.
+        const RESTART_LABEL: &str = UpgradeInstruction::Restart.lisp_form();
+        assert_eq!(
+            RESTART_LABEL,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART,
+            "const-position dispatch on Restart must yield the lifted \
+             M2_UPGRADE_INSTRUCTION_KIND_RESTART tag verbatim",
+        );
     }
 
     #[test]
