@@ -116,8 +116,31 @@ impl NodeKind {
     /// consumer surfaces, extending the discipline onto the caixa-ast
     /// per-AST-node-family arm-set every downstream authoring consumer
     /// (`caixa-fmt`, `caixa-lint`, `caixa-lsp`) partitions on.
+    ///
+    /// `pub const fn` — the body reads the arm discriminant through a
+    /// per-arm pattern-match on `&self` that binds `k: &String` on the
+    /// `Keyword` arm and projects onto its byte-borrowed `&str` view via
+    /// [`String::as_str`] (`pub const fn` since Rust 1.87, well before
+    /// this workspace's 1.89 MSRV floor); no arm-storage owning-borrow is
+    /// taken, no drop is invoked on any arm's `String` / `Vec<Node>` /
+    /// `Box<Node>` payload. Extends the const-eval discipline the sibling
+    /// caixa-ast source-position primitive family (`Span::new` /
+    /// `Span::point` / `Span::contains` / `Span::union` / `Span::len` /
+    /// `Span::is_empty`, `Position::new` / `Position::origin`,
+    /// `line_column`) and the paired [`Self::seq_delims`] /
+    /// [`Self::reader_macro_prefix`] writer-half siblings on the
+    /// compound-arm / reader-macro-arm sets already carry onto the
+    /// caixa-ast [`NodeKind`] outer-sum-type's per-`Keyword`-arm
+    /// borrowed-scalar-projection axis. Every downstream reader that
+    /// wants a compile-time keyword-name-arm identity fixture (a `const
+    /// LOOKUP: Option<&str> = NodeKind::Keyword(…).as_keyword();` future
+    /// caixa-lint kwarg-key const-lookup table, a per-arm identity oracle
+    /// a future caixa-lsp writer const-registry consults at compile time,
+    /// a compile-time keyword-arm-set partition truth table the caixa-fmt
+    /// writer keys off) now reads through one substrate-primitive const
+    /// dispatch rather than being forced onto the runtime code path.
     #[must_use]
-    pub fn as_keyword(&self) -> Option<&str> {
+    pub const fn as_keyword(&self) -> Option<&str> {
         match self {
             Self::Keyword(k) => Some(k.as_str()),
             _ => None,
@@ -159,8 +182,19 @@ impl NodeKind {
     /// arm axis (symbol names — every head symbol lookup, every enum
     /// variant match, every form-head-tag detector) across the
     /// caixa-ast/caixa-fmt/caixa-lint/caixa-teia consumer surface.
+    ///
+    /// `pub const fn` — sibling in `const`-eval posture to the peer
+    /// [`Self::as_keyword`] promotion on the same substrate-primitive
+    /// per-arm scalar-projection family; the body is body-preserving
+    /// verbatim (same `match &self { Self::Symbol(s) => Some(s.as_str()),
+    /// _ => None }` shape, same [`String::as_str`] `pub const fn` const-
+    /// stable since Rust 1.87 the [`Self::as_keyword`] promotion routes
+    /// through), so the promotion extends the const-eval discipline onto
+    /// the second per-arm borrowed-scalar-projection axis of the closed
+    /// three-arm `Keyword` / `Symbol` / `Str` per-`String`-arm family the
+    /// sibling [`Self::as_str`] promotion closes onto the third arm.
     #[must_use]
-    pub fn as_symbol(&self) -> Option<&str> {
+    pub const fn as_symbol(&self) -> Option<&str> {
         match self {
             Self::Symbol(s) => Some(s.as_str()),
             _ => None,
@@ -198,8 +232,27 @@ impl NodeKind {
     /// `:nome` / `:descricao` value gate, every `-flag` token detector,
     /// every quoted-string `:kind` mis-authoring diagnostic) across the
     /// caixa-lint/caixa-fmt consumer surface.
+    ///
+    /// `pub const fn` — closes the const-eval-surface promotion the
+    /// paired [`Self::as_keyword`] / [`Self::as_symbol`] siblings opened
+    /// onto the third and last per-`String`-arm axis of the closed
+    /// three-arm `Keyword` / `Symbol` / `Str` per-arm scalar-projection
+    /// family. Body-preserving verbatim (same `match &self { Self::Str(s)
+    /// => Some(s.as_str()), _ => None }` shape, same [`String::as_str`]
+    /// `pub const fn` const-stable since Rust 1.87 the two sibling
+    /// promotions route through), so every downstream consumer that
+    /// wants a compile-time string-literal-arm identity fixture (a
+    /// `const IS_FLAG: Option<&str> = NodeKind::Str("--flag".into())
+    /// .as_str();`-shaped future caixa-fmt writer const-lookup table over
+    /// a `const` fixture that widens `String::from` to `const` once that
+    /// lands upstream, a per-arm identity oracle a future caixa-lint
+    /// no-string-literal-in-numeric-position rule consults at compile
+    /// time, a compile-time Str-arm-set partition truth table the
+    /// caixa-lsp writer keys off) now reads through one substrate-
+    /// primitive const dispatch rather than being forced onto the runtime
+    /// code path.
     #[must_use]
-    pub fn as_str(&self) -> Option<&str> {
+    pub const fn as_str(&self) -> Option<&str> {
         match self {
             Self::Str(s) => Some(s.as_str()),
             _ => None,
@@ -1196,6 +1249,70 @@ mod is_variant_tests {
                  with their pre-lift shape"
             );
         }
+    }
+
+    // Pin the const-eval surface: the substrate-primitive per-arm
+    // scalar-projection family — [`NodeKind::as_keyword`],
+    // [`NodeKind::as_symbol`], [`NodeKind::as_str`] — reaches into `const`
+    // context, so a future compile-time caixa-fmt writer-side per-arm-
+    // identity truth-table / caixa-lint keyword-key const-lookup /
+    // caixa-lsp writer const-registry can key off the three sibling
+    // borrowed-scalar-projection accessors without being forced onto the
+    // runtime code path. The `const _: () = assert!(…)` bindings resolve
+    // each projection at compile time on the non-`String`-payload arm-set
+    // (the three `String`-carrying arms themselves cannot be constructed
+    // in `const` context yet — `String::new` widens the const-eval surface
+    // once `String::from` / `From<&str>` reach `const`, sibling to the
+    // same rust-lang/rust #143874 tracking issue the peer `Span::union`
+    // open-codes `Ord::min` / `Ord::max` around), pinning the four `Nil` /
+    // `Int` / `Bool` / `Float` non-`String`-payload atom arms — each of
+    // which is `const`-constructible in-place through its raw arm ctor
+    // and each of which must fall through the accessor's `_ => None` arm
+    // on all three projections. Any regression that drops `pub const fn`
+    // back to `pub fn` on any of the three (a body edit that reaches for
+    // a non-const operation on the accessor path) fails this test at
+    // compile time rather than at runtime, matching the sibling caixa-ast
+    // source-position primitive family's `Span::new` / `Span::point` /
+    // `Span::contains` / `Span::union` / `Span::len` / `Span::is_empty` /
+    // `Position::new` / `Position::origin` / `line_column` `pub const fn`
+    // shape's const-eval discipline and the paired [`NodeKind::seq_delims`]
+    // / [`NodeKind::reader_macro_prefix`] writer-half sibling promotions
+    // on the compound-arm / reader-macro-arm sets — extended onto the
+    // caixa-ast [`NodeKind`] outer-sum-type's per-`String`-arm borrowed-
+    // scalar-projection axis.
+    #[test]
+    fn as_keyword_as_symbol_as_str_are_const() {
+        const NIL: NodeKind = NodeKind::Nil;
+        const NIL_KEYWORD: Option<&str> = NIL.as_keyword();
+        const NIL_SYMBOL: Option<&str> = NIL.as_symbol();
+        const NIL_STR: Option<&str> = NIL.as_str();
+        const _: () = assert!(NIL_KEYWORD.is_none());
+        const _: () = assert!(NIL_SYMBOL.is_none());
+        const _: () = assert!(NIL_STR.is_none());
+
+        const INT: NodeKind = NodeKind::Int(0);
+        const INT_KEYWORD: Option<&str> = INT.as_keyword();
+        const INT_SYMBOL: Option<&str> = INT.as_symbol();
+        const INT_STR: Option<&str> = INT.as_str();
+        const _: () = assert!(INT_KEYWORD.is_none());
+        const _: () = assert!(INT_SYMBOL.is_none());
+        const _: () = assert!(INT_STR.is_none());
+
+        const BOOL: NodeKind = NodeKind::Bool(false);
+        const BOOL_KEYWORD: Option<&str> = BOOL.as_keyword();
+        const BOOL_SYMBOL: Option<&str> = BOOL.as_symbol();
+        const BOOL_STR: Option<&str> = BOOL.as_str();
+        const _: () = assert!(BOOL_KEYWORD.is_none());
+        const _: () = assert!(BOOL_SYMBOL.is_none());
+        const _: () = assert!(BOOL_STR.is_none());
+
+        const FLOAT: NodeKind = NodeKind::Float(0.0);
+        const FLOAT_KEYWORD: Option<&str> = FLOAT.as_keyword();
+        const FLOAT_SYMBOL: Option<&str> = FLOAT.as_symbol();
+        const FLOAT_STR: Option<&str> = FLOAT.as_str();
+        const _: () = assert!(FLOAT_KEYWORD.is_none());
+        const _: () = assert!(FLOAT_SYMBOL.is_none());
+        const _: () = assert!(FLOAT_STR.is_none());
     }
 
     // Projection contract on the outer-`NodeKind` sum-type's disjunctive
