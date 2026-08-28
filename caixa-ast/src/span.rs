@@ -57,8 +57,26 @@ impl Span {
         }
     }
 
+    /// Byte-offset half-open containment predicate every consumer that
+    /// keys off an author-authored source position (LSP hover
+    /// span-lookup at the cursor, per-diagnostic span-registry probe,
+    /// per-trivia leading/trailing-owner attachment gate) reads through
+    /// — returns `true` iff `offset` lies inside the half-open range
+    /// `[self.start, self.end)`. `pub const fn` — matches the sibling
+    /// [`Self::new`] / [`Self::point`] `pub const fn` shape on the same
+    /// [`Span`] primitive's construction axis, extending the const-eval
+    /// surface onto the primitive's containment-predicate axis without
+    /// a body change (integer comparison is const in Rust since long
+    /// before this workspace's 1.89 MSRV floor). Every downstream
+    /// consumer that wants a compile-time span-containment fixture —
+    /// a `const IS_INSIDE: bool = SPAN.contains(OFFSET);` LSP hover-
+    /// registry entry, a per-diagnostic const-context span oracle a
+    /// future admission webhook consults, a compile-time span-partition
+    /// truth table the caixa-fmt trivia-owner resolver keys off — now
+    /// reads through one substrate-primitive const dispatch rather than
+    /// being forced onto the runtime code path.
     #[must_use]
-    pub fn contains(self, offset: u32) -> bool {
+    pub const fn contains(self, offset: u32) -> bool {
         offset >= self.start && offset < self.end
     }
 }
@@ -135,5 +153,34 @@ mod tests {
         assert_eq!(line_column(src, 0), Position { line: 1, column: 1 });
         assert_eq!(line_column(src, 4), Position { line: 2, column: 1 });
         assert_eq!(line_column(src, 9), Position { line: 3, column: 2 });
+    }
+
+    #[test]
+    fn contains_is_half_open() {
+        let s = Span::new(3, 7);
+        assert!(!s.contains(2));
+        assert!(s.contains(3));
+        assert!(s.contains(6));
+        assert!(!s.contains(7));
+    }
+
+    #[test]
+    fn contains_is_const() {
+        // Pin the const-eval surface: the substrate-primitive
+        // containment predicate reaches into `const` context, so a
+        // future compile-time span-registry / LSP hover-oracle /
+        // trivia-owner truth-table fixture can key off `Span::contains`
+        // without being forced onto the runtime code path. The four
+        // `const _: () = assert!(…)` bindings resolve the predicate at
+        // compile time — any regression that drops `pub const fn` back
+        // to `pub fn` (a body edit that reaches for a non-const
+        // operation) fails this test at compile time rather than at
+        // runtime, matching the sibling `Span::new` / `Span::point`
+        // `pub const fn` shape's const-eval discipline.
+        const SPAN: Span = Span::new(3, 7);
+        const _: () = assert!(!SPAN.contains(2));
+        const _: () = assert!(SPAN.contains(3));
+        const _: () = assert!(SPAN.contains(5));
+        const _: () = assert!(!SPAN.contains(7));
     }
 }
