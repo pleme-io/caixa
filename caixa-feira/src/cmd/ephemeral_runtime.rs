@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use kube::Client;
-use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams, PostParams};
+use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams};
 use tatara_process::phase::ProcessPhase;
 use tatara_process::prelude::Process;
 
@@ -54,19 +54,6 @@ pub async fn apply_process(client: Client, process: &Process) -> Result<Process>
     api.patch(&name, &params, &Patch::Apply(process))
         .await
         .with_context(|| format!("server-side apply Process {ns}/{name}"))
-}
-
-/// Plain create — fails with 409 if the Process exists.
-pub async fn create_process(client: Client, process: &Process) -> Result<Process> {
-    let ns = process
-        .metadata
-        .namespace
-        .clone()
-        .ok_or_else(|| anyhow!("Process has no metadata.namespace"))?;
-    let api: Api<Process> = Api::namespaced(client, &ns);
-    api.create(&PostParams::default(), process)
-        .await
-        .context("create Process")
 }
 
 /// Delete a Process by name. Returns Ok(true) if delete was issued,

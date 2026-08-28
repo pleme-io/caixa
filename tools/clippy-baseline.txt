@@ -58,7 +58,6 @@
 1	clippy::cast_sign_loss	caixa-feira/src/cmd/ephemeral.rs
 2	clippy::doc_markdown	caixa-feira/src/cmd/ephemeral.rs
 1	clippy::print_literal	caixa-feira/src/cmd/ephemeral.rs
-1	dead_code	caixa-feira/src/cmd/ephemeral_runtime.rs
 1	clippy::unnecessary_wraps	caixa-feira/src/cmd/fmt.rs
 1	clippy::struct_excessive_bools	caixa-feira/src/cmd/lint.rs
 1	clippy::unnecessary_wraps	caixa-feira/src/cmd/lint.rs
