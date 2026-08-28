@@ -188,21 +188,69 @@ impl fmt::Display for Position {
 
 /// Compute (line, column) for a byte offset. Line and column are 1-indexed.
 /// O(offset); fine for diagnostics, not for hot paths.
+///
+/// `pub const fn` — closes the const-eval discipline on the caixa-ast
+/// source-position primitive family. The pre-lift body iterated
+/// [`str::char_indices`], whose iterator methods are not yet const-
+/// stable (rust-lang/rust #143874, the same tracking issue [`Span::union`]
+/// open-codes `Ord::min` / `Ord::max` around). The const-lift trades the
+/// char-boundary iterator for a manual `while` walk over the src's raw
+/// [`str::as_bytes`] (`pub const fn` since Rust 1.32, well before this
+/// workspace's 1.89 MSRV floor) that keys off two facts every `&str`
+/// carries by construction:
+///
+/// - **`\n` is ASCII.** Byte `0x0A` is a 1-byte UTF-8 codepoint and
+///   never appears as a continuation byte of a multi-byte codepoint (a
+///   continuation byte lies in `0x80..0xC0`). Every line boundary in a
+///   `&str` therefore surfaces as a lone `b'\n'` at exactly one byte
+///   position, so the line-count decision matches the pre-lift
+///   `char_indices` walk verbatim.
+/// - **A char boundary is a non-continuation byte.** Every codepoint
+///   start byte lies in `0x00..0x80` (ASCII) or `0xC0..` (multi-byte
+///   lead); continuation bytes lie in `0x80..0xC0`. Column-counting
+///   therefore matches the pre-lift walk by advancing `col` only on
+///   non-continuation bytes.
+///
+/// Semantic-preserving across every fixture the sibling
+/// [`tests::line_column_handles_newlines`] pins on ASCII input, plus
+/// the added [`tests::line_column_is_const_across_ascii_and_utf8`]
+/// UTF-8 sweep (a 2-byte `é` and a 4-byte `😀` fixture, both of which
+/// the byte-role decision correctly folds onto one column advance per
+/// codepoint start byte, matching the pre-lift `char_indices` walk).
+///
+/// The offset clamp mirrors the pre-lift `break` on `i >= offset`: when
+/// `offset` falls beyond the src end, the walk stops at the last byte
+/// rather than reading past it; when `offset` falls in the middle of a
+/// multi-byte codepoint, the walk stops before the codepoint's start
+/// byte would be counted, matching the pre-lift arm that consumed no
+/// char whose start byte index was `>= offset`.
 #[must_use]
-pub fn line_column(src: &str, offset: u32) -> Position {
+pub const fn line_column(src: &str, offset: u32) -> Position {
     let mut line: u32 = 1;
     let mut col: u32 = 1;
     let offset = offset as usize;
-    for (i, ch) in src.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
+    let bytes = src.as_bytes();
+    let end = if offset < bytes.len() {
+        offset
+    } else {
+        bytes.len()
+    };
+    let mut i = 0;
+    while i < end {
+        let b = bytes[i];
+        if b == b'\n' {
             line += 1;
             col = 1;
-        } else {
+        } else if b < 0x80 || b >= 0xC0 {
+            // ASCII byte (0x00..0x80) or multi-byte codepoint lead
+            // (0xC0..) — advances the column by one, matching
+            // one char in the pre-lift `char_indices` walk. A
+            // continuation byte (0x80..0xC0) belongs to a codepoint
+            // that has already been counted at its lead byte and
+            // must not re-advance `col`.
             col += 1;
         }
+        i += 1;
     }
     Position::new(line, col)
 }
@@ -344,6 +392,91 @@ mod tests {
         const _: () = assert!(AT_COLUMN == 4);
         const _: () = assert!(ORIGIN_LINE == 1);
         const _: () = assert!(ORIGIN_COLUMN == 1);
+    }
+
+    #[test]
+    fn line_column_is_const_across_ascii_and_utf8() {
+        // Pin the const-eval surface on the last unlifted method of the
+        // caixa-ast source-position primitive family: `line_column`
+        // reaches into `const` context, so a future compile-time
+        // diagnostic-emitter / LSP hover-registry / trivia-owner
+        // truth-table fixture can key off `line_column` without being
+        // forced onto the runtime code path. Any regression that drops
+        // `pub const fn` back to `pub fn` (a body edit that reaches for
+        // a non-const iterator like `str::char_indices`) fails this test
+        // at compile time rather than at runtime, matching the sibling
+        // `Span::new` / `Span::point` / `Span::contains` / `Span::union`
+        // / `Span::len` / `Span::is_empty` / `Position::new` /
+        // `Position::origin` `pub const fn` shape's const-eval discipline
+        // on the same caixa-ast source-position primitive family.
+        //
+        // The ASCII arm matches the sibling `line_column_handles_newlines`
+        // fixture verbatim, resolved at compile time.
+        const ASCII: &str = "abc\ndef\nghi";
+        const ASCII_ORIGIN: Position = line_column(ASCII, 0);
+        const ASCII_ROW_2: Position = line_column(ASCII, 4);
+        const ASCII_ROW_3: Position = line_column(ASCII, 9);
+        const _: () = assert!(ASCII_ORIGIN.line == 1 && ASCII_ORIGIN.column == 1);
+        const _: () = assert!(ASCII_ROW_2.line == 2 && ASCII_ROW_2.column == 1);
+        const _: () = assert!(ASCII_ROW_3.line == 3 && ASCII_ROW_3.column == 2);
+        // Offset clamp: an offset beyond the src end falls onto the last
+        // byte, matching the pre-lift `break` on the exhausted iterator.
+        const ASCII_PAST_END: Position = line_column(ASCII, 100);
+        const _: () = assert!(ASCII_PAST_END.line == 3 && ASCII_PAST_END.column == 4);
+
+        // UTF-8 arm: the byte-role logic (advance `col` only on non-
+        // continuation bytes, `b < 0x80 || b >= 0xC0`) folds every
+        // multi-byte codepoint onto exactly one column advance, matching
+        // the pre-lift `char_indices` walk. `é` is 2 bytes (`0xC3 0xA9`);
+        // `😀` is 4 bytes (`0xF0 0x9F 0x98 0x80`).
+        //
+        // Fixture: "h" (0x68) at byte 0, "é" (0xC3 0xA9) at bytes 1..3,
+        // "l" (0x6C) at byte 3, "l" (0x6C) at byte 4, "o" (0x6F) at byte 5.
+        const UTF8_TWO_BYTE: &str = "héllo";
+        const UTF8_TWO_BYTE_AFTER_H: Position = line_column(UTF8_TWO_BYTE, 1);
+        const UTF8_TWO_BYTE_MID_E_ACUTE: Position = line_column(UTF8_TWO_BYTE, 2);
+        const UTF8_TWO_BYTE_AFTER_E_ACUTE: Position = line_column(UTF8_TWO_BYTE, 3);
+        const UTF8_TWO_BYTE_END: Position = line_column(UTF8_TWO_BYTE, 100);
+        // After "h" (1 codepoint): column 2.
+        const _: () = assert!(UTF8_TWO_BYTE_AFTER_H.line == 1 && UTF8_TWO_BYTE_AFTER_H.column == 2);
+        // Offset 2 falls one byte after `é`'s lead byte (offset 1),
+        // so the codepoint has already been counted at its lead byte
+        // — matches the pre-lift `char_indices` arm that consumed
+        // every char whose start-index was `< offset`. Column 3
+        // = "after h and é" — the mid-codepoint continuation-byte
+        // position resolves to the same 1-indexed column the lead-
+        // byte-adjacent position would.
+        const _: () =
+            assert!(UTF8_TWO_BYTE_MID_E_ACUTE.line == 1 && UTF8_TWO_BYTE_MID_E_ACUTE.column == 3);
+        // After "hé" (2 codepoints): column 3, byte-equal to the mid-
+        // continuation-byte case above — the codepoint boundary at
+        // byte 3 lands on the same 1-indexed column the walk reached
+        // after crossing `é`'s lead byte at byte 1.
+        const _: () = assert!(
+            UTF8_TWO_BYTE_AFTER_E_ACUTE.line == 1 && UTF8_TWO_BYTE_AFTER_E_ACUTE.column == 3
+        );
+        // Past-end clamp on UTF-8 input: 5 codepoints total, column 6.
+        const _: () = assert!(UTF8_TWO_BYTE_END.line == 1 && UTF8_TWO_BYTE_END.column == 6);
+
+        // Fixture: "😀" (0xF0 0x9F 0x98 0x80) at bytes 0..4, space at 4,
+        // "n" at 5.
+        const UTF8_FOUR_BYTE: &str = "😀 nice";
+        const UTF8_FOUR_BYTE_AFTER_EMOJI: Position = line_column(UTF8_FOUR_BYTE, 4);
+        const UTF8_FOUR_BYTE_AFTER_SPACE: Position = line_column(UTF8_FOUR_BYTE, 5);
+        // After "😀" (1 codepoint on a 4-byte sequence): column 2.
+        const _: () =
+            assert!(UTF8_FOUR_BYTE_AFTER_EMOJI.line == 1 && UTF8_FOUR_BYTE_AFTER_EMOJI.column == 2);
+        // After "😀 " (2 codepoints): column 3.
+        const _: () =
+            assert!(UTF8_FOUR_BYTE_AFTER_SPACE.line == 1 && UTF8_FOUR_BYTE_AFTER_SPACE.column == 3);
+
+        // Newline crossing a multi-byte codepoint boundary: "😀\n😀".
+        // Byte layout: 0..4 = 😀, 4 = '\n', 5..9 = 😀. Offset 5 lands at
+        // line 2 column 1 (start of the second codepoint).
+        const UTF8_ACROSS_NEWLINE: &str = "😀\n😀";
+        const UTF8_ACROSS_NEWLINE_ROW_2: Position = line_column(UTF8_ACROSS_NEWLINE, 5);
+        const _: () =
+            assert!(UTF8_ACROSS_NEWLINE_ROW_2.line == 2 && UTF8_ACROSS_NEWLINE_ROW_2.column == 1);
     }
 
     #[test]
