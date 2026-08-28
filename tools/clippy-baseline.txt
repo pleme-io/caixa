@@ -92,7 +92,6 @@
 1	clippy::must_use_candidate	caixa-resolver/src/lisp_config.rs
 1	clippy::match_wildcard_for_single_variants	caixa-resolver/src/resolve.rs
 1	clippy::too_many_lines	caixa-resolver/src/resolve.rs
-1	dead_code	caixa-resolver/tests/git_integration.rs
 1	clippy::unnecessary_literal_bound	caixa-teia-forge/src/backend.rs
 1	clippy::doc_markdown	caixa-teia-forge/src/lib.rs
 1	clippy::unnecessary_to_owned	caixa-teia/src/instance.rs
