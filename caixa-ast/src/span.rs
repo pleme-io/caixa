@@ -142,6 +142,44 @@ pub struct Position {
     pub column: u32,
 }
 
+impl Position {
+    /// Substrate-primitive constructor every producer of a
+    /// 1-indexed line/column pair reads through — folds the two-slot
+    /// `Position { line, column }` struct-literal wire-up (the sole
+    /// production emitter [`line_column`]'s tail, plus every
+    /// per-fixture line/column literal in the sibling test module)
+    /// onto one `pub const fn` dispatch. Matches the sibling
+    /// [`Span::new`] / [`Span::point`] `pub const fn` shape on the
+    /// same caixa-ast source-position primitive family; every
+    /// downstream LSP hover-registry / diagnostic emitter / future
+    /// position-carrying trivia-registry that wants a compile-time
+    /// position fixture (a `const AT: Position = Position::new(1, 4);`
+    /// LSP hover-oracle default, a per-diagnostic const-context
+    /// leading-position fixture, a compile-time position-partition
+    /// truth table the caixa-fmt trivia-owner resolver keys off)
+    /// now reaches through one substrate-primitive const dispatch
+    /// rather than duplicating the two-slot struct literal at every
+    /// construction site.
+    #[must_use]
+    pub const fn new(line: u32, column: u32) -> Self {
+        Self { line, column }
+    }
+
+    /// Canonical origin — line 1, column 1, matching the
+    /// [`line_column`] convention (both axes 1-indexed). `pub const
+    /// fn` — the shape materialises at compile time so a future
+    /// const-context consumer (a substrate-wide `const ORIGIN:
+    /// Position = Position::origin();` LSP hover-oracle default, a
+    /// per-diagnostic const-context leading-position fixture that
+    /// today reaches for the `(1, 1)` magic pair inline) reads
+    /// through one substrate-primitive const dispatch rather than
+    /// duplicating the `(1, 1)` origin literal at every consumer.
+    #[must_use]
+    pub const fn origin() -> Self {
+        Self::new(1, 1)
+    }
+}
+
 impl fmt::Display for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.line, self.column)
@@ -166,7 +204,7 @@ pub fn line_column(src: &str, offset: u32) -> Position {
             col += 1;
         }
     }
-    Position { line, column: col }
+    Position::new(line, col)
 }
 
 #[cfg(test)]
@@ -226,9 +264,9 @@ mod tests {
     #[test]
     fn line_column_handles_newlines() {
         let src = "abc\ndef\nghi";
-        assert_eq!(line_column(src, 0), Position { line: 1, column: 1 });
-        assert_eq!(line_column(src, 4), Position { line: 2, column: 1 });
-        assert_eq!(line_column(src, 9), Position { line: 3, column: 2 });
+        assert_eq!(line_column(src, 0), Position::origin());
+        assert_eq!(line_column(src, 4), Position::new(2, 1));
+        assert_eq!(line_column(src, 9), Position::new(3, 2));
     }
 
     #[test]
@@ -270,6 +308,42 @@ mod tests {
         const INVERTED_EMPTY: bool = INVERTED.is_empty();
         const _: () = assert!(INVERTED_LEN == 0);
         const _: () = assert!(INVERTED_EMPTY);
+    }
+
+    #[test]
+    fn position_new_and_origin_are_const() {
+        // Pin the const-eval surface on the substrate-primitive
+        // 1-indexed line/column pair: the constructor and canonical
+        // origin reach into `const` context, so a future compile-time
+        // LSP hover-registry / diagnostic-emitter / trivia-owner
+        // truth-table fixture can key off `Position::new` /
+        // `Position::origin` without being forced onto the runtime
+        // code path. Any regression that drops `pub const fn` back to
+        // `pub fn` (a body edit that reaches for a non-const
+        // operation) fails this test at compile time rather than at
+        // runtime, matching the sibling `Span::new` / `Span::point` /
+        // `Span::contains` / `Span::union` / `Span::len` /
+        // `Span::is_empty` `pub const fn` shape's const-eval
+        // discipline on the same caixa-ast source-position primitive
+        // family.
+        //
+        // Also pins `Position::origin`'s canonical (1, 1) shape at
+        // compile time — a future accidental drift (an `origin` that
+        // returns `Position::new(0, 0)` on a well-meaning "zero-
+        // indexed origin" rewrite that forgets `line_column` emits
+        // 1-indexed positions) trips at build time rather than
+        // surfacing far from the origin declaration at some
+        // downstream diagnostic-emitter's off-by-one row report.
+        const AT: Position = Position::new(2, 4);
+        const ORIGIN: Position = Position::origin();
+        const AT_LINE: u32 = AT.line;
+        const AT_COLUMN: u32 = AT.column;
+        const ORIGIN_LINE: u32 = ORIGIN.line;
+        const ORIGIN_COLUMN: u32 = ORIGIN.column;
+        const _: () = assert!(AT_LINE == 2);
+        const _: () = assert!(AT_COLUMN == 4);
+        const _: () = assert!(ORIGIN_LINE == 1);
+        const _: () = assert!(ORIGIN_COLUMN == 1);
     }
 
     #[test]
