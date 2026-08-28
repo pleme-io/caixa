@@ -1926,8 +1926,28 @@ impl LayoutError {
     /// substrate primitive so every [`StandardLayout::verify`] wire-up
     /// on this variant reads through one dispatch rather than the
     /// pre-lift open-coded struct-literal block.
+    ///
+    /// `pub const fn` — matches the sibling [`Self::missing_manifest`]
+    /// `pub const fn` shape on the same [`LayoutError`] envelope's
+    /// path-carrying tuple-newtype axis. The body is a pure two-field
+    /// struct-literal (`Self::MissingEntry { kind, path }` — no
+    /// `.to_string()` / `.into()` / accessor projection on either arg,
+    /// unlike the sibling [`Self::missing_lib`] / [`Self::ci_on_non_acao`]
+    /// ctors that route through `caixa.nome().to_string()`), so the
+    /// const-eval surface widens with no body change. Every downstream
+    /// consumer that wants to fold a per-arm layout diagnostic into a
+    /// `const` position (a `const MISSING_BIBLIOTECA: LayoutError =
+    /// LayoutError::missing_entry(LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+    /// PathBuf::new());` fixture the future M4 `caixa.pleme.io/v1alpha1/Caixa`
+    /// CR materializer's admission-webhook per-kind rejection-body
+    /// lookup table reaches for, a compile-time per-arm diagnostic
+    /// registry the LSP hover renderer materializes per typed-slot
+    /// fixture, a `const`-context probe the future
+    /// `feira validate --entry-exists` per-caixa verb consults) now
+    /// reads through one const dispatch on the substrate primitive
+    /// rather than being forced onto the runtime code path.
     #[must_use]
-    pub fn missing_entry(kind: &'static str, path: PathBuf) -> Self {
+    pub const fn missing_entry(kind: &'static str, path: PathBuf) -> Self {
         Self::MissingEntry { kind, path }
     }
 
@@ -2824,6 +2844,55 @@ mod tests {
                 kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
                 path,
             },
+        );
+    }
+
+    #[test]
+    fn missing_entry_ctor_is_const_fn_usable_in_const_position() {
+        // Fail-before-pass-after pin on [`LayoutError::missing_entry`]'s
+        // `pub const fn` shape — a future accidental downgrade to a
+        // non-`const` `pub fn` (a body reversion that reaches for a
+        // `.to_string()` / `.into()` / accessor projection on either
+        // arg, matching the sibling [`LayoutError::missing_lib`] /
+        // [`LayoutError::ci_on_non_acao`] non-const-body shape) trips
+        // here at caixa-core build time with "cannot call non-const fn
+        // `LayoutError::missing_entry` in constants" rather than
+        // surfacing as a downstream `const`-context regression at a
+        // future M4 CR materializer's admission-webhook per-kind
+        // rejection-body lookup table, a compile-time per-arm
+        // diagnostic registry the LSP hover renderer materializes, or
+        // a `const`-context probe the future `feira validate
+        // --entry-exists` per-caixa verb consults.
+        //
+        // Peer of the sibling
+        // [`crate::behavior::tests::behavior_spec_is_empty_is_const_fn_usable_in_const_position`]
+        // (ba644e7 — `pub const fn` widening of the M2 `:behavior`
+        // emptiness predicate) and the sibling per-envelope pins on
+        // the [`crate::supervisor::RestartStrategy::as_str`] /
+        // [`crate::supervisor::RestartPolicy::as_str`] /
+        // [`crate::aplicacao::PlacementStrategy::as_str`] const-fn
+        // widenings — extends the same "one substrate primitive per
+        // pure-struct-literal ctor stays `pub const fn` so every
+        // downstream const-context consumer routes through one const
+        // dispatch" discipline onto the last un-pinned pure-struct-
+        // literal ctor on the [`LayoutError`] envelope's path-carrying
+        // axis (the sibling [`Self::missing_manifest`] already carries
+        // this posture; [`Self::missing_lib`] / [`Self::ci_on_non_acao`]
+        // stay non-const by design because their bodies project through
+        // the paired [`crate::Caixa::nome`] `String → String` accessor
+        // which is not `const`-stable).
+        const MISSING_BIBLIOTECA: LayoutError = LayoutError::missing_entry(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            PathBuf::new(),
+        );
+        assert_eq!(
+            MISSING_BIBLIOTECA,
+            LayoutError::MissingEntry {
+                kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+                path: PathBuf::new(),
+            },
+            "missing_entry const-position dispatch must byte-equal the runtime-position \
+             struct-literal wrap on the same (kind, path) fixture",
         );
     }
 
