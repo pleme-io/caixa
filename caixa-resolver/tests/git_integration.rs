@@ -26,16 +26,6 @@ fn git(cwd: &Path, args: &[&str]) {
     );
 }
 
-fn git_out(cwd: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
-        .current_dir(cwd)
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(out.status.success());
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
-}
-
 fn make_local_remote(name: &str, caixa_src: &str, tmp: &Path) -> String {
     // Bare remote.
     let bare = tmp.join(format!("{name}.git"));
@@ -258,11 +248,4 @@ fn lacre_round_trips_through_lisp_after_resolution() {
     let reparsed = Lacre::from_lisp(&src).expect("lacre round-trips through Lisp");
     assert_eq!(reparsed.raiz, lacre.raiz);
     assert_eq!(reparsed.entradas.len(), lacre.entradas.len());
-}
-
-fn _unused_sha_check() -> String {
-    // Used to keep the `git_out` helper reachable from cfg(test) gates.
-    let tmp = tempdir().unwrap();
-    git(tmp.path(), &["init", "--quiet"]);
-    git_out(tmp.path(), &["rev-parse", "HEAD"])
 }
