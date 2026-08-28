@@ -589,8 +589,30 @@ impl NodeKind {
     /// `&'static str` rather than a borrow into arm storage because the
     /// sigil bytes are the arm's IDENTITY (like `seq_delims`'s
     /// `(char, char)` pair) rather than a payload the arm carries.
+    ///
+    /// `pub const fn` — the body reads the arm discriminant through a
+    /// `_`-binding pattern-match that projects onto a `Copy`-shaped
+    /// `Option<&'static str>` return, no arm-storage borrow is taken, and
+    /// no drop is invoked on any arm's `Box<Node>` payload (the `_`
+    /// pattern binds nothing). Pattern matching on `&Self` where the
+    /// enum carries drop-typed arms has been const-stable in Rust since
+    /// long before this workspace's 1.89 MSRV floor. Extends the
+    /// const-eval discipline the sibling caixa-ast source-position
+    /// primitive family (`Span::new` / `Span::point` / `Span::contains`
+    /// / `Span::union` / `Span::len` / `Span::is_empty`, `Position::new`
+    /// / `Position::origin`, `line_column`) already carries onto the
+    /// caixa-ast [`NodeKind`] outer-sum-type's per-arm identity-projection
+    /// axis. Every downstream writer that wants a compile-time reader-
+    /// macro-sigil fixture (a `const QUOTE: Option<&'static str> =
+    /// NodeKind::Quote(…).reader_macro_prefix();` future caixa-fmt writer
+    /// const-lookup table, a per-arm identity oracle a future caixa-lint
+    /// no-quote-sigil-in-non-reader-macro-context rule consults at
+    /// compile time, a compile-time reader-macro-arm-set partition truth
+    /// table the caixa-lsp writer keys off) now reads through one
+    /// substrate-primitive const dispatch rather than being forced onto
+    /// the runtime code path.
     #[must_use]
-    pub fn reader_macro_prefix(&self) -> Option<&'static str> {
+    pub const fn reader_macro_prefix(&self) -> Option<&'static str> {
         match self {
             Self::Quote(_) => Some("'"),
             Self::Quasiquote(_) => Some("`"),
@@ -2263,6 +2285,52 @@ mod is_variant_tests {
                  silently disagree with their pre-lift shape"
             );
         }
+    }
+
+    // Pin the const-eval surface: the substrate-primitive writer-half-of-
+    // the-reader/writer-duality projection accessor reaches into `const`
+    // context, so a future compile-time caixa-fmt writer-side sigil-lookup
+    // truth-table / caixa-lint no-quote-sigil-in-non-reader-macro-context
+    // rule / caixa-lsp writer const-registry can key off
+    // `NodeKind::reader_macro_prefix` without being forced onto the runtime
+    // code path. The `const _: () = assert!(…)` bindings resolve the
+    // projection at compile time on the non-reader-macro arm-set (the
+    // reader-macro arms themselves carry a `Box<Node>` payload which
+    // `Box::new` cannot construct in `const` context yet — that
+    // half of the const-eval surface unlocks on the same
+    // rust-lang/rust #143874 tracking issue the sibling `Span::union`
+    // open-codes `Ord::min` / `Ord::max` around), pinning the four `Nil`
+    // / `Int` / `Bool` / `Float` non-reader-macro atom arms — each of
+    // which is `const`-constructible in-place through its raw arm ctor
+    // (`NodeKind::Nil` a unit ctor; `NodeKind::Int(i64)` / `Bool(bool)` /
+    // `Float(f64)` all one-slot tuple-newtype ctors on `Copy` scalar
+    // payloads) and each of which must fall through the accessor's
+    // `_ => None` arm. Any regression that drops `pub const fn` back to
+    // `pub fn` (a body edit that reaches for a non-const operation on
+    // the accessor path) fails this test at compile time rather than at
+    // runtime, matching the sibling caixa-ast source-position primitive
+    // family's `Span::new` / `Span::point` / `Span::contains` /
+    // `Span::union` / `Span::len` / `Span::is_empty` / `Position::new` /
+    // `Position::origin` / `line_column` `pub const fn` shape's const-
+    // eval discipline extended onto the caixa-ast [`NodeKind`] outer-
+    // sum-type's per-arm identity-projection axis.
+    #[test]
+    fn reader_macro_prefix_is_const() {
+        const NIL: NodeKind = NodeKind::Nil;
+        const NIL_PREFIX: Option<&'static str> = NIL.reader_macro_prefix();
+        const _: () = assert!(NIL_PREFIX.is_none());
+
+        const INT: NodeKind = NodeKind::Int(0);
+        const INT_PREFIX: Option<&'static str> = INT.reader_macro_prefix();
+        const _: () = assert!(INT_PREFIX.is_none());
+
+        const BOOL: NodeKind = NodeKind::Bool(false);
+        const BOOL_PREFIX: Option<&'static str> = BOOL.reader_macro_prefix();
+        const _: () = assert!(BOOL_PREFIX.is_none());
+
+        const FLOAT: NodeKind = NodeKind::Float(0.0);
+        const FLOAT_PREFIX: Option<&'static str> = FLOAT.reader_macro_prefix();
+        const _: () = assert!(FLOAT_PREFIX.is_none());
     }
 
     // Pin the [`Node::to_tatara_sexp`] compound-arm-set converge onto the
