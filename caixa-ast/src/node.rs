@@ -526,8 +526,32 @@ impl NodeKind {
     /// substrate — the writer half by extending this partition once, the
     /// walker half by extending [`Self::as_seq_body`]'s — rather than a
     /// coordinated rewrite across every per-consumer writer site.
+    ///
+    /// `pub const fn` — the body reads the arm discriminant through a
+    /// `_`-binding pattern-match that projects onto a `Copy`-shaped
+    /// `Option<(char, char)>` return, no arm-storage borrow is taken, and
+    /// no drop is invoked on any arm's `Vec<Node>` payload (the `_`
+    /// pattern binds nothing). Pattern matching on `&Self` where the
+    /// enum carries drop-typed arms has been const-stable in Rust since
+    /// long before this workspace's 1.89 MSRV floor. Extends the
+    /// const-eval discipline the sibling caixa-ast source-position
+    /// primitive family (`Span::new` / `Span::point` / `Span::contains`
+    /// / `Span::union` / `Span::len` / `Span::is_empty`, `Position::new`
+    /// / `Position::origin`, `line_column`) and the paired
+    /// [`Self::reader_macro_prefix`] writer-half sibling on the reader-
+    /// macro-arm-set already carry onto the caixa-ast [`NodeKind`] outer-
+    /// sum-type's per-arm identity-projection axis. Every downstream
+    /// writer that wants a compile-time delimiter-pair fixture (a
+    /// `const PAREN: Option<(char, char)> =
+    /// NodeKind::List(…).seq_delims();` future caixa-fmt writer
+    /// const-lookup table, a per-arm identity oracle a future caixa-lint
+    /// no-delimiter-in-non-compound-context rule consults at compile
+    /// time, a compile-time compound-arm-set partition truth table the
+    /// caixa-lsp writer keys off) now reads through one substrate-
+    /// primitive const dispatch rather than being forced onto the
+    /// runtime code path.
     #[must_use]
-    pub fn seq_delims(&self) -> Option<(char, char)> {
+    pub const fn seq_delims(&self) -> Option<(char, char)> {
         match self {
             Self::List(_) => Some(('(', ')')),
             Self::Map(_) => Some(('{', '}')),
@@ -2147,6 +2171,53 @@ mod is_variant_tests {
                  would silently disagree with their pre-lift shape"
             );
         }
+    }
+
+    // Pin the const-eval surface: the substrate-primitive writer-half-of-
+    // the-reader/writer-duality projection accessor reaches into `const`
+    // context, so a future compile-time caixa-fmt writer-side delimiter-
+    // pair-lookup truth-table / caixa-lint no-delimiter-in-non-compound-
+    // context rule / caixa-lsp writer const-registry can key off
+    // `NodeKind::seq_delims` without being forced onto the runtime code
+    // path. The `const _: () = assert!(…)` bindings resolve the projection
+    // at compile time on the non-compound arm-set (the compound arms
+    // themselves carry a `Vec<Node>` payload with an `impl Drop` whose
+    // const-drop stability is behind the same rust-lang/rust #143874
+    // tracking issue the sibling `Span::union` open-codes `Ord::min` /
+    // `Ord::max` around), pinning the four `Nil` / `Int` / `Bool` /
+    // `Float` non-compound atom arms — each of which is
+    // `const`-constructible in-place through its raw arm ctor
+    // (`NodeKind::Nil` a unit ctor; `NodeKind::Int(i64)` / `Bool(bool)` /
+    // `Float(f64)` all one-slot tuple-newtype ctors on `Copy` scalar
+    // payloads) and each of which must fall through the accessor's
+    // `_ => None` arm. Any regression that drops `pub const fn` back to
+    // `pub fn` (a body edit that reaches for a non-const operation on
+    // the accessor path) fails this test at compile time rather than at
+    // runtime, matching the sibling
+    // `reader_macro_prefix_is_const` pin on the paired reader-macro-arm-
+    // set writer-half accessor and the caixa-ast source-position primitive
+    // family's `Span::new` / `Span::point` / `Span::contains` /
+    // `Span::union` / `Span::len` / `Span::is_empty` / `Position::new` /
+    // `Position::origin` / `line_column` `pub const fn` shape's const-
+    // eval discipline extended onto the caixa-ast [`NodeKind`] outer-
+    // sum-type's per-arm identity-projection axis.
+    #[test]
+    fn seq_delims_is_const() {
+        const NIL: NodeKind = NodeKind::Nil;
+        const NIL_DELIMS: Option<(char, char)> = NIL.seq_delims();
+        const _: () = assert!(NIL_DELIMS.is_none());
+
+        const INT: NodeKind = NodeKind::Int(0);
+        const INT_DELIMS: Option<(char, char)> = INT.seq_delims();
+        const _: () = assert!(INT_DELIMS.is_none());
+
+        const BOOL: NodeKind = NodeKind::Bool(false);
+        const BOOL_DELIMS: Option<(char, char)> = BOOL.seq_delims();
+        const _: () = assert!(BOOL_DELIMS.is_none());
+
+        const FLOAT: NodeKind = NodeKind::Float(0.0);
+        const FLOAT_DELIMS: Option<(char, char)> = FLOAT.seq_delims();
+        const _: () = assert!(FLOAT_DELIMS.is_none());
     }
 
     // Projection contract on the outer-`NodeKind` sum-type's writer-side
