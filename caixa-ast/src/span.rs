@@ -25,13 +25,33 @@ impl Span {
         }
     }
 
+    /// Byte-width of the half-open range `[start, end)`. `pub const fn` —
+    /// `u32::saturating_sub` is const-stable since Rust 1.47, well before
+    /// this workspace's 1.89 MSRV floor, so the promotion is a body-
+    /// preserving type-signature widening. Matches the sibling
+    /// [`Self::new`] / [`Self::point`] / [`Self::contains`] /
+    /// [`Self::union`] `pub const fn` shape on the same [`Span`] primitive
+    /// — every downstream consumer that wants a compile-time span-width
+    /// fixture (a `const WIDTH: u32 = SPAN.len();` LSP hover-registry
+    /// entry, a per-diagnostic const-context width oracle a future
+    /// admission webhook consults, a compile-time span-partition truth
+    /// table the caixa-fmt trivia-owner resolver keys off) now reads
+    /// through one substrate-primitive const dispatch rather than being
+    /// forced onto the runtime code path.
     #[must_use]
-    pub fn len(self) -> u32 {
+    pub const fn len(self) -> u32 {
         self.end.saturating_sub(self.start)
     }
 
+    /// Half-open emptiness predicate — `true` iff `self.start == self.end`.
+    /// `pub const fn` — folds onto the sibling [`Self::len`] `pub const
+    /// fn` promotion (integer equality is const in Rust since long before
+    /// this workspace's 1.89 MSRV floor). Matches every other accessor /
+    /// predicate on this [`Span`] primitive's const-eval surface; only
+    /// the fundamentally-runtime-only `slice(&str)` method (string-slice
+    /// indexing outside const-eval) remains `pub fn`.
     #[must_use]
-    pub fn is_empty(self) -> bool {
+    pub const fn is_empty(self) -> bool {
         self.len() == 0
     }
 
@@ -218,6 +238,38 @@ mod tests {
         assert!(s.contains(3));
         assert!(s.contains(6));
         assert!(!s.contains(7));
+    }
+
+    #[test]
+    fn len_and_is_empty_are_const() {
+        // Pin the const-eval surface: the substrate-primitive width
+        // accessor and emptiness predicate reach into `const` context, so
+        // a future compile-time span-registry / LSP hover-oracle /
+        // trivia-owner truth-table fixture can key off `Span::len` /
+        // `Span::is_empty` without being forced onto the runtime code
+        // path. Any regression that drops `pub const fn` back to `pub fn`
+        // (a body edit that reaches for a non-const operation) fails this
+        // test at compile time rather than at runtime, matching the
+        // sibling `Span::new` / `Span::point` / `Span::contains` /
+        // `Span::union` `pub const fn` shape's const-eval discipline.
+        const RANGE: Span = Span::new(3, 7);
+        const POINT: Span = Span::point(5);
+        const RANGE_LEN: u32 = RANGE.len();
+        const POINT_LEN: u32 = POINT.len();
+        const RANGE_EMPTY: bool = RANGE.is_empty();
+        const POINT_EMPTY: bool = POINT.is_empty();
+        const _: () = assert!(RANGE_LEN == 4);
+        const _: () = assert!(POINT_LEN == 0);
+        const _: () = assert!(!RANGE_EMPTY);
+        const _: () = assert!(POINT_EMPTY);
+        // Saturating-sub floor: an inverted (end < start) fixture must
+        // clamp to 0 at compile time, matching the runtime
+        // `u32::saturating_sub` semantics the pre-lift body carried.
+        const INVERTED: Span = Span::new(9, 2);
+        const INVERTED_LEN: u32 = INVERTED.len();
+        const INVERTED_EMPTY: bool = INVERTED.is_empty();
+        const _: () = assert!(INVERTED_LEN == 0);
+        const _: () = assert!(INVERTED_EMPTY);
     }
 
     #[test]
