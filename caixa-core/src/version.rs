@@ -259,8 +259,7 @@ pub fn parse_requirement(s: &str) -> Result<semver::VersionReq, VersionError> {
     if s == "*" {
         return Ok(semver::VersionReq::STAR);
     }
-    semver::VersionReq::parse(s)
-        .map_err(|e| VersionError::Requirement(s.to_string(), e.to_string()))
+    semver::VersionReq::parse(s).map_err(|e| VersionError::requirement(s, e.to_string()))
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -338,6 +337,34 @@ impl VersionError {
     #[must_use]
     pub fn semver(value: impl Into<String>, reason: impl Into<String>) -> Self {
         Self::Semver(value.into(), reason.into())
+    }
+
+    /// Construct a [`VersionError::Requirement`] carrying the offending
+    /// authoring string `value` and the underlying
+    /// [`semver::VersionReq::parse`] `reason` verbatim in the variant's
+    /// two-slot tuple-newtype payload. Folds the uniform
+    /// `Self::Requirement(value.into(), reason.into())` tuple-newtype
+    /// construction onto one substrate primitive so every wire-up on the
+    /// variant reads through one dispatch rather than the pre-lift open-
+    /// coded `VersionError::Requirement(<into-String-expr>,
+    /// <into-String-expr>)` block. Peer to the sibling
+    /// [`VersionError::semver`] ctor on the [`CaixaVersion::parse`]
+    /// surface — the same `(String, String)` two-slot tuple-newtype axis
+    /// of the paired [`VersionError`] envelope, but on the version-
+    /// requirement parser surface rather than the semver-version-body
+    /// parser surface. Closes the last un-lifted variant on the
+    /// [`VersionError`] envelope: every arm now reaches its emit site
+    /// through one substrate-primitive dispatch, matching the "one
+    /// substrate primitive per emit-site variant" ratchet the peer per-
+    /// variant lifts on [`crate::AplicacaoError`] /
+    /// [`crate::SupervisorError`] / [`crate::UpgradeError`] /
+    /// [`crate::LayoutError`] / [`crate::DepError`] /
+    /// [`crate::ManifestError`] / [`crate::LimitsError`] /
+    /// [`crate::BehaviorError`] / [`crate::DialetoError`] have converged
+    /// onto.
+    #[must_use]
+    pub fn requirement(value: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::Requirement(value.into(), reason.into())
     }
 }
 
@@ -546,6 +573,86 @@ mod tests {
         // current byte to the canonical substrate-git-org convention's
         // documented shape.
         assert_eq!(DEFAULT_PLEME_GIT_ORG, "pleme-io");
+    }
+
+    #[test]
+    fn requirement_ctor_matches_tuple_literal_wrap_on_str_binding() {
+        // Fail-before-pass-after byte-equality pin: the lifted
+        // [`VersionError::requirement`] inherent ctor projects a `&str`
+        // binding pair through the paired `impl Into<String>` bounds
+        // byte-equal to the pre-lift open-coded
+        // `VersionError::Requirement(<into-String-expr>, <into-String-expr>)`
+        // tuple-literal on the same fixture. Same shape the peer
+        // [`VersionError::semver_ctor_matches_tuple_literal_wrap_on_str_binding`]
+        // pin carries on the sibling [`VersionError::Semver`] variant of
+        // the same `(String, String)` two-slot tuple-newtype envelope.
+        let value: &str = "not-a-req";
+        let reason: &str = "unexpected character 'n' while parsing major version number";
+        assert_eq!(
+            VersionError::requirement(value, reason),
+            VersionError::Requirement(value.to_string(), reason.to_string()),
+            "generated requirement ctor over `&str` bindings must match \
+             the pre-lift tuple-literal wrap on the same fixture",
+        );
+    }
+
+    #[test]
+    fn requirement_ctor_matches_tuple_literal_wrap_on_string_binding() {
+        // Fail-before-pass-after byte-equality pin on the paired owned-
+        // `String` shape. Peer to the `&str` variant above; refuses any
+        // future de-lift that inlines a divergent construction on the
+        // owned-`String` path (a stray `.trim().to_string()` normalization
+        // on either slot, a swap that routes the ctor through the sibling
+        // [`VersionError::Semver`] variant on the paired parser surface,
+        // an argument-ordering swap on the paired slots).
+        let value: String = String::from("^bogus");
+        let reason: String = String::from("unexpected character while parsing requirement");
+        assert_eq!(
+            VersionError::requirement(value.clone(), reason.clone()),
+            VersionError::Requirement(value, reason),
+            "generated requirement ctor over owned-`String` bindings must \
+             match the pre-lift tuple-literal wrap on the same fixture",
+        );
+    }
+
+    #[test]
+    fn parse_requirement_error_routes_through_requirement_ctor() {
+        // Fail-before-pass-after routes-through pin: refuses any future
+        // de-lift of [`parse_requirement`]'s
+        // [`semver::VersionReq::parse`] `map_err` arm off the substrate
+        // primitive. Sweeps three malformed authoring shapes (a bare
+        // non-numeric, a stray operator with no version body, a
+        // caret-prefixed non-numeric that the [`semver::VersionReq`]
+        // grammar rejects at the operator-body slot) through the parser
+        // and asserts the emitted [`VersionError`] equals the ctor-built
+        // error verbatim under `PartialEq`, so any future swap of the
+        // wire-up (an inline `Self::Requirement(...)` re-inlining, a
+        // routing detour through the sibling [`VersionError::Semver`]
+        // variant on the paired parser surface, an argument-ordering
+        // swap on the paired slots) trips at caixa-core test time rather
+        // than at a downstream diagnostic drift on a `feira lock` /
+        // resolver admission callsite. The `"*"` wildcard short-circuit
+        // is deliberately excluded from the sweep — it returns
+        // [`semver::VersionReq::STAR`] before reaching the parser arm.
+        for bad in ["not-a-req", "^", "^bogus"] {
+            let err = parse_requirement(bad)
+                .expect_err("malformed requirement fixture must fail parsing");
+            let semver_reason = match semver::VersionReq::parse(bad) {
+                Err(e) => e.to_string(),
+                Ok(_) => unreachable!(
+                    "fixture `{bad}` is documented as a `VersionReq` \
+                     rejection but parsed cleanly — the pin's oracle \
+                     drifted from `semver`'s current shape",
+                ),
+            };
+            assert_eq!(
+                err,
+                VersionError::requirement(bad, semver_reason),
+                "parse_requirement must route its `map_err` arm through \
+                 the lifted VersionError::requirement ctor on the same \
+                 offending value and semver reason",
+            );
+        }
     }
 
     #[test]
