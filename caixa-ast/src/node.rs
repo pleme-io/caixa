@@ -414,8 +414,30 @@ impl NodeKind {
     /// scalar-arm accessors and two disjunctive-scalar-arm accessors onto
     /// the compound-arm axis every downstream authoring-tool and
     /// manifest-parser walker partitions on.
+    ///
+    /// `pub const fn` — extends the caixa-ast const-eval-surface family
+    /// ([`Self::as_keyword`] / [`Self::as_symbol`] / [`Self::as_str`] on
+    /// the per-arm scalar axis, [`Self::seq_delims`] /
+    /// [`Self::reader_macro_prefix`] on the outer-`NodeKind` writer-half
+    /// projection axis, [`crate::Span::new`] / [`crate::Span::point`] /
+    /// [`crate::Span::len`] / [`crate::Span::is_empty`] /
+    /// [`crate::Span::contains`] / [`crate::Span::union`] on the
+    /// byte-offset axis, [`crate::Position::new`] /
+    /// [`crate::Position::origin`] / [`crate::Position::line_column`] on
+    /// the 1-indexed line/column axis, [`crate::Trivia::comment_text`]
+    /// on the trivia-envelope-scoped projection axis) onto the
+    /// compound-arm projection axis. The body reaches for
+    /// [`Vec::as_slice`] on the [`Self::List`] borrowed-`Vec<Node>` slot
+    /// — const-stable since Rust 1.7, well before this workspace's 1.89
+    /// MSRV floor — so the promotion is a body-preserving type-signature
+    /// widening. Every downstream authoring consumer that wants a
+    /// compile-time list-body fixture (a `const HEAD: Option<&[Node]> =
+    /// KIND.as_list();` compile-time oracle a caixa-lint arity gate keys
+    /// off, a per-lint const-context list-shape probe an admission
+    /// webhook consults) now reads through one substrate-primitive const
+    /// dispatch rather than being forced onto the runtime code path.
     #[must_use]
-    pub fn as_list(&self) -> Option<&[Node]> {
+    pub const fn as_list(&self) -> Option<&[Node]> {
         match self {
             Self::List(items) => Some(items.as_slice()),
             _ => None,
@@ -1785,6 +1807,59 @@ mod is_variant_tests {
                  pre-lift shape"
             );
         }
+    }
+
+    // Fail-before-pass-after pin on [`NodeKind::as_list`]'s
+    // `const`-eval-surface posture. The projection routes the
+    // [`NodeKind::List`] arm's borrowed-`Vec<Node>` slot through the
+    // `pub const fn` [`Vec::as_slice`] (const-stable since Rust 1.7, well
+    // within the workspace's 1.89 MSRV floor) — any future accidental
+    // downgrade to non-`const` fails `as_list_via_const_fn` at caixa-ast
+    // build time with E0015 (`cannot call non-const method`), strictly
+    // stronger than a runtime `assert!`. Sibling of the peer
+    // per-source-position-primitive `const`-eval-surface passes on the
+    // caixa-ast surface ([`crate::Span::new`] / [`crate::Span::point`] /
+    // [`crate::Span::len`] / [`crate::Span::is_empty`] /
+    // [`crate::Span::contains`] / [`crate::Span::union`] on the
+    // byte-offset axis, [`crate::Position::new`] /
+    // [`crate::Position::origin`] / [`crate::Position::line_column`] on
+    // the 1-indexed line/column axis, [`crate::Trivia::comment_text`] on
+    // the trivia-envelope-scoped projection axis, [`NodeKind::seq_delims`]
+    // / [`NodeKind::reader_macro_prefix`] / [`NodeKind::as_keyword`] /
+    // [`NodeKind::as_symbol`] / [`NodeKind::as_str`] on the
+    // outer-`NodeKind` writer-half + per-arm scalar projection axes) —
+    // the first `const`-eval-surface pin on the outer-`NodeKind` sum-type
+    // compound-arm projection axis. The sweep exercises the
+    // [`NodeKind::List`] projecting-arm alongside two non-projecting
+    // sibling arms (the sibling compound arm [`NodeKind::Map`] to pin the
+    // strict-`List`-only compound-axis boundary, and the atom-arm
+    // [`NodeKind::Nil`] to pin the non-projecting-arm floor) so a
+    // copy-paste flip that widened the projecting-arm-set or reroute
+    // through a non-`const` detour (a hand-rolled `Some(items.clone()
+    // .as_slice().to_vec().leak())` shape, an inner `.iter().collect()`
+    // that allocates) trips at caixa-ast test time under `PartialEq` on
+    // the `Option<&[Node]>` return shape rather than at a downstream
+    // caixa-fmt / caixa-lint / caixa-teia / caixa-ast consumer-observable
+    // drift.
+    #[test]
+    fn as_list_projection_is_const_fn() {
+        const fn as_list_via_const_fn(k: &NodeKind) -> Option<&[Node]> {
+            k.as_list()
+        }
+        let empty_list = NodeKind::List(Vec::new());
+        let empty_map = NodeKind::Map(Vec::new());
+        let nil = NodeKind::Nil;
+        assert_eq!(as_list_via_const_fn(&empty_list), Some(&[] as &[Node]));
+        assert_eq!(as_list_via_const_fn(&empty_map), None);
+        assert_eq!(as_list_via_const_fn(&nil), None);
+        // Round-trip cross-check against the sibling runtime dispatch —
+        // any future divergence between the `const fn` path and the
+        // runtime path (a hand-rolled shadow `impl` overriding one side,
+        // a `#[cfg(...)]`-gated body that shipped only one lane) trips
+        // here under `PartialEq` on the `Option<&[Node]>` return shape.
+        assert_eq!(as_list_via_const_fn(&empty_list), empty_list.as_list());
+        assert_eq!(as_list_via_const_fn(&empty_map), empty_map.as_list());
+        assert_eq!(as_list_via_const_fn(&nil), nil.as_list());
     }
 
     // Projection contract on the outer-`NodeKind` sum-type's disjunctive
