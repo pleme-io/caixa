@@ -2636,6 +2636,92 @@ pub struct MeshPolicy {
 }
 
 impl MeshPolicy {
+    /// Substrate-canonical `const`-context peer of the derived
+    /// [`Default::default`] on [`MeshPolicy`] — returns the fully-empty
+    /// per-`:politicas` slot (every one of the five `Option<_>`-carrying
+    /// per-axis fields set to `None`), materializable at `const`-eval
+    /// time.
+    ///
+    /// Named `empty()` (not `default()` / `new()`) to match the sibling
+    /// `is_empty()` predicate on the same primitive: the pair
+    /// (`empty()` / `is_empty()`) forms the round-trip discipline
+    /// `MeshPolicy::empty().is_empty() == true` the pin
+    /// [`tests::mesh_policy_empty_is_the_all_none_arm_and_is_empty`]
+    /// locks load-bearing, and every `const`-context consumer that
+    /// wants a canonical unset baseline reads through this constructor
+    /// rather than the derived (non-`const`) [`Default::default`] or
+    /// the five-field struct-literal `MeshPolicy { timeout: None,
+    /// retries: None, circuit_breaker: None, mtls_required: None,
+    /// rate_limit: None }` open-coded per-site.
+    ///
+    /// Direct peer of [`crate::LimitsSpec::empty`] (9739971) on the
+    /// M2 `:limits` typed slot — same "`const`-context peer of the
+    /// derived non-`const` [`Default::default`]" discipline extended
+    /// onto the M3 `:politicas` typed slot. The two lifted `pub const
+    /// fn` constructors together now cover the two per-slot
+    /// [`Default`]-carrying M2/M3 typed slots that also carry an
+    /// `is_empty()` emptiness predicate: every `const`-context consumer
+    /// of a canonical unset per-slot baseline reads through the same
+    /// paired-`(empty(), is_empty())` shape on either slot without a
+    /// runtime dispatch on the derived [`Default::default`].
+    ///
+    /// Prior to this lift the "canonical unset [`MeshPolicy`]" shape
+    /// was reached through one of two paths — the derived
+    /// [`Default::default`] (`fn`, not `const fn` — a downstream
+    /// `const _: MeshPolicy = MeshPolicy::default();` cannot compile
+    /// because [`Default::default`] is not `const`-stable on stable
+    /// Rust; the tracking issue on `const Default` still blocks the
+    /// promotion) or an open-coded struct-literal with five `None`
+    /// arms threaded verbatim at every call site (the five
+    /// `MeshPolicy { timeout: Some(_), ..Default::default() }` /
+    /// `MeshPolicy { retries: Some(_), ..Default::default() }` /
+    /// sibling per-axis-only fixtures in this crate's own test module
+    /// each rest on `..Default::default()` for the four peer arms; a
+    /// future axis addition silently drifts the fixture's intent from
+    /// "one axis under test, the other four unset" to "one axis under
+    /// test, N axes unset, one field forgotten"). A future extension
+    /// of the axis (a per-edge `:politicas` overlay the M4 roadmap
+    /// grows once per-`:contratos`-edge overrides land, a sixth
+    /// `:politicas` sub-slot the roadmap
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// grows past the five-arm Envoy/Cilium-shape §III.2 axis set)
+    /// reaches this constructor at one edit (one added struct field
+    /// on the type + one added `<axis>: None` line here) rather than
+    /// a coordinated rewrite of every open-coded struct-literal at
+    /// every downstream consumer.
+    ///
+    /// `pub const fn` — matches the sibling
+    /// [`MeshPolicy::is_empty`] `pub const fn` shape verbatim, so
+    /// every downstream consumer that folds a canonical unset
+    /// baseline into a `const` position (a `const EMPTY: MeshPolicy =
+    /// MeshPolicy::empty();` module-scope binding a future per-edge
+    /// `:politicas` overlay reads through as its "no override
+    /// declared" arm, a compile-time per-fixture-builder default the
+    /// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// admission-time default-overlay-emit gate consults, a
+    /// compile-time lookup table the LSP hover renderer materializes
+    /// per typed-slot fixture) reads through one `const` dispatch
+    /// rather than being forced onto the runtime code path. Pinned
+    /// load-bearing at the substrate-primitive level by
+    /// [`tests::mesh_policy_empty_is_the_all_none_arm_and_is_empty`]
+    /// (round-trip pin against [`Self::is_empty`]),
+    /// [`tests::mesh_policy_empty_byte_equals_default`] (byte-parity
+    /// pin against the derived [`Default::default`]), and
+    /// [`tests::mesh_policy_empty_ctor_is_const_fn`] (const-eval-surface
+    /// pin via `const` binding — any future accidental downgrade to
+    /// `pub fn` fires E0015 at the binding at caixa-core build time,
+    /// strictly stronger than a runtime `assert!`).
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            timeout: None,
+            retries: None,
+            circuit_breaker: None,
+            mtls_required: None,
+            rate_limit: None,
+        }
+    }
+
     /// True when no `:politicas` axis carries a value — every field is
     /// `None`. The same emptiness contract every other M2/M3 typed
     /// surface carries ([`crate::LimitsSpec::is_empty`],
@@ -24698,6 +24784,116 @@ mod tests {
         // on is_empty() to decide whether to emit at all without
         // re-deriving the contract from inline field probes.
         assert!(!three_member_spec().politicas.is_empty());
+    }
+
+    #[test]
+    fn mesh_policy_empty_is_the_all_none_arm_and_is_empty() {
+        // Fail-before-pass-after round-trip pin on the paired
+        // ([`MeshPolicy::empty`], [`MeshPolicy::is_empty`]) constructor /
+        // predicate on the [`MeshPolicy`] typed slot: the lifted
+        // constructor must materialize a value whose every one of the
+        // five `Option<_>`-carrying per-axis fields is `None`, so the
+        // paired [`MeshPolicy::is_empty`] predicate returns `true` on
+        // the constructor's output by construction. A future silent
+        // regression that omits a `None` arm from the constructor's
+        // struct-literal (a sixth axis added to the type whose
+        // constructor arm is forgotten, an accidental `Some(0)` on the
+        // `retries` arm that would silently violate the
+        // [`AplicacaoError::PolicyRetriesZero`] admission floor) trips
+        // here at caixa-core test time rather than surfacing as a
+        // downstream consumer's per-`:politicas` overlay-emit path
+        // reading a `MeshPolicy::empty()` output that fails the
+        // emptiness predicate and lands an unexpected `spec.policies.
+        // <axis>` field in the emitted Cilium/Envoy overlay. Peer of
+        // the sibling
+        // [`crate::limits::tests::limits_spec_empty_is_the_all_none_arm_and_is_empty`]
+        // pin on the M2 `:limits` typed slot — extends the same
+        // "the canonical unset baseline satisfies the paired
+        // emptiness predicate" round-trip discipline onto the M3
+        // `:politicas` slot.
+        let empty = MeshPolicy::empty();
+        assert!(
+            empty.is_empty(),
+            "MeshPolicy::empty() must return a value whose is_empty() \
+             predicate is true — got {empty:?}",
+        );
+        assert_eq!(empty.timeout(), None);
+        assert_eq!(empty.retries(), None);
+        assert_eq!(empty.circuit_breaker(), None);
+        assert_eq!(empty.mtls_required(), None);
+        assert_eq!(empty.rate_limit(), None);
+    }
+
+    #[test]
+    fn mesh_policy_empty_byte_equals_default() {
+        // Fail-before-pass-after byte-parity pin on the two-path
+        // convergence: the lifted `pub const fn` [`MeshPolicy::empty`]
+        // constructor must byte-equal the derived (non-`const`)
+        // [`Default::default`] on every one of the five
+        // `Option<_>`-carrying per-axis fields under `PartialEq`. The
+        // two paths are semantically identical (both name the
+        // "canonical unset [`MeshPolicy`]" shape) but structurally
+        // distinct (the derived [`Default::default`] threads through
+        // the derive-generated per-field `<Option<_> as Default>::default`
+        // cascade, resolving to `None` on each; the lifted
+        // constructor's struct-literal names each `None` arm
+        // verbatim). A future regression on either path — an
+        // accidental `Some(0)` on the constructor's `retries` arm
+        // that would silently drift the constructor's output from the
+        // derived default (surfacing here as the pin's first-arm
+        // inequality), a future substrate-wide field-default rebrand
+        // that lands on the derived path's per-field
+        // `<Option<_> as Default>::default` but forgets to extend the
+        // constructor's struct-literal (surfacing here as the pin's
+        // per-arm inequality on the newly rebranded axis) — trips
+        // here at caixa-core test time. The `const` binding on the
+        // LHS forces the lifted constructor through the `const`-eval
+        // surface at compile time, so any future accidental downgrade
+        // to `pub fn` fires E0015 at the binding rather than at a
+        // downstream `const`-context consumer's dispatch site. Peer
+        // of the sibling
+        // [`crate::limits::tests::limits_spec_empty_byte_equals_default`]
+        // pin on the M2 `:limits` typed slot.
+        const EMPTY: MeshPolicy = MeshPolicy::empty();
+        assert_eq!(
+            EMPTY,
+            MeshPolicy::default(),
+            "MeshPolicy::empty() must byte-equal MeshPolicy::default() on \
+             every per-axis field — the two paths name the same canonical \
+             unset baseline; a mismatch means one path drifted from the \
+             other on some per-axis default",
+        );
+    }
+
+    #[test]
+    fn mesh_policy_empty_ctor_is_const_fn() {
+        // Const-eval-surface pin on the lifted [`MeshPolicy::empty`]
+        // constructor: the constructor must remain `pub const fn` so
+        // downstream consumers can materialize a canonical unset
+        // baseline in `const` context (a `const EMPTY: MeshPolicy =
+        // MeshPolicy::empty();` module-scope binding for a
+        // fixture-builder table, a `const`-context per-arm predicate
+        // that folds emptiness over the constructor's output at
+        // compile time, a compile-time lookup table the LSP hover
+        // renderer materializes per typed-slot fixture). A future
+        // accidental downgrade to non-`const` (an added runtime
+        // helper reachable only from a non-`const` context in the
+        // body, a manual hand-rolled `impl` that shadows this method)
+        // trips at caixa-core build time — E0015 at the `const EMPTY`
+        // binding below — rather than surfacing as a downstream
+        // `const`-context regression far from the constructor's
+        // declaration. The paired [`Self::is_empty`] predicate call
+        // inside the `const { assert!(..) }` block enforces both
+        // halves of the round-trip (constructor is `const`-callable
+        // AND its output satisfies the paired emptiness predicate at
+        // `const`-eval time) at caixa-core compile time. Peer of the
+        // sibling
+        // [`crate::limits::tests::limits_spec_empty_ctor_is_const_fn`]
+        // pin on the M2 `:limits` typed slot.
+        const EMPTY: MeshPolicy = MeshPolicy::empty();
+        const {
+            assert!(EMPTY.is_empty());
+        }
     }
 
     // ── shared duration codec: cross-slot integer-magnitude gate ──
