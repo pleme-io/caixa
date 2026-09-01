@@ -304,8 +304,26 @@ impl NodeKind {
     /// sibling per-arm accessors already opened, extending the discipline
     /// onto the atom-string-carrying arm-set every caixa-teia name-slot
     /// gate partitions on.
+    ///
+    /// `pub const fn` — extends the caixa-ast const-eval-surface family
+    /// (`Span::new` / `Span::point` / `Span::contains` / `Span::union` /
+    /// `Span::len` / `Span::is_empty` / `Position::new` / `Position::origin`
+    /// / `line_column`; the writer-half `NodeKind::seq_delims` /
+    /// `NodeKind::reader_macro_prefix`; the sibling per-arm
+    /// [`Self::as_keyword`] / [`Self::as_symbol`] / [`Self::as_str`]
+    /// scalar-projection triple; the compound-arm [`Self::as_list`]) onto
+    /// the outer-`NodeKind` sum-type's *disjunctive* atom-string-carrying
+    /// three-arm projection axis. Body reads the arm discriminant through a
+    /// `const`-friendly `match` and returns `Some(&str)` through
+    /// [`String::as_str`] (`pub const fn` since Rust 1.87, well before this
+    /// promotion) — no interior heap traffic, no trait dispatch, no runtime
+    /// operation on the accessor path. A future compile-time caixa-fmt
+    /// writer-side per-arm-identity truth-table / caixa-lint keyword-key
+    /// const-lookup / caixa-lsp writer const-registry that keys off the
+    /// atom-string-carrying three-arm disjunction lands directly on this
+    /// accessor without a runtime-context escape hatch.
     #[must_use]
-    pub fn as_atom_string(&self) -> Option<&str> {
+    pub const fn as_atom_string(&self) -> Option<&str> {
         match self {
             Self::Symbol(s) | Self::Str(s) | Self::Keyword(s) => Some(s.as_str()),
             _ => None,
@@ -355,8 +373,20 @@ impl NodeKind {
     /// opened, extending the discipline onto the two-arm atom-name-
     /// carrying subset every caixa-teia `build_ref` `:nome` / caixa-lsp
     /// `document_symbol` `:nome`-detail site partitions on.
+    ///
+    /// `pub const fn` — sibling in `const`-eval posture to the paired
+    /// three-arm [`Self::as_atom_string`] disjunctive projection, extending
+    /// the caixa-ast const-eval-surface family onto the strict-subset
+    /// two-arm atom-name-carrying axis. Same `match` + [`String::as_str`]
+    /// (`pub const fn` since Rust 1.87) shape as every other borrowed-`&str`
+    /// projection on the [`NodeKind`] outer sum-type — no interior heap
+    /// traffic, no trait dispatch, no runtime operation on the accessor
+    /// path. Pairs with [`Self::as_atom_string`]'s three-arm promotion so
+    /// the two disjunctive-arm-set consumer axes on the substrate primitive
+    /// (`kwarg_symbol` `:tipo`/`:nome`; `build_ref` `:nome`; `document_symbol`
+    /// `:nome`-detail) route through one const-dispatch pair.
     #[must_use]
-    pub fn as_symbol_or_str(&self) -> Option<&str> {
+    pub const fn as_symbol_or_str(&self) -> Option<&str> {
         match self {
             Self::Symbol(s) | Self::Str(s) => Some(s.as_str()),
             _ => None,
@@ -1335,6 +1365,55 @@ mod is_variant_tests {
         const _: () = assert!(FLOAT_KEYWORD.is_none());
         const _: () = assert!(FLOAT_SYMBOL.is_none());
         const _: () = assert!(FLOAT_STR.is_none());
+    }
+
+    // Pin the const-eval surface on the paired *disjunctive* projections
+    // that extend the sibling per-arm [`NodeKind::as_keyword`] /
+    // [`NodeKind::as_symbol`] / [`NodeKind::as_str`] scalar-projection
+    // family onto the disjunctive atom-string-carrying arm-sets:
+    // [`NodeKind::as_atom_string`] (three-arm Symbol|Str|Keyword) and
+    // [`NodeKind::as_symbol_or_str`] (two-arm Symbol|Str strict subset).
+    // Both reach into `const` context so a future compile-time caixa-teia
+    // `kwarg_symbol` / `build_ref` const-lookup, or caixa-lsp
+    // `document_symbol` writer const-registry, can key off the disjunctive
+    // projections without escape onto the runtime path. The `const _: ()
+    // = assert!(…)` bindings resolve both projections at compile time on
+    // the four non-`String`-payload atom arms (Nil / Int / Bool / Float),
+    // each of which is `const`-constructible in-place through its raw arm
+    // ctor and each of which must fall through to `None` on both
+    // projections. A regression that drops `pub const fn` back to `pub fn`
+    // on either (a body edit that reaches for a non-const operation on the
+    // accessor path) fails this test at compile time rather than at runtime,
+    // matching the sibling per-arm scalar-projection triple's
+    // `as_keyword_as_symbol_as_str_are_const` pin and the writer-half
+    // `NodeKind::seq_delims` / `NodeKind::reader_macro_prefix` /
+    // compound-arm `NodeKind::as_list` const-eval discipline — extended
+    // onto the outer-`NodeKind` disjunctive-arm-set projection axis.
+    #[test]
+    fn as_atom_string_and_as_symbol_or_str_are_const() {
+        const NIL: NodeKind = NodeKind::Nil;
+        const NIL_ATOM_STRING: Option<&str> = NIL.as_atom_string();
+        const NIL_SYMBOL_OR_STR: Option<&str> = NIL.as_symbol_or_str();
+        const _: () = assert!(NIL_ATOM_STRING.is_none());
+        const _: () = assert!(NIL_SYMBOL_OR_STR.is_none());
+
+        const INT: NodeKind = NodeKind::Int(0);
+        const INT_ATOM_STRING: Option<&str> = INT.as_atom_string();
+        const INT_SYMBOL_OR_STR: Option<&str> = INT.as_symbol_or_str();
+        const _: () = assert!(INT_ATOM_STRING.is_none());
+        const _: () = assert!(INT_SYMBOL_OR_STR.is_none());
+
+        const BOOL: NodeKind = NodeKind::Bool(false);
+        const BOOL_ATOM_STRING: Option<&str> = BOOL.as_atom_string();
+        const BOOL_SYMBOL_OR_STR: Option<&str> = BOOL.as_symbol_or_str();
+        const _: () = assert!(BOOL_ATOM_STRING.is_none());
+        const _: () = assert!(BOOL_SYMBOL_OR_STR.is_none());
+
+        const FLOAT: NodeKind = NodeKind::Float(0.0);
+        const FLOAT_ATOM_STRING: Option<&str> = FLOAT.as_atom_string();
+        const FLOAT_SYMBOL_OR_STR: Option<&str> = FLOAT.as_symbol_or_str();
+        const _: () = assert!(FLOAT_ATOM_STRING.is_none());
+        const _: () = assert!(FLOAT_SYMBOL_OR_STR.is_none());
     }
 
     // Projection contract on the outer-`NodeKind` sum-type's disjunctive
