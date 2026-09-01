@@ -41,10 +41,45 @@ pub enum TriviaKind {
 }
 
 impl Trivia {
+    /// Project the wrapped [`TriviaKind::LineComment`] body as `&str`, or
+    /// `None` on the sibling two arms ([`TriviaKind::BlankLine`] +
+    /// [`TriviaKind::Shebang`]) — the trivia-envelope-scoped surface every
+    /// downstream authoring consumer that only needs the line-comment body
+    /// (a `caixa-fmt` block-comment paragraph-fill pass over the collected
+    /// trivia list, a `caixa-lint` doc-comment / rustdoc-shape probe, a
+    /// deferred `caixa-lsp` hover pop-up that renders the comment body on
+    /// mouse-over) partitions on.
+    ///
+    /// `pub const fn` — closes const-eval discipline on the [`Trivia`]
+    /// envelope-scoped projection axis, peer with the sibling
+    /// [`crate::TriviaKind`] `IsVariant`-derived per-arm predicate
+    /// discriminators ([`TriviaKind::is_line_comment`] +
+    /// [`TriviaKind::is_blank_line`] + [`TriviaKind::is_shebang`]) on the
+    /// same trivia-arm-discriminator surface. The body reaches for
+    /// [`String::as_str`] on the [`TriviaKind::LineComment`] borrowed-
+    /// `String` slot — const-stable since Rust 1.87, well before this
+    /// workspace's 1.89 MSRV floor — so the promotion is a body-preserving
+    /// type-signature widening. Matches the sibling per-source-position-
+    /// primitive const-eval-surface family on the caixa-ast surface
+    /// ([`crate::Span::new`] / [`crate::Span::point`] / [`crate::Span::len`]
+    /// / [`crate::Span::is_empty`] / [`crate::Span::contains`] /
+    /// [`crate::Span::union`] on the byte-offset axis,
+    /// [`crate::Position::new`] / [`crate::Position::origin`] on the 1-
+    /// indexed line/column axis, [`crate::Position::line_column`] on the
+    /// `Position` projection axis, [`crate::NodeKind::seq_delims`] /
+    /// [`crate::NodeKind::reader_macro_prefix`] / [`crate::NodeKind::as_keyword`]
+    /// / [`crate::NodeKind::as_symbol`] / [`crate::NodeKind::as_str`] on
+    /// the outer-NodeKind writer-half projection axis) — every downstream
+    /// consumer that wants a compile-time line-comment-body fixture (a
+    /// `const HEADER: Option<&str> = TRIVIA.comment_text();` compile-time
+    /// oracle a caixa-fmt paragraph-fill pass keys off, a per-lint const-
+    /// context doc-comment shape probe a future admission webhook
+    /// consults) now reads through one substrate-primitive const dispatch
+    /// rather than being forced onto the runtime code path.
     #[must_use]
-    pub fn comment_text(&self) -> Option<&str> {
+    pub const fn comment_text(&self) -> Option<&str> {
         match &self.kind {
-            TriviaKind::LineComment(s) => Some(s),
+            TriviaKind::LineComment(s) => Some(s.as_str()),
             TriviaKind::BlankLine | TriviaKind::Shebang(_) => None,
         }
     }
@@ -92,6 +127,60 @@ mod is_variant_tests {
                  satisfy exactly one is_* predicate (its own); observed \
                  row must equal the one-hot expected row"
             );
+        }
+    }
+
+    // Fail-before-pass-after pin on [`Trivia::comment_text`]'s
+    // `const`-eval-surface posture. The projection routes the wrapped
+    // [`TriviaKind::LineComment`] borrowed-`String` slot through the
+    // `pub const fn` [`String::as_str`] (const-stable since Rust 1.87,
+    // well within the workspace's 1.89 MSRV floor) — any future
+    // accidental downgrade to non-`const` fails
+    // `comment_text_via_const_fn` at caixa-ast build time with E0015
+    // (`cannot call non-const method`), strictly stronger than a runtime
+    // `assert!`. Sibling of the peer per-source-position-primitive
+    // `const`-eval-surface passes on the caixa-ast surface
+    // ([`crate::Span::new`] / [`crate::Span::point`] / [`crate::Span::len`]
+    // / [`crate::Span::is_empty`] / [`crate::Span::contains`] /
+    // [`crate::Span::union`] on the byte-offset axis,
+    // [`crate::Position::new`] / [`crate::Position::origin`] /
+    // [`crate::Position::line_column`] on the 1-indexed line/column
+    // axis, [`crate::NodeKind::seq_delims`] /
+    // [`crate::NodeKind::reader_macro_prefix`] /
+    // [`crate::NodeKind::as_keyword`] / [`crate::NodeKind::as_symbol`]
+    // / [`crate::NodeKind::as_str`] on the outer-NodeKind writer-half
+    // projection axis). The sweep exercises all three
+    // [`TriviaKind`] arms (a populated `LineComment` body, the field-
+    // less `BlankLine`, a populated `Shebang` body) so a copy-paste flip
+    // that reroutes one arm's return through the wrong projection lane
+    // trips at caixa-ast test time under `PartialEq` on the
+    // `Option<&str>` return shape rather than at a downstream
+    // caixa-fmt / caixa-lint / caixa-lsp consumer-observable drift.
+    #[test]
+    fn trivia_comment_text_projection_is_const_fn() {
+        const fn comment_text_via_const_fn(t: &Trivia) -> Option<&str> {
+            t.comment_text()
+        }
+        for (variant, expected) in [
+            (TriviaKind::LineComment("hello".into()), Some("hello")),
+            (TriviaKind::BlankLine, None),
+            (
+                TriviaKind::Shebang("#!/usr/bin/env tatara-script".into()),
+                None,
+            ),
+        ] {
+            let trivia = Trivia {
+                kind: variant,
+                span: Span::default(),
+            };
+            assert_eq!(
+                comment_text_via_const_fn(&trivia),
+                expected,
+                "Trivia::comment_text must project through the pub const \
+                 fn body byte-equal to the pre-lift open-coded match on \
+                 the same fixture",
+            );
+            assert_eq!(comment_text_via_const_fn(&trivia), trivia.comment_text());
         }
     }
 
