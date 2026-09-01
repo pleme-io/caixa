@@ -373,6 +373,81 @@ pub struct LimitsSpec {
 }
 
 impl LimitsSpec {
+    /// Substrate-canonical `const`-context peer of the derived
+    /// [`Default::default`] on [`LimitsSpec`] — returns the fully-empty
+    /// per-`:limits` slot (every one of the four `Option<Copy-T>`-carrying
+    /// per-axis fields set to `None`), materializable at `const`-eval time.
+    ///
+    /// Named `empty()` (not `default()` / `new()`) to match the sibling
+    /// `is_empty()` predicate on the same primitive: the pair
+    /// (`empty()` / `is_empty()`) forms the round-trip discipline
+    /// `LimitsSpec::empty().is_empty() == true` the pin
+    /// [`tests::limits_spec_empty_is_the_all_none_arm_and_is_empty`]
+    /// locks load-bearing, and every `const`-context consumer that
+    /// wants a canonical unset baseline reads through this constructor
+    /// rather than the derived (non-`const`) [`Default::default`] or
+    /// the four-field struct-literal `LimitsSpec { memory: None, fuel:
+    /// None, wall_clock: None, cpu: None }` open-coded per-site.
+    ///
+    /// Prior to this lift the "canonical unset [`LimitsSpec`]" shape was
+    /// reached through one of two paths — the derived
+    /// [`Default::default`] (`fn`, not `const fn` — a downstream
+    /// `const _: LimitsSpec = LimitsSpec::default();` cannot compile
+    /// because [`Default::default`] is not `const`-stable on stable
+    /// Rust; the tracking issue on `const Default` still blocks the
+    /// promotion) or an open-coded struct-literal with four `None`
+    /// arms threaded verbatim at every call site (the four
+    /// [`ser_byte_size_routes_through_render_serialize_option_via_str_canonical`] /
+    /// [`de_byte_size_routes_through_render_deserialize_option_via_str_canonical`] /
+    /// sibling per-serde-hook test fixtures in this crate's own test
+    /// module carry the same `LimitsSpec { memory: Some(_), fuel: None,
+    /// wall_clock: None, cpu: None }` fixture shape; a future variant
+    /// addition to any of these fields silently drifts the fixture's
+    /// intent from "one axis under test, the other three unset" to
+    /// "one axis under test, N axes unset, one field forgotten"). A
+    /// future extension of the axis (a per-cluster limits-declaration
+    /// overlay the operator pins through a future `ComputeUnit` CR-side
+    /// `spec.limits.<axis>` slot the M4 CR materializer resolves, a
+    /// fifth `:limits` sub-slot the roadmap
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// grows once the Lunatic-shape §III.1 axis set stops covering the
+    /// substrate's discovered sandboxing shape) reaches this
+    /// constructor at one edit (one added struct field on the type +
+    /// one added `<axis>: None` line here) rather than a coordinated
+    /// rewrite of every open-coded four-field struct-literal at every
+    /// downstream consumer.
+    ///
+    /// `pub const fn` — matches the sibling
+    /// [`LimitsSpec::is_empty`] `pub const fn` shape verbatim, so
+    /// every downstream consumer that folds a canonical unset
+    /// baseline into a `const` position (a `const EMPTY:
+    /// LimitsSpec = LimitsSpec::empty();` module-scope binding the
+    /// future wasm-operator's per-Servico startup-log skip-empty-
+    /// `:limits` short-circuit reads through, a compile-time
+    /// per-fixture-builder default the future M4 CR materializer's
+    /// admission-time default-overlay-emit gate consults, a
+    /// compile-time lookup table the LSP hover renderer materializes
+    /// per typed-slot fixture) reads through one `const` dispatch
+    /// rather than being forced onto the runtime code path. Pinned
+    /// load-bearing at the substrate-primitive level by
+    /// [`tests::limits_spec_empty_is_the_all_none_arm_and_is_empty`]
+    /// (round-trip pin against [`Self::is_empty`]),
+    /// [`tests::limits_spec_empty_byte_equals_default`] (byte-parity
+    /// pin against the derived [`Default::default`]), and
+    /// [`tests::limits_spec_empty_ctor_is_const_fn`] (const-eval-surface
+    /// pin via `const` binding — any future accidental downgrade to
+    /// `pub fn` fires E0015 at the binding at caixa-core build time,
+    /// strictly stronger than a runtime `assert!`).
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            memory: None,
+            fuel: None,
+            wall_clock: None,
+            cpu: None,
+        }
+    }
+
     /// True when no axis is bounded.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
@@ -7811,6 +7886,111 @@ mod tests {
              produce byte-equal `LimitsError::EmptyDuration` to the \
              pre-lift tuple-newtype wrap on the same `&str` fixture",
         );
+    }
+
+    #[test]
+    fn limits_spec_empty_is_the_all_none_arm_and_is_empty() {
+        // Fail-before-pass-after round-trip pin on the paired
+        // ([`LimitsSpec::empty`], [`LimitsSpec::is_empty`]) constructor /
+        // predicate on the [`LimitsSpec`] typed slot: the lifted
+        // constructor must materialize a value whose every one of the
+        // four `Option<Copy-T>`-carrying per-axis fields is `None`, so
+        // the paired [`LimitsSpec::is_empty`] predicate returns `true`
+        // on the constructor's output by construction. A future silent
+        // regression that omits a `None` arm from the constructor's
+        // struct-literal (a fifth axis added to the type whose
+        // constructor arm is forgotten, an accidental `Some(0)` on the
+        // `memory` arm that would silently violate the
+        // [`LimitsError::MemoryZero`] admission floor) trips here at
+        // caixa-core test time rather than surfacing as a downstream
+        // consumer's per-`:limits` overlay-emit path reading a
+        // `LimitsSpec::empty()` output that fails the emptiness
+        // predicate and lands an unexpected `spec.limits.<axis>` field
+        // in the emitted ComputeUnit CR. Peer of the sibling
+        // [`crate::aplicacao::MeshPolicy`] / [`crate::BehaviorSpec`]
+        // emptiness-predicate pins on the M3 / M2 typed-slot surface
+        // — extends the same "the canonical unset baseline satisfies
+        // the paired emptiness predicate" round-trip discipline onto
+        // the M2 `:limits` slot.
+        let empty = LimitsSpec::empty();
+        assert!(
+            empty.is_empty(),
+            "LimitsSpec::empty() must return a value whose is_empty() \
+             predicate is true — got {empty:?}",
+        );
+        assert_eq!(empty.memory(), None);
+        assert_eq!(empty.fuel(), None);
+        assert_eq!(empty.wall_clock(), None);
+        assert_eq!(empty.cpu(), None);
+    }
+
+    #[test]
+    fn limits_spec_empty_byte_equals_default() {
+        // Fail-before-pass-after byte-parity pin on the two-path
+        // convergence: the lifted `pub const fn` [`LimitsSpec::empty`]
+        // constructor must byte-equal the derived (non-`const`)
+        // [`Default::default`] on every one of the four
+        // `Option<Copy-T>`-carrying per-axis fields under `PartialEq`.
+        // The two paths are semantically identical (both name the
+        // "canonical unset [`LimitsSpec`]" shape) but structurally
+        // distinct (the derived [`Default::default`] threads through
+        // the derive-generated per-field
+        // `<Option<Copy-T> as Default>::default` cascade, resolving to
+        // `None` on each; the lifted constructor's struct-literal
+        // names each `None` arm verbatim). A future regression on
+        // either path — an accidental `Some(0)` on the constructor's
+        // `memory` arm that would silently drift the constructor's
+        // output from the derived default (surfacing here as the pin's
+        // first-arm inequality), a future substrate-wide field-default
+        // rebrand that lands on the derived path's per-field
+        // `<Option<Copy-T> as Default>::default` but forgets to
+        // extend the constructor's struct-literal (surfacing here as
+        // the pin's per-arm inequality on the newly rebranded axis) —
+        // trips here at caixa-core test time. The `const` binding on
+        // the LHS forces the lifted constructor through the
+        // `const`-eval surface at compile time, so any future
+        // accidental downgrade to `pub fn` fires E0015 at the binding
+        // rather than at a downstream `const`-context consumer's
+        // dispatch site.
+        const EMPTY: LimitsSpec = LimitsSpec::empty();
+        assert_eq!(
+            EMPTY,
+            LimitsSpec::default(),
+            "LimitsSpec::empty() must byte-equal LimitsSpec::default() on \
+             every per-axis field — the two paths name the same canonical \
+             unset baseline; a mismatch means one path drifted from the \
+             other on some per-axis default",
+        );
+    }
+
+    #[test]
+    fn limits_spec_empty_ctor_is_const_fn() {
+        // Const-eval-surface pin on the lifted [`LimitsSpec::empty`]
+        // constructor: the constructor must remain `pub const fn` so
+        // downstream consumers can materialize a canonical unset
+        // baseline in `const` context (a `const EMPTY: LimitsSpec =
+        // LimitsSpec::empty();` module-scope binding for a
+        // fixture-builder table, a `const`-context per-arm predicate
+        // that folds emptiness over the constructor's output at
+        // compile time, a compile-time lookup table the LSP hover
+        // renderer materializes per typed-slot fixture). A future
+        // accidental downgrade to non-`const` (an added runtime helper
+        // reachable only from a non-`const` context in the body, a
+        // manual hand-rolled `impl` that shadows this method) trips
+        // at caixa-core build time — E0015 at the `const EMPTY` binding
+        // below — rather than surfacing as a downstream `const`-
+        // context regression far from the constructor's declaration.
+        // The paired [`Self::is_empty`] predicate call inside the
+        // `const { assert!(..) }` block enforces both halves of the
+        // round-trip (constructor is `const`-callable AND its output
+        // satisfies the paired emptiness predicate at `const`-eval
+        // time) at caixa-core compile time. Peer of the sibling
+        // [`caixa_kind_wire_name_is_const_fn`]-shaped
+        // `const`-eval-surface pins on the peer accessor axes.
+        const EMPTY: LimitsSpec = LimitsSpec::empty();
+        const {
+            assert!(EMPTY.is_empty());
+        }
     }
 
     #[test]
