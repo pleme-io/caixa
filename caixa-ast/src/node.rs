@@ -525,8 +525,34 @@ impl NodeKind {
     /// three scalar-arm, two disjunctive-scalar-arm, and one compound-
     /// arm accessors onto the fourth arm-family every downstream
     /// authoring-tool walker and manifest-lowerer partitions on.
+    ///
+    /// `pub const fn` — closes the const-eval discipline the sibling
+    /// caixa-ast source-position primitive family (`Span::new` /
+    /// `Span::point` / `Span::contains` / `Span::union` / `Span::len` /
+    /// `Span::is_empty`, `Position::new` / `Position::origin`,
+    /// `line_column`), the outer-`NodeKind` per-arm scalar-projection
+    /// family (`as_keyword` / `as_symbol` / `as_str`), the two
+    /// disjunctive-scalar accessors (`as_atom_string` /
+    /// `as_symbol_or_str`), the single-arm compound projection
+    /// (`as_list`), and the paired writer-half projections (`seq_delims`
+    /// / `reader_macro_prefix`) already carry onto the caixa-ast
+    /// [`NodeKind`] outer-sum-type's per-`Box<Node>`-arm reader-half
+    /// projection axis. Body is preserved verbatim: the four-arm
+    /// disjunctive `match &self` binds `inner: &Box<Node>` and returns
+    /// `Some(inner)`, where the compiler's built-in `&Box<T>` → `&T`
+    /// return-position coercion sidesteps the `Deref` trait-dispatch
+    /// path (const-stable in Rust since long before this workspace's 1.89
+    /// MSRV floor), so no arm-storage owning-borrow is taken and no drop
+    /// is invoked on any arm's `Box<Node>` payload. Every downstream
+    /// walker that wants a compile-time reader-macro-inner fixture (a
+    /// `const INNER: Option<&Node> = KIND.as_reader_macro_inner();`
+    /// compile-time oracle a caixa-lint reader-macro-arity gate keys off,
+    /// a per-arm identity oracle a future caixa-lsp writer const-
+    /// registry consults at compile time) now reads through one substrate-
+    /// primitive const dispatch rather than being forced onto the runtime
+    /// code path.
     #[must_use]
-    pub fn as_reader_macro_inner(&self) -> Option<&Node> {
+    pub const fn as_reader_macro_inner(&self) -> Option<&Node> {
         match self {
             Self::Quote(inner)
             | Self::Quasiquote(inner)
@@ -589,8 +615,37 @@ impl NodeKind {
     /// reader-macro-arm-set accessors onto the disjunctive-compound-arm
     /// axis every downstream compound-shape-agnostic walker partitions
     /// on.
+    ///
+    /// `pub const fn` — sibling in `const`-eval posture to the paired
+    /// single-arm [`Self::as_list`] compound projection, extending the
+    /// caixa-ast const-eval-surface family onto the disjunctive three-
+    /// arm D4-dialect compound-body axis. Body-preserving verbatim
+    /// (same `match &self { Self::List(items) | Self::Map(items) |
+    /// Self::Vector(items) => Some(items.as_slice()), _ => None }`
+    /// shape, same [`Vec::as_slice`] `pub const fn` const-stable since
+    /// Rust 1.7 the [`Self::as_list`] promotion routes through), so the
+    /// promotion is a type-signature widening — no arm-storage owning-
+    /// borrow is taken, no drop is invoked on any arm's `Vec<Node>`
+    /// payload. Closes the const-eval discipline the sibling caixa-ast
+    /// source-position primitive family, the outer-`NodeKind` per-arm
+    /// scalar-projection family (`as_keyword` / `as_symbol` / `as_str`),
+    /// the two disjunctive-scalar accessors (`as_atom_string` /
+    /// `as_symbol_or_str`), the single-arm compound projection
+    /// (`as_list`), the paired writer-half projections (`seq_delims` /
+    /// `reader_macro_prefix`), and the sibling reader-macro-arm reader-
+    /// half projection ([`Self::as_reader_macro_inner`]) already carry
+    /// onto the last remaining `Option<&_>` projection axis of the
+    /// outer-`NodeKind` sum-type — the disjunctive three-arm compound-
+    /// body axis every compound-shape-agnostic walker / header-inliner /
+    /// grid-cell classifier partitions on. Pairs with the sibling
+    /// writer-half [`Self::seq_delims`] promotion so the reader/writer-
+    /// duality's two halves on the D4-dialect compound-arm-set (the
+    /// body slice the arm carries, and the two delimiter bytes the arm
+    /// reads back as) now BOTH dispatch through one substrate-primitive
+    /// const accessor rather than a runtime-context escape hatch on
+    /// either half.
     #[must_use]
-    pub fn as_seq_body(&self) -> Option<&[Node]> {
+    pub const fn as_seq_body(&self) -> Option<&[Node]> {
         match self {
             Self::List(items) | Self::Map(items) | Self::Vector(items) => Some(items.as_slice()),
             _ => None,
@@ -2111,6 +2166,64 @@ mod is_variant_tests {
         }
     }
 
+    // Pin the const-eval surface: the substrate-primitive reader-half-of-
+    // the-reader/writer-duality projection accessor on the reader-macro-
+    // arm-set reaches into `const` context, so a future compile-time
+    // caixa-lint reader-macro-arity truth-table / caixa-lsp writer const-
+    // registry / caixa-teia manifest-lowerer const-fixture that keys off
+    // `NodeKind::as_reader_macro_inner` lands directly on the accessor
+    // without a runtime-context escape hatch. The `const _: () = assert!(…)`
+    // bindings resolve the projection at compile time on the non-reader-
+    // macro arm-set (the reader-macro arms themselves carry a `Box<Node>`
+    // payload with an `impl Drop` whose const-drop stability is behind
+    // the same rust-lang/rust #143874 tracking issue the sibling
+    // `Span::union` open-codes `Ord::min` / `Ord::max` around), pinning
+    // the four `Nil` / `Int` / `Bool` / `Float` non-compound atom arms —
+    // each `const`-constructible in-place through its raw arm ctor and
+    // each of which must fall through the accessor's `_ => None` arm.
+    // Any regression that drops `pub const fn` back to `pub fn` (a body
+    // edit that reaches for a non-const operation on the accessor path
+    // — e.g. a `Some(Box::leak(inner.clone()))` regression, an inner
+    // `Deref::deref` trait-dispatch call that opts out of the compiler's
+    // built-in `&Box<T>` → `&T` return-position coercion) fails this
+    // test at compile time rather than at runtime, matching the sibling
+    // `reader_macro_prefix_is_const` pin on the paired writer-half of
+    // the reader-macro-arm-set and the caixa-ast source-position primitive
+    // family's `Span::new` / `Span::point` / `Span::contains` /
+    // `Span::union` / `Span::len` / `Span::is_empty` / `Position::new` /
+    // `Position::origin` / `line_column` `pub const fn` shape's const-
+    // eval discipline extended onto the caixa-ast [`NodeKind`] outer-
+    // sum-type's per-`Box<Node>`-arm reader-half projection axis.
+    #[test]
+    fn as_reader_macro_inner_is_const() {
+        const NIL: NodeKind = NodeKind::Nil;
+        const NIL_INNER: Option<&Node> = NIL.as_reader_macro_inner();
+        const _: () = assert!(NIL_INNER.is_none());
+
+        const INT: NodeKind = NodeKind::Int(0);
+        const INT_INNER: Option<&Node> = INT.as_reader_macro_inner();
+        const _: () = assert!(INT_INNER.is_none());
+
+        const BOOL: NodeKind = NodeKind::Bool(false);
+        const BOOL_INNER: Option<&Node> = BOOL.as_reader_macro_inner();
+        const _: () = assert!(BOOL_INNER.is_none());
+
+        const FLOAT: NodeKind = NodeKind::Float(0.0);
+        const FLOAT_INNER: Option<&Node> = FLOAT.as_reader_macro_inner();
+        const _: () = assert!(FLOAT_INNER.is_none());
+
+        // Runtime cross-check against the sibling runtime dispatch — any
+        // future divergence between the `const fn` path and the runtime
+        // path (a hand-rolled shadow `impl` overriding one side, a
+        // `#[cfg(...)]`-gated body that shipped only one lane) trips
+        // here under `PartialEq` on the `Option<&Node>` return shape.
+        const fn inner_via_const_fn(k: &NodeKind) -> Option<&Node> {
+            k.as_reader_macro_inner()
+        }
+        let nil = NodeKind::Nil;
+        assert_eq!(inner_via_const_fn(&nil), nil.as_reader_macro_inner());
+    }
+
     // Projection contract on the outer-`NodeKind` sum-type's disjunctive
     // three-arm `List` | `Map` | `Vector` D4-dialect compound-body arm-
     // set accessor: exactly the three compound-carrying arms return
@@ -2299,6 +2412,75 @@ mod is_variant_tests {
                  sites would silently disagree with their pre-lift shape"
             );
         }
+    }
+
+    // Pin the const-eval surface: the substrate-primitive reader-half-of-
+    // the-reader/writer-duality projection accessor on the D4-dialect
+    // compound-body arm-set reaches into `const` context, so a future
+    // compile-time caixa-fmt writer-side compound-body-lookup truth-table
+    // / caixa-lint no-empty-compound-in-header-position rule / caixa-lsp
+    // writer const-registry / caixa-teia manifest-lowerer const-fixture
+    // that keys off `NodeKind::as_seq_body` lands directly on the accessor
+    // without a runtime-context escape hatch. Pairs with the sibling
+    // writer-half `seq_delims_is_const` pin so BOTH halves of the
+    // reader/writer-duality on the D4-dialect compound-arm-set now sit in
+    // `const` context — the body slice the arm carries AND the two
+    // delimiter bytes the arm reads back as. The `const _: () = assert!(…)`
+    // bindings resolve the projection at compile time on the non-compound
+    // arm-set (the compound arms themselves carry a `Vec<Node>` payload
+    // with an `impl Drop` whose const-drop stability is behind the same
+    // rust-lang/rust #143874 tracking issue the sibling `Span::union`
+    // open-codes `Ord::min` / `Ord::max` around), pinning the four `Nil` /
+    // `Int` / `Bool` / `Float` non-compound atom arms — each of which is
+    // `const`-constructible in-place through its raw arm ctor
+    // (`NodeKind::Nil` a unit ctor; `NodeKind::Int(i64)` / `Bool(bool)` /
+    // `Float(f64)` all one-slot tuple-newtype ctors on `Copy` scalar
+    // payloads) and each of which must fall through the accessor's
+    // `_ => None` arm. Any regression that drops `pub const fn` back to
+    // `pub fn` (a body edit that reaches for a non-const operation on the
+    // accessor path — e.g. an `.iter().collect::<Vec<_>>().leak()` detour
+    // that would silently allocate on every call) fails this test at
+    // compile time rather than at runtime, matching the sibling
+    // `as_list_projection_is_const_fn` pin on the paired single-arm
+    // compound projection, the `seq_delims_is_const` pin on the paired
+    // writer-half of the compound-arm-set, and the caixa-ast source-
+    // position primitive family's `pub const fn` shape's const-eval
+    // discipline extended onto the caixa-ast [`NodeKind`] outer-sum-type's
+    // last remaining `Option<&_>` projection axis.
+    #[test]
+    fn as_seq_body_is_const() {
+        const NIL: NodeKind = NodeKind::Nil;
+        const NIL_BODY: Option<&[Node]> = NIL.as_seq_body();
+        const _: () = assert!(NIL_BODY.is_none());
+
+        const INT: NodeKind = NodeKind::Int(0);
+        const INT_BODY: Option<&[Node]> = INT.as_seq_body();
+        const _: () = assert!(INT_BODY.is_none());
+
+        const BOOL: NodeKind = NodeKind::Bool(false);
+        const BOOL_BODY: Option<&[Node]> = BOOL.as_seq_body();
+        const _: () = assert!(BOOL_BODY.is_none());
+
+        const FLOAT: NodeKind = NodeKind::Float(0.0);
+        const FLOAT_BODY: Option<&[Node]> = FLOAT.as_seq_body();
+        const _: () = assert!(FLOAT_BODY.is_none());
+
+        // Runtime cross-check against the sibling runtime dispatch — any
+        // future divergence between the `const fn` path and the runtime
+        // path (a hand-rolled shadow `impl` overriding one side, a
+        // `#[cfg(...)]`-gated body that shipped only one lane) trips
+        // here under `PartialEq` on the `Option<&[Node]>` return shape.
+        const fn body_via_const_fn(k: &NodeKind) -> Option<&[Node]> {
+            k.as_seq_body()
+        }
+        let empty_list = NodeKind::List(Vec::new());
+        let empty_map = NodeKind::Map(Vec::new());
+        let empty_vec = NodeKind::Vector(Vec::new());
+        let nil = NodeKind::Nil;
+        assert_eq!(body_via_const_fn(&empty_list), empty_list.as_seq_body());
+        assert_eq!(body_via_const_fn(&empty_map), empty_map.as_seq_body());
+        assert_eq!(body_via_const_fn(&empty_vec), empty_vec.as_seq_body());
+        assert_eq!(body_via_const_fn(&nil), nil.as_seq_body());
     }
 
     // Projection contract on the outer-`NodeKind` sum-type's writer-side
