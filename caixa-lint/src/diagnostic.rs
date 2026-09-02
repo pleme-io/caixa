@@ -237,6 +237,111 @@ impl FixSafety {
     /// after `caixa_arch::InvariantKind`) to converge onto the same
     /// one-canonical-arm-list-per-enum discipline.
     pub const ALL: &'static [Self] = &[Self::Safe, Self::Unsafe];
+
+    /// Substrate-canonical per-[`FixSafety`] lowercase-tag scalar
+    /// accessor every consumer that renders the fix-safety-tier axis
+    /// as user-facing text keys off — returns the per-arm byte-string
+    /// (`"safe"` / `"unsafe"`) as a `&'static str`, matching the paired
+    /// [`gen_platform::IsVariant`]-derive-generated per-arm predicate
+    /// names ([`Self::is_safe`] / [`Self::is_unsafe`]) verbatim.
+    ///
+    /// Named `as_str` (not `label` / `tag`) to match the sibling
+    /// closed-set-enum `as_str` convention the substrate already
+    /// carries across every peer typed enum — [`crate::Severity::as_str`]
+    /// on the paired caixa-lint severity axis, [`caixa_core::CaixaKind::as_str`]
+    /// on the caixa-core top-level `:kind` axis, and the M2/M3
+    /// [`caixa_core::supervisor::RestartStrategy::as_str`] /
+    /// [`caixa_core::supervisor::RestartPolicy::as_str`] /
+    /// [`caixa_core::aplicacao::PlacementStrategy::as_str`] siblings.
+    /// Every future consumer that reaches the fix-safety tier as a
+    /// canonical byte-string (a future `feira lint --fix-safety=<tag>`
+    /// verb enumerating the accepted tier list into a Nord-themed
+    /// help line, a `tracing::field::Value::Str`-arm structured-log
+    /// recorder on the runner's per-diagnostic fix-safety-classification
+    /// emission path, a future admission-webhook rejection body
+    /// naming the accepted fix-safety tiers) reaches the paired
+    /// byte-string through one substrate-primitive dispatch rather
+    /// than an open-coded `format!("{:?}", ...)`-allocation re-inlining
+    /// at every wire-up.
+    ///
+    /// `pub const fn` — matches the sibling
+    /// [`gen_platform::IsVariant`]-derive-generated per-arm `is_*`
+    /// predicates' `const fn` posture, so every future substrate-side
+    /// `const`-context consumer (a `const _: () = assert!(…)` module-
+    /// scope pin on a per-fixture typed [`FixSafety`], a compile-time
+    /// `HashMap<&'static str, _>`-shaped per-tier policy table) reaches
+    /// the paired byte-string through one substrate-primitive dispatch
+    /// at compile time as at runtime.
+    ///
+    /// A future variant addition (an `Experimental` tier between
+    /// [`Self::Safe`] and [`Self::Unsafe`] the M3-and-later lint
+    /// runner grows for AI-suggested rewrites that need explicit
+    /// review-and-accept) reaches the paired [`std::fmt::Display`] +
+    /// [`AsRef<str>`] impls and every downstream `.as_str()` consumer
+    /// through one match-arm edit here.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Safe => "safe",
+            Self::Unsafe => "unsafe",
+        }
+    }
+}
+
+/// Route the derived-style [`std::fmt::Display`] impl on [`FixSafety`]
+/// through the substrate-canonical [`FixSafety::as_str`] `pub const fn`
+/// accessor so every consumer that binds a [`FixSafety`] through the
+/// standard-library `{}` formatting axis (a future `feira lint --fix`
+/// per-tier summary line, a `tracing::field::Value::from(fix.safety)`
+/// structured-log recorder on the runner's per-fix emission path, any
+/// `format!("{safety}")` interpolation in a future audit surface)
+/// reaches the canonical byte-string through one substrate-primitive
+/// dispatch rather than an open-coded per-arm match at every wire-up.
+///
+/// Follows the same closed-set-typed-enum `Display`-through-`as_str`
+/// convention the substrate-wide siblings [`crate::Severity`] (6ad94f3),
+/// [`caixa_core::CaixaKind`], [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::dep::DepList`], [`caixa_arch::invariants::InvariantKind`]
+/// (87c875a), and [`caixa_arch::report::ArchVerdict`] (f3da79b) already
+/// carry — closes the [`FixSafety`] closed-set enum's
+/// `(as_str, Display, AsRef<str>)` canonical-projection triple.
+impl std::fmt::Display for FixSafety {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Route the standard-library [`AsRef<str>`] projection on [`FixSafety`]
+/// through the substrate-canonical [`FixSafety::as_str`] `pub const fn`
+/// accessor so every consumer that binds a [`FixSafety`] through the
+/// trait-idiomatic `.as_ref()` (a future
+/// `HashMap::get::<str>(safety.as_ref())` per-tier policy-table lookup,
+/// a `Command::arg` shell-out composing the canonical fix-safety tag
+/// into a `feira lint --fix-safety=<tag>` verb, any
+/// `impl AsRef<str>`-bound generic function) reaches the canonical
+/// byte-string through one substrate-primitive dispatch rather than an
+/// open-coded `.as_str()` re-inlining at every wire-up.
+///
+/// Peer of the substrate-wide sibling closed-set-enum
+/// `AsRef<str>`-through-`as_str` family already carried by
+/// [`crate::Severity`] (ce9d1e3), [`caixa_core::CaixaKind`],
+/// [`caixa_core::CaixaDialeto`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::aplicacao::RateLimitUnit`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::dep::DepList`], [`caixa_core::CaixaVersion`],
+/// [`caixa_arch::invariants::InvariantKind`], and
+/// [`caixa_arch::report::ArchVerdict`] — extends the axis onto the
+/// caixa-lint fix-safety-tier closed-set enum, closing the
+/// `(as_str, Display, AsRef<str>)` canonical-projection triple.
+impl AsRef<str> for FixSafety {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -682,5 +787,129 @@ mod tests {
         assert_eq!(format!("{}", Severity::Warning), "warning");
         assert_eq!(format!("{}", Severity::Info), "info");
         assert_eq!(format!("{}", Severity::Hint), "hint");
+    }
+
+    #[test]
+    fn fix_safety_as_str_returns_canonical_lowercase_tag_per_arm() {
+        // Fail-before-pass-after pin on the [`FixSafety`] two-arm
+        // canonical lowercase tag alphabet — the byte-string every
+        // downstream `.as_str()`-bound consumer (a future
+        // `feira lint --fix-safety=<tag>` verb enumerating the
+        // accepted tier list, a `tracing::field::Value::Str`-arm
+        // structured-log recorder on the runner's per-fix emission
+        // path, a `HashMap::get::<str>(safety.as_str())` lookup on a
+        // future per-tier policy table) receives through one
+        // substrate-primitive dispatch. Matches the paired
+        // [`gen_platform::IsVariant`]-derive-generated per-arm
+        // predicate names ([`FixSafety::is_safe`] /
+        // [`FixSafety::is_unsafe`]) verbatim.
+        //
+        // A future rename of the canonical tag on any arm (a `"soft"`
+        // shortening of [`FixSafety::Safe`], a `"risky"` shortening
+        // of [`FixSafety::Unsafe`], a capitalisation drift on either
+        // of the two) touches the [`FixSafety::as_str`] scalar
+        // accessor and both this pin and the paired
+        // [`fix_safety_as_ref_str_routes_through_as_str_accessor`]
+        // convergence pin catch it in one caixa-lint test run rather
+        // than at a downstream consumer's silent misclassification.
+        //
+        // Peer of the sibling
+        // [`severity_as_ref_str_returns_canonical_lowercase_tag_per_arm`]
+        // pin on the paired caixa-lint severity axis (ce9d1e3 / 6ad94f3).
+        assert_eq!(FixSafety::Safe.as_str(), "safe");
+        assert_eq!(FixSafety::Unsafe.as_str(), "unsafe");
+    }
+
+    #[test]
+    fn fix_safety_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after pin on the `impl AsRef<str> for
+        // FixSafety` trait-idiomatic `&str`-projection axis: for every
+        // arm in [`FixSafety::ALL`], the standard-library `.as_ref()`
+        // dispatch must resolve to the same byte-string the paired
+        // [`FixSafety::as_str`] `pub const fn` scalar accessor returns.
+        // Guards against a future silent split between the trait impl
+        // and the substrate accessor (a hand-rolled `match self`
+        // reintroduction inside the impl, an arm rename that touches
+        // one path but not the other, an accidental peer accessor that
+        // shadows [`FixSafety::as_str`]) by asserting the two paths
+        // converge byte-for-byte across the full closed set.
+        //
+        // Peer of the sibling caixa-lint
+        // [`severity_as_ref_str_routes_through_as_str_accessor`]
+        // convergence pin (ce9d1e3) and the caixa-arch
+        // `invariant_kind_as_ref_str_routes_through_as_str_accessor`
+        // (87c875a) / `arch_verdict_display_and_as_ref_str_route_through_as_str_accessor`
+        // (f3da79b) peers.
+        for &arm in FixSafety::ALL {
+            let via_trait: &str = arm.as_ref();
+            let via_accessor: &str = arm.as_str();
+            assert_eq!(
+                via_trait, via_accessor,
+                "FixSafety::{arm:?}.as_ref() must resolve to the same \
+                 byte-string as FixSafety::{arm:?}.as_str() — the \
+                 AsRef<str> impl must dispatch through the substrate \
+                 accessor",
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_display_and_as_ref_str_route_through_as_str_accessor() {
+        // Three-path convergence pin: the paired [`std::fmt::Display`]
+        // impl, the paired [`AsRef<str>`] impl, and the substrate-
+        // canonical [`FixSafety::as_str`] `pub const fn` accessor must
+        // resolve to the same `&'static str` per arm.
+        //
+        // Guards against any future silent detour that routes one impl
+        // through a divergent projection (a hand-rolled per-arm match
+        // in the `fmt` body, an `impl AsRef<str>` swap onto a
+        // hypothetical peer accessor, a rename that touches one
+        // endpoint but not the paired sibling) — the pin trips at
+        // caixa-lint test time rather than at a downstream consumer's
+        // silent tag split. Peer of the sibling caixa-lint
+        // [`severity_display_and_as_ref_str_route_through_as_str_accessor`]
+        // (6ad94f3), caixa-arch
+        // `invariant_kind_display_and_as_ref_str_route_through_as_str_accessor`
+        // (87c875a), and
+        // `arch_verdict_display_and_as_ref_str_route_through_as_str_accessor`
+        // (f3da79b) three-path convergence pins — closes the
+        // `(as_str, Display, AsRef<str>)` canonical-projection triple
+        // on the last remaining closed-set fieldless typed enum on the
+        // caixa-lint surface without it.
+        for &arm in FixSafety::ALL {
+            let via_as_str: &str = arm.as_str();
+            let via_as_ref: &str = arm.as_ref();
+            let via_display = arm.to_string();
+            assert_eq!(
+                via_as_ref, via_as_str,
+                "FixSafety::{arm:?} AsRef<str>::as_ref() must byte-equal \
+                 as_str()",
+            );
+            assert_eq!(
+                via_display, via_as_str,
+                "FixSafety::{arm:?} Display::fmt() must byte-equal \
+                 as_str()",
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_display_byte_equals_canonical_lowercase_tag_per_arm() {
+        // Byte-parity pin on the [`FixSafety`] two-arm canonical
+        // lowercase tag alphabet through the standard-library `{}`
+        // Display axis — pinned separately from the paired
+        // [`fix_safety_as_str_returns_canonical_lowercase_tag_per_arm`]
+        // pin so a future silent swap of the `Display` impl onto a
+        // divergent projection (a hand-rolled per-arm match in the
+        // `fmt` body that shifts one arm, a routing detour through
+        // the derived `Debug` output shape, an `impl Display` swap
+        // that reads from a hypothetical peer accessor) trips at
+        // caixa-lint test time rather than at the downstream
+        // `format!("{safety}")` consumer's silent tag drift. Peer of
+        // the sibling caixa-lint
+        // [`severity_display_byte_equals_canonical_lowercase_tag_per_arm`]
+        // (6ad94f3) pin on the paired severity axis.
+        assert_eq!(format!("{}", FixSafety::Safe), "safe");
+        assert_eq!(format!("{}", FixSafety::Unsafe), "unsafe");
     }
 }
