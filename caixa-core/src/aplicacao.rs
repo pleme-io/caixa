@@ -6173,6 +6173,79 @@ impl std::fmt::Display for PlacementStrategy {
     }
 }
 
+/// Substrate-canonical [`AsRef<str>`] projection on the M3
+/// per-Aplicacao distribution-strategy [`PlacementStrategy`] closed-set
+/// typed enum — routes through the same [`PlacementStrategy::as_str`]
+/// `pub const fn` scalar accessor the paired [`std::fmt::Display`] impl
+/// and the un-`rename`d [`serde::Serialize`] derive already key off, so
+/// any future consumer that binds a [`PlacementStrategy`] through the
+/// standard-library `impl AsRef<str>` bound (a future `feira app
+/// placement --set <arm>` verb that composes the emitted
+/// `PascalCase`/camelCase wire scalar into a
+/// [`std::process::Command::arg`] shell-out of the future
+/// `lareira-fleet-programs` aggregator's per-Aplicacao gate, a
+/// per-Aplicacao structured-log recorder on the future `app-operator`'s
+/// hierarchical reconciliation surface that accepts `impl AsRef<str>`
+/// at the `tracing::field::Value` `Str`-arm, a
+/// [`std::collections::HashMap`] lookup keyed on the strategy wire byte
+/// through `map.get::<str>(strategy.as_ref())` on a future
+/// per-strategy dispatch table the M5 adaptive-placement engine
+/// composes) reaches the paired
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] lifted-const
+/// through one substrate-primitive dispatch rather than an open-coded
+/// `.as_str()` projection at every wire-up.
+///
+/// Peer of the sibling [`std::fmt::Display`] impl on the same
+/// primitive — both delegate to the shared
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor, so
+/// [`format!("{v}")`], `v.as_str()`, and `<PlacementStrategy as
+/// AsRef<str>>::as_ref(&v)` resolve to the same byte-string per
+/// instance by construction. A future variant rename or `#[serde(rename_all
+/// = "kebab-case")]` attribute-drift on the enum reaches every one of
+/// the three paths (plus the wire-format `Serialize` derive that
+/// already routes through the same lifted const) through exactly one
+/// caixa-core edit.
+///
+/// Same "route the trait impl through the substrate-primitive
+/// accessor" discipline the sibling [`crate::CaixaVersion`]
+/// [`AsRef<str>`] impl (16d5c7e), the paired M2
+/// [`crate::supervisor::RestartStrategy`] [`AsRef<str>`] impl
+/// (63eb1a4), and the paired M2 [`crate::supervisor::RestartPolicy`]
+/// [`AsRef<str>`] impl (419ea81) carry — closes the M2/M3
+/// closed-set-typed-enum family's standard-library [`AsRef<str>`]
+/// projection axis onto the last remaining M3 mesh-primitive-defining
+/// slot, so every OTP/mesh-shape closed-set typed enum on the caixa
+/// surface now carries the paired [`AsRef<str>`] + [`fmt::Display`] +
+/// `as_str` triple through one lifted `M3_PLACEMENT_ESTRATEGIA_*` /
+/// `SUPERVISOR_*` const. Rust-side newtype/typed-enum convention pairs
+/// [`AsRef<str>`] and [`fmt::Display`] on the same primitive so a
+/// caller who has one has both; before this lift,
+/// [`PlacementStrategy`] carried [`fmt::Display`] but not the paired
+/// [`AsRef<str>`] impl the convention names.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_as_ref_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm closed set) and
+/// [`tests::placement_strategy_as_ref_str_routes_through_display_via_shared_accessor`]
+/// (three-path convergence: `AsRef<str>` + `Display` + `as_str` all
+/// resolve to the same lifted `M3_PLACEMENT_ESTRATEGIA_*` const per
+/// arm) — any future silent detour that routes the impl through a
+/// divergent projection (a per-arm inline `match self { … }`
+/// re-inlining that opens a compile-time link to the un-lifted
+/// arm-literal, a swap onto the kebab-case
+/// [`gen_platform::Discriminant`] catalog identity that would collide
+/// the wire axis with the dispatcher-catalog axis) trips at
+/// caixa-core test time under `assert_eq!` rather than at a downstream
+/// `impl AsRef<str>`-bound consumer's silent split.
+impl AsRef<str> for PlacementStrategy {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -18964,6 +19037,83 @@ mod tests {
                  Display + as_str + Serialize all resolve to the same \
                  M3_PLACEMENT_ESTRATEGIA_* const)"
             );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl AsRef<str> for PlacementStrategy` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`PlacementStrategy::as_str`] `pub const fn` accessor resolve
+        // to the same `&str` per instance across the three-arm closed
+        // set, so any future silent detour that routes the impl through
+        // a divergent projection (a per-arm inline
+        // `match self { PlacementStrategy::Sharded => "Sharded", … }`
+        // re-inlining that opens a compile-time link to the un-lifted
+        // arm-literal, a swap onto the kebab-case
+        // [`gen_platform::Discriminant`] catalog identity that would
+        // collide the wire axis with the dispatcher-catalog axis) trips
+        // at caixa-core test time under `PartialEq` rather than at a
+        // downstream `impl AsRef<str>`-bound consumer's silent split.
+        // Sweeps every one of the three arms [`PlacementStrategy::ALL`]
+        // carries so no arm's projection is covered only by the sibling
+        // wire-format `Serialize` derive path. Peer of the sibling
+        // [`crate::supervisor::tests::restart_policy_as_ref_str_routes_through_as_str_accessor`]
+        // (419ea81) / `restart_strategy_as_ref_str_routes_through_as_str_accessor`
+        // (63eb1a4) on the paired M2 per-supervisor closed-set typed
+        // enums, and the [`crate::version::tests::caixa_version_as_ref_str_routes_through_as_str_accessor`]
+        // (16d5c7e) pin on the paired top-level `:versao` typed newtype
+        // — the four pins together close the substrate primitive's
+        // `AsRef<str>` projection axis on every closed-set typed enum
+        // /newtype on the M2/M3 mesh + supervision + version surface.
+        for &variant in PlacementStrategy::ALL {
+            assert_eq!(
+                <PlacementStrategy as AsRef<str>>::as_ref(&variant),
+                variant.as_str(),
+                "AsRef<str> impl on PlacementStrategy::{variant:?} must \
+                 byte-equal PlacementStrategy::as_str on the same instance \
+                 — divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_as_ref_str_routes_through_display_via_shared_accessor() {
+        // Fail-before-pass-after byte-parity pin on the three-path
+        // convergence discipline the M3 per-Aplicacao distribution-
+        // strategy primitive now carries on the `&str`-projection axis:
+        // `<PlacementStrategy as AsRef<str>>::as_ref(&v)` (the newly
+        // lifted impl), `format!("{v}")` (the pre-existing
+        // [`fmt::Display`] impl), and `v.as_str()` (the substrate-
+        // primitive `pub const fn` accessor both trait impls delegate
+        // through) must resolve to the same byte-string on every
+        // instance across the three-arm closed set. Refuses any future
+        // divergence between the two trait impls (a stray
+        // [`fmt::Display::fmt`] rewrite that hand-rolls the arms rather
+        // than delegating through the shared accessor; a hypothetical
+        // `AsRef<str>` rewrite that inlines a per-arm literal cascade)
+        // that would silently split the two projection paths of the
+        // same closed-set typed enum. Mirrors the sibling three-path-
+        // convergence discipline the peer
+        // [`crate::supervisor::RestartPolicy`] typed enum carries on its
+        // `AsRef<str>` / `Display` / `as_str` triple (supervisor.rs pin
+        // `restart_policy_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 419ea81), the peer [`crate::supervisor::RestartStrategy`]
+        // triple (supervisor.rs pin
+        // `restart_strategy_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 63eb1a4), and the [`crate::CaixaVersion`] typed newtype
+        // triple (version.rs pin
+        // `caixa_version_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 16d5c7e).
+        for &variant in PlacementStrategy::ALL {
+            let via_as_ref: &str = <PlacementStrategy as AsRef<str>>::as_ref(&variant);
+            let via_display: String = format!("{variant}");
+            let via_accessor: &str = variant.as_str();
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_display, via_accessor);
+            assert_eq!(via_as_ref, via_display.as_str());
         }
     }
 
