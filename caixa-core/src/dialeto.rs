@@ -172,6 +172,64 @@ impl CaixaDialeto {
         }
     }
 
+    /// Substrate-canonical reverse projection on the [`CaixaDialeto`]
+    /// closed-set dialect-classification axis — parses the `PascalCase`
+    /// variant-name byte-string back to the typed variant, or `None` when
+    /// `s` is outside the closed-set arm-string set [`Self::as_str`]
+    /// emits. Walks the same four `"Pacote"` / `"Molde"` /
+    /// `"MoldePosicional"` / `"Desconhecido"` byte-strings the sibling
+    /// [`Self::as_str`] emitter returns, so the parse and emit halves of
+    /// the round-trip migrate through one caixa-core edit on any future
+    /// arm addition (the module doc's "third dialect" hazard actualising
+    /// as a fifth arm) — the compiler-checked exhaustiveness on
+    /// [`Self::as_str`]'s `match self` arms and the round-trip pin
+    /// [`tests::caixa_dialeto_round_trips_through_as_str_and_from_wire`]
+    /// together lock the two halves mutually.
+    ///
+    /// Prior to this lift the substrate carried only the forward
+    /// `Self → &str` projection on the dialect-classification axis (the
+    /// [`Self::as_str`] emitter, the [`std::fmt::Display`] impl routed
+    /// through it, the [`AsRef<str>`] impl routed through it) — every
+    /// future consumer that wanted to promote the census-facing text back
+    /// to the typed enum (a future `feira dialeto --filter
+    /// <Pacote|Molde|MoldePosicional|Desconhecido>` CLI arg-parse that
+    /// binds the wire form into the typed enum before dispatching to the
+    /// per-arm counter, a future M4 `mesh.pleme.io/v1alpha1/Manifesto`
+    /// CR materializer's admission-time re-parse of the per-dialect
+    /// audit body, a future audit-report re-loader that binds a prior
+    /// [`Self::as_str`] output back to the typed enum for cross-run
+    /// comparison) would have had to re-inline a four-arm `match s`
+    /// cascade that expressed no compile-time link back to the typed
+    /// [`CaixaDialeto`] enum.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`crate::supervisor::RestartStrategy::from_wire`] (4eec29c) /
+    /// [`crate::supervisor::RestartPolicy::from_wire`] (dd32ccf) /
+    /// [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`crate::dep::DepList::from_wire`] (45ee563) typed enums carry on
+    /// the peer wire-side `str → Self` axes — extends the family onto
+    /// the seventh closed-set fieldless typed enum on the caixa surface
+    /// (the dialect-classification axis), matching the same
+    /// two-way `str ↔ Self` round-trip every sibling closed-set enum
+    /// already carries. Method-named `from_wire` (not `from_str`) to
+    /// match the peer shapes verbatim and side-step the derived
+    /// [`std::str::FromStr`] impls the sibling
+    /// [`gen_platform::FromStrKind`]-carrying axes install on their
+    /// kebab-case dispatcher-catalog identity. Returns `Option<Self>`
+    /// (rather than `Result<Self, _>`) to match the peer shapes: the
+    /// caller picks the diagnostic form appropriate for its use site.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "Pacote" => Some(Self::Pacote),
+            "Molde" => Some(Self::Molde),
+            "MoldePosicional" => Some(Self::MoldePosicional),
+            "Desconhecido" => Some(Self::Desconhecido),
+            _ => None,
+        }
+    }
+
     /// The keyword an author should write for this dialect, once the
     /// migration named in [`Self::consumidor`] completes.
     #[must_use]
@@ -1219,6 +1277,103 @@ mod tests {
         const { assert!(CaixaDialeto::Molde.is_molde()) };
         const { assert!(CaixaDialeto::MoldePosicional.is_molde_posicional()) };
         const { assert!(CaixaDialeto::Desconhecido.is_desconhecido()) };
+    }
+
+    #[test]
+    fn caixa_dialeto_from_wire_accepts_every_as_str_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`CaixaDialeto::from_wire`] reverse projection: every arm in
+        // [`CaixaDialeto::ALL`] must parse back through `from_wire` when
+        // fed its own [`CaixaDialeto::as_str`] output, landing on
+        // `Some(same_variant)` — a regression that hand-rolled either
+        // side's per-arm match without threading through the shared
+        // four-string closed set would silently disagree on any future
+        // arm rename and this pin flags it at caixa-core build time.
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_round_trips_through_from_wire`]
+        // (2aa6d23) /
+        // `placement_strategy_from_wire_accepts_every_lifted_constant`
+        // (18c7342) /
+        // `dep_list_round_trips_through_as_str_and_from_wire` (45ee563)
+        // shape on the sibling closed-set typed-enum reverse-projection
+        // axes.
+        for &variant in CaixaDialeto::ALL {
+            let wire = variant.as_str();
+            let parsed = CaixaDialeto::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "CaixaDialeto::from_wire({wire:?}) must accept every \
+                     CaixaDialeto::as_str output — got None for the \
+                     wire byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "CaixaDialeto::from_wire(CaixaDialeto::{variant:?}.as_str()) \
+                 must return CaixaDialeto::{variant:?} — the (as_str, \
+                 from_wire) pair must form a total round-trip on the \
+                 closed four-arm CaixaDialeto arm-set"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the parser's accept-set: any string outside
+        // the four-arm [`CaixaDialeto::as_str`] output set must return
+        // `None`. A future accidental widening of the accept-set (a
+        // case-insensitive match that accepts `"pacote"` on the wire
+        // axis, a hand-rolled Levenshtein-forgiving arm-lookup that
+        // admits `"Pacotee"` typos, a silent acceptance of the sibling
+        // [`Self::palavra_canonica`] `"defcaixa"` / `"defmolde"`
+        // byte-shapes on this axis) would silently drift the parser's
+        // accept-set from the emitter's — a downstream audit-report
+        // re-loader that bound a prior audit's [`Self::as_str`] output
+        // back to the typed enum through this parser would then bind a
+        // malformed byte-string to a plausibly-wrong typed arm the
+        // caller does not route through any fallback, silently
+        // misclassifying the reloaded row. Also rejects the sibling
+        // [`Self::palavra_canonica`] (`"defcaixa"` / `"defmolde"`) and
+        // the sibling [`Self::consumidor`] (`"caixa-core / feira"`,
+        // `"pleme-doc-gen"`, `"nobody known"`) byte-shapes, which are
+        // the substrate's *distinct-axis* projections on the same enum
+        // — the two-axis split the sibling
+        // [`Self::palavra_canonica`] / [`Self::consumidor`] /
+        // [`Self::descricao`] docstrings explicitly frame forbids
+        // accepting one axis's byte-shapes as parseable on the other
+        // axis. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_from_wire_rejects_unknown_byte_strings`]
+        // (2aa6d23) /
+        // `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // (18c7342) /
+        // `dep_list_from_wire_returns_none_on_unknown_wire_scalar`
+        // (45ee563) rejection pins on the sibling closed-set typed-enum
+        // reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "pacote",
+            "PACOTE",
+            "molde",
+            "MoldePositional",
+            "desconhecido",
+            "Unknown",
+            "defcaixa",
+            "defmolde",
+            "?",
+            "caixa-core / feira",
+            "pleme-doc-gen",
+            "nobody known",
+            "Pacote ",
+            " Pacote",
+        ] {
+            assert!(
+                CaixaDialeto::from_wire(bad).is_none(),
+                "CaixaDialeto::from_wire({bad:?}) must return None — the \
+                 parser's accept-set is exactly the four CaixaDialeto::as_str \
+                 outputs; a widening would silently split the parser's \
+                 accept-set from the emitter's arm-set"
+            );
+        }
     }
 
     #[test]
