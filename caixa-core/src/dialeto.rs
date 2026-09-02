@@ -336,6 +336,63 @@ impl std::fmt::Display for CaixaDialeto {
     }
 }
 
+/// Substrate-canonical [`AsRef<str>`] projection on the [`CaixaDialeto`]
+/// closed-set fieldless typed dialect-classification enum — routes through
+/// the same [`CaixaDialeto::as_str`] `pub const fn` scalar accessor the
+/// paired [`std::fmt::Display`] impl already delegates through, so any
+/// future consumer that binds a [`CaixaDialeto`] through the standard-
+/// library `impl AsRef<str>` bound (a [`std::process::Command::arg`]
+/// shell-out that composes the canonical `PascalCase` variant-name into a
+/// `feira dialeto --strict-palavra <Pacote|Molde|MoldePosicional|Desconhecido>`
+/// diagnostic overlay, a `tracing::field::Value::Str`-arm structured-log
+/// recorder on the [`crate::Caixa::from_lisp`] foreign-dialect
+/// [`crate::ManifestError::DialetoEstrangeiro`] refusal path, a
+/// [`std::collections::HashMap`] lookup keyed on the canonical name
+/// through `map.get::<str>(dialeto.as_ref())` on a future M4 admission-
+/// webhook's per-dialect rejection-body composition table) reaches the
+/// paired `"Pacote"` / `"Molde"` / `"MoldePosicional"` / `"Desconhecido"`
+/// byte-string through one substrate-primitive dispatch rather than an
+/// open-coded `.as_str()` re-inlining at every wire-up.
+///
+/// Same "route the trait impl through the substrate-primitive accessor"
+/// discipline the sibling [`crate::CaixaVersion`] [`AsRef<str>`] impl
+/// (16d5c7e), the paired M2 [`crate::supervisor::RestartStrategy`]
+/// [`AsRef<str>`] impl (63eb1a4), the paired M2
+/// [`crate::supervisor::RestartPolicy`] [`AsRef<str>`] impl (419ea81),
+/// the M3 [`crate::aplicacao::PlacementStrategy`] [`AsRef<str>`] impl
+/// (d86edd2), the M3 [`crate::aplicacao::RateLimitUnit`] [`AsRef<str>`]
+/// impl (d8136db), and the top-level [`crate::CaixaKind`] [`AsRef<str>`]
+/// impl (cd2091f) carry — extends the substrate primitive's
+/// [`AsRef<str>`] projection axis onto the seventh closed-set typed enum
+/// on the caixa surface: the dialect-classification axis previously
+/// carried [`fmt::Display`]-through-`as_str` but not yet the paired
+/// [`AsRef<str>`] impl, so a downstream consumer that bound the enum
+/// through the standard-library `AsRef<str>` trait had to reach the
+/// canonical byte-string through an open-coded `.as_str()` call rather
+/// than the trait-idiomatic `.as_ref()` the peer closed-set typed enums
+/// already admit.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_as_ref_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`] across the four-arm
+/// closed set) and
+/// [`tests::caixa_dialeto_as_ref_str_routes_through_display_via_shared_accessor`]
+/// (three-path convergence: `AsRef<str>` + `Display` + `as_str` all
+/// resolve to the same byte-string per arm) — any future silent detour
+/// that routes the impl through a divergent projection (a per-arm inline
+/// `match self { CaixaDialeto::Pacote => "Pacote", … }` re-inlining that
+/// opens a compile-time link to the un-lifted arm-literal, a swap onto
+/// the second-axis [`CaixaDialeto::palavra_canonica`] /
+/// [`CaixaDialeto::consumidor`] / [`CaixaDialeto::descricao`] accessors
+/// that carry distinct byte-shapes per axis) trips at caixa-core test
+/// time under `assert_eq!` rather than at a downstream
+/// `impl AsRef<str>`-bound consumer's silent split.
+impl AsRef<str> for CaixaDialeto {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -837,6 +894,81 @@ mod tests {
                  CaixaDialeto::as_str (single source of truth: the \
                  lifted per-arm `PascalCase` variant-name byte-string)"
             );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl AsRef<str> for CaixaDialeto` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`CaixaDialeto::as_str`] `pub const fn` accessor resolve to
+        // the same `&str` per instance across the four-arm closed set,
+        // so any future silent detour that routes the impl through a
+        // divergent projection (a per-arm inline
+        // `match self { CaixaDialeto::Pacote => "Pacote", … }` re-inlining
+        // that opens a compile-time link to the un-lifted arm-literal,
+        // a swap onto the second-axis
+        // [`CaixaDialeto::palavra_canonica`] /
+        // [`CaixaDialeto::consumidor`] / [`CaixaDialeto::descricao`]
+        // accessors that carry distinct byte-shapes per axis) trips at
+        // caixa-core test time under `PartialEq` rather than at a
+        // downstream `impl AsRef<str>`-bound consumer's silent split.
+        // Sweeps every one of the four arms [`CaixaDialeto::ALL`]
+        // carries so no arm's projection is covered only by the sibling
+        // `Display` path. Peer of the sibling
+        // `rate_limit_unit_as_ref_str_routes_through_as_suffix_accessor`
+        // (d8136db) on the M3 `:politicas :rate-limit` closed-set typed
+        // enum, and the peer
+        // [`crate::kind::tests::caixa_kind_as_ref_str_routes_through_as_str_accessor`]
+        // (cd2091f) pin on the top-level closed-set typed
+        // discriminator — the pins together close the substrate
+        // primitive's `AsRef<str>` projection axis onto the seventh
+        // closed-set fieldless typed enum on the caixa surface.
+        for &variant in CaixaDialeto::ALL {
+            assert_eq!(
+                <CaixaDialeto as AsRef<str>>::as_ref(&variant),
+                variant.as_str(),
+                "AsRef<str> impl on CaixaDialeto::{variant:?} must \
+                 byte-equal CaixaDialeto::as_str on the same instance \
+                 — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_as_ref_str_routes_through_display_via_shared_accessor() {
+        // Fail-before-pass-after byte-parity pin on the three-path
+        // convergence discipline the [`CaixaDialeto`] closed-set
+        // dialect-classification enum now carries on the `&str`-
+        // projection axis: `<CaixaDialeto as AsRef<str>>::as_ref(&v)`
+        // (the newly lifted impl), `format!("{v}")` (the pre-existing
+        // [`fmt::Display`] impl), and `v.as_str()` (the substrate-
+        // primitive `pub const fn` accessor both trait impls delegate
+        // through) must resolve to the same byte-string on every
+        // instance across the four-arm closed set. Refuses any future
+        // divergence between the two trait impls (a stray
+        // [`fmt::Display::fmt`] rewrite that hand-rolls the arms
+        // rather than delegating through the shared accessor; a
+        // hypothetical `AsRef<str>` rewrite that inlines a per-arm
+        // literal cascade) that would silently split the two
+        // projection paths of the same closed-set typed enum. Mirrors
+        // the sibling three-path-convergence discipline the peer
+        // [`crate::aplicacao::RateLimitUnit`] typed enum carries
+        // (`rate_limit_unit_as_ref_str_routes_through_display_via_shared_accessor`,
+        // d8136db), the peer [`crate::CaixaKind`] triple
+        // (`caixa_kind_as_ref_str_routes_through_display_via_shared_accessor`,
+        // cd2091f), and the [`crate::CaixaVersion`] typed newtype
+        // triple (`caixa_version_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 16d5c7e).
+        for &variant in CaixaDialeto::ALL {
+            let via_as_ref: &str = <CaixaDialeto as AsRef<str>>::as_ref(&variant);
+            let via_display: String = format!("{variant}");
+            let via_accessor: &str = variant.as_str();
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_display, via_accessor);
+            assert_eq!(via_as_ref, via_display.as_str());
         }
     }
 
