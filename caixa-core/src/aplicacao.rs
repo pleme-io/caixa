@@ -4477,6 +4477,72 @@ impl std::fmt::Display for RateLimitUnit {
     }
 }
 
+/// Substrate-canonical [`AsRef<str>`] projection on the M3
+/// `:politicas :rate-limit` closed-set typed unit-suffix enum —
+/// routes through the same [`RateLimitUnit::as_suffix`] `pub const fn`
+/// scalar accessor the paired [`std::fmt::Display`] impl already
+/// delegates through, so any future consumer that binds a
+/// [`RateLimitUnit`] through the standard-library `impl AsRef<str>`
+/// bound (a [`std::process::Command::arg`] shell-out that composes the
+/// canonical suffix into an Envoy sidecar config-CLI's per-`:politicas`
+/// `--rate-limit-unit <s|m|h>` arg on the future
+/// `CiliumClusterwideEnvoyConfig` overlay MESH-COMPOSITION §III.2 #3
+/// names, a `tracing::field::Value::Str`-arm structured-log recorder
+/// on the future `app-operator`'s per-`:politicas :rate-limit`
+/// reconcile step, a [`std::collections::HashMap`] lookup keyed on
+/// the canonical suffix through `map.get::<str>(unit.as_ref())` on a
+/// future per-unit token-bucket-refill dispatch table the future M4
+/// admission-webhook rejection body composes) reaches the paired
+/// `"s"` / `"m"` / `"h"` byte-string through one substrate-primitive
+/// dispatch rather than an open-coded `.as_suffix()` re-inlining at
+/// every wire-up.
+///
+/// Deliberately routes through the canonical suffix axis, not the
+/// second-magnitude [`RateLimitUnit::window`] axis — `AsRef<str>` and
+/// [`fmt::Display`] land on the same author-surface-canonical byte-
+/// string the codec's parse and render arms both dispatch on, while
+/// the token-bucket-refill period stays reachable only through the
+/// explicit [`RateLimitUnit::window`] / [`RateLimitUnit::from_window`]
+/// paths.
+///
+/// Same "route the trait impl through the substrate-primitive
+/// accessor" discipline the sibling [`crate::CaixaVersion`]
+/// [`AsRef<str>`] impl (16d5c7e), the paired M2
+/// [`crate::supervisor::RestartStrategy`] [`AsRef<str>`] impl
+/// (63eb1a4), the paired M2 [`crate::supervisor::RestartPolicy`]
+/// [`AsRef<str>`] impl (419ea81), the M3
+/// [`PlacementStrategy`] [`AsRef<str>`] impl (d86edd2), and the
+/// top-level [`crate::CaixaKind`] [`AsRef<str>`] impl (cd2091f) carry
+/// — closes the substrate primitive's [`AsRef<str>`] projection axis
+/// onto the last remaining closed-set typed enum with a
+/// [`fmt::Display`] surface, so every closed-set typed enum / newtype
+/// on the caixa surface (top-level `:kind`, both M2
+/// `:supervisor`-slot per-child and sibling-restart typed enums, the
+/// M3 `:placement :estrategia` typed enum, the M3
+/// `:politicas :rate-limit` unit-suffix typed enum, and the `:versao`
+/// typed newtype) now carries the paired [`AsRef<str>`] +
+/// [`fmt::Display`] + `as_*` triple through one lifted-const family.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_as_ref_str_routes_through_as_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::as_suffix`] across the
+/// three-arm closed set) and
+/// [`tests::rate_limit_unit_as_ref_str_routes_through_display_via_shared_accessor`]
+/// (three-path convergence: `AsRef<str>` + `Display` + `as_suffix`
+/// all resolve to the same byte-string per arm) — any future silent
+/// detour that routes the impl through a divergent projection (a
+/// per-arm inline `match self { … }` re-inlining that opens a compile-
+/// time link to the un-lifted arm-literal, a swap onto the
+/// second-magnitude [`RateLimitUnit::window`] axis that would collide
+/// the canonical-suffix / token-bucket-refill two-axis split) trips at
+/// caixa-core test time under `assert_eq!` rather than at a downstream
+/// `impl AsRef<str>`-bound consumer's silent split.
+impl AsRef<str> for RateLimitUnit {
+    fn as_ref(&self) -> &str {
+        self.as_suffix()
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -21092,6 +21158,83 @@ mod tests {
                  as_suffix (single source of truth: the canonical suffix \
                  the codec parses and renders)"
             );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_as_ref_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl AsRef<str> for RateLimitUnit` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] `pub const fn` accessor
+        // resolve to the same `&str` per instance across the three-arm
+        // closed set, so any future silent detour that routes the impl
+        // through a divergent projection (a per-arm inline
+        // `match self { RateLimitUnit::Second => "s", … }` re-inlining
+        // that opens a compile-time link to the un-lifted arm-literal,
+        // a swap onto the second-magnitude
+        // [`super::RateLimitUnit::window`] axis that would collide the
+        // canonical-suffix / token-bucket-refill two-axis split) trips
+        // at caixa-core test time under `PartialEq` rather than at a
+        // downstream `impl AsRef<str>`-bound consumer's silent split.
+        // Sweeps every one of the three arms
+        // [`super::RateLimitUnit::ALL`] carries so no arm's projection
+        // is covered only by the sibling `Display` path. Peer of the
+        // sibling
+        // `placement_strategy_as_ref_str_routes_through_as_str_accessor`
+        // (d86edd2) on the M3 mesh-placement closed-set typed enum,
+        // and the peer
+        // [`crate::kind::tests::caixa_kind_as_ref_str_routes_through_as_str_accessor`]
+        // (cd2091f) pin on the top-level closed-set typed
+        // discriminator — the pins together close the substrate
+        // primitive's `AsRef<str>` projection axis on every closed-set
+        // typed enum with a `fmt::Display` surface across the M2 / M3
+        // typed slots plus the top-level `:kind` + `:versao`
+        // primitives.
+        for &unit in super::RateLimitUnit::ALL {
+            assert_eq!(
+                <super::RateLimitUnit as AsRef<str>>::as_ref(&unit),
+                unit.as_suffix(),
+                "AsRef<str> impl on RateLimitUnit::{unit:?} must \
+                 byte-equal RateLimitUnit::as_suffix on the same \
+                 instance — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_as_ref_str_routes_through_display_via_shared_accessor() {
+        // Fail-before-pass-after byte-parity pin on the three-path
+        // convergence discipline the M3 `:politicas :rate-limit`
+        // canonical-unit primitive now carries on the `&str`-projection
+        // axis: `<RateLimitUnit as AsRef<str>>::as_ref(&v)` (the newly
+        // lifted impl), `format!("{v}")` (the pre-existing
+        // [`fmt::Display`] impl), and `v.as_suffix()` (the substrate-
+        // primitive `pub const fn` accessor both trait impls delegate
+        // through) must resolve to the same byte-string on every
+        // instance across the three-arm closed set. Refuses any future
+        // divergence between the two trait impls (a stray
+        // [`fmt::Display::fmt`] rewrite that hand-rolls the arms
+        // rather than delegating through the shared accessor; a
+        // hypothetical `AsRef<str>` rewrite that inlines a per-arm
+        // literal cascade) that would silently split the two
+        // projection paths of the same closed-set typed enum. Mirrors
+        // the sibling three-path-convergence discipline the peer
+        // [`super::PlacementStrategy`] typed enum carries
+        // (`placement_strategy_as_ref_str_routes_through_display_via_shared_accessor`,
+        // d86edd2), the peer [`crate::CaixaKind`] triple
+        // (`caixa_kind_as_ref_str_routes_through_display_via_shared_accessor`,
+        // cd2091f), and the [`crate::CaixaVersion`] typed newtype
+        // triple (`caixa_version_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 16d5c7e).
+        for &unit in super::RateLimitUnit::ALL {
+            let via_as_ref: &str = <super::RateLimitUnit as AsRef<str>>::as_ref(&unit);
+            let via_display: String = format!("{unit}");
+            let via_accessor: &str = unit.as_suffix();
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_display, via_accessor);
+            assert_eq!(via_as_ref, via_display.as_str());
         }
     }
 
