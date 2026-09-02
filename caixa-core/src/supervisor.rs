@@ -1316,61 +1316,116 @@ pub const SUPERVISOR_ESTRATEGIA_DEFAULT: RestartStrategy = RestartStrategy::OneF
 /// explicitly, never a posture an omitted slot should silently assume.
 pub const SUPERVISOR_CHILD_RESTART_DEFAULT: RestartPolicy = RestartPolicy::Permanent;
 
+/// Route the manually-authored [`Default`] impl on [`SupervisorSpec`]
+/// through the substrate-canonical [`SupervisorSpec::otp_canonical`]
+/// `pub const fn` constructor rather than a struct-literal cascade over
+/// the paired [`SUPERVISOR_ESTRATEGIA_DEFAULT`] /
+/// [`default_max_restarts`] / [`SUPERVISOR_RESTART_WINDOW_DEFAULT`]
+/// lifted consts — one source of truth for the Erlang/OTP-canonical
+/// `{one_for_one, 5, 60}` worker-supervisor baseline across the two
+/// paths every downstream consumer already reaches through (the
+/// hand-authored-until-now [`Default::default`] the
+/// `..SupervisorSpec::default()` struct-update-syntax on every
+/// one-axis-under-test fixture in this crate's test module rests on,
+/// and the `pub const fn` [`SupervisorSpec::otp_canonical`] constructor
+/// every `const`-context consumer reaches through).
+///
+/// Extends the [`Default`]-through-const-ctor fold discipline the
+/// [`crate::LimitsSpec`] [`Default`]-through-[`crate::LimitsSpec::empty`]
+/// (abd52c2), [`crate::aplicacao::MeshPolicy`]
+/// [`Default`]-through-[`crate::aplicacao::MeshPolicy::empty`] (91641a4),
+/// and [`crate::BehaviorSpec`]
+/// [`Default`]-through-[`crate::BehaviorSpec::empty`] (0c1752c) folds
+/// closed on the M2 / M3 `Option`-only "canonical unset baseline"
+/// typed-slot spec family — extended here onto the M2 supervisor-slot
+/// [`SupervisorSpec`] whose canonical baseline is not "everything
+/// `None`" but the OTP-canonical `{one_for_one, 5, 60}` worker-
+/// supervisor triple. The `empty()` peer's naming did not fit
+/// (`SupervisorSpec` carries a discriminator-shaped `estrategia` field
+/// and a non-zero `max_restarts`/`restart_window` pair whose canonical
+/// shape is Erlang/OTP-descended, not the "no axis declared" bottom
+/// the sibling `Option`-only slots fold to), so this peer is named
+/// [`SupervisorSpec::otp_canonical`] instead — the same phrasing the
+/// existing per-arm pin tests
+/// [`tests::supervisor_estrategia_default_pins_otp_canonical_value`] /
+/// [`tests::supervisor_max_restarts_default_pins_otp_canonical_value`] /
+/// [`tests::supervisor_restart_window_default_pins_otp_canonical_value`]
+/// already reach for. Pinned load-bearing by
+/// [`tests::supervisor_spec_default_routes_through_otp_canonical_ctor`]
+/// (byte-parity pin against [`SupervisorSpec::otp_canonical`] under
+/// [`PartialEq`], sharpening the sibling
+/// `supervisor_spec_default_*_routes_through_lifted_default` per-arm
+/// pins from a per-field lift into a whole-struct one-source-of-truth
+/// pin — the derived-until-now [`Default::default`] and the
+/// [`SupervisorSpec::otp_canonical`] constructor are byte-equal by
+/// construction, not by coincidence).
 impl Default for SupervisorSpec {
+    #[inline]
     fn default() -> Self {
-        Self {
-            // Route the struct-literal `estrategia` default arm through
-            // the substrate-canonical [`SUPERVISOR_ESTRATEGIA_DEFAULT`]
-            // typed `pub const` rather than the transitively-derived
-            // `RestartStrategy::default()` route — one source of truth
-            // for the Erlang/OTP `one_for_one` half of Learn You Some
-            // Erlang's `{one_for_one, intensity, 5, 60}` worker-
-            // supervisor canonical default, paired with the sibling
-            // `max_restarts: default_max_restarts()` arm below that
-            // routes through the peer [`SUPERVISOR_MAX_RESTARTS_DEFAULT`]
-            // `MaxIntensity` half (b698ec0) and the sibling
-            // `restart_window: Some(SUPERVISOR_RESTART_WINDOW_DEFAULT)`
-            // arm that routes through the peer
-            // [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] `Period` half
-            // (f7dcd0e). All three halves of the same OTP-canonical
-            // default now share the same substrate-primitive lift
-            // discipline so any future coherent rebrand of the paired
-            // triple migrates through three typed constants in lockstep
-            // instead of splitting two lifted halves against a
-            // transitively-derived third. Pinned by
-            // `supervisor_spec_default_estrategia_routes_through_lifted_default`.
-            estrategia: SUPERVISOR_ESTRATEGIA_DEFAULT,
-            max_restarts: default_max_restarts(),
-            // Route the struct-literal `restart_window` default arm
-            // through the substrate-canonical
-            // [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] typed `pub const`
-            // rather than a raw `Duration::from_secs(60)` literal — one
-            // source of truth for the Erlang/OTP-canonical
-            // `{intensity, 5, 60}` `Period` half of Learn You Some
-            // Erlang's worker-supervisor default, paired with the
-            // sibling `max_restarts: default_max_restarts()` arm above
-            // that already routes through the peer
-            // [`SUPERVISOR_MAX_RESTARTS_DEFAULT`] `MaxIntensity` half
-            // (b698ec0). The two halves of the same OTP-canonical
-            // default now share the same substrate-primitive lift
-            // discipline so any future coherent rebrand of the paired
-            // default (Elixir's `{max_restarts: 3, max_seconds: 5}`, a
-            // per-cluster overlay via a future
-            // `:restart-window-overrides` slot, a per-child-cohort
-            // promotion) migrates through two typed constants in
-            // lockstep instead of splitting a lifted `MaxIntensity` half
-            // against an open-coded `Period` literal. Pinned by
-            // `supervisor_spec_default_restart_window_routes_through_lifted_default`
-            // in the tests module; peer of the sibling
-            // `supervisor_spec_default_max_restarts_routes_through_lifted_default`
-            // byte-parity pin on the paired `max_restarts` field.
-            restart_window: Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
-            children: Vec::new(),
-        }
+        Self::otp_canonical()
     }
 }
 
 impl SupervisorSpec {
+    /// `const`-context peer of the [`Default for SupervisorSpec`]
+    /// impl (which routes through this constructor) — returns the
+    /// Erlang/OTP-canonical `{one_for_one, 5, 60}` worker-supervisor
+    /// baseline this crate reaches for in every fixture-builder
+    /// `..SupervisorSpec::default()` struct-update expression and
+    /// every downstream `SupervisorSpec::default()` seed.
+    ///
+    /// Each field routes through the same substrate-canonical
+    /// [`SUPERVISOR_ESTRATEGIA_DEFAULT`] / [`default_max_restarts`] /
+    /// [`SUPERVISOR_RESTART_WINDOW_DEFAULT`] lifted consts the
+    /// per-arm pin tests
+    /// [`tests::supervisor_estrategia_default_pins_otp_canonical_value`]
+    /// / [`tests::supervisor_max_restarts_default_pins_otp_canonical_value`]
+    /// / [`tests::supervisor_restart_window_default_pins_otp_canonical_value`]
+    /// already assert, so a future coherent rebrand of the OTP-canonical
+    /// triple (Elixir's `{max_restarts: 3, max_seconds: 5}`, a per-
+    /// cluster overlay via a future `:restart-window-overrides` slot, a
+    /// per-child-cohort promotion the INSPIRATIONS.md §II.2 Erlang/OTP
+    /// absorption roadmap acknowledges) migrates through three typed
+    /// constants in lockstep, and the paired [`Default`] impl inherits
+    /// every future extension by construction.
+    ///
+    /// `pub const fn` rather than the derived-style `Default::default`
+    /// or a `pub const SUPERVISOR_SPEC_DEFAULT: SupervisorSpec` item —
+    /// [`Default::default`] is not `const` on stable Rust, and
+    /// `SupervisorSpec` is non-`Copy` so a `pub const` item would force
+    /// every consumer through a [`Clone::clone`]. The `pub const fn`
+    /// discipline lets `const`-context callers construct the OTP-
+    /// canonical baseline at compile time without runtime dispatch on
+    /// the derived [`Default::default`], the same posture the sibling
+    /// [`crate::LimitsSpec::empty`] (9739971) /
+    /// [`crate::aplicacao::MeshPolicy::empty`] (6df969b) /
+    /// [`crate::BehaviorSpec::empty`] (f9b18e3) `Option`-only typed-slot
+    /// spec `pub const fn` constructors carry on the sibling
+    /// "everything `None`" baseline axis.
+    ///
+    /// Fourth peer on the M2 / M3 typed-slot-spec "const-context peer
+    /// of the derived-style [`Default`]" family — sibling of the
+    /// [`crate::LimitsSpec::empty`] / [`crate::aplicacao::MeshPolicy::empty`]
+    /// / [`crate::BehaviorSpec::empty`] `Option`-only "canonical unset
+    /// baseline" trio, extended here onto the M2 supervisor-slot
+    /// [`SupervisorSpec`] whose canonical baseline is not "everything
+    /// `None`" but the Erlang/OTP-canonical `{one_for_one, 5, 60}`
+    /// worker-supervisor triple. Named [`Self::otp_canonical`] rather
+    /// than `empty()` to name the actual invariant the return value
+    /// pins — the same phrasing already used in the per-arm pin tests
+    /// on this file. Pinned load-bearing by
+    /// [`tests::supervisor_spec_otp_canonical_byte_equals_default`] and
+    /// [`tests::supervisor_spec_otp_canonical_is_usable_in_const_context`].
+    #[must_use]
+    pub const fn otp_canonical() -> Self {
+        Self {
+            estrategia: SUPERVISOR_ESTRATEGIA_DEFAULT,
+            max_restarts: default_max_restarts(),
+            restart_window: Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
+            children: Vec::new(),
+        }
+    }
+
     /// Substrate-canonical per-`:supervisor` `:estrategia` OTP-shaped
     /// sibling-restart-strategy scalar accessor every consumer that
     /// dispatches on the supervisor's per-sibling restart-decision shape
@@ -3406,6 +3461,92 @@ mod tests {
             SupervisorSpec::default().estrategia(),
             SUPERVISOR_ESTRATEGIA_DEFAULT,
         );
+    }
+
+    #[test]
+    fn supervisor_spec_default_routes_through_otp_canonical_ctor() {
+        // Composition pin: the [`Default for SupervisorSpec`] impl must
+        // route through the substrate-canonical
+        // [`SupervisorSpec::otp_canonical`] `pub const fn` constructor
+        // rather than a re-hand-authored struct-literal cascade. Sharpens
+        // the sibling per-arm
+        // `supervisor_spec_default_*_routes_through_lifted_default` pins
+        // from a per-field lift into a whole-struct one-source-of-truth
+        // pin — the derived-until-now [`Default::default`] and the
+        // [`SupervisorSpec::otp_canonical`] constructor are byte-equal by
+        // construction, not by coincidence.
+        //
+        // A future extension of the OTP-canonical baseline (a fifth
+        // `restart_intensity` field the Erlang/OTP `#supervisor` record
+        // grows, a per-child-cohort split of the `restart_window` /
+        // `max_restarts` pair, an M4 `mesh.pleme.io/v1alpha1/Supervisor`
+        // CR materializer's admission-time overlay pass) reaches both
+        // paths through exactly one edit on
+        // [`SupervisorSpec::otp_canonical`] — the derived path could
+        // silently disagree with the constructor's shape on any new
+        // field whose [`Default::default`] resolves to a different arm
+        // than the OTP-canonical baseline the constructor names, while
+        // this delegated impl reaches the constructor directly and
+        // picks up every future extension by construction.
+        //
+        // Fourth peer on the M2 / M3 typed-slot-spec
+        // [`Default`]-through-const-ctor fold family — sibling of the
+        // [`crate::LimitsSpec`] [`Default`]-through-[`crate::LimitsSpec::empty`]
+        // (abd52c2), [`crate::aplicacao::MeshPolicy`]
+        // [`Default`]-through-[`crate::aplicacao::MeshPolicy::empty`]
+        // (91641a4), and [`crate::BehaviorSpec`]
+        // [`Default`]-through-[`crate::BehaviorSpec::empty`] (0c1752c)
+        // per-`Option`-only-typed-slot folds — extended here onto the
+        // M2 supervisor-slot [`SupervisorSpec`] whose canonical baseline
+        // is not "everything `None`" but the Erlang/OTP-canonical
+        // `{one_for_one, 5, 60}` worker-supervisor triple.
+        assert_eq!(SupervisorSpec::default(), SupervisorSpec::otp_canonical());
+    }
+
+    #[test]
+    fn supervisor_spec_otp_canonical_byte_equals_default() {
+        // Value pin: [`SupervisorSpec::otp_canonical`] must byte-equal
+        // the hand-authored `{one_for_one, 5, 60, []}` OTP-canonical
+        // baseline the sibling `default_has_one_for_one_and_5_restarts_in_60s`
+        // pin already asserts against the [`Default::default`] path.
+        // Sharpens the pair-invariant into a per-constructor pin so a
+        // future extension of [`SupervisorSpec`] with a fifth field
+        // whose OTP-canonical shape is non-`Default::default`-equivalent
+        // trips at caixa-core test time rather than at a downstream
+        // consumer that composed [`SupervisorSpec::otp_canonical`] with
+        // [`SupervisorSpec::validate`] as its "canonical baseline
+        // seed".
+        let canonical = SupervisorSpec::otp_canonical();
+        assert_eq!(canonical.estrategia, RestartStrategy::OneForOne);
+        assert_eq!(canonical.max_restarts, 5);
+        assert_eq!(canonical.restart_window, Some(Duration::from_secs(60)));
+        assert!(canonical.children.is_empty());
+    }
+
+    #[test]
+    fn supervisor_spec_otp_canonical_is_usable_in_const_context() {
+        // Const-context pin: [`SupervisorSpec::otp_canonical`] must
+        // remain callable from a `const`-bound position so downstream
+        // `const`-context callers wanting a canonical OTP-baseline seed
+        // can construct one at compile time without runtime dispatch on
+        // the derived [`Default::default`]. Peer of the sibling
+        // `pub const fn` [`crate::LimitsSpec::empty`] /
+        // [`crate::aplicacao::MeshPolicy::empty`] /
+        // [`crate::BehaviorSpec::empty`] constructors on the sibling
+        // typed-slot-spec `pub const fn` axis. If a future edit breaks
+        // the `const`-eligibility of [`SupervisorSpec::otp_canonical`]
+        // (a non-`const` field-default helper, a non-`const`-stable
+        // container type promotion), this evaluation fails at
+        // build time on this file rather than at a downstream
+        // `const`-context call site.
+        const CANONICAL: SupervisorSpec = SupervisorSpec::otp_canonical();
+        assert_eq!(CANONICAL.estrategia, SUPERVISOR_ESTRATEGIA_DEFAULT);
+        assert_eq!(CANONICAL.max_restarts, SUPERVISOR_MAX_RESTARTS_DEFAULT);
+        assert_eq!(
+            CANONICAL.restart_window,
+            Some(SUPERVISOR_RESTART_WINDOW_DEFAULT),
+        );
+        assert!(CANONICAL.children.is_empty());
     }
 
     #[test]
