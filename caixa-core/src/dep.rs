@@ -3336,6 +3336,63 @@ impl std::fmt::Display for DepList {
     }
 }
 
+/// Substrate-canonical [`AsRef<str>`] projection on the two-list
+/// dep-graph closed-set typed enum — routes through the same
+/// [`DepList::as_str`] `pub const fn` scalar accessor the paired
+/// [`std::fmt::Display`] impl already delegates through, so any future
+/// consumer that binds a [`DepList`] through the standard-library
+/// `impl AsRef<str>` bound (a [`std::process::Command::arg`] shell-out
+/// that composes the canonical author-surface tag into a
+/// `feira dep --list <deps|deps-dev>` diagnostic overlay, a
+/// `tracing::field::Value::Str`-arm structured-log recorder on the
+/// [`DepError::DuplicateNome`] / [`DepError::DepIsSelf`] refusal paths,
+/// a [`std::collections::HashMap`] lookup keyed on the canonical tag
+/// through `map.get::<str>(list.as_ref())` on a future M4 admission-
+/// webhook's per-list rejection-body composition table) reaches the
+/// paired [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] byte-string through one
+/// substrate-primitive dispatch rather than an open-coded `.as_str()`
+/// re-inlining at every wire-up.
+///
+/// Same "route the trait impl through the substrate-primitive
+/// accessor" discipline the sibling [`crate::CaixaDialeto`]
+/// [`AsRef<str>`] impl (1723611), the [`crate::aplicacao::RateLimitUnit`]
+/// [`AsRef<str>`] impl (d8136db), the [`crate::CaixaKind`]
+/// [`AsRef<str>`] impl (cd2091f), the M3
+/// [`crate::aplicacao::PlacementStrategy`] [`AsRef<str>`] impl
+/// (d86edd2), the M2 [`crate::supervisor::RestartPolicy`]
+/// [`AsRef<str>`] impl (419ea81), the M2
+/// [`crate::supervisor::RestartStrategy`] [`AsRef<str>`] impl
+/// (63eb1a4), and the [`crate::CaixaVersion`] [`AsRef<str>`] impl
+/// (16d5c7e) carry — closes the substrate primitive's
+/// [`AsRef<str>`] projection axis on the seventh (and last unlifted)
+/// closed-set typed enum on the caixa surface: the two-list dep-graph
+/// axis previously carried [`fmt::Display`]-through-`as_str` but not
+/// yet the paired [`AsRef<str>`] impl, so a downstream consumer that
+/// bound the enum through the standard-library `AsRef<str>` trait had
+/// to reach the canonical byte-string through an open-coded
+/// `.as_str()` call rather than the trait-idiomatic `.as_ref()` the
+/// peer closed-set typed enums already admit.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_as_ref_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`] across the two-arm
+/// closed set) and
+/// [`tests::dep_list_as_ref_str_routes_through_display_via_shared_accessor`]
+/// (three-path convergence: `AsRef<str>` + `Display` + `as_str` all
+/// resolve to the same byte-string per arm) — any future silent detour
+/// that routes the impl through a divergent projection (a per-arm
+/// inline `match self { DepList::Prod => ":deps", … }` re-inlining
+/// that opens a compile-time link to the un-lifted arm-literal, a
+/// swap onto a second projection axis) trips at caixa-core test time
+/// under `assert_eq!` rather than at a downstream
+/// `impl AsRef<str>`-bound consumer's silent split.
+impl AsRef<str> for DepList {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -17311,6 +17368,81 @@ mod tests {
                  silent-conversion regression surfaces here rather than \
                  at a downstream diagnostic-shape mismatch",
             );
+        }
+    }
+
+    #[test]
+    fn dep_list_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl AsRef<str> for DepList` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::DepList::as_str`] `pub const fn` accessor resolve
+        // to the same `&str` per instance across the two-arm closed
+        // set, so any future silent detour that routes the impl
+        // through a divergent projection (a per-arm inline
+        // `match self { DepList::Prod => ":deps", … }` re-inlining
+        // that opens a compile-time link to the un-lifted arm-literal,
+        // a swap onto a second projection axis) trips at caixa-core
+        // test time under `PartialEq` rather than at a downstream
+        // `impl AsRef<str>`-bound consumer's silent split. Sweeps
+        // every one of the two arms [`super::DepList::ALL`] carries
+        // so no arm's projection is covered only by the sibling
+        // `Display` path. Peer of the sibling
+        // `caixa_dialeto_as_ref_str_routes_through_as_str_accessor`
+        // (1723611) on the top-level dialect-classification closed-
+        // set typed enum, and the peer
+        // `rate_limit_unit_as_ref_str_routes_through_as_suffix_accessor`
+        // (d8136db) pin on the M3 `:politicas :rate-limit` closed-set
+        // typed enum — the pins together close the substrate
+        // primitive's `AsRef<str>` projection axis onto the seventh
+        // (and last unlifted) closed-set typed enum on the caixa
+        // surface.
+        for &list in super::DepList::ALL {
+            assert_eq!(
+                <super::DepList as AsRef<str>>::as_ref(&list),
+                list.as_str(),
+                "AsRef<str> impl on DepList::{list:?} must byte-equal \
+                 DepList::as_str on the same instance — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_as_ref_str_routes_through_display_via_shared_accessor() {
+        // Fail-before-pass-after byte-parity pin on the three-path
+        // convergence discipline the [`super::DepList`] two-list
+        // dep-graph closed-set typed enum now carries on the `&str`-
+        // projection axis: `<DepList as AsRef<str>>::as_ref(&v)` (the
+        // newly lifted impl), `format!("{v}")` (the pre-existing
+        // [`fmt::Display`] impl), and `v.as_str()` (the substrate-
+        // primitive `pub const fn` accessor both trait impls delegate
+        // through) must resolve to the same byte-string on every
+        // instance across the two-arm closed set. Refuses any future
+        // divergence between the two trait impls (a stray
+        // [`fmt::Display::fmt`] rewrite that hand-rolls the arms
+        // rather than delegating through the shared accessor; a
+        // hypothetical `AsRef<str>` rewrite that inlines a per-arm
+        // literal cascade) that would silently split the two
+        // projection paths of the same closed-set typed enum. Mirrors
+        // the sibling three-path-convergence discipline the peer
+        // [`crate::CaixaDialeto`] typed enum carries
+        // (`caixa_dialeto_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 1723611), the peer [`crate::aplicacao::RateLimitUnit`] triple
+        // (`rate_limit_unit_as_ref_str_routes_through_display_via_shared_accessor`,
+        // d8136db), the peer [`crate::CaixaKind`] triple
+        // (`caixa_kind_as_ref_str_routes_through_display_via_shared_accessor`,
+        // cd2091f), and the [`crate::CaixaVersion`] typed newtype
+        // triple (`caixa_version_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 16d5c7e).
+        for &list in super::DepList::ALL {
+            let via_as_ref: &str = <super::DepList as AsRef<str>>::as_ref(&list);
+            let via_display: String = format!("{list}");
+            let via_accessor: &str = list.as_str();
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_display, via_accessor);
+            assert_eq!(via_as_ref, via_display.as_str());
         }
     }
 }
