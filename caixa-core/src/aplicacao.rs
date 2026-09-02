@@ -2600,7 +2600,7 @@ impl Membro {
 
 /// Mesh policies that apply to every `:contratos` edge unless
 /// overridden per-edge in M4. V0 is a single global policy block.
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshPolicy {
     /// Per-call timeout. Authored as a duration string (`"30s"`).
@@ -2633,6 +2633,93 @@ pub struct MeshPolicy {
         with = "rate_limit_codec"
     )]
     pub rate_limit: Option<RateLimit>,
+}
+
+/// Route the derived-style [`Default`] impl on [`MeshPolicy`] through
+/// the substrate-canonical [`MeshPolicy::empty`] `pub const fn`
+/// constructor rather than the derive-generated per-field
+/// `<Option<_> as Default>::default` cascade — one source of truth for
+/// the "canonical unset per-`:politicas` slot" shape across the two
+/// paths every downstream consumer already reaches through (the
+/// derived-until-now [`Default::default`] the `..Default::default()`
+/// struct-update-syntax on every one-axis-under-test fixture in this
+/// crate's test module rests on, and the `pub const fn`
+/// [`MeshPolicy::empty`] constructor every `const`-context consumer
+/// reaches through).
+///
+/// Prior to this fold the two paths were byte-equal by *coincidence*
+/// under the pinning test
+/// [`tests::mesh_policy_empty_byte_equals_default`] rather than
+/// byte-equal by *construction* — the derive-generated
+/// [`Default::default`] resolved each `Option<_>` field through its
+/// own `<Option<_> as Default>::default` (which returns `None`) and
+/// the lifted `pub const fn` [`MeshPolicy::empty`] named the same five
+/// `None` arms verbatim in its struct-literal. Two hand-authored (or
+/// derive-authored) sources of the same "canonical unset baseline"
+/// shape on the same primitive is exactly the substrate-canonical-
+/// source-of-truth duplication the [`crate::LimitsSpec::empty`]
+/// (9739971) / [`MeshPolicy::empty`] (6df969b) /
+/// [`crate::BehaviorSpec::empty`] (f9b18e3) lifts closed on the
+/// forward `const`-context path — extending the same discipline onto
+/// the paired [`Default`] impl means every consumer of the derived-
+/// until-now [`Default::default`] surface (every `..Default::default()`
+/// struct-update-syntax fixture in this crate's test module — the
+/// five per-axis-only pins at [`tests::mesh_policy_with_only_timeout_is_not_empty`],
+/// [`tests::mesh_policy_with_only_retries_is_not_empty`],
+/// [`tests::mesh_policy_with_only_circuit_breaker_is_not_empty`],
+/// [`tests::mesh_policy_with_only_mtls_required_is_not_empty`],
+/// [`tests::mesh_policy_with_only_rate_limit_is_not_empty`] — and the
+/// entry pin at [`tests::mesh_policy_default_is_empty`], the future
+/// M4 per-edge `:politicas` overlay CR materializer's admission-time
+/// default-overlay-emit gate, every future `..Default::default()`
+/// struct-update-syntax fixture-builder arm) also routes through the
+/// substrate primitive's single source of truth.
+///
+/// A future extension of the `:politicas` axis set (a per-edge
+/// `:politicas` overlay the M4 roadmap grows once per-`:contratos`-
+/// edge overrides land, a sixth `:politicas` sub-slot the roadmap
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// grows past the five-arm Envoy/Cilium-shape §III.2 axis set)
+/// reaches this impl's return value through exactly one edit on
+/// [`MeshPolicy::empty`] — the derived path could silently disagree
+/// with the constructor's shape on any new field whose
+/// `Default::default` is not `None` (a future non-`Option<_>` field
+/// with a non-`Default::default`-equivalent baseline, a `Vec<_>` field
+/// defaulting to an empty vector, an enum arm-carrying field with a
+/// non-`Default::default` canonical unset arm), while this delegated
+/// impl reaches the constructor directly and picks up every future
+/// extension by construction.
+///
+/// Direct peer of [`crate::LimitsSpec`]'s
+/// [`Default`]-through-[`crate::LimitsSpec::empty`] fold (abd52c2) on
+/// the M2 `:limits` typed slot — same "one source of truth for the
+/// canonical unset baseline" discipline extended onto the M3
+/// `:politicas` typed slot. The sibling [`crate::BehaviorSpec`] impl
+/// on the M2 `:behavior` slot is the third and last established
+/// candidate for the same delegation fold once the per-slot peer pin
+/// on this axis lands in a future run. Pinned load-bearing by
+/// [`tests::mesh_policy_default_routes_through_empty_ctor`]
+/// (byte-parity pin against [`MeshPolicy::empty`] under `PartialEq`,
+/// sharpening the pre-existing
+/// [`tests::mesh_policy_empty_byte_equals_default`] pin from a "two
+/// paths byte-equal by coincidence" invariant into a "two paths
+/// byte-equal by construction — one delegates to the other" invariant)
+/// and by [`tests::mesh_policy_empty_validates_ok`] (the canonical
+/// unset baseline must pass [`MeshPolicy::validate`] — every per-axis
+/// value-shape gate is `if let Some(_)` guarded and every cross-axis
+/// arm on [`MeshPolicy::first_cross_axis_violation`] is a
+/// `let (Some(_), Some(_))` pattern, so an all-`None` input
+/// structurally short-circuits every arm; the pin makes the invariant
+/// load-bearing so a future extension that adds a non-`Option`-guarded
+/// gate to [`MeshPolicy::validate`] trips at caixa-core test time
+/// rather than at a downstream consumer that composed
+/// [`MeshPolicy::default`]/[`MeshPolicy::empty`] with
+/// [`MeshPolicy::validate`] as its "no-op axis short-circuit").
+impl Default for MeshPolicy {
+    #[inline]
+    fn default() -> Self {
+        Self::empty()
+    }
 }
 
 impl MeshPolicy {
@@ -24894,6 +24981,95 @@ mod tests {
         const {
             assert!(EMPTY.is_empty());
         }
+    }
+
+    #[test]
+    fn mesh_policy_default_routes_through_empty_ctor() {
+        // Fail-before-pass-after byte-parity pin on the two-path
+        // convergence discipline lifted onto the [`Default`] impl:
+        // pre-fold the derive-generated [`Default::default`] and the
+        // `pub const fn` [`MeshPolicy::empty`] constructor were
+        // byte-equal by *coincidence* (each hand-authored or derive-
+        // authored `None` per axis, pinned load-bearing by the
+        // pre-existing [`mesh_policy_empty_byte_equals_default`]
+        // sibling pin), while the folded impl now routes
+        // [`Default::default`] through the substrate-canonical
+        // [`Self::empty`] constructor — the two paths are byte-equal
+        // by *construction*, one delegates to the other. This pin
+        // sharpens the pre-existing byte-parity invariant into a
+        // structural-delegation invariant: any future silent regression
+        // that re-derives [`Default`] on the type (a `#[derive(Default)]`
+        // re-addition that shadows the manual impl, a swap of the
+        // manual impl's body onto a divergent struct-literal that
+        // diverges from [`Self::empty`]'s output on a new field's
+        // non-`None` canonical baseline) trips here at caixa-core test
+        // time under `PartialEq` rather than at a downstream consumer
+        // of the derived-until-now [`Default::default`] surface (the
+        // five per-axis-only `..Default::default()` fixtures at
+        // [`mesh_policy_with_only_timeout_is_not_empty`] /
+        // [`mesh_policy_with_only_retries_is_not_empty`] /
+        // [`mesh_policy_with_only_circuit_breaker_is_not_empty`] /
+        // [`mesh_policy_with_only_mtls_required_is_not_empty`] /
+        // [`mesh_policy_with_only_rate_limit_is_not_empty`], the
+        // `MeshPolicy::default().is_empty()` round-trip at
+        // [`mesh_policy_default_is_empty`], every future consumer of
+        // a hypothetical `..MeshPolicy::default()` overlay-elision
+        // arm). Peer of the sibling
+        // [`crate::limits::tests::limits_spec_default_routes_through_empty_ctor`]
+        // pin on the M2 `:limits` typed slot (abd52c2).
+        assert_eq!(
+            MeshPolicy::default(),
+            MeshPolicy::empty(),
+            "MeshPolicy::default() must delegate through MeshPolicy::empty() \
+             on every per-axis field — a mismatch means the manual Default \
+             impl drifted off the substrate-canonical empty() constructor \
+             (or the constructor drifted off the impl's expected shape)",
+        );
+    }
+
+    #[test]
+    fn mesh_policy_empty_validates_ok() {
+        // Fail-before-pass-after invariant pin on the empty-baseline
+        // validate composition: the canonical unset [`MeshPolicy`]
+        // (every one of the five `Option<_>`-carrying per-axis fields
+        // set to `None`) must pass every gate on
+        // [`MeshPolicy::validate`]. The invariant is structurally
+        // guaranteed today — every per-axis value-shape gate on the
+        // validate dispatch is `if let Some(_) = self.<axis>()` guarded
+        // and every cross-axis arm on
+        // [`MeshPolicy::first_cross_axis_violation`] is a
+        // `let (Some(_), Some(_))` pattern, so an all-`None` input
+        // short-circuits every arm before any zero-floor / canonical-
+        // form / cap / pairwise-ordering check fires. Pinning the
+        // composition here makes the invariant load-bearing so a
+        // future extension of the validate surface that adds a
+        // non-`Option`-guarded gate (a hypothetical cross-slot
+        // coherence gate a future per-axis / per-slot fold on the M3
+        // `:politicas` slot establishes on top of the current
+        // pairwise-cross-axis composition per
+        // `theory/MESH-COMPOSITION.md` §III.2, a per-arm
+        // `mtls_required`-defaults-to-`true` admission overlay a
+        // future admission webhook lands) that fires on the all-`None`
+        // input trips here at caixa-core test time rather than at a
+        // downstream consumer that composed [`MeshPolicy::default`]
+        // (which now routes through [`MeshPolicy::empty`]) with
+        // [`MeshPolicy::validate`] as its "no-op axis short-circuit"
+        // and observed a spurious rejection on the canonical unset
+        // baseline. Peer of the sibling
+        // [`crate::limits::tests::limits_spec_empty_validates_ok`] pin
+        // on the M2 `:limits` typed slot (abd52c2) — that one anchors
+        // the invariant on the folded [`Default`] impl the
+        // [`crate::LimitsSpec::empty`] constructor now backs; this one
+        // extends it onto the M3 `:politicas` slot's folded impl.
+        MeshPolicy::empty().validate().expect(
+            "MeshPolicy::empty() must satisfy MeshPolicy::validate — \
+             every per-axis value-shape gate is `if let Some(_)` guarded \
+             and every cross-axis arm is a `let (Some(_), Some(_))` pattern, \
+             so an all-`None` input short-circuits every arm; a spurious \
+             rejection on the canonical unset baseline means a future \
+             validate-side extension added a non-`Option`-guarded gate that \
+             fires on empty input",
+        );
     }
 
     // ── shared duration codec: cross-slot integer-magnitude gate ──
