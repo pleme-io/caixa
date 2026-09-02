@@ -115,9 +115,20 @@ fn render(opts: &RenderOpts) -> Result<(PathBuf, TeiaManifest)> {
             caixa_arch::InvariantKind::Compliance => Semantic::Warning,
             caixa_arch::InvariantKind::Hint => Semantic::Hint,
         };
+        // Route the per-violation severity-tag text through the
+        // substrate-canonical [`caixa_arch::InvariantKind::as_str`]
+        // `pub const fn` accessor rather than the pre-lift
+        // `format!("{:?}", v.kind).to_lowercase()` shape — the paired
+        // typed accessor returns the same three canonical lowercase tags
+        // (`"safety"` / `"compliance"` / `"hint"`) as a `&'static str`
+        // in one substrate-primitive dispatch, eliminating the per-render
+        // `String` allocation and the silent dependency on the derived
+        // [`std::fmt::Debug`]'s per-arm output (Rust convention gives no
+        // stability guarantee for `Debug`). Pinned load-bearing by
+        // `caixa_arch::invariants::tests::invariant_kind_as_str_byte_equals_pre_lift_debug_lowercase_form`.
         eprintln!(
             "{}  [{}] {}/{}: {}",
-            theme.paint(sev, &format!("{:?}", v.kind).to_lowercase()),
+            theme.paint(sev, v.kind.as_str()),
             v.invariant_id,
             v.instance_tipo,
             v.instance_nome,

@@ -52,6 +52,120 @@ impl InvariantKind {
     /// canonical severity ordering every listing / rendering consumer
     /// defers to.
     pub const ALL: &'static [Self] = &[Self::Safety, Self::Compliance, Self::Hint];
+
+    /// Substrate-canonical per-[`InvariantKind`] lowercase-tag scalar
+    /// accessor every consumer that renders the arch severity axis as
+    /// user-facing text keys off — returns the per-arm byte-string
+    /// (`"safety"` / `"compliance"` / `"hint"`) as a `&'static str`, the
+    /// same three tags the pre-lift `format!("{:?}", v.kind).to_lowercase()`
+    /// consumer at `caixa-feira/src/cmd/tofu.rs`'s per-violation render
+    /// site produced by round-tripping through the derived
+    /// [`std::fmt::Debug`] output — with two silent drift footguns the
+    /// substrate-canonical accessor closes at build time:
+    ///
+    ///   - the `Debug` derive's per-arm output is *not* a stability
+    ///     guarantee (Rust's own convention gives it as *no guarantee at
+    ///     all*), so a `#[derive(Debug)]` swap for a hand-rolled
+    ///     `impl Debug` that pretty-prints the arm with per-arm context
+    ///     (`"Safety(hard)"`, `"Hint(recommend)"`) would silently reroute
+    ///     the diagnostic tag through a stale byte-string with no
+    ///     downstream signal until an operator scrolled the `feira tofu`
+    ///     terminal output;
+    ///   - `format!("{:?}", v.kind).to_lowercase()` allocates a fresh
+    ///     `String` per violation on every render pass — a per-arm
+    ///     `&'static str` return eliminates the allocation at every
+    ///     substrate-side per-`InvariantKind` render consumer.
+    ///
+    /// Peer of the sibling substrate-wide closed-set fieldless typed-enum
+    /// canonical-lowercase-tag scalar accessors [`caixa_lint::Severity::as_str`]
+    /// (per the caixa-lint diagnostic module's four-arm severity-classification
+    /// axis returning `"error"` / `"warning"` / `"info"` / `"hint"`),
+    /// [`caixa_core::CaixaKind::as_str`] (per the caixa-core top-level `:kind`
+    /// axis returning `"biblioteca"` / `"binario"` / …), and the M2/M3
+    /// [`caixa_core::supervisor::RestartStrategy::as_str`] / [`caixa_core::supervisor::RestartPolicy::as_str`]
+    /// / [`caixa_core::aplicacao::PlacementStrategy::as_str`] siblings —
+    /// extends the substrate-wide "one canonical lowercase-tag accessor
+    /// per closed-set fieldless typed enum" discipline onto the caixa-arch
+    /// invariant-severity axis, the first outside-caixa-core / outside-
+    /// caixa-lint closed-set enum on the caixa surface to reach the axis.
+    ///
+    /// `pub const fn` — matches the sibling
+    /// [`gen_platform::IsVariant`]-derive-generated per-arm `is_*`
+    /// predicates' `const fn` posture, so every future substrate-side
+    /// `const`-context consumer (a `const _: () = assert!(…)` module-scope
+    /// pin on a per-fixture typed [`InvariantKind`], a future M4 admission-
+    /// webhook `const fn` per-severity rejection-body composer, a
+    /// compile-time `HashMap<&'static str, _>`-shaped per-severity policy
+    /// table) reaches the paired byte-string through one substrate-primitive
+    /// dispatch at compile time as at runtime.
+    ///
+    /// A future variant addition (a `Warning` tier between
+    /// [`Self::Compliance`] and [`Self::Hint`] the `iac-forge` policy-
+    /// engine grows, a `Fatal` tier above [`Self::Safety`]) reaches the
+    /// paired [`std::fmt::Display`] impl + [`AsRef<str>`] impl + every
+    /// downstream `.as_str()` consumer through one match-arm edit here,
+    /// not a coordinated rewrite of every open-coded `format!("{:?}", …)`
+    /// re-inlining. Named `as_str` (not `label` / `tag`) to match the
+    /// sibling closed-set-enum `as_str` convention the substrate already
+    /// carries verbatim across every peer typed enum.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Safety => "safety",
+            Self::Compliance => "compliance",
+            Self::Hint => "hint",
+        }
+    }
+}
+
+/// Route the derived-style [`std::fmt::Display`] impl on [`InvariantKind`]
+/// through the substrate-canonical [`InvariantKind::as_str`] `pub const fn`
+/// accessor so every consumer that binds an [`InvariantKind`] through
+/// the standard-library `{}` formatting axis (a future `feira arch`
+/// per-severity summary line, a `tracing::field::Value::from(kind)`
+/// structured-log recorder on the operator's per-violation emission path,
+/// any `format!("{kind}")` interpolation in a future audit surface)
+/// reaches the canonical byte-string through one substrate-primitive
+/// dispatch rather than an open-coded per-arm match at every wire-up.
+///
+/// Follows the same closed-set-typed-enum `Display`-through-`as_str`
+/// convention the substrate-wide siblings [`caixa_core::CaixaKind`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`], and [`caixa_core::dep::DepList`]
+/// already carry — closes the [`InvariantKind`] closed-set enum's
+/// `(as_str, Display, AsRef<str>)` canonical-projection triple.
+impl std::fmt::Display for InvariantKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Route the standard-library [`AsRef<str>`] projection on [`InvariantKind`]
+/// through the substrate-canonical [`InvariantKind::as_str`] `pub const fn`
+/// accessor so every consumer that binds an [`InvariantKind`] through
+/// the trait-idiomatic `.as_ref()` (a future `HashMap::get::<str>(kind.as_ref())`
+/// per-severity policy-table lookup, a `Command::arg` shell-out composing
+/// the canonical severity tag into a `feira arch --severity=<tag>` filter,
+/// any `impl AsRef<str>`-bound generic function) reaches the canonical
+/// byte-string through one substrate-primitive dispatch rather than an
+/// open-coded `.as_str()` re-inlining at every wire-up.
+///
+/// Peer of the substrate-wide sibling closed-set-enum
+/// `AsRef<str>`-through-`as_str` family already carried by
+/// [`caixa_core::CaixaKind`], [`caixa_core::CaixaDialeto`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::aplicacao::RateLimitUnit`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::dep::DepList`], [`caixa_core::CaixaVersion`], and
+/// [`caixa_lint::Severity`] — extends the axis onto the caixa-arch
+/// invariant-severity closed-set enum, closing the
+/// `(as_str, Display, AsRef<str>)` canonical-projection triple.
+impl AsRef<str> for InvariantKind {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -393,6 +507,107 @@ mod tests {
                 matches!(arm, InvariantKind::Hint),
                 "InvariantKind::{arm:?}.is_hint() must agree with \
                  matches!(_, InvariantKind::Hint) byte-for-byte",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_as_str_returns_canonical_lowercase_tag_per_arm() {
+        // Fail-before-pass-after per-arm tag pin on the substrate-canonical
+        // [`InvariantKind::as_str`] `pub const fn` accessor: for every arm
+        // in [`InvariantKind::ALL`], the accessor returns the canonical
+        // lowercase byte-string the paired `caixa-feira/src/cmd/tofu.rs`
+        // per-violation render site's pre-lift
+        // `format!("{:?}", v.kind).to_lowercase()` shape produced by
+        // round-tripping through the derived [`std::fmt::Debug`] output.
+        //
+        // A rename of any of the three lowercase tags (or a swap onto a
+        // PascalCase / snake-case variant that would silently split the
+        // three closed-set arms' downstream diagnostic-tag identity from
+        // the substrate-canonical byte-string every peer closed-set-enum
+        // `as_str` accessor returns) trips this pin at caixa-arch test
+        // time rather than at a downstream `feira tofu` operator's silent
+        // misclassification. Peer of the sibling
+        // [`caixa_lint::diagnostic::tests::severity_as_ref_str_returns_canonical_lowercase_tag_per_arm`]
+        // (ce9d1e3) pin on the caixa-lint `Severity` axis and the sibling
+        // per-arm as_str pins on the caixa-core closed-set-enum family
+        // (`CaixaKind::as_str`, `PlacementStrategy::as_str`,
+        // `RestartStrategy::as_str`, `RestartPolicy::as_str`, `DepList::as_str`,
+        // `CaixaDialeto::as_str`).
+        for (arm, expected) in [
+            (InvariantKind::Safety, "safety"),
+            (InvariantKind::Compliance, "compliance"),
+            (InvariantKind::Hint, "hint"),
+        ] {
+            assert_eq!(
+                arm.as_str(),
+                expected,
+                "InvariantKind::{arm:?}.as_str() must return the canonical \
+                 lowercase tag {expected:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_as_str_byte_equals_pre_lift_debug_lowercase_form() {
+        // Fail-before-pass-after byte-parity pin on the substrate-canonical
+        // [`InvariantKind::as_str`] `pub const fn` accessor vs the pre-lift
+        // `format!("{:?}", v.kind).to_lowercase()` shape at
+        // `caixa-feira/src/cmd/tofu.rs` — the sole production consumer
+        // this lift retargets — for every arm in [`InvariantKind::ALL`].
+        //
+        // The pre-lift shape depended on the [`std::fmt::Debug`] derive's
+        // per-arm byte-string output (Rust convention gives no stability
+        // guarantee) plus a per-render `String` allocation from
+        // [`str::to_lowercase`]; the post-lift `.as_str()` return is a
+        // `&'static str` reached in one substrate-primitive dispatch. This
+        // pin makes the two paths' byte-agreement load-bearing so a future
+        // silent drift between them (a hand-rolled `impl Debug` that
+        // pretty-prints the arm with per-arm context, an arm rename that
+        // touches `Debug` but not `as_str`, or the reverse) trips at
+        // caixa-arch build time rather than at the downstream `feira tofu`
+        // consumer's silent tag drift.
+        for arm in InvariantKind::ALL {
+            let pre_lift = format!("{arm:?}").to_lowercase();
+            assert_eq!(
+                arm.as_str(),
+                pre_lift,
+                "InvariantKind::{arm:?}.as_str() must byte-equal the pre-lift \
+                 format!(\"{{:?}}\", v.kind).to_lowercase() shape",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_display_and_as_ref_str_route_through_as_str_accessor() {
+        // Three-path convergence pin: the paired [`std::fmt::Display`] impl,
+        // the paired [`AsRef<str>`] impl, and the substrate-canonical
+        // [`InvariantKind::as_str`] `pub const fn` accessor must resolve
+        // to the same `&'static str` per arm.
+        //
+        // Guards against any future silent detour that routes one impl
+        // through a divergent projection (a hand-rolled per-arm match in
+        // the `fmt` body, an `impl AsRef<str>` swap onto a hypothetical
+        // wire_name axis, a rename that touches one endpoint but not the
+        // paired sibling) — the pin trips at caixa-arch test time rather
+        // than at a downstream consumer's silent tag split. Peer of the
+        // sibling
+        // [`caixa_lint::diagnostic::tests::severity_as_ref_str_routes_through_as_str_accessor`]
+        // (ce9d1e3) three-path convergence pin on the caixa-lint
+        // `Severity` axis.
+        for &arm in InvariantKind::ALL {
+            let via_as_str: &str = arm.as_str();
+            let via_as_ref: &str = arm.as_ref();
+            let via_display = arm.to_string();
+            assert_eq!(
+                via_as_ref, via_as_str,
+                "InvariantKind::{arm:?} AsRef<str>::as_ref() must byte-equal \
+                 as_str()",
+            );
+            assert_eq!(
+                via_display, via_as_str,
+                "InvariantKind::{arm:?} Display::fmt() must byte-equal \
+                 as_str()",
             );
         }
     }
