@@ -101,6 +101,35 @@ impl Severity {
     }
 }
 
+/// Route the standard-library `&str`-projection trait through the
+/// existing [`Severity::as_str`] `pub const fn` scalar accessor so
+/// every downstream consumer that binds a [`Severity`] through the
+/// trait-idiomatic `.as_ref()` (a `Command::arg` shell-out composing
+/// the canonical severity tag into a `feira lint --severity=<tag>`
+/// diagnostic overlay, a `tracing::field::Value::Str`-arm structured-
+/// log recorder on the runner's per-diagnostic emission path, a
+/// `HashMap::get::<str>(sev.as_ref())` lookup on a future
+/// per-severity policy table) reaches the canonical byte-string
+/// through one substrate-primitive dispatch rather than an open-
+/// coded `.as_str()` re-inlining at every wire-up. Follows the
+/// same closed-set-typed-enum `AsRef<str>`-through-`as_str`
+/// convention the caixa-core siblings ([`caixa_core::CaixaKind`]
+/// cd2091f, [`caixa_core::CaixaDialeto`] 1723611,
+/// [`caixa_core::PlacementStrategy`] d86edd2,
+/// [`caixa_core::RateLimitUnit`] d8136db,
+/// [`caixa_core::RestartStrategy`] 63eb1a4,
+/// [`caixa_core::RestartPolicy`] 419ea81,
+/// [`caixa_core::DepList`] df4592e, [`caixa_core::CaixaVersion`]
+/// 16d5c7e) already carry — extending the axis onto the caixa-lint
+/// severity-classification closed-set typed enum, the ninth peer
+/// on the caixa surface and the first outside caixa-core.
+impl AsRef<str> for Severity {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -508,5 +537,70 @@ mod tests {
                  Severity::is_error() byte-for-byte on {severity:?}",
             );
         }
+    }
+
+    #[test]
+    fn severity_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after pin on the `impl AsRef<str> for
+        // Severity` trait-idiomatic `&str`-projection axis: for every
+        // arm in [`Severity::ALL`], the standard-library `.as_ref()`
+        // dispatch must resolve to the same byte-string the existing
+        // [`Severity::as_str`] `pub const fn` scalar accessor returns.
+        // Guards against a future silent split between the trait impl
+        // and the substrate accessor (a hand-rolled `match self`
+        // reintroduction inside the impl, an arm rename that touches
+        // one path but not the other, an accidental peer accessor that
+        // shadows [`Severity::as_str`]) by asserting the two paths
+        // converge byte-for-byte across the full closed set.
+        //
+        // Peer of the sibling caixa-core `AsRef<str>`-through-`as_str`
+        // pins ([`caixa_core::kind::tests::caixa_kind_as_ref_str_routes_through_as_str_accessor`]
+        // cd2091f, [`caixa_core::dialeto::tests::caixa_dialeto_as_ref_str_routes_through_as_str_accessor`]
+        // 1723611, [`caixa_core::aplicacao::tests::placement_strategy_as_ref_str_routes_through_as_str_accessor`]
+        // d86edd2, [`caixa_core::supervisor::tests::restart_strategy_as_ref_str_routes_through_as_str_accessor`]
+        // 63eb1a4, [`caixa_core::supervisor::tests::restart_policy_as_ref_str_routes_through_as_str_accessor`]
+        // 419ea81, [`caixa_core::dep::tests::dep_list_as_ref_str_routes_through_as_str_accessor`]
+        // df4592e).
+        for &arm in Severity::ALL {
+            let via_trait: &str = arm.as_ref();
+            let via_accessor: &str = arm.as_str();
+            assert_eq!(
+                via_trait, via_accessor,
+                "Severity::{arm:?}.as_ref() must resolve to the same \
+                 byte-string as Severity::{arm:?}.as_str() — the \
+                 AsRef<str> impl must dispatch through the substrate \
+                 accessor",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_as_ref_str_returns_canonical_lowercase_tag_per_arm() {
+        // Byte-parity pin on the [`Severity`] four-arm canonical
+        // lowercase tag alphabet — the byte-string every downstream
+        // `.as_ref()`-bound consumer (a `Command::arg` shell-out
+        // composing `--severity=<tag>` on the runner's diagnostic-
+        // overlay CLI, a `tracing::field::Value::Str`-arm structured-
+        // log recorder on the per-diagnostic emission path, a
+        // `HashMap::get::<str>(sev.as_ref())` lookup on a future
+        // per-severity policy table) receives through one substrate-
+        // primitive dispatch.
+        //
+        // A future rename of the canonical tag on any arm (a `"warn"`
+        // shortening of [`Severity::Warning`], a `"err"` shortening
+        // of [`Severity::Error`], a capitalisation drift on any of
+        // the four) touches the [`Severity::as_str`] scalar accessor
+        // and both this pin and the paired
+        // [`severity_as_ref_str_routes_through_as_str_accessor`]
+        // convergence pin catch it in one caixa-lint test run rather
+        // than at a downstream consumer's silent misclassification.
+        //
+        // Peer of the sibling caixa-core canonical-byte-string arm-
+        // family pins ([`caixa_core::kind::tests::caixa_kind_as_str_returns_lifted_peer_const`],
+        // [`caixa_core::dialeto::tests::caixa_dialeto_as_str_returns_canonical_pascal_case_tag`]).
+        assert_eq!(Severity::Error.as_ref(), "error");
+        assert_eq!(Severity::Warning.as_ref(), "warning");
+        assert_eq!(Severity::Info.as_ref(), "info");
+        assert_eq!(Severity::Hint.as_ref(), "hint");
     }
 }
