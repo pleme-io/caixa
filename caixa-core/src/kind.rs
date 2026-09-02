@@ -377,6 +377,79 @@ impl std::fmt::Display for CaixaKind {
     }
 }
 
+/// Substrate-canonical [`AsRef<str>`] projection on the structurally
+/// most fundamental closed-set typed enum on the caixa surface — every
+/// [`crate::Caixa`] carries a `:kind` — routing through the same
+/// [`CaixaKind::as_str`] `pub const fn` accessor the paired
+/// [`std::fmt::Display`] impl already delegates through, so any future
+/// consumer that binds a [`CaixaKind`] through the standard-library
+/// `impl AsRef<str>` bound (a [`std::process::Command::arg`] shell-out
+/// composing the diagnostic byte-string into the future `feira` verb
+/// dispatch, a `tracing::field::Value::Str`-arm structured-log recorder
+/// on the future `caixa-operator`'s per-caixa reconcile step, a
+/// [`std::collections::HashMap`] lookup keyed on the human-readable
+/// label through `map.get::<str>(kind.as_ref())` on a future per-kind
+/// diagnostic-dispatch table the M4 admission-webhook rejection body
+/// composes) reaches the paired
+/// [`crate::render::CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`crate::render::CAIXA_KIND_LABEL_BINARIO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SERVICO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SUPERVISOR`] /
+/// [`crate::render::CAIXA_KIND_LABEL_APLICACAO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_ACAO`] lifted-const through one
+/// substrate-primitive dispatch rather than an open-coded `.as_str()`
+/// projection at every wire-up.
+///
+/// Deliberately routes through the human-readable
+/// [`CaixaKind::as_str`] axis, not the `PascalCase`
+/// [`CaixaKind::wire_name`] axis — the two-axis split the sibling
+/// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+/// pin makes load-bearing is preserved here by construction: `AsRef`
+/// and `Display` land on the diagnostic byte-string, while the wire
+/// axis (tatara-lisp author surface `:kind Biblioteca`) stays reachable
+/// only through the explicit [`CaixaKind::wire_name`] +
+/// [`serde::Serialize`] paths. Rust-side newtype/typed-enum convention
+/// pairs [`AsRef<str>`] with [`fmt::Display`] on the same primitive so
+/// a caller who has one has both; before this lift, [`CaixaKind`]
+/// carried [`fmt::Display`] but not the paired [`AsRef<str>`] impl the
+/// convention names.
+///
+/// Same "route the trait impl through the substrate-primitive
+/// accessor" discipline the sibling [`crate::CaixaVersion`]
+/// [`AsRef<str>`] impl (16d5c7e), the paired M2
+/// [`crate::supervisor::RestartStrategy`] [`AsRef<str>`] impl
+/// (63eb1a4), the paired M2 [`crate::supervisor::RestartPolicy`]
+/// [`AsRef<str>`] impl (419ea81), and the M3
+/// [`crate::aplicacao::PlacementStrategy`] [`AsRef<str>`] impl
+/// (d86edd2) carry — closes the substrate primitive's
+/// [`AsRef<str>`] projection axis onto the top-level [`CaixaKind`]
+/// discriminator, so every closed-set typed enum on the caixa surface
+/// (top-level `:kind`, M2 `:supervisor` per-child + sibling restart,
+/// M3 `:placement :estrategia`, `:versao` newtype) now carries the
+/// paired [`AsRef<str>`] + [`fmt::Display`] + `as_str` triple through
+/// one lifted `CAIXA_KIND_LABEL_*` / `SUPERVISOR_*` /
+/// `M3_PLACEMENT_ESTRATEGIA_*` const family.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_as_ref_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] across the six-arm
+/// closed set) and
+/// [`tests::caixa_kind_as_ref_str_routes_through_display_via_shared_accessor`]
+/// (three-path convergence: `AsRef<str>` + `Display` + `as_str` all
+/// resolve to the same lifted `CAIXA_KIND_LABEL_*` const per arm) —
+/// any future silent detour that routes the impl through a divergent
+/// projection (a per-arm inline `match self { … }` re-inlining that
+/// opens a compile-time link to the un-lifted arm-literal, a swap onto
+/// the `PascalCase` [`CaixaKind::wire_name`] axis that would collide
+/// the human-readable / wire two-axis split) trips at caixa-core test
+/// time under `assert_eq!` rather than at a downstream
+/// `impl AsRef<str>`-bound consumer's silent split.
+impl AsRef<str> for CaixaKind {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1022,6 +1095,96 @@ mod tests {
                  {wire:?}) must return Some({variant:?}) — CaixaKind::ALL \
                  must be a subset of the from_wire accept-set"
             );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl AsRef<str> for CaixaKind` — asserts the standard-library
+        // trait impl and the substrate-primitive [`CaixaKind::as_str`]
+        // `pub const fn` accessor resolve to the same `&str` per
+        // instance across the six-arm closed set, so any future silent
+        // detour that routes the impl through a divergent projection
+        // (a per-arm inline `match self { CaixaKind::Servico => "servico",
+        // … }` re-inlining that opens a compile-time link to the
+        // un-lifted arm-literal, a swap onto the PascalCase
+        // [`CaixaKind::wire_name`] axis that would collide the
+        // diagnostic / wire two-axis split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin makes load-bearing) trips at caixa-core test time under
+        // `assert_eq!` rather than at a downstream `impl AsRef<str>`-
+        // bound consumer's silent split. Sweeps every one of the six
+        // arms [`CaixaKind::ALL`] carries so no arm's projection is
+        // covered only by the sibling wire-format `Serialize` derive
+        // path. Peer of the sibling
+        // [`crate::supervisor::tests::restart_policy_as_ref_str_routes_through_as_str_accessor`]
+        // (419ea81) /
+        // [`crate::supervisor::tests::restart_strategy_as_ref_str_routes_through_as_str_accessor`]
+        // (63eb1a4) /
+        // [`crate::aplicacao::tests::placement_strategy_as_ref_str_routes_through_as_str_accessor`]
+        // (d86edd2) pins on the paired M2/M3 closed-set typed enums,
+        // and the
+        // [`crate::version::tests::caixa_version_as_ref_str_routes_through_as_str_accessor`]
+        // (16d5c7e) pin on the paired top-level `:versao` typed
+        // newtype — the five pins together close the substrate
+        // primitive's `AsRef<str>` projection axis on every closed-set
+        // typed enum/newtype on the top-level + M2 + M3 caixa surface.
+        for &variant in CaixaKind::ALL {
+            assert_eq!(
+                <CaixaKind as AsRef<str>>::as_ref(&variant),
+                variant.as_str(),
+                "AsRef<str> impl on CaixaKind::{variant:?} must \
+                 byte-equal CaixaKind::as_str on the same instance — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_as_ref_str_routes_through_display_via_shared_accessor() {
+        // Fail-before-pass-after byte-parity pin on the three-path
+        // convergence discipline the top-level [`CaixaKind`] discriminator
+        // now carries on the diagnostic-`&str`-projection axis:
+        // `<CaixaKind as AsRef<str>>::as_ref(&v)` (the newly lifted
+        // impl), `format!("{v}")` (the pre-existing [`fmt::Display`]
+        // impl), and `v.as_str()` (the substrate-primitive
+        // `pub const fn` accessor both trait impls delegate through)
+        // must resolve to the same byte-string on every instance
+        // across the six-arm closed set. Refuses any future divergence
+        // between the two trait impls (a stray [`fmt::Display::fmt`]
+        // rewrite that hand-rolls the arms rather than delegating
+        // through the shared accessor; a hypothetical `AsRef<str>`
+        // rewrite that inlines a per-arm literal cascade) that would
+        // silently split the two projection paths of the top-level
+        // typed discriminator. Preserves the two-axis split the
+        // sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin makes load-bearing: this pin asserts three paths
+        // *converge* on the diagnostic axis, and the sibling pin
+        // asserts the wire axis stays *distinct* from it. Mirrors the
+        // sibling three-path-convergence discipline the peer
+        // [`crate::aplicacao::PlacementStrategy`] carries on its
+        // `AsRef<str>` / `Display` / `as_str` triple (aplicacao.rs pin
+        // `placement_strategy_as_ref_str_routes_through_display_via_shared_accessor`,
+        // d86edd2), the peer [`crate::supervisor::RestartPolicy`]
+        // triple (supervisor.rs pin
+        // `restart_policy_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 419ea81), the peer [`crate::supervisor::RestartStrategy`]
+        // triple (supervisor.rs pin
+        // `restart_strategy_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 63eb1a4), and the [`crate::CaixaVersion`] typed newtype
+        // triple (version.rs pin
+        // `caixa_version_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 16d5c7e).
+        for &variant in CaixaKind::ALL {
+            let via_as_ref: &str = <CaixaKind as AsRef<str>>::as_ref(&variant);
+            let via_display: String = format!("{variant}");
+            let via_accessor: &str = variant.as_str();
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_display, via_accessor);
+            assert_eq!(via_as_ref, via_display.as_str());
         }
     }
 
