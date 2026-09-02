@@ -344,8 +344,31 @@ impl TeiaValue {
     /// [`Self::as_float`] / [`Self::as_bool`] / [`Self::as_ref`]
     /// projections fold on the same shape at their first cross-crate
     /// consumer.
+    ///
+    /// `pub const fn` — closes const-eval discipline on the outer
+    /// [`TeiaValue`] sum-type's projection axis. The body reaches for
+    /// [`String::as_str`] on the [`Self::Str`] borrowed-`String` slot,
+    /// const-stable since Rust 1.87 (well within the workspace's 1.89
+    /// MSRV floor per the workspace `Cargo.toml`), so the promotion is
+    /// a body-preserving type-signature widening. Peer of the sibling
+    /// per-envelope projection accessors on the caixa-ast surface that
+    /// already carry the `pub const fn` discipline on their borrowed-
+    /// `String` payload arms — [`caixa_ast::Trivia::comment_text`]
+    /// (78e88b1) on the [`caixa_ast::TriviaKind::LineComment`] payload
+    /// arm and [`caixa_ast::Trivia::shebang_text`] (ad89ae0) on the
+    /// [`caixa_ast::TriviaKind::Shebang`] payload arm — extended here
+    /// onto the substrate's IaC-side per-`(defteia …)` attribute-value
+    /// sum-type projection surface. Every downstream consumer that
+    /// wants a compile-time per-attribute scalar fixture (a
+    /// `const CIDR: Option<&str> = VALUE.as_str();` compile-time oracle
+    /// a future `caixa-arch::invariants` const-context CIDR-shape probe
+    /// keys off, a per-lint const-context scalar-shape probe a future
+    /// admission webhook consults, an M4 `mesh.pleme.io/v1alpha1/Teia`
+    /// CR materializer's per-attribute const-context scalar-shape
+    /// classifier) now reads through one substrate-primitive const
+    /// dispatch rather than being forced onto the runtime code path.
     #[must_use]
-    pub fn as_str(&self) -> Option<&str> {
+    pub const fn as_str(&self) -> Option<&str> {
         match self {
             Self::Str(s) => Some(s.as_str()),
             _ => None,
@@ -388,8 +411,25 @@ impl TeiaValue {
     /// projection accessors carried onto the M3 `:contratos` sum-type
     /// dispatch surface, extended here onto the substrate's IaC-side
     /// per-`(defteia …)` attribute value sum-type.
+    ///
+    /// `pub const fn` — closes const-eval discipline on the paired
+    /// [`Self::as_str`] scalar-arm projection axis's peer object-arm
+    /// projection. The body borrows the [`Self::Object`] arm's own
+    /// [`BTreeMap`] storage through a plain reference-return with no
+    /// method call in the const-context path, so the promotion is a
+    /// body-preserving type-signature widening. Together with
+    /// [`Self::as_str`] this closes the "opens/closes" pair on the
+    /// outer [`TeiaValue`] sum-type onto the const-eval-surface
+    /// discipline the sibling per-envelope caixa-ast projection
+    /// accessors ([`caixa_ast::Trivia::comment_text`] +
+    /// [`caixa_ast::Trivia::shebang_text`]) already carry on their
+    /// borrowed-`String` payload arms — every current `Option<&_>`
+    /// projection accessor on the outer [`TeiaValue`] sum-type is now
+    /// `pub const fn`, and the future per-arm [`Self::as_list`] /
+    /// [`Self::as_int`] / [`Self::as_float`] / [`Self::as_bool`] /
+    /// [`Self::as_ref`] projections extend on the same shape.
     #[must_use]
-    pub fn as_object(&self) -> Option<&BTreeMap<String, TeiaValue>> {
+    pub const fn as_object(&self) -> Option<&BTreeMap<String, TeiaValue>> {
         match self {
             Self::Object(map) => Some(map),
             _ => None,
@@ -801,6 +841,125 @@ mod tests {
             "TeiaValue::as_object must borrow from the Object arm's \
              BTreeMap backing storage (zero-copy projection)",
         );
+    }
+
+    // Fail-before-pass-after pin on [`TeiaValue::as_str`]'s `const`-eval-
+    // surface posture. The projection routes the wrapped [`TeiaValue::Str`]
+    // borrowed-`String` slot through the `pub const fn` [`String::as_str`]
+    // (const-stable since Rust 1.87, well within the workspace's 1.89
+    // MSRV floor per the workspace `Cargo.toml`) — any future accidental
+    // downgrade to non-`const` fails `as_str_via_const_fn` at caixa-teia
+    // build time with E0015 (`cannot call non-const method`), strictly
+    // stronger than a runtime `assert!`. Sibling of the peer per-envelope
+    // projection accessors' const-eval-surface pins on the caixa-ast
+    // surface ([`caixa_ast::Trivia::comment_text`] +
+    // [`caixa_ast::Trivia::shebang_text`], pinned by
+    // `trivia_comment_text_projection_is_const_fn` and
+    // `trivia_shebang_text_projection_is_const_fn` respectively) —
+    // extends the same discipline onto the substrate's IaC-side per-
+    // `(defteia …)` attribute-value sum-type projection surface. The
+    // sweep exercises the populated + empty `Str` bodies plus every
+    // non-`Str` arm so a copy-paste flip that reroutes one arm's return
+    // through the wrong projection lane trips at caixa-teia test time
+    // under `PartialEq` on the `Option<&str>` return shape rather than
+    // at a downstream `caixa-arch` / `caixa-pangea` consumer-observable
+    // drift.
+    #[test]
+    fn as_str_projection_is_const_fn() {
+        const fn as_str_via_const_fn(v: &TeiaValue) -> Option<&str> {
+            v.as_str()
+        }
+        let variants: Vec<(TeiaValue, Option<&'static str>)> = vec![
+            (TeiaValue::Str("primary-01".into()), Some("primary-01")),
+            (TeiaValue::Str(String::new()), Some("")),
+            (TeiaValue::Int(42), None),
+            (TeiaValue::Float(2.5), None),
+            (TeiaValue::Bool(true), None),
+            (TeiaValue::Null, None),
+            (TeiaValue::List(vec![TeiaValue::Int(1)]), None),
+            (
+                TeiaValue::Object({
+                    let mut m = BTreeMap::new();
+                    m.insert("k".into(), TeiaValue::Str("v".into()));
+                    m
+                }),
+                None,
+            ),
+            (
+                TeiaValue::Ref(TeiaRefRepr {
+                    tipo: "aws/vpc".into(),
+                    nome: "main".into(),
+                    atributo: "id".into(),
+                }),
+                None,
+            ),
+        ];
+        for (variant, expected) in &variants {
+            assert_eq!(
+                as_str_via_const_fn(variant),
+                *expected,
+                "TeiaValue::as_str must project through the pub const fn \
+                 body byte-equal to the pre-lift open-coded match on the \
+                 same fixture",
+            );
+            assert_eq!(as_str_via_const_fn(variant), variant.as_str());
+        }
+    }
+
+    // Fail-before-pass-after pin on [`TeiaValue::as_object`]'s `const`-
+    // eval-surface posture. The projection borrows the [`TeiaValue::Object`]
+    // arm's own [`BTreeMap`] storage through a plain reference-return
+    // with no method call in the const-context path — any future
+    // accidental downgrade to non-`const` fails `as_object_via_const_fn`
+    // at caixa-teia build time with E0015, strictly stronger than a
+    // runtime `assert!`. Sibling of the paired `as_str_projection_is_
+    // const_fn` pin above — together the two pins close the const-eval
+    // surface on every current `Option<&_>` projection accessor on the
+    // outer [`TeiaValue`] sum-type. The sweep exercises the populated +
+    // empty `Object` bodies plus every non-`Object` arm so a copy-paste
+    // flip that reroutes one arm's return through the wrong projection
+    // lane trips at caixa-teia test time under `PartialEq` on the
+    // `Option<&BTreeMap<…>>` return shape rather than at a downstream
+    // `caixa-arch` / `caixa-pangea` consumer-observable drift.
+    #[test]
+    fn as_object_projection_is_const_fn() {
+        const fn as_object_via_const_fn(v: &TeiaValue) -> Option<&BTreeMap<String, TeiaValue>> {
+            v.as_object()
+        }
+        let populated: BTreeMap<String, TeiaValue> = {
+            let mut m = BTreeMap::new();
+            m.insert("owner".into(), TeiaValue::Str("team-a".into()));
+            m
+        };
+        let empty: BTreeMap<String, TeiaValue> = BTreeMap::new();
+        let variants: Vec<(TeiaValue, Option<&BTreeMap<String, TeiaValue>>)> = vec![
+            (TeiaValue::Object(populated.clone()), Some(&populated)),
+            (TeiaValue::Object(empty.clone()), Some(&empty)),
+            (TeiaValue::Str("main".into()), None),
+            (TeiaValue::Int(0), None),
+            (TeiaValue::Float(0.0), None),
+            (TeiaValue::Bool(false), None),
+            (TeiaValue::Null, None),
+            (TeiaValue::List(Vec::new()), None),
+            (
+                TeiaValue::Ref(TeiaRefRepr {
+                    tipo: "aws/vpc".into(),
+                    nome: "main".into(),
+                    atributo: "id".into(),
+                }),
+                None,
+            ),
+        ];
+        for (variant, expected) in &variants {
+            assert_eq!(
+                as_object_via_const_fn(variant),
+                *expected,
+                "TeiaValue::as_object must project through the pub const \
+                 fn body byte-equal to the pre-lift open-coded match on \
+                 the same fixture",
+            );
+            assert_eq!(as_object_via_const_fn(variant), variant.as_object());
+        }
     }
 
     fn all_teia_value_variants() -> Vec<(TeiaValue, &'static str)> {
