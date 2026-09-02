@@ -130,6 +130,33 @@ impl AsRef<str> for Severity {
     }
 }
 
+/// Route the derived-style [`std::fmt::Display`] impl on [`Severity`]
+/// through the substrate-canonical [`Severity::as_str`] `pub const fn`
+/// accessor so every consumer that binds a [`Severity`] through the
+/// standard-library `{}` formatting axis (a future
+/// `caixa-lsp`-side hover-line composer projecting the canonical tag
+/// into a rendered diagnostic, a `tracing::field::Value::from(sev)`
+/// structured-log recorder on the runner's per-diagnostic emission
+/// path, any `format!("{sev}")` interpolation in a future
+/// audit-report surface) reaches the canonical byte-string through
+/// one substrate-primitive dispatch rather than an open-coded per-arm
+/// match at every wire-up.
+///
+/// Follows the same closed-set-typed-enum `Display`-through-`as_str`
+/// convention the substrate-wide siblings [`caixa_core::CaixaKind`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::dep::DepList`], and
+/// [`caixa_arch::invariants::InvariantKind`] (87c875a) already carry
+/// — closes the [`Severity`] closed-set enum's
+/// `(as_str, Display, AsRef<str>)` canonical-projection triple.
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -602,5 +629,58 @@ mod tests {
         assert_eq!(Severity::Warning.as_ref(), "warning");
         assert_eq!(Severity::Info.as_ref(), "info");
         assert_eq!(Severity::Hint.as_ref(), "hint");
+    }
+
+    #[test]
+    fn severity_display_and_as_ref_str_route_through_as_str_accessor() {
+        // Three-path convergence pin: the paired [`std::fmt::Display`]
+        // impl, the paired [`AsRef<str>`] impl, and the substrate-
+        // canonical [`Severity::as_str`] `pub const fn` accessor must
+        // resolve to the same `&'static str` per arm.
+        //
+        // Guards against any future silent detour that routes one impl
+        // through a divergent projection (a hand-rolled per-arm match
+        // in the `fmt` body, an `impl AsRef<str>` swap onto a
+        // hypothetical wire_name axis, a rename that touches one
+        // endpoint but not the paired sibling) — the pin trips at
+        // caixa-lint test time rather than at a downstream consumer's
+        // silent tag split. Peer of the sibling
+        // [`caixa_arch::invariants::tests::invariant_kind_display_and_as_ref_str_route_through_as_str_accessor`]
+        // (87c875a) three-path convergence pin on the caixa-arch
+        // [`InvariantKind`] axis.
+        for &arm in Severity::ALL {
+            let via_as_str: &str = arm.as_str();
+            let via_as_ref: &str = arm.as_ref();
+            let via_display = arm.to_string();
+            assert_eq!(
+                via_as_ref, via_as_str,
+                "Severity::{arm:?} AsRef<str>::as_ref() must byte-equal \
+                 as_str()",
+            );
+            assert_eq!(
+                via_display, via_as_str,
+                "Severity::{arm:?} Display::fmt() must byte-equal \
+                 as_str()",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_display_byte_equals_canonical_lowercase_tag_per_arm() {
+        // Byte-parity pin on the [`Severity`] four-arm canonical
+        // lowercase tag alphabet through the standard-library `{}`
+        // Display axis — pinned separately from the paired
+        // [`severity_as_ref_str_returns_canonical_lowercase_tag_per_arm`]
+        // pin so a future silent swap of the `Display` impl onto a
+        // divergent projection (a hand-rolled per-arm match in the
+        // `fmt` body that shifts one arm, a routing detour through the
+        // derived `Debug` output shape, an `impl Display` swap that
+        // reads from a hypothetical peer accessor) trips at caixa-lint
+        // test time rather than at the downstream `format!("{sev}")`
+        // consumer's silent tag drift.
+        assert_eq!(format!("{}", Severity::Error), "error");
+        assert_eq!(format!("{}", Severity::Warning), "warning");
+        assert_eq!(format!("{}", Severity::Info), "info");
+        assert_eq!(format!("{}", Severity::Hint), "hint");
     }
 }
