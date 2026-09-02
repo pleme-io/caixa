@@ -280,6 +280,69 @@ impl std::fmt::Display for RestartStrategy {
     }
 }
 
+/// Substrate-canonical [`AsRef<str>`] projection on the M2
+/// per-supervisor sibling-restart [`RestartStrategy`] closed-set typed
+/// enum — routes through the same [`RestartStrategy::as_str`]
+/// `pub const fn` scalar accessor the paired [`std::fmt::Display`]
+/// impl and the un-`rename`d [`serde::Serialize`] derive already key
+/// off, so any future consumer that binds a [`RestartStrategy`]
+/// through the standard-library `impl AsRef<str>` bound (a future
+/// [`caixa-feira`] `feira supervisor --estrategia <arm>` verb that
+/// composes the emitted `PascalCase` wire scalar into a
+/// [`std::process::Command::arg`] shell-out of the future
+/// wasm-operator's admission gate, a per-supervisor structured-log
+/// recorder on the future `caixa-operator`'s hierarchical
+/// reconciliation surface that accepts `impl AsRef<str>` at the
+/// `tracing::field::Value` `Str`-arm, a [`std::collections::HashMap`]
+/// lookup keyed on the estrategia wire byte through
+/// `map.get::<str>(strategy.as_ref())` on a future per-strategy
+/// dispatch table) reaches the paired [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`]
+/// / [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`]
+/// lifted-const through one substrate-primitive dispatch rather
+/// than an open-coded `.as_str()` projection at every wire-up.
+///
+/// Peer of the sibling [`std::fmt::Display`] impl on the same
+/// primitive — both delegate to the shared
+/// [`RestartStrategy::as_str`] `pub const fn` accessor, so
+/// [`format!("{s}")`], `s.as_str()`, and
+/// `<RestartStrategy as AsRef<str>>::as_ref(&s)` resolve to the same
+/// byte-string per instance by construction. A future variant rename
+/// or `#[serde(rename_all = "kebab-case")]` attribute-drift on the
+/// enum reaches every one of the three paths (plus the wire-format
+/// `Serialize` derive that already routes through the same lifted
+/// const) through exactly one caixa-core edit.
+///
+/// Same "route the trait impl through the substrate-primitive
+/// accessor" discipline the sibling [`crate::CaixaVersion`]
+/// [`AsRef<str>`] impl (16d5c7e) carries on the paired top-level
+/// `:versao` typed newtype — extends it onto the second `AsRef<str>`
+/// axis on the caixa typed surface (the first M2 OTP-shape
+/// closed-set typed enum to converge onto the standard-library
+/// [`AsRef<str>`] projection). Rust-side newtype/typed-enum
+/// convention pairs [`AsRef<str>`] and [`fmt::Display`] on the same
+/// primitive so a caller who has one has both; before this lift,
+/// [`RestartStrategy`] carried [`fmt::Display`] but not the paired
+/// [`AsRef<str>`] impl the convention names.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_as_ref_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm closed set) — any future silent detour that routes the
+/// impl through a divergent projection (a per-arm inline
+/// `match self { … }` re-inlining that opens a compile-time link to
+/// the un-lifted arm-literal, a swap onto the kebab-case
+/// [`gen_platform::Discriminant`] catalog identity that would collide
+/// the wire axis with the dispatcher-catalog axis) trips at
+/// caixa-core test time under `assert_eq!` rather than at a
+/// downstream `impl AsRef<str>`-bound consumer's silent split.
+impl AsRef<str> for RestartStrategy {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -6010,6 +6073,76 @@ mod tests {
                  Display + as_str + Serialize all resolve to the same \
                  SUPERVISOR_ESTRATEGIA_* const)"
             );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl AsRef<str> for RestartStrategy` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`RestartStrategy::as_str`] `pub const fn` accessor resolve
+        // to the same `&str` per instance across the four-arm
+        // closed set, so any future silent detour that routes the
+        // impl through a divergent projection (a per-arm inline
+        // `match self { RestartStrategy::OneForOne => "OneForOne", … }`
+        // re-inlining that opens a compile-time link to the un-lifted
+        // arm-literal, a swap onto the kebab-case
+        // [`gen_platform::Discriminant`] catalog identity that would
+        // collide the wire axis with the dispatcher-catalog axis) trips
+        // at caixa-core test time under `PartialEq` rather than at a
+        // downstream `impl AsRef<str>`-bound consumer's silent split.
+        // Sweeps every one of the four arms
+        // [`RestartStrategy::ALL`] carries so no arm's projection is
+        // covered only by the sibling wire-format `Serialize` derive
+        // path. Peer of the sibling
+        // [`crate::version::tests::caixa_version_as_ref_str_routes_through_as_str_accessor`]
+        // (16d5c7e) `AsRef<str>`-byte-parity pin on the paired
+        // top-level `:versao` typed newtype — the two pins together
+        // cover the substrate primitive's `AsRef<str>` projection axis
+        // on the paired newtype + closed-set-typed-enum surface.
+        for &variant in RestartStrategy::ALL {
+            assert_eq!(
+                <RestartStrategy as AsRef<str>>::as_ref(&variant),
+                variant.as_str(),
+                "AsRef<str> impl on RestartStrategy::{variant:?} must \
+                 byte-equal RestartStrategy::as_str on the same instance \
+                 — divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_as_ref_str_routes_through_display_via_shared_accessor() {
+        // Fail-before-pass-after byte-parity pin on the three-path
+        // convergence discipline the M2 sibling-restart primitive now
+        // carries on the `&str`-projection axis:
+        // `<RestartStrategy as AsRef<str>>::as_ref(&s)` (the newly
+        // lifted impl), `format!("{s}")` (the pre-existing
+        // [`fmt::Display`] impl), and `s.as_str()` (the substrate-
+        // primitive `pub const fn` accessor both trait impls delegate
+        // through) must resolve to the same byte-string on every
+        // instance across the four-arm closed set. Refuses any future
+        // divergence between the two trait impls (a stray
+        // [`fmt::Display::fmt`] rewrite that hand-rolls the arms
+        // rather than delegating through the shared accessor; a
+        // hypothetical `AsRef<str>` rewrite that inlines a per-arm
+        // literal cascade) that would silently split the two
+        // projection paths of the same closed-set typed enum. Mirrors
+        // the sibling three-path-convergence discipline the peer
+        // [`crate::CaixaVersion`] typed newtype carries on its
+        // `AsRef<str>` / `Display` / `as_str` triple
+        // (version.rs pin
+        // `caixa_version_as_ref_str_routes_through_display_via_shared_accessor`,
+        // 16d5c7e).
+        for &variant in RestartStrategy::ALL {
+            let via_as_ref: &str = <RestartStrategy as AsRef<str>>::as_ref(&variant);
+            let via_display: String = format!("{variant}");
+            let via_accessor: &str = variant.as_str();
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_display, via_accessor);
+            assert_eq!(via_as_ref, via_display.as_str());
         }
     }
 
