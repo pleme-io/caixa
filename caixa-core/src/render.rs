@@ -7247,6 +7247,167 @@ impl PathShapeViolation {
     /// caller in [`crate::manifest::ManifestError`] preserve for
     /// diagnostic-precedence continuity) defers to.
     pub const ALL: &'static [Self] = &[Self::Empty, Self::Absolute, Self::ParentEscape];
+
+    /// Substrate-canonical per-[`PathShapeViolation`] lowercase-kebab-tag
+    /// scalar accessor every consumer that renders the three-arm
+    /// path-shape violation axis as user-facing text keys off — returns
+    /// the per-arm byte-string (`"empty"` / `"absolute"` /
+    /// `"parent-escape"`) as a `&'static str`, the same lowercase tags
+    /// a future `feira lint --explain-path-shape=<axis>` per-arm
+    /// listing, a future `mesh.pleme.io/v1alpha1/Caixa` CR
+    /// materializer's per-path admission-webhook rejection body naming
+    /// the accepted-violation-tag set, or a
+    /// `tracing::field::Value::Str`-arm structured-log recorder on the
+    /// caixa-build pipeline's per-slot path-gate emission path would
+    /// have otherwise reached via a
+    /// `format!("{:?}", violation).to_lowercase()` round-trip through
+    /// the [`std::fmt::Debug`] derive — with two silent drift footguns
+    /// the substrate-canonical accessor closes at build time:
+    ///
+    ///   - the [`std::fmt::Debug`] derive's per-arm output is *not* a
+    ///     stability guarantee (Rust's own convention gives it as *no
+    ///     guarantee at all*), so a `#[derive(Debug)]` swap for a
+    ///     hand-rolled `impl Debug` that pretty-prints the arm with
+    ///     per-arm context (`"Empty(no path supplied)"`,
+    ///     `"Absolute(escapes sandbox)"`, `"ParentEscape(traverses
+    ///     above root)"`) would silently reroute every diagnostic tag
+    ///     through a stale byte-string with no downstream signal until
+    ///     an operator scrolled the `feira lint` / `feira build`
+    ///     terminal output;
+    ///   - `format!("{:?}", violation).to_lowercase()` also collapses
+    ///     `ParentEscape` to `"parentescape"` rather than the
+    ///     kebab-case `"parent-escape"` every other substrate-side
+    ///     kebab-slug axis (the sibling
+    ///     [`caixa_provedor::FerriteRuntime::variant_slug`]-emitted
+    ///     `"ferrite-safe"` / `"ferrite-arena"` tags, the
+    ///     [`crate::CaixaKind::as_str`]-emitted lowercase-single-word
+    ///     kind tags) already carries — allocating a fresh `String`
+    ///     per render pass on top of the tag drift.
+    ///
+    /// Peer of the sibling substrate-wide closed-set fieldless typed-
+    /// enum canonical-lowercase-tag scalar accessors
+    /// [`caixa_arch::ArchVerdict::as_str`] (f3da79b — the paired
+    /// proof-outcome axis on the sibling caixa-arch closed-set enum),
+    /// [`caixa_arch::InvariantKind::as_str`] (87c875a — the sibling
+    /// caixa-arch severity axis), [`caixa_lint::Severity::as_str`] /
+    /// [`caixa_lint::FixSafety::as_str`] (72782f7 — caixa-lint),
+    /// [`crate::CaixaKind::as_str`] / [`crate::CaixaDialeto::as_str`]
+    /// / [`crate::CaixaVersion::as_str`], and the sibling M2/M3
+    /// `caixa-core` closed-set typed-enum `as_str` family
+    /// ([`crate::supervisor::RestartStrategy::as_str`] /
+    /// [`crate::supervisor::RestartPolicy::as_str`] /
+    /// [`crate::aplicacao::PlacementStrategy::as_str`] /
+    /// [`crate::aplicacao::RateLimitUnit::as_suffix`] /
+    /// [`crate::dep::DepList::as_str`]) — extends the substrate-wide
+    /// "one canonical lowercase-tag accessor per closed-set fieldless
+    /// typed enum" discipline onto the caixa-core render-side
+    /// path-shape-diagnostic axis, the first render-side path-shape-
+    /// diagnostic closed-set enum to reach it.
+    ///
+    /// `pub const fn` — matches the sibling
+    /// [`gen_platform::IsVariant`]-derive-generated per-arm `is_*`
+    /// predicates' `const fn` posture, so every future substrate-side
+    /// `const`-context consumer (a `const _: () = assert!(…)` module-
+    /// scope pin on a per-fixture typed [`PathShapeViolation`], a
+    /// future `const fn` per-violation rejection-body composer, a
+    /// compile-time `HashMap<&'static str, _>`-shaped per-violation
+    /// policy table) reaches the paired byte-string through one
+    /// substrate-primitive dispatch at compile time as at runtime.
+    ///
+    /// A future variant addition (a `Symlink` arm the future
+    /// symlink-escape gate would carry once `Path::is_symlink` becomes
+    /// part of the sandbox contract, a `TrailingSpace` arm a future
+    /// authoring-side whitespace-hygiene gate would raise for
+    /// `"lib/init.lisp "` shapes) reaches the paired
+    /// [`std::fmt::Display`] impl + [`AsRef<str>`] impl + every
+    /// downstream `.as_str()` consumer through one match-arm edit
+    /// here, not a coordinated rewrite of every open-coded
+    /// `format!("{:?}", …)` re-inlining. Named `as_str` (not `label`
+    /// / `tag` / `slug`) to match the sibling closed-set-enum `as_str`
+    /// convention the substrate already carries verbatim across every
+    /// peer typed enum whose canonical projection is a plain
+    /// `&'static str` (as distinct from the sibling
+    /// [`caixa_provedor::FerriteRuntime::variant_slug`] and
+    /// [`crate::WitTarget::label`] domain-named projections on enums
+    /// carrying a paired non-string projection axis).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::Absolute => "absolute",
+            Self::ParentEscape => "parent-escape",
+        }
+    }
+}
+
+/// Route the derived-style [`std::fmt::Display`] impl on
+/// [`PathShapeViolation`] through the substrate-canonical
+/// [`PathShapeViolation::as_str`] `pub const fn` accessor so every
+/// consumer that binds a [`PathShapeViolation`] through the standard-
+/// library `{}` formatting axis (a future `feira lint
+/// --explain-path-shape=<axis>` per-arm listing line naming the
+/// violation, a `tracing::field::Value::from(violation)` structured-
+/// log recorder on the caixa-build pipeline's per-slot path-gate
+/// emission path, any `format!("{violation}")` interpolation in a
+/// future audit surface) reaches the canonical byte-string through
+/// one substrate-primitive dispatch rather than an open-coded
+/// per-arm match at every wire-up.
+///
+/// Follows the same closed-set-typed-enum `Display`-through-`as_str`
+/// convention the substrate-wide siblings
+/// [`caixa_arch::ArchVerdict`] (f3da79b),
+/// [`caixa_arch::InvariantKind`] (87c875a),
+/// [`caixa_lint::Severity`] (6ad94f3),
+/// [`caixa_lint::FixSafety`] (72782f7), [`crate::CaixaKind`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`], and
+/// [`crate::dep::DepList`] already carry, plus the peer
+/// [`caixa_provedor::FerriteRuntime`] `Display`-through-`variant_slug`
+/// route (f919cda) on the sibling caixa-provedor axis whose canonical
+/// projection is domain-named — closes the [`PathShapeViolation`]
+/// closed-set enum's `(as_str, Display, AsRef<str>)`
+/// canonical-projection triple.
+impl std::fmt::Display for PathShapeViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Route the standard-library [`AsRef<str>`] projection on
+/// [`PathShapeViolation`] through the substrate-canonical
+/// [`PathShapeViolation::as_str`] `pub const fn` accessor so every
+/// consumer that binds a [`PathShapeViolation`] through the trait-
+/// idiomatic `.as_ref()` (a future
+/// `HashMap::get::<str>(violation.as_ref())` per-violation policy-
+/// table lookup, a `Command::arg` shell-out composing the canonical
+/// violation tag into a `feira lint --path-shape=<tag>` filter, any
+/// `impl AsRef<str>`-bound generic function) reaches the canonical
+/// byte-string through one substrate-primitive dispatch rather than
+/// an open-coded `.as_str()` re-inlining at every wire-up.
+///
+/// Peer of the substrate-wide sibling closed-set-enum
+/// `AsRef<str>`-through-`as_str` family already carried by
+/// [`caixa_arch::ArchVerdict`] (f3da79b),
+/// [`caixa_arch::InvariantKind`] (87c875a),
+/// [`caixa_lint::Severity`] (ce9d1e3),
+/// [`caixa_lint::FixSafety`] (72782f7), [`crate::CaixaKind`],
+/// [`crate::CaixaDialeto`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`],
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::dep::DepList`], and [`crate::CaixaVersion`], plus the
+/// peer [`caixa_provedor::FerriteRuntime`] `AsRef<str>`-through-
+/// `variant_slug` route (f919cda) — extends the axis onto the caixa-
+/// core render-side path-shape-diagnostic closed-set enum, closing
+/// the `(as_str, Display, AsRef<str>)` canonical-projection triple
+/// on the first render-side path-shape-diagnostic closed-set
+/// fieldless typed enum on the caixa surface to converge onto it.
+impl AsRef<str> for PathShapeViolation {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
@@ -40292,6 +40453,77 @@ mod tests {
                  with matches!(_, PathShapeViolation::ParentEscape)"
             );
         }
+    }
+
+    #[test]
+    fn path_shape_violation_display_and_as_ref_str_route_through_as_str_accessor() {
+        // Fail-before-pass-after three-path convergence pin: for every
+        // arm in [`PathShapeViolation::ALL`], the paired
+        // [`std::fmt::Display`] impl and [`AsRef<str>`] impl and the
+        // substrate-canonical [`PathShapeViolation::as_str`] accessor
+        // resolve to the same `&'static str` per arm. Mirrors the peer
+        // `arch_verdict_display_and_as_ref_str_route_through_as_str_accessor`
+        // (f3da79b) /
+        // `invariant_kind_display_and_as_ref_str_route_through_as_str_accessor`
+        // (87c875a) /
+        // `fix_safety_display_and_as_ref_str_route_through_as_str_accessor`
+        // (72782f7) /
+        // `ferrite_runtime_display_and_as_ref_str_route_through_variant_slug_accessor`
+        // (f919cda) pin shapes on the sibling caixa-arch / caixa-lint /
+        // caixa-provedor closed-set-enum triple closures, extended onto
+        // the caixa-core render-side path-shape-diagnostic axis.
+        //
+        // Any future silent detour that routes one impl through a
+        // divergent projection (a per-arm inline `match self { … }` re-
+        // inlining that opens a compile-time link to the un-lifted arm-
+        // literal, a swap onto a `format!("{:?}", …).to_lowercase()`
+        // round-trip that would collapse the multi-word `ParentEscape`
+        // arm to `"parentescape"` and desynchronize the kebab-case
+        // `"parent-escape"` slug the emitter returns, an arm rename
+        // touching one impl but not the paired sibling) trips at
+        // caixa-core test time under `assert_eq!` rather than at a
+        // downstream `impl AsRef<str>`-bound consumer's silent tag
+        // split or a `format!("{violation}")` audit-line divergence.
+        for &arm in PathShapeViolation::ALL {
+            let via_as_str: &str = arm.as_str();
+            let via_as_ref: &str = arm.as_ref();
+            let via_display = arm.to_string();
+            assert_eq!(
+                via_as_ref, via_as_str,
+                "PathShapeViolation::{arm:?} AsRef<str>::as_ref() must \
+                 byte-equal as_str()",
+            );
+            assert_eq!(
+                via_display, via_as_str,
+                "PathShapeViolation::{arm:?} Display::fmt() must \
+                 byte-equal as_str()",
+            );
+        }
+        // Pin the exact per-arm byte-string on `as_str` + both trait
+        // impls so a future rebrand of the canonical slug (`"empty"` /
+        // `"absolute"` / `"parent-escape"`) surfaces at this pin rather
+        // than at a downstream consumer's silent tag drift.
+        assert_eq!(PathShapeViolation::Empty.as_str(), "empty");
+        assert_eq!(PathShapeViolation::Absolute.as_str(), "absolute");
+        assert_eq!(PathShapeViolation::ParentEscape.as_str(), "parent-escape",);
+        assert_eq!(format!("{}", PathShapeViolation::Empty), "empty");
+        assert_eq!(format!("{}", PathShapeViolation::Absolute), "absolute");
+        assert_eq!(
+            format!("{}", PathShapeViolation::ParentEscape),
+            "parent-escape",
+        );
+        assert_eq!(
+            <PathShapeViolation as AsRef<str>>::as_ref(&PathShapeViolation::Empty),
+            "empty",
+        );
+        assert_eq!(
+            <PathShapeViolation as AsRef<str>>::as_ref(&PathShapeViolation::Absolute),
+            "absolute",
+        );
+        assert_eq!(
+            <PathShapeViolation as AsRef<str>>::as_ref(&PathShapeViolation::ParentEscape),
+            "parent-escape",
+        );
     }
 
     // ── is_lisp_extension — `:behavior :on-*` + `:upgrade-from ───────────
