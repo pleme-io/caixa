@@ -146,6 +146,100 @@ impl BehaviorSpec {
         self.declared_slots().map(|(_slot, p)| p)
     }
 
+    /// Substrate-canonical `const`-context peer of the derived
+    /// [`Default::default`] on [`BehaviorSpec`] — returns the fully-empty
+    /// per-`:behavior` slot (every one of the six `Option<PathBuf>`-
+    /// carrying `:on-*` callback fields set to `None`), materializable
+    /// at `const`-eval time.
+    ///
+    /// Named `empty()` (not `default()` / `new()`) to match the sibling
+    /// `is_empty()` predicate on the same primitive: the pair
+    /// (`empty()` / `is_empty()`) forms the round-trip discipline
+    /// `BehaviorSpec::empty().is_empty() == true` the pin
+    /// [`tests::behavior_spec_empty_is_the_all_none_arm_and_is_empty`]
+    /// locks load-bearing, and every `const`-context consumer that
+    /// wants a canonical unset baseline reads through this constructor
+    /// rather than the derived (non-`const`) [`Default::default`] or
+    /// the six-field struct-literal `BehaviorSpec { on_init: None,
+    /// on_call: None, on_cast: None, on_info: None, on_state_change:
+    /// None, on_terminate: None }` open-coded per-site.
+    ///
+    /// Third and final `pub const fn empty()` constructor on the M2 /
+    /// M3 [`Default`]-carrying typed-slot spec family — direct peer of
+    /// the sibling [`crate::LimitsSpec::empty`] (9739971) on the M2
+    /// `:limits` slot and [`crate::aplicacao::MeshPolicy::empty`]
+    /// (6df969b) on the M3 `:politicas` slot; extends the same
+    /// "`const`-context peer of the derived non-`const`
+    /// [`Default::default`]" discipline onto the M2 `:behavior` typed
+    /// slot. The three lifted `pub const fn` constructors together now
+    /// cover every per-slot [`Default`]-carrying M2 / M3 typed slot
+    /// that also carries a paired `pub const fn is_empty()` emptiness
+    /// predicate: every `const`-context consumer of a canonical unset
+    /// per-slot baseline reads through the same paired-
+    /// (`empty()` / `is_empty()`) shape on either slot without a
+    /// runtime dispatch on the derived [`Default::default`].
+    ///
+    /// Prior to this lift the "canonical unset [`BehaviorSpec`]" shape
+    /// was reached through one of two paths — the derived
+    /// [`Default::default`] (`fn`, not `const fn` — a downstream
+    /// `const _: BehaviorSpec = BehaviorSpec::default();` cannot compile
+    /// because [`Default::default`] is not `const`-stable on stable
+    /// Rust; the tracking issue on `const Default` still blocks the
+    /// promotion) or an open-coded struct-literal with six `None` arms
+    /// threaded verbatim at every call site (the same six-field literal
+    /// the pre-existing
+    /// [`tests::behavior_spec_is_empty_is_const_fn_usable_in_const_position`]
+    /// pin already inlines to reach `const` position, and the same
+    /// per-mask literal the sibling
+    /// [`tests::behavior_spec_is_empty_agrees_with_declared_paths_across_all_slot_permutations`]
+    /// permutation sweep constructs 64 times; a future slot addition
+    /// silently drifts the fixture's intent from "one axis under test,
+    /// the other five unset" to "one axis under test, N axes unset, one
+    /// field forgotten"). A future extension of the axis (a per-cluster
+    /// callback overlay the M4 CR materializer resolves per-CR, a
+    /// per-tenant callback alias the operator pins through a future
+    /// `:placement`-scoped slot, a seventh OTP-shape `gen_server`
+    /// callback the roadmap
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// grows once the six canonical arms stop covering the substrate's
+    /// discovered callback shape) reaches this constructor at one edit
+    /// (one added struct field on the type + one added `<axis>: None`
+    /// line here) rather than a coordinated rewrite of every open-coded
+    /// six-field struct-literal at every downstream consumer.
+    ///
+    /// `pub const fn` — matches the sibling
+    /// [`BehaviorSpec::is_empty`] `pub const fn` shape verbatim, so
+    /// every downstream consumer that folds a canonical unset baseline
+    /// into a `const` position (a `const EMPTY: BehaviorSpec =
+    /// BehaviorSpec::empty();` module-scope binding the future
+    /// wasm-operator's per-Servico startup-log skip-empty-`:behavior`
+    /// short-circuit reads through, a compile-time per-fixture-builder
+    /// default the future M4 CR materializer's admission-time
+    /// default-overlay-emit gate consults, a compile-time lookup table
+    /// the LSP hover renderer materializes per typed-slot fixture)
+    /// reads through one `const` dispatch rather than being forced onto
+    /// the runtime code path. Pinned load-bearing at the substrate-
+    /// primitive level by
+    /// [`tests::behavior_spec_empty_is_the_all_none_arm_and_is_empty`]
+    /// (round-trip pin against [`Self::is_empty`]),
+    /// [`tests::behavior_spec_empty_byte_equals_default`] (byte-parity
+    /// pin against the derived [`Default::default`]), and
+    /// [`tests::behavior_spec_empty_ctor_is_const_fn`] (const-eval-surface
+    /// pin via `const` binding — any future accidental downgrade to
+    /// `pub fn` fires E0015 at the binding at caixa-core build time,
+    /// strictly stronger than a runtime `assert!`).
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            on_init: None,
+            on_call: None,
+            on_cast: None,
+            on_info: None,
+            on_state_change: None,
+            on_terminate: None,
+        }
+    }
+
     /// Substrate-canonical per-`:behavior` emptiness predicate every
     /// M2 renderer that overlays the typed slot onto a cluster artifact
     /// keys off — `true` iff every one of the six `Option<PathBuf>`-
@@ -2833,5 +2927,145 @@ mod tests {
                  at slot-set mask {mask:#08b}"
             );
         }
+    }
+
+    // ── pub-const-fn peer of derived Default on BehaviorSpec::empty() ──
+
+    #[test]
+    fn behavior_spec_empty_is_the_all_none_arm_and_is_empty() {
+        // Fail-before-pass-after round-trip pin on the paired
+        // ([`BehaviorSpec::empty`], [`BehaviorSpec::is_empty`]) constructor /
+        // predicate on the [`BehaviorSpec`] typed slot: the lifted
+        // constructor must materialize a value whose every one of the
+        // six `Option<PathBuf>`-carrying per-`:on-*` callback fields is
+        // `None`, so the paired [`BehaviorSpec::is_empty`] predicate
+        // returns `true` on the constructor's output by construction.
+        // A future silent regression that omits a `None` arm from the
+        // constructor's struct-literal (a seventh callback added to the
+        // type whose constructor arm is forgotten, an accidental
+        // `Some(PathBuf::new())` on the `on_init` arm that would
+        // silently violate the [`BehaviorError::EmptyPath`] admission
+        // floor at [`BehaviorSpec::validate`] time) trips here at
+        // caixa-core test time rather than surfacing as a downstream
+        // consumer's per-`:behavior` overlay-emit path reading a
+        // `BehaviorSpec::empty()` output that fails the emptiness
+        // predicate and lands an unexpected `spec.behavior.<slot>`
+        // field in the emitted ComputeUnit CR. Peer of the sibling
+        // [`crate::limits::tests::limits_spec_empty_is_the_all_none_arm_and_is_empty`]
+        // pin on the M2 `:limits` typed slot and the sibling
+        // [`crate::aplicacao::tests::mesh_policy_empty_is_the_all_none_arm_and_is_empty`]
+        // pin on the M3 `:politicas` typed slot — extends the same
+        // "the canonical unset baseline satisfies the paired emptiness
+        // predicate" round-trip discipline onto the M2 `:behavior`
+        // slot, closing the round-trip family on the three per-slot
+        // [`Default`]-carrying M2 / M3 typed-slot spec structs.
+        let empty = BehaviorSpec::empty();
+        assert!(
+            empty.is_empty(),
+            "BehaviorSpec::empty() must return a value whose is_empty() \
+             predicate is true — got {empty:?}",
+        );
+        assert_eq!(empty.on_init(), None);
+        assert_eq!(empty.on_call(), None);
+        assert_eq!(empty.on_cast(), None);
+        assert_eq!(empty.on_info(), None);
+        assert_eq!(empty.on_state_change(), None);
+        assert_eq!(empty.on_terminate(), None);
+    }
+
+    #[test]
+    fn behavior_spec_empty_byte_equals_default() {
+        // Fail-before-pass-after byte-parity pin on the two-path
+        // convergence: the lifted `pub const fn` [`BehaviorSpec::empty`]
+        // constructor must byte-equal the derived (non-`const`)
+        // [`Default::default`] on every one of the six
+        // `Option<PathBuf>`-carrying per-`:on-*` fields under `PartialEq`.
+        // The two paths are semantically identical (both name the
+        // "canonical unset [`BehaviorSpec`]" shape) but structurally
+        // distinct (the derived [`Default::default`] threads through
+        // the derive-generated per-field
+        // `<Option<PathBuf> as Default>::default` cascade, resolving
+        // to `None` on each; the lifted constructor's struct-literal
+        // names each `None` arm verbatim). A future regression on
+        // either path — an accidental `Some(PathBuf::new())` on the
+        // constructor's `on_init` arm that would silently drift the
+        // constructor's output from the derived default (surfacing here
+        // as the pin's inequality), a future substrate-wide field-
+        // default rebrand that lands on the derived path's per-field
+        // `<Option<PathBuf> as Default>::default` but forgets to extend
+        // the constructor's struct-literal (surfacing here as the pin's
+        // per-arm inequality on the newly rebranded axis) — trips here
+        // at caixa-core test time. The `const` binding on the LHS
+        // forces the lifted constructor through the `const`-eval
+        // surface at compile time, so any future accidental downgrade
+        // to `pub fn` fires E0015 at the binding rather than at a
+        // downstream `const`-context consumer's dispatch site. Peer of
+        // the sibling
+        // [`crate::limits::tests::limits_spec_empty_byte_equals_default`]
+        // and
+        // [`crate::aplicacao::tests::mesh_policy_empty_byte_equals_default`]
+        // pins on the M2 `:limits` / M3 `:politicas` typed slots.
+        const EMPTY: BehaviorSpec = BehaviorSpec::empty();
+        assert_eq!(
+            EMPTY,
+            BehaviorSpec::default(),
+            "BehaviorSpec::empty() must byte-equal BehaviorSpec::default() \
+             on every per-callback field — the two paths name the same \
+             canonical unset baseline; a mismatch means one path drifted \
+             from the other on some per-slot default",
+        );
+    }
+
+    #[test]
+    fn behavior_spec_empty_ctor_is_const_fn() {
+        // Const-eval-surface pin on the lifted [`BehaviorSpec::empty`]
+        // constructor: the constructor must remain `pub const fn` so
+        // downstream consumers can materialize a canonical unset
+        // baseline in `const` context (a `const EMPTY: BehaviorSpec =
+        // BehaviorSpec::empty();` module-scope binding for a
+        // fixture-builder table, a `const`-context per-arm predicate
+        // that folds emptiness over the constructor's output at
+        // compile time, a compile-time lookup table the LSP hover
+        // renderer materializes per typed-slot fixture). A future
+        // accidental downgrade to non-`const` (an added runtime helper
+        // reachable only from a non-`const` context in the body, a
+        // manual hand-rolled `impl` that shadows this method) fires
+        // E0015 at the anonymous `const _` binding below at
+        // caixa-core build time, rather than surfacing as a downstream
+        // `const`-context regression far from the constructor's
+        // declaration.
+        //
+        // Pin shape diverges from the peer
+        // [`crate::limits::tests::limits_spec_empty_ctor_is_const_fn`]
+        // and
+        // [`crate::aplicacao::tests::mesh_policy_empty_ctor_is_const_fn`]
+        // sibling pins on the M2 `:limits` / M3 `:politicas` typed
+        // slots: those spec structs carry only `Option<Copy>` fields
+        // whose destructors are trivially `const`-evaluable, so the
+        // sibling pins can fold the paired `is_empty()` predicate
+        // through a `const { assert!(EMPTY.is_empty()); }` block
+        // (each reference to `EMPTY` inline-copies the ctor's output
+        // and drops it at compile time, which the trivially-`Copy`
+        // field destructors accept). [`BehaviorSpec`] carries
+        // `Option<PathBuf>` fields whose per-field destructor is not
+        // `const`-stable — the compiler propagates const-eval Drop
+        // friendliness through direct struct literals but not through
+        // function calls (even when the function is `const fn`), so
+        // an inline-copy of `EMPTY = BehaviorSpec::empty()` inside a
+        // second `const` binding trips E0493 on the non-`const`
+        // `PathBuf` destructor even though every field is `None`. The
+        // paired [`Self::is_empty`] predicate's `pub const fn` shape
+        // and its agreement with `empty()`'s output are already pinned
+        // load-bearing by the sibling
+        // [`behavior_spec_is_empty_is_const_fn_usable_in_const_position`]
+        // pin (const-position dispatch on a struct-literal-initialized
+        // empty [`BehaviorSpec`]) and the
+        // [`behavior_spec_empty_is_the_all_none_arm_and_is_empty`] pin
+        // above (round-trip against `is_empty()` on the ctor's output);
+        // this pin folds the third of the triad — the ctor is
+        // `const`-callable — via an anonymous `const _` binding that
+        // sidesteps the inline-and-drop by having no downstream
+        // reference.
+        const _: BehaviorSpec = BehaviorSpec::empty();
     }
 }
