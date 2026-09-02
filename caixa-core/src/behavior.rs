@@ -33,7 +33,7 @@ use thiserror::Error;
 ///
 /// All fields optional. The wasm-engine looks up the callback by
 /// kind at instance start; if absent, the runtime default is used.
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BehaviorSpec {
     /// Called once before the instance accepts traffic. Analog of
@@ -72,6 +72,110 @@ pub struct BehaviorSpec {
     /// instance terminates gracefully (not on hard kill).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_terminate: Option<PathBuf>,
+}
+
+/// Route the derived-style [`Default`] impl on [`BehaviorSpec`] through
+/// the substrate-canonical [`BehaviorSpec::empty`] `pub const fn`
+/// constructor rather than the derive-generated per-field
+/// `<Option<PathBuf> as Default>::default` cascade — one source of
+/// truth for the "canonical unset per-`:behavior` slot" shape across
+/// the two paths every downstream consumer already reaches through
+/// (the derived-until-now [`Default::default`] the `..Default::default()`
+/// struct-update-syntax on every one-axis-under-test fixture in this
+/// crate's test module rests on, and the `pub const fn`
+/// [`BehaviorSpec::empty`] constructor every `const`-context consumer
+/// reaches through).
+///
+/// Prior to this fold the two paths were byte-equal by *coincidence*
+/// under the pinning test
+/// [`tests::behavior_spec_empty_byte_equals_default`] rather than
+/// byte-equal by *construction* — the derive-generated
+/// [`Default::default`] resolved each `Option<PathBuf>` field through
+/// its own `<Option<PathBuf> as Default>::default` (which returns
+/// `None`) and the lifted `pub const fn` [`BehaviorSpec::empty`] named
+/// the same six `None` arms verbatim in its struct-literal. Two
+/// hand-authored (or derive-authored) sources of the same "canonical
+/// unset baseline" shape on the same primitive is exactly the
+/// substrate-canonical-source-of-truth duplication the [`crate::LimitsSpec::empty`]
+/// (9739971) / [`crate::aplicacao::MeshPolicy::empty`] (6df969b) /
+/// [`BehaviorSpec::empty`] (f9b18e3) lifts closed on the forward
+/// `const`-context path — extending the same discipline onto the
+/// paired [`Default`] impl means every consumer of the derived-until-
+/// now [`Default::default`] surface (every `..Default::default()`
+/// struct-update-syntax fixture in this crate's test module — the
+/// per-slot-only pins across [`tests::validate_default_is_ok`] and the
+/// `validate_rejects_*` per-slot fixtures at
+/// [`tests::validate_rejects_empty_path_per_slot`] /
+/// [`tests::validate_rejects_absolute_path`] /
+/// [`tests::validate_rejects_parent_escape`] /
+/// [`tests::validate_rejects_parent_escape_mid_path`] /
+/// [`tests::validate_diagnostic_order_is_deterministic`] /
+/// [`tests::validate_rejects_non_lisp_extension_per_slot`] /
+/// [`tests::validate_rejects_no_extension`] /
+/// [`tests::validate_rejects_wrong_extension`] /
+/// [`tests::validate_rejects_uppercase_lisp_extension`] /
+/// [`tests::validate_accepts_canonical_lisp_paths`] /
+/// [`tests::validate_path_shape_precedes_extension_arm`] /
+/// [`tests::validate_extension_diagnostic_names_offending_slot_and_path`] /
+/// [`tests::validate_extension_arm_fires_across_multi_malformed_manifest_in_slot_order`],
+/// the future M4 CR materializer's admission-time default-overlay-emit
+/// gate, every future `..Default::default()` struct-update-syntax
+/// fixture-builder arm) also routes through the substrate primitive's
+/// single source of truth.
+///
+/// A future extension of the `:behavior` axis set (a per-cluster
+/// callback overlay the M4 CR materializer resolves per-CR, a
+/// per-tenant callback alias table the operator pins through a future
+/// `:placement`-scoped slot, a seventh OTP-shape `gen_server` callback
+/// the roadmap
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// grows once the six canonical arms stop covering the substrate's
+/// discovered callback shape) reaches this impl's return value through
+/// exactly one edit on [`BehaviorSpec::empty`] — the derived path
+/// could silently disagree with the constructor's shape on any new
+/// field whose `Default::default` is not `None` (a future
+/// non-`Option<PathBuf>` field with a non-`Default::default`-equivalent
+/// baseline, a `Vec<PathBuf>` field defaulting to an empty vector, an
+/// enum arm-carrying field with a non-`Default::default` canonical
+/// unset arm), while this delegated impl reaches the constructor
+/// directly and picks up every future extension by construction.
+///
+/// Third and final peer on the [`Default`]-through-`empty()` fold
+/// axis, closing the M2 / M3 [`Default`]-carrying typed-slot spec
+/// family — sibling of the prior [`crate::LimitsSpec`]
+/// [`Default`]-through-[`crate::LimitsSpec::empty`] fold (abd52c2) on
+/// the M2 `:limits` typed slot and the prior
+/// [`crate::aplicacao::MeshPolicy`]
+/// [`Default`]-through-[`crate::aplicacao::MeshPolicy::empty`] fold
+/// (91641a4) on the M3 `:politicas` typed slot — same "one source of
+/// truth for the canonical unset baseline" discipline extended onto
+/// the M2 `:behavior` typed slot. Every M2 / M3 [`Default`]-carrying
+/// typed-slot spec that also carries a paired `pub const fn empty()`
+/// substrate primitive now routes its [`Default`] impl through that
+/// primitive by construction: no derive-generated / constructor drift
+/// remains on this family. Pinned load-bearing by
+/// [`tests::behavior_spec_default_routes_through_empty_ctor`]
+/// (byte-parity pin against [`BehaviorSpec::empty`] under `PartialEq`,
+/// sharpening the pre-existing
+/// [`tests::behavior_spec_empty_byte_equals_default`] pin from a "two
+/// paths byte-equal by coincidence" invariant into a "two paths
+/// byte-equal by construction — one delegates to the other"
+/// invariant) and by [`tests::behavior_spec_empty_validates_ok`] (the
+/// canonical unset baseline must pass [`BehaviorSpec::validate`] —
+/// [`BehaviorSpec::validate`] iterates through
+/// [`BehaviorSpec::declared_slots`] and its `filter_map` skips every
+/// `None` arm before dispatching [`validate_callback_path`], so an
+/// all-`None` input structurally short-circuits every arm; the pin
+/// makes the invariant load-bearing so a future extension that adds a
+/// non-`declared_slots`-routed gate trips at caixa-core test time
+/// rather than at a downstream consumer that composed
+/// [`BehaviorSpec::default`] / [`BehaviorSpec::empty`] with
+/// [`BehaviorSpec::validate`] as its "no-op axis short-circuit").
+impl Default for BehaviorSpec {
+    #[inline]
+    fn default() -> Self {
+        Self::empty()
+    }
 }
 
 impl BehaviorSpec {
@@ -3067,5 +3171,93 @@ mod tests {
         // sidesteps the inline-and-drop by having no downstream
         // reference.
         const _: BehaviorSpec = BehaviorSpec::empty();
+    }
+
+    #[test]
+    fn behavior_spec_default_routes_through_empty_ctor() {
+        // Fail-before-pass-after byte-parity pin on the two-path
+        // convergence discipline lifted onto the [`Default`] impl for
+        // [`BehaviorSpec`]: pre-fold the derive-generated
+        // [`Default::default`] and the `pub const fn`
+        // [`BehaviorSpec::empty`] constructor were byte-equal by
+        // *coincidence* (each hand-authored or derive-authored `None`
+        // per axis, pinned load-bearing by the pre-existing
+        // [`behavior_spec_empty_byte_equals_default`] sibling pin),
+        // while the folded impl now routes [`Default::default`] through
+        // the substrate-canonical [`Self::empty`] constructor — the
+        // two paths are byte-equal by *construction*, one delegates to
+        // the other. This pin sharpens the pre-existing byte-parity
+        // invariant into a structural-delegation invariant: any future
+        // silent regression that re-derives [`Default`] on the type
+        // (a `#[derive(Default)]` re-addition that shadows the manual
+        // impl, a swap of the manual impl's body onto a divergent
+        // struct-literal that diverges from [`Self::empty`]'s output
+        // on a new field's non-`None` canonical baseline) trips here
+        // at caixa-core test time under `PartialEq` rather than at a
+        // downstream consumer of the derived-until-now
+        // [`Default::default`] surface (the `..Default::default()`
+        // struct-update-syntax fixtures across the `validate_*`
+        // per-slot test set, the [`validate_default_is_ok`] entry pin,
+        // every future consumer of a hypothetical
+        // `..BehaviorSpec::default()` overlay-elision arm). Peer of
+        // the sibling
+        // [`crate::limits::tests::limits_spec_default_routes_through_empty_ctor`]
+        // pin on the M2 `:limits` typed slot (abd52c2) and
+        // [`crate::aplicacao::tests::mesh_policy_default_routes_through_empty_ctor`]
+        // pin on the M3 `:politicas` typed slot (91641a4) — closes the
+        // three-peer family on the M2 / M3 [`Default`]-carrying
+        // typed-slot spec structs.
+        assert_eq!(
+            BehaviorSpec::default(),
+            BehaviorSpec::empty(),
+            "BehaviorSpec::default() must delegate through BehaviorSpec::empty() \
+             on every per-callback field — a mismatch means the manual Default \
+             impl drifted off the substrate-canonical empty() constructor \
+             (or the constructor drifted off the impl's expected shape)",
+        );
+    }
+
+    #[test]
+    fn behavior_spec_empty_validates_ok() {
+        // Fail-before-pass-after invariant pin on the empty-baseline
+        // validate composition: the canonical unset [`BehaviorSpec`]
+        // (every one of the six `Option<PathBuf>`-carrying per-`:on-*`
+        // callback fields set to `None`) must pass every gate on
+        // [`BehaviorSpec::validate`]. The invariant is structurally
+        // guaranteed today — [`BehaviorSpec::validate`] iterates
+        // through [`BehaviorSpec::declared_slots`], whose `filter_map`
+        // arm skips every `None` per-slot entry before dispatching
+        // [`validate_callback_path`], so an all-`None` input
+        // short-circuits every arm before any of the four value-shape
+        // gates (empty-path / absolute-path / parent-escape /
+        // non-`.lisp`-extension) fires. Pinning the composition here
+        // makes the invariant load-bearing so a future extension of
+        // the validate surface that adds a non-`declared_slots`-routed
+        // gate (a hypothetical cross-slot coherence gate a future
+        // per-slot fold on the M2 `:behavior` slot establishes on top
+        // of the current per-slot value-shape composition per
+        // `theory/CAIXA-SDLC.md` §I, a per-arm behavioral-envelope
+        // admission overlay a future admission webhook lands) that
+        // fires on the all-`None` input trips here at caixa-core test
+        // time rather than at a downstream consumer that composed
+        // [`BehaviorSpec::default`] (which now routes through
+        // [`BehaviorSpec::empty`]) with [`BehaviorSpec::validate`] as
+        // its "no-op axis short-circuit" and observed a spurious
+        // rejection on the canonical unset baseline. Peer of the
+        // sibling
+        // [`crate::limits::tests::limits_spec_empty_validates_ok`] pin
+        // on the M2 `:limits` typed slot (abd52c2) and
+        // [`crate::aplicacao::tests::mesh_policy_empty_validates_ok`]
+        // pin on the M3 `:politicas` typed slot (91641a4) — closes the
+        // three-peer family on the M2 / M3 [`Default`]-carrying
+        // typed-slot spec structs on this axis too.
+        BehaviorSpec::empty().validate().expect(
+            "BehaviorSpec::empty() must satisfy BehaviorSpec::validate — \
+             declared_slots' filter_map skips every None per-slot entry \
+             before dispatching validate_callback_path, so an all-None input \
+             short-circuits every arm; a spurious rejection on the canonical \
+             unset baseline means a future validate-side extension added a \
+             non-declared_slots-routed gate that fires on empty input",
+        );
     }
 }
