@@ -44,6 +44,69 @@ impl From<&str> for CaixaVersion {
     }
 }
 
+/// Substrate-canonical [`AsRef<str>`] projection on the [`CaixaVersion`]
+/// typed newtype — routes through the same [`CaixaVersion::as_str`]
+/// `pub const fn` scalar accessor the sibling [`fmt::Display`] impl
+/// and every downstream `&str`-shaped consumer already keys off, so
+/// any future consumer that binds a [`CaixaVersion`] through the
+/// standard-library `impl AsRef<str>` bound (a `Path`-shaped file-
+/// system reader on the operator side that accepts the version body
+/// as one segment of a per-caixa `versao/<v>/...` on-disk cache path,
+/// a builder-shaped API on the future `feira publish` writer verb
+/// that composes `<prefix><versao>` through a git-tag builder crate's
+/// `impl AsRef<str>` join step, a `HashMap<CaixaVersion, _>` lookup
+/// through the `map.get::<str>(v.as_ref())` shape a future
+/// version-keyed dispatch table lands on) reaches the wrapped
+/// [`String`] through one substrate-primitive dispatch rather than
+/// through the pre-lift `.as_str()` open-coded projection at every
+/// wire-up.
+///
+/// Peer of the sibling [`fmt::Display`] impl on the same primitive —
+/// both delegate to the shared [`CaixaVersion::as_str`] `pub const
+/// fn` accessor, so [`format!("{v}")`], `v.as_str()`, and
+/// `<CaixaVersion as AsRef<str>>::as_ref(&v)` resolve to the same
+/// byte-string per instance by construction. A future rebrand of the
+/// wrapped storage (a hypothetical widening to a typed [`semver::Version`]
+/// slot the roadmap acknowledges once eager parse-on-construct
+/// discipline lands, an internal normalization step that trims
+/// leading zeroes off pre-release identifiers, a per-cluster overlay
+/// the operator pins through a future `:versao-overrides` slot) that
+/// changes what [`CaixaVersion::as_str`] returns migrates every
+/// consumer of every one of the three paths in lockstep.
+///
+/// Same "route the trait impl through the substrate-primitive
+/// accessor" discipline the sibling [`fmt::Display`] impl on this
+/// type already carries — extends it onto the standard-library
+/// [`AsRef<str>`] projection axis every third-party API that takes
+/// `impl AsRef<str>` (the [`std::path::Path::new`] / [`std::fs`]
+/// interop surface, [`std::process::Command::arg`], the peer
+/// `tracing::field::Value` recorder's `Str`-arm, every `clap`-side
+/// `value_parser!` fold that accepts an owned newtype through
+/// `impl AsRef<str>`) already binds through. Rust-side newtype
+/// convention pairs `AsRef<str>` and [`fmt::Display`] on the same
+/// primitive so a caller who has one has both; before this lift,
+/// [`CaixaVersion`] carried [`fmt::Display`] but not the paired
+/// [`AsRef<str>`] impl the convention names.
+///
+/// The first standard-library trait added to [`CaixaVersion`] beyond
+/// the pre-existing [`serde::Serialize`] / [`serde::Deserialize`] /
+/// [`Debug`] / [`Clone`] / [`PartialEq`] / [`Eq`] / [`Hash`] derives
+/// and the paired [`fmt::Display`] / [`From<String>`] / [`From<&str>`]
+/// hand-written impls. Pinned load-bearing by
+/// [`tests::caixa_version_as_ref_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaVersion::as_str`]) — any future
+/// silent detour that routes the impl through a divergent projection
+/// (a `Cow<'_, str>` intermediate, a stray `.to_lowercase()`
+/// normalization, a swap onto a per-arm inline `&self.0.as_str()`
+/// re-inlining) trips at caixa-core test time under `assert_eq!`
+/// rather than at a downstream `impl AsRef<str>`-bound consumer's
+/// silent split.
+impl AsRef<str> for CaixaVersion {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Canonical Zig-style git-tag prefix every `feira publish` run writes
 /// and every downstream consumer of a published caixa reads. A caixa
 /// published at `:versao "0.1.0"` lands as a git tag `v0.1.0` on the
@@ -677,5 +740,80 @@ mod tests {
         // the lifted constant's current byte to the canonical Zig-style
         // convention's documented shape.
         assert_eq!(DEFAULT_PUBLISH_TAG_PREFIX, "v");
+    }
+
+    #[test]
+    fn caixa_version_as_ref_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl AsRef<str> for CaixaVersion` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`CaixaVersion::as_str`] `pub const fn` accessor resolve to
+        // the same `&str` per instance, so any future silent detour
+        // that routes the impl through a divergent projection (a
+        // `Cow<'_, str>` intermediate, a stray `.to_lowercase()`
+        // normalization, a swap onto a per-arm inline `&self.0.as_str()`
+        // re-inlining, a swap onto a divergent [`String::trim`]
+        // fold) trips at caixa-core test time under `PartialEq`
+        // rather than at a downstream `impl AsRef<str>`-bound
+        // consumer's silent split. Sweeps four authoring shapes (a
+        // canonical release version, a pre-release build-metadata
+        // version, the zero-version canonical unset baseline, and
+        // the empty-string byte the caller-side default-construct
+        // path composes) so every non-degenerate arm of the wrapped
+        // `String` storage is covered. Peer of the sibling
+        // [`caixa_version_as_str_accessor_is_const_fn`] const-eval
+        // pin on the same [`CaixaVersion::as_str`] primitive — the
+        // two pins together cover the const-eval axis (the pin above)
+        // and the trait-projection axis (this pin) of the same
+        // substrate-primitive scalar accessor.
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            assert_eq!(
+                <CaixaVersion as AsRef<str>>::as_ref(&v),
+                v.as_str(),
+                "AsRef<str> impl must byte-equal CaixaVersion::as_str \
+                 on the same instance — divergence signals a silent \
+                 detour off the substrate-primitive accessor",
+            );
+            assert_eq!(
+                <CaixaVersion as AsRef<str>>::as_ref(&v),
+                versao,
+                "AsRef<str> impl must byte-equal the pre-lift wrapped \
+                 String storage on round-trip through the From<&str> \
+                 constructor — divergence signals a normalization \
+                 detour on either the constructor or the accessor",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_version_as_ref_str_routes_through_display_via_shared_accessor() {
+        // Fail-before-pass-after byte-parity pin on the three-path
+        // convergence discipline the substrate primitive now carries
+        // on the `&str`-projection axis: `<CaixaVersion as
+        // AsRef<str>>::as_ref(&v)` (the newly lifted impl),
+        // `format!("{v}")` (the pre-existing [`fmt::Display`] impl),
+        // and `v.as_str()` (the substrate-primitive `pub const fn`
+        // accessor both trait impls delegate through) must resolve to
+        // the same byte-string on every instance. Refuses any future
+        // divergence between the two trait impls (a stray
+        // [`fmt::Display::fmt`] rewrite that inlines
+        // `f.write_str(&self.0)` on the wrapped `String` directly,
+        // bypassing the shared accessor; a hypothetical `AsRef<str>`
+        // rewrite that inlines the same `&self.0` field-access) that
+        // would silently split the two projection paths of the same
+        // typed newtype. Mirrors the sibling three-path-convergence
+        // discipline the peer [`RestartStrategy`] typed enum carries
+        // on its `Display` / `as_str` / `Serialize` triple (aplicacao.rs
+        // pin `restart_strategy_display_matches_serialized_wire_byte_string`).
+        for versao in ["0.1.0", "1.2.3-alpha.1", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_as_ref: &str = <CaixaVersion as AsRef<str>>::as_ref(&v);
+            let via_display: String = format!("{v}");
+            let via_accessor: &str = v.as_str();
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_display, via_accessor);
+            assert_eq!(via_as_ref, via_display.as_str());
+        }
     }
 }
