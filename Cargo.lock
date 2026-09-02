@@ -376,7 +376,7 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "caixa-actions"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "canteiro-types",
@@ -388,7 +388,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-arch"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-pangea",
  "caixa-teia",
@@ -402,7 +402,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-ast"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "gen-platform",
  "logos",
@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-core"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "canteiro-types",
  "gen-platform",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-crd"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "caixa-lacre",
@@ -447,7 +447,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-feira"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "anyhow",
  "caixa-arch",
@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-flake"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "pretty_assertions",
@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-flux"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "gen-platform",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-fmt"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-ast",
  "pretty_assertions",
@@ -518,7 +518,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-helm"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "pretty_assertions",
@@ -531,7 +531,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-lacre"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "blake3",
  "caixa-core",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-lint"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-ast",
  "caixa-theme",
@@ -559,7 +559,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-lsp"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "anyhow",
  "caixa-ast",
@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-mesh"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "pretty_assertions",
@@ -589,7 +589,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-operator"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-pangea"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "caixa-teia",
@@ -627,7 +627,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-provedor"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "gen-platform",
  "iac-forge",
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-resolver"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "anyhow",
  "blake3",
@@ -658,7 +658,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-tatara"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "pretty_assertions",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-teia"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-ast",
  "caixa-core",
@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-teia-forge"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "caixa-core",
  "caixa-teia",
@@ -699,7 +699,7 @@ dependencies = [
 
 [[package]]
 name = "caixa-theme"
-version = "0.1.322"
+version = "0.1.323"
 dependencies = [
  "gen-platform",
  "serde",
