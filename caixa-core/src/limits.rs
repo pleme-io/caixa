@@ -331,7 +331,7 @@ pub const LIMITS_CPU_MILLICORES_MAX: u32 = 128_000;
 pub const LIMITS_FUEL_MAX: u64 = 1_000_000_000_000;
 
 /// Per-process limits. All fields optional — `None` = unbounded for that axis.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LimitsSpec {
     /// Max linear memory in bytes. Authored as a byte-size string
@@ -370,6 +370,85 @@ pub struct LimitsSpec {
         deserialize_with = "de_millicores"
     )]
     pub cpu: Option<u32>,
+}
+
+/// Route the derived-style [`Default`] impl on [`LimitsSpec`] through
+/// the substrate-canonical [`LimitsSpec::empty`] `pub const fn`
+/// constructor rather than the derive-generated per-field
+/// `<Option<Copy-T> as Default>::default` cascade — one source of
+/// truth for the "canonical unset per-`:limits` slot" shape across
+/// the two paths every downstream consumer already reaches through
+/// (the derived-until-now [`Default::default`] the `..Default::default()`
+/// struct-update-syntax on every one-axis-under-test fixture in this
+/// crate's test module rests on, and the `pub const fn`
+/// [`LimitsSpec::empty`] constructor every `const`-context consumer
+/// reaches through).
+///
+/// Prior to this fold the two paths were byte-equal by *coincidence*
+/// under the pinning test
+/// [`tests::limits_spec_empty_byte_equals_default`] rather than
+/// byte-equal by *construction* — the derive-generated
+/// [`Default::default`] resolved each `Option<Copy-T>` field through
+/// its own `<Option<Copy-T> as Default>::default` (which returns
+/// `None`) and the lifted `pub const fn` [`LimitsSpec::empty`] named
+/// the same four `None` arms verbatim in its struct-literal. Two
+/// hand-authored (or derive-authored) sources of the same "canonical
+/// unset baseline" shape on the same primitive is exactly the
+/// substrate-canonical-source-of-truth duplication the [`empty`]
+/// (9739971) / [`crate::MeshPolicy::empty`] (6df969b) /
+/// [`crate::BehaviorSpec::empty`] (f9b18e3) lifts closed on the
+/// forward `const`-context path — extending the same discipline onto
+/// the paired [`Default`] impl means every consumer of the derived-
+/// until-now [`Default::default`] surface (the two in-crate call
+/// sites at [`tests::default_limits_round_trip`] +
+/// [`tests::default_limits_validates_ok`], the future M4 CR
+/// materializer's admission-time default-overlay-emit gate, every
+/// future `..Default::default()` struct-update-syntax fixture-builder
+/// arm) also routes through the substrate primitive's single source
+/// of truth.
+///
+/// A future extension of the `:limits` axis set (a per-cluster limits-
+/// declaration overlay the operator pins through a future `ComputeUnit`
+/// CR-side `spec.limits.<axis>` slot the M4 CR materializer resolves,
+/// a fifth `:limits` sub-slot the roadmap
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// grows once the Lunatic-shape §III.1 axis set stops covering the
+/// substrate's discovered sandboxing shape) reaches this impl's return
+/// value through exactly one edit on [`LimitsSpec::empty`] — the
+/// derived path could silently disagree with the constructor's shape
+/// on any new field whose `Default::default` is not `None` (a future
+/// non-`Option<_>` field with a non-`Default::default`-equivalent
+/// baseline, a `Vec<_>` field defaulting to an empty vector, an
+/// enum arm-carrying field with a non-`Default::default` canonical
+/// unset arm), while this delegated impl reaches the constructor
+/// directly and picks up every future extension by construction.
+///
+/// First peer on the [`Default`]-through-`empty()` fold axis (peer
+/// with the sibling [`crate::MeshPolicy::empty`] + [`crate::BehaviorSpec::empty`]
+/// primitives on the M3 `:politicas` + M2 `:behavior` typed slots
+/// respectively — their derived [`Default`] impls are candidates for
+/// the same delegation fold in a future run once the per-slot peer
+/// pins on this axis land). Pinned load-bearing by
+/// [`tests::limits_spec_default_routes_through_empty_ctor`] (byte-parity
+/// pin against [`LimitsSpec::empty`] under `PartialEq`, sharpening
+/// the pre-existing [`tests::limits_spec_empty_byte_equals_default`]
+/// pin from a "two paths byte-equal by coincidence" invariant into a
+/// "two paths byte-equal by construction — one delegates to the
+/// other" invariant) and by
+/// [`tests::limits_spec_empty_validates_ok`] (the canonical unset
+/// baseline must pass [`LimitsSpec::validate`] — every per-axis
+/// value-shape gate is `if let Some(_)` guarded, so an all-`None`
+/// input structurally short-circuits every arm; the pin makes the
+/// invariant load-bearing so a future extension that adds a
+/// non-`Option`-guarded arm to [`LimitsSpec::validate`] trips at
+/// caixa-core test time rather than at a downstream consumer that
+/// composed [`LimitsSpec::default`]/[`LimitsSpec::empty`] with
+/// [`LimitsSpec::validate`] as its "no-op axis short-circuit").
+impl Default for LimitsSpec {
+    #[inline]
+    fn default() -> Self {
+        Self::empty()
+    }
 }
 
 impl LimitsSpec {
@@ -7991,6 +8070,90 @@ mod tests {
         const {
             assert!(EMPTY.is_empty());
         }
+    }
+
+    #[test]
+    fn limits_spec_default_routes_through_empty_ctor() {
+        // Fail-before-pass-after byte-parity pin on the two-path
+        // convergence discipline lifted onto the [`Default`] impl:
+        // pre-fold the derive-generated [`Default::default`] and the
+        // `pub const fn` [`LimitsSpec::empty`] constructor were
+        // byte-equal by *coincidence* (each hand-authored or derive-
+        // authored `None` per axis, pinned load-bearing by the
+        // pre-existing [`limits_spec_empty_byte_equals_default`]
+        // sibling pin), while the folded impl now routes
+        // [`Default::default`] through the substrate-canonical
+        // [`Self::empty`] constructor — the two paths are byte-equal
+        // by *construction*, one delegates to the other. This pin
+        // sharpens the pre-existing byte-parity invariant into a
+        // structural-delegation invariant: any future silent regression
+        // that re-derives [`Default`] on the type (a `#[derive(Default)]`
+        // re-addition that shadows the manual impl, a swap of the
+        // manual impl's body onto a divergent struct-literal that
+        // diverges from [`Self::empty`]'s output on a new field's
+        // non-`None` canonical baseline) trips here at caixa-core test
+        // time under `PartialEq` rather than at a downstream consumer
+        // of the derived-until-now [`Default::default`] surface (the
+        // in-crate `LimitsSpec::default().validate().unwrap()` call
+        // at [`default_limits_validates_ok`], the round-trip fixture
+        // at [`default_limits_round_trip`], every `..Default::default()`
+        // struct-update-syntax fixture in this crate's test module,
+        // every future consumer of a hypothetical
+        // `..LimitsSpec::default()` overlay-elision arm). Peer of the
+        // sibling [`limits_spec_empty_byte_equals_default`]
+        // byte-parity pin — that one keeps the two paths byte-equal at
+        // test time on the pre-fold shape; this one keeps them
+        // structurally identical at build time on the post-fold shape.
+        assert_eq!(
+            LimitsSpec::default(),
+            LimitsSpec::empty(),
+            "LimitsSpec::default() must delegate through LimitsSpec::empty() \
+             on every per-axis field — a mismatch means the manual Default \
+             impl drifted off the substrate-canonical empty() constructor \
+             (or the constructor drifted off the impl's expected shape)",
+        );
+    }
+
+    #[test]
+    fn limits_spec_empty_validates_ok() {
+        // Fail-before-pass-after invariant pin on the empty-baseline
+        // validate composition: the canonical unset [`LimitsSpec`]
+        // (every one of the four `Option<Copy-T>`-carrying per-axis
+        // fields set to `None`) must pass every gate on
+        // [`LimitsSpec::validate`]. The invariant is structurally
+        // guaranteed today — every per-axis gate on the validate
+        // dispatch is `if let Some(_) = self.<axis>()` guarded, so an
+        // all-`None` input short-circuits every arm before any
+        // zero-floor / wasm32-page-floor / cap / canonical-form check
+        // fires. Pinning the composition here makes the invariant
+        // load-bearing so a future extension of the validate surface
+        // that adds a non-`Option`-guarded gate (a hypothetical
+        // cross-axis coherence gate the sibling
+        // [`crate::MeshPolicy::breaker_window_observes_timeout`] axis
+        // establishes on the M3 `:politicas` slot's typed pair — a
+        // future analog on the M2 `:limits` slot's `:fuel` /
+        // `:wall-clock` typed pair once wasmtime's per-call fuel
+        // accounting integrates with wall-clock deadline propagation,
+        // per `theory/INSPIRATIONS.md` §III.1) that fires on the
+        // all-`None` input trips here at caixa-core test time rather
+        // than at a downstream consumer that composed
+        // [`LimitsSpec::default`] (which now routes through
+        // [`LimitsSpec::empty`]) with [`LimitsSpec::validate`] as its
+        // "no-op axis short-circuit" and observed a spurious rejection
+        // on the canonical unset baseline. Peer of the sibling
+        // [`default_limits_validates_ok`] pin on the pre-fold
+        // [`Default::default`] path — that one anchors the invariant
+        // on the derived path; this one anchors it on the substrate-
+        // canonical constructor the folded [`Default`] impl now
+        // delegates through.
+        LimitsSpec::empty().validate().expect(
+            "LimitsSpec::empty() must satisfy LimitsSpec::validate — \
+                     every per-axis gate is `if let Some(_)` guarded, so an \
+                     all-`None` input short-circuits every arm; a spurious \
+                     rejection on the canonical unset baseline means a \
+                     future validate-side extension added a \
+                     non-`Option`-guarded gate that fires on empty input",
+        );
     }
 
     #[test]
