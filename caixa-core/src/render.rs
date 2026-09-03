@@ -7483,6 +7483,104 @@ impl AsRef<str> for PathShapeViolation {
     }
 }
 
+/// Trait-idiomatic reverse projection on the [`PathShapeViolation`]
+/// closed-set render-side path-shape-diagnostic axis — routes
+/// byte-for-byte through the paired substrate-primitive
+/// [`PathShapeViolation::from_wire`] `Option<Self>` accessor so every
+/// future consumer that binds a canonical path-shape-violation tag
+/// through the standard-library `.try_into()` / [`TryFrom`] axis (a
+/// future `feira lint --explain-path-shape=<empty|absolute|parent-escape>`
+/// CLI arg-parse that composes into
+/// `let axis: PathShapeViolation = s.try_into()?`, a future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection-body
+/// parser that folds a prior audit's `spec.pathShape: String` through
+/// `PathShapeViolation::try_from(&s)?`, a generic
+/// `<T: TryFrom<&str>>`-bound loader over any of the substrate's
+/// closed-set typed enums) reaches the same three-arm accept-set the
+/// sibling [`PathShapeViolation::from_wire`] resolver parses through
+/// and the sibling [`PathShapeViolation::as_str`] emits, rather than
+/// an open-coded per-arm
+/// `match s { "empty" => …, "absolute" => …, "parent-escape" => …,
+/// _ => … }` cascade whose arm-set has no compile-time link back to
+/// the substrate primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`PathShapeViolation::as_str`])
+/// with the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so
+/// a caller who can project *out to* a `&str` can also project *in
+/// from* one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint the sibling method-named [`PathShapeViolation::from_wire`] would
+/// trigger under a `FromStr` impl (the same design tradeoff the peer
+/// [`crate::CaixaKind`] (3c83606), [`crate::CaixaDialeto`] (bf33136),
+/// [`crate::aplicacao::PlacementStrategy`] (6fd00cd),
+/// [`crate::supervisor::RestartStrategy`] (5b828ed),
+/// [`crate::supervisor::RestartPolicy`] (6fdd0d9),
+/// [`crate::aplicacao::WitShape`] (5472902), and
+/// [`crate::aplicacao::RateLimitUnit`] (bf78400) blocks note) — this
+/// impl closes the trait-idiomatic reverse axis without disturbing the
+/// method-named `from_wire` shape every peer closed-set typed enum
+/// already carries.
+///
+/// `type Error = ()` matches the sibling
+/// [`PathShapeViolation::from_wire`]'s `Option<Self>` return-shape's
+/// deliberate deferral of error typing: the caller picks the diagnostic
+/// form appropriate for its use site (a future `feira lint
+/// --explain-path-shape` CLI arg-parse composes its own per-verb
+/// "unknown path-shape axis: <arg> — accepted: {…}" message enumerating
+/// [`PathShapeViolation::ALL`], a future M4 admission-webhook rejection
+/// body wraps the `Err(())` outcome with the accepted-set enumeration
+/// for operator diagnostics, a `Result::map_err` at the call site lifts
+/// the axis-error to a per-verb error type). Same shape the peer sibling
+/// reverse-projection axes carry.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same three-arm
+/// accept-set the [`PathShapeViolation::from_wire`] resolver dispatches
+/// through, so any future arm addition (a `Symlink` arm the future
+/// symlink-escape gate would carry once
+/// [`std::path::Path::is_symlink`] becomes part of the sandbox
+/// contract, a `TrailingSpace` arm a future authoring-side
+/// whitespace-hygiene gate would raise for `"lib/init.lisp "` shapes
+/// — both trajectory items the sibling [`PathShapeViolation::ALL`] doc
+/// block already names) grows the trait-idiomatic axis by construction:
+/// one caixa-core edit on [`PathShapeViolation::from_wire`] extends
+/// both the method-named reverse projection every existing consumer
+/// keys off and the trait-idiomatic reverse projection this impl
+/// exposes, without a coordinated rewrite across every future
+/// `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// reverse-projection family ([`crate::CaixaKind`] via 3c83606,
+/// [`crate::CaixaDialeto`] via bf33136,
+/// [`crate::aplicacao::PlacementStrategy`] via 6fd00cd,
+/// [`crate::supervisor::RestartStrategy`] via 5b828ed,
+/// [`crate::supervisor::RestartPolicy`] via 6fdd0d9,
+/// [`crate::aplicacao::WitShape`] via 5472902, and
+/// [`crate::aplicacao::RateLimitUnit`] via bf78400) onto the first
+/// render-side path-shape-diagnostic closed-set enum on the caixa
+/// surface — the sandbox-escape three-arm accept-set every
+/// [`is_sandboxed_relative_path`] caller
+/// ([`crate::BehaviorSpec::validate`],
+/// [`crate::UpgradeInstruction::validate`], every future M3/M4 axis
+/// admitting a user-supplied path) match-and-wraps into its own typed
+/// per-slot `*Invalid { slot, path }` variant.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::from_wire`] across
+/// the three-arm accept-set) and
+/// [`tests::path_shape_violation_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for PathShapeViolation {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -40713,6 +40811,162 @@ mod tests {
                  PathShapeViolation::as_str outputs; a widening would \
                  silently split the parser's accept-set from the \
                  emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for PathShapeViolation` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`super::PathShapeViolation::from_wire`] `Option<Self>`
+        // accessor resolve to the same three-arm accept-set across
+        // every arm the exhaustive [`super::PathShapeViolation::ALL`]
+        // slice enumerates. Any future silent detour that routes the
+        // trait impl through a divergent projection (a per-arm inline
+        // `match s { "empty" => Ok(Self::Empty), … }` re-inlining that
+        // opens a compile-time link to the un-lifted arm-literal, a
+        // silent case-fold that admits `"EMPTY"` / `"Absolute"` /
+        // `"ParentEscape"` and would collide the canonical-kebab
+        // accept-set the emitter dispatches on) trips at caixa-core
+        // test time under `assert_eq!` rather than at a downstream
+        // `impl TryFrom<&str>`-bound consumer's silent split. Sweeps
+        // every one of the three arms [`super::PathShapeViolation::ALL`]
+        // carries so no arm's projection is covered only by the sibling
+        // method-named `from_wire` path. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136),
+        // `placement_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (6fd00cd), and
+        // `rate_limit_unit_try_from_str_routes_through_from_suffix_accessor`
+        // (bf78400) — extends the trait-idiomatic reverse-projection
+        // axis onto the first render-side path-shape-diagnostic
+        // closed-set enum on the caixa surface.
+        for &variant in PathShapeViolation::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <PathShapeViolation as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on PathShapeViolation must round-trip \
+                 PathShapeViolation::{variant:?}.as_str() = {wire:?} back \
+                 to Ok(PathShapeViolation::{variant:?}) — divergence from \
+                 PathShapeViolation::from_wire signals a silent detour off \
+                 the substrate-primitive accessor",
+            );
+            assert_eq!(
+                <PathShapeViolation as TryFrom<&str>>::try_from(wire).ok(),
+                PathShapeViolation::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must byte-equal \
+                 PathShapeViolation::from_wire on the same input",
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for
+        // PathShapeViolation` — sweeps a candidate set of byte-strings
+        // outside the three-arm canonical-kebab wire accept-set the
+        // sibling [`super::PathShapeViolation::as_str`] emits and
+        // asserts every one lands on `Err(())`, so a future accidental
+        // widening of the trait impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("empty") => Ok(…)` case-fold
+        // path, a silent acceptance of the pre-lift PascalCase
+        // Debug-derived shapes `"Empty"` / `"Absolute"` /
+        // `"ParentEscape"` on the wire axis, a Levenshtein-forgiving
+        // arm-lookup that admits `"parentescape"` typos — the exact
+        // form a `format!("{:?}", …).to_lowercase()` round-trip on
+        // the paired [`std::fmt::Debug`] derive would otherwise land
+        // on, the drift footgun the emitter's documentation explicitly
+        // names as the reason the substrate-canonical kebab-case
+        // `"parent-escape"` slug exists) trips at caixa-core test
+        // time. The candidate set includes the empty string,
+        // whitespace-only padding, uppercase rebrand candidates,
+        // underscored / space-separated rebrand candidates,
+        // Levenshtein-neighbor typos, sibling closed-set-enum
+        // canonical tags (`"biblioteca"`, `"servico"`, `"one-for-one"`,
+        // `"safety"`, `"hint"`) that must NOT bleed across enum
+        // accept-sets under a shared generic loader, and
+        // trailing/leading-whitespace-padded canonical tags. Peer of
+        // the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (3c83606),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_str_rejects_unknown_byte_strings`]
+        // (bf33136), and
+        // `rate_limit_unit_try_from_str_rejects_unknown_byte_strings`
+        // (bf78400) rejection pins on the sibling closed-set typed-enum
+        // trait-idiomatic reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "Empty",
+            "EMPTY",
+            "Absolute",
+            "ABSOLUTE",
+            "ParentEscape",
+            "PARENTESCAPE",
+            "parentescape",
+            "parent_escape",
+            "parent escape",
+            "parent-escap",
+            "biblioteca",
+            "servico",
+            "safety",
+            "hint",
+            "one-for-one",
+            "empty ",
+            " empty",
+            "empty\n",
+            "empty\t",
+        ] {
+            assert_eq!(
+                <PathShapeViolation as TryFrom<&str>>::try_from(bad),
+                Err(()),
+                "TryFrom<&str> for PathShapeViolation({bad:?}) must return \
+                 Err(()) — the trait impl's accept-set is exactly the three \
+                 PathShapeViolation::as_str outputs; a widening would \
+                 silently split the trait impl's accept-set from the \
+                 emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin: the trait-idiomatic
+        // [`TryFrom<&str>`] and the method-named
+        // [`super::PathShapeViolation::from_wire`] projections must
+        // return equivalent decisions on every input — the trait
+        // impl's `.ok()` project-out from `Result<Self, ()>` and the
+        // method's `Option<Self>` return must byte-equal each other on
+        // both accepts and rejects. A future silent bifurcation (the
+        // trait impl gaining a case-fold path the method does not
+        // carry, the method gaining a synonym alias the trait impl
+        // does not honor) trips at caixa-core test time under a single
+        // pin rather than at a downstream generic-bound consumer that
+        // dispatches through one axis while a peer dispatches through
+        // the other. Sweeps both the three-arm accept-set (via
+        // [`super::PathShapeViolation::ALL`] threaded through
+        // [`super::PathShapeViolation::as_str`]) and a canonical
+        // rejection sample so both halves of the partition are covered.
+        for &variant in PathShapeViolation::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <PathShapeViolation as TryFrom<&str>>::try_from(wire).ok(),
+                PathShapeViolation::from_wire(wire),
+                "TryFrom<&str>::ok() and from_wire must agree on \
+                 PathShapeViolation::{variant:?}.as_str() = {wire:?}",
+            );
+        }
+        for bad in ["", "Empty", "unknown", "parentescape", "one-for-one"] {
+            assert_eq!(
+                <PathShapeViolation as TryFrom<&str>>::try_from(bad).ok(),
+                PathShapeViolation::from_wire(bad),
+                "TryFrom<&str>::ok() and from_wire must agree on the \
+                 rejection outcome for {bad:?}",
             );
         }
     }
