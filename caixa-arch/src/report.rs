@@ -146,6 +146,65 @@ impl ArchVerdict {
             Self::Rejected => "rejected",
         }
     }
+
+    /// Reverse projection on the [`ArchVerdict`] closed-set enum's
+    /// canonical-tag axis — parses a `"proven"` / `"rejected"` wire
+    /// byte-string back to the typed enum, or returns `None` when `s`
+    /// lies outside the two-arm accept-set [`Self::as_str`] emits. The
+    /// single `&str → Self` projection every future re-entry point on
+    /// the verdict-outcome axis dispatches through (a future
+    /// `feira arch --verdict <proven|rejected>` CLI arg-parse that
+    /// binds the wire byte-string into the typed enum before
+    /// dispatching to a per-arm filter, a future M4
+    /// `mesh.pleme.io/v1alpha1/ArchAudit` CR materializer's admission-
+    /// time re-parse of the per-manifest verdict axis, an `iac-forge`
+    /// audit-report re-loader that binds a prior [`Self::as_str`]
+    /// output back to the typed enum for cross-run outcome-histogram
+    /// diff) would have had to re-inline a two-arm `match s` cascade
+    /// that expressed no compile-time link back to the substrate
+    /// primitive.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`caixa_core::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`caixa_core::CaixaDialeto::from_wire`] (d0e65ea) /
+    /// [`caixa_core::supervisor::RestartStrategy::from_wire`] (4eec29c) /
+    /// [`caixa_core::supervisor::RestartPolicy::from_wire`] (dd32ccf) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`caixa_core::dep::DepList::from_wire`] (45ee563) /
+    /// [`crate::invariants::InvariantKind::from_wire`] (b9e4e61) /
+    /// [`caixa_core::render::PathShapeViolation::from_wire`] (aebd9c6)
+    /// typed enums carry on the peer wire-side `str → Self` axes —
+    /// extends the substrate-wide `(as_str, from_wire)` round-trip
+    /// family onto the second closed-set fieldless typed enum on the
+    /// caixa-arch surface (the verdict-outcome axis, after the peer
+    /// severity-classification axis on [`InvariantKind`]), matching the
+    /// same two-way `str ↔ Self` round-trip every sibling closed-set
+    /// enum already carries. Method-named `from_wire` (not `from_str`)
+    /// to match the peer shapes verbatim and side-step a
+    /// `clippy::should_implement_trait` lint that a plain `from_str`
+    /// name would otherwise trigger without paired
+    /// [`std::str::FromStr`] impl scaffolding this axis does not carry
+    /// today. Returns `Option<Self>` (rather than `Result<Self, _>`)
+    /// to match the peer shapes: the caller picks the diagnostic form
+    /// appropriate for its use site (a `feira arch --verdict` CLI
+    /// arg-parse renders its own per-verb error message; an admission-
+    /// webhook rejection body wraps the `None` outcome with the
+    /// accepted-set enumeration `ArchVerdict::ALL.iter().map(…)` for
+    /// operator diagnostics).
+    ///
+    /// Pinned load-bearing at the substrate-primitive level by
+    /// [`tests::arch_verdict_from_wire_accepts_every_as_str_output`]
+    /// (round-trip witness against the peer [`Self::as_str`] axis) and
+    /// [`tests::arch_verdict_from_wire_rejects_unknown_byte_strings`]
+    /// (rejection witness against silent accept-set widening).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "proven" => Some(Self::Proven),
+            "rejected" => Some(Self::Rejected),
+            _ => None,
+        }
+    }
 }
 
 /// Route the derived-style [`std::fmt::Display`] impl on
@@ -428,6 +487,116 @@ mod tests {
                 via_display, via_as_str,
                 "ArchVerdict::{arm:?} Display::fmt() must byte-equal \
                  as_str()",
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_from_wire_accepts_every_as_str_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`ArchVerdict::from_wire`] reverse projection: every arm in
+        // [`ArchVerdict::ALL`] must parse back through `from_wire` when
+        // fed its own [`ArchVerdict::as_str`] output, landing on
+        // `Some(same_variant)`. A regression that hand-rolled either
+        // side's per-arm match without threading through the shared
+        // two-string closed set would silently disagree on any future
+        // arm rename (or a new arm the `iac-forge` policy-engine grows
+        // — a `PartiallyProven` tier for compliance-only violation
+        // sets, an `Unknown` tier for the M4 admission-webhook's
+        // timeout-during-check outcome) and this pin flags it at
+        // caixa-arch build time rather than at a downstream `feira
+        // arch --verdict` consumer's silent tag misclassification.
+        // Peer of the sibling
+        // [`crate::invariants::tests::invariant_kind_from_wire_accepts_every_as_str_output`]
+        // (b9e4e61) round-trip pin on the peer caixa-arch
+        // `InvariantKind` reverse-projection axis, and of the sibling
+        // `caixa_core::kind::tests::caixa_kind_wire_round_trips_through_from_wire`
+        // (2aa6d23) / `caixa_dialeto_from_wire_accepts_every_as_str_output`
+        // (d0e65ea) / `placement_strategy_from_wire_accepts_every_lifted_constant`
+        // (18c7342) / `dep_list_round_trips_through_as_str_and_from_wire`
+        // (45ee563) round-trip pins on the sibling closed-set typed-enum
+        // reverse-projection axes.
+        for &variant in ArchVerdict::ALL {
+            let wire = variant.as_str();
+            let parsed = ArchVerdict::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "ArchVerdict::from_wire({wire:?}) must accept every \
+                     ArchVerdict::as_str output — got None for the wire \
+                     byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "ArchVerdict::from_wire(ArchVerdict::{variant:?}.as_str()) \
+                 must return ArchVerdict::{variant:?} — the (as_str, \
+                 from_wire) pair must form a total round-trip on the \
+                 closed two-arm ArchVerdict arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the [`ArchVerdict::from_wire`] parser's
+        // accept-set: any string outside the two-arm
+        // [`ArchVerdict::as_str`] output set must return `None`. A
+        // future accidental widening of the accept-set (a case-
+        // insensitive match that accepts `"PROVEN"` / `"Proven"`, a
+        // silent acceptance of the pre-lift PascalCase Debug-derived
+        // shapes `"Proven"` / `"Rejected"` on the wire axis, a
+        // Levenshtein-forgiving arm-lookup that admits `"provn"`
+        // typos, a silent absorption of the sibling
+        // [`crate::invariants::InvariantKind::as_str`] three-arm
+        // accept-set — the two axes share no byte-strings but a
+        // widened parser could still misclassify a peer's arm-tag as
+        // a verdict) would silently drift the parser's accept-set
+        // from the emitter's — a downstream audit-report re-loader
+        // that bound a prior audit's [`Self::as_str`] output back to
+        // the typed enum through this parser would then bind a
+        // malformed byte-string to a plausibly-wrong typed arm the
+        // caller does not route through any fallback, silently
+        // misclassifying the reloaded row.
+        //
+        // Peer of the sibling
+        // [`crate::invariants::tests::invariant_kind_from_wire_rejects_unknown_byte_strings`]
+        // (b9e4e61) rejection pin on the peer caixa-arch
+        // `InvariantKind` axis, and of the sibling
+        // `caixa_kind_from_wire_rejects_unknown_byte_strings` (2aa6d23),
+        // `caixa_dialeto_from_wire_rejects_unknown_byte_strings`
+        // (d0e65ea), `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // (18c7342), and `dep_list_from_wire_returns_none_on_unknown_wire_scalar`
+        // (45ee563) rejection pins on the sibling closed-set typed-enum
+        // reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "Proven",
+            "PROVEN",
+            "Rejected",
+            "REJECTED",
+            "provn",
+            "rejcted",
+            "safety",
+            "compliance",
+            "hint",
+            "warning",
+            "error",
+            "info",
+            "fatal",
+            "proven ",
+            " proven",
+            "proven\n",
+            "proven\t",
+            "rejected ",
+            " rejected",
+        ] {
+            assert!(
+                ArchVerdict::from_wire(bad).is_none(),
+                "ArchVerdict::from_wire({bad:?}) must return None — \
+                 the parser's accept-set is exactly the two \
+                 ArchVerdict::as_str outputs; a widening would \
+                 silently split the parser's accept-set from the \
+                 emitter's arm-set",
             );
         }
     }
