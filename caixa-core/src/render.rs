@@ -7338,6 +7338,79 @@ impl PathShapeViolation {
             Self::ParentEscape => "parent-escape",
         }
     }
+
+    /// Substrate-canonical reverse projection on the
+    /// [`PathShapeViolation`] closed-set render-side path-shape-diagnostic
+    /// axis — parses the lowercase-kebab per-arm byte-string
+    /// [`Self::as_str`] emits back to the typed variant, or `None` when
+    /// `s` is outside the closed three-arm accept-set (`"empty"` /
+    /// `"absolute"` / `"parent-escape"`). Walks exactly the same three
+    /// byte-strings the sibling [`Self::as_str`] forward emitter returns,
+    /// so the parse and emit halves of the round-trip migrate through
+    /// one caixa-core edit on any future arm addition (a `Symlink` arm
+    /// the future symlink-escape gate would carry once
+    /// [`std::path::Path::is_symlink`] becomes part of the sandbox
+    /// contract, a `TrailingSpace` arm a future authoring-side
+    /// whitespace-hygiene gate would raise for `"lib/init.lisp "`
+    /// shapes): the compiler-checked exhaustiveness on [`Self::as_str`]'s
+    /// `match self` arms and the round-trip pin
+    /// [`tests::path_shape_violation_from_wire_accepts_every_as_str_output`]
+    /// together lock the two halves mutually.
+    ///
+    /// Prior to this lift the substrate carried only the forward
+    /// `Self → &str` projection on the path-shape-violation axis (the
+    /// [`Self::as_str`] emitter, the paired [`std::fmt::Display`] impl
+    /// routed through it, the paired [`AsRef<str>`] impl routed through
+    /// it) — every future consumer that wanted to promote the render-
+    /// side path-shape-violation tag back to the typed enum (a future
+    /// `feira lint --explain-path-shape=<empty|absolute|parent-escape>`
+    /// CLI arg-parse that binds the wire byte-string into the typed
+    /// enum before dispatching to the per-arm listing body, a future
+    /// M4 `mesh.pleme.io/v1alpha1/Caixa` CR materializer's admission-
+    /// webhook rejection-body parser that re-binds a prior audit's
+    /// [`Self::as_str`] output to the typed enum before threading it
+    /// into the per-slot diagnostic-precedence table, a future
+    /// `tracing::field::Value::Str`-arm structured-log re-loader that
+    /// hydrates a prior caixa-build pipeline's per-slot path-gate
+    /// emission back to the typed enum for cross-run
+    /// violation-histogram diff) would have had to re-inline a three-
+    /// arm `match s` cascade that expressed no compile-time link back
+    /// to the typed [`PathShapeViolation`] enum.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23),
+    /// [`crate::CaixaDialeto::from_wire`] (d0e65ea),
+    /// [`crate::supervisor::RestartStrategy::from_wire`] (4eec29c),
+    /// [`crate::supervisor::RestartPolicy::from_wire`] (dd32ccf),
+    /// [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342),
+    /// [`crate::dep::DepList::from_wire`] (45ee563), and
+    /// [`caixa_arch::InvariantKind::from_wire`] (b9e4e61) typed enums
+    /// carry on the peer wire-side `str → Self` axes — extends the
+    /// substrate-wide `(as_str, from_wire)` round-trip family onto the
+    /// caixa-core render-side path-shape-diagnostic closed-set enum
+    /// (the first render-side path-shape-diagnostic axis to reach it),
+    /// matching the same two-way `str ↔ Self` round-trip every sibling
+    /// closed-set enum already carries. Method-named `from_wire` (not
+    /// `from_str`) to match the peer shapes verbatim and side-step a
+    /// `clippy::should_implement_trait` lint that a plain `from_str`
+    /// name would otherwise trigger without paired
+    /// [`std::str::FromStr`] impl scaffolding this axis does not carry
+    /// today. Returns `Option<Self>` (rather than `Result<Self, _>`) to
+    /// match the peer shapes: the caller picks the diagnostic form
+    /// appropriate for its use site (a `feira lint --explain-path-shape`
+    /// CLI arg-parse renders its own per-verb error message; an
+    /// admission-webhook rejection body wraps the `None` outcome with
+    /// the accepted-set enumeration `PathShapeViolation::ALL.iter().
+    /// map(PathShapeViolation::as_str)` for operator diagnostics).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "empty" => Some(Self::Empty),
+            "absolute" => Some(Self::Absolute),
+            "parent-escape" => Some(Self::ParentEscape),
+            _ => None,
+        }
+    }
 }
 
 /// Route the derived-style [`std::fmt::Display`] impl on
@@ -40524,6 +40597,124 @@ mod tests {
             <PathShapeViolation as AsRef<str>>::as_ref(&PathShapeViolation::ParentEscape),
             "parent-escape",
         );
+    }
+
+    #[test]
+    fn path_shape_violation_from_wire_accepts_every_as_str_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`PathShapeViolation::from_wire`] reverse projection: every arm
+        // in [`PathShapeViolation::ALL`] must parse back through
+        // `from_wire` when fed its own [`PathShapeViolation::as_str`]
+        // output, landing on `Some(same_variant)`. A regression that
+        // hand-rolled either side's per-arm match without threading
+        // through the shared three-string closed set would silently
+        // disagree on any future arm rename (or a new arm the future
+        // symlink-escape / whitespace-hygiene gates would grow — a
+        // `Symlink` arm, a `TrailingSpace` arm) and this pin flags it at
+        // caixa-core build time rather than at a downstream `feira lint
+        // --explain-path-shape` consumer's silent tag misclassification.
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_round_trips_through_from_wire`]
+        // (2aa6d23),
+        // [`crate::dialeto::tests::caixa_dialeto_from_wire_accepts_every_as_str_output`]
+        // (d0e65ea),
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_accepts_every_lifted_constant`]
+        // (18c7342),
+        // [`crate::dep::tests::dep_list_round_trips_through_as_str_and_from_wire`]
+        // (45ee563), and
+        // `caixa_arch::tests::invariant_kind_from_wire_accepts_every_as_str_output`
+        // (b9e4e61) round-trip pins on the sibling closed-set typed-enum
+        // reverse-projection axes.
+        for &variant in PathShapeViolation::ALL {
+            let wire = variant.as_str();
+            let parsed = PathShapeViolation::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "PathShapeViolation::from_wire({wire:?}) must accept every \
+                     PathShapeViolation::as_str output — got None for the wire \
+                     byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "PathShapeViolation::from_wire(PathShapeViolation::{variant:?}.as_str()) \
+                 must return PathShapeViolation::{variant:?} — the (as_str, \
+                 from_wire) pair must form a total round-trip on the \
+                 closed three-arm PathShapeViolation arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the [`PathShapeViolation::from_wire`] parser's
+        // accept-set: any string outside the three-arm
+        // [`PathShapeViolation::as_str`] output set must return `None`. A
+        // future accidental widening of the accept-set (a case-
+        // insensitive match that accepts `"EMPTY"` / `"Empty"`, a silent
+        // acceptance of the pre-lift PascalCase Debug-derived shapes
+        // `"Empty"` / `"Absolute"` / `"ParentEscape"` on the wire axis,
+        // a Levenshtein-forgiving arm-lookup that admits `"parentescape"`
+        // typos — the exact form a `format!("{:?}", …).to_lowercase()`
+        // round-trip on the paired [`std::fmt::Debug`] derive would
+        // otherwise land on, the drift footgun the emitter's
+        // documentation explicitly names as the reason the substrate-
+        // canonical kebab-case `"parent-escape"` slug exists — a silent
+        // absorption of the sibling
+        // [`crate::CaixaKind::as_str`] / [`crate::supervisor::RestartStrategy::as_str`]
+        // accept-sets which are distinct-axis projections on peer
+        // closed-set enums that share no arm with this one) would
+        // silently drift the parser's accept-set from the emitter's —
+        // a downstream `feira lint --explain-path-shape` re-loader that
+        // bound a prior audit's [`Self::as_str`] output back to the
+        // typed enum through this parser would then bind a malformed
+        // byte-string to a plausibly-wrong typed arm the caller does
+        // not route through any fallback, silently misclassifying the
+        // reloaded row.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_from_wire_rejects_unknown_byte_strings`]
+        // (2aa6d23),
+        // [`crate::dialeto::tests::caixa_dialeto_from_wire_rejects_unknown_byte_strings`]
+        // (d0e65ea),
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_rejects_unknown_byte_strings`]
+        // (18c7342),
+        // [`crate::dep::tests::dep_list_from_wire_returns_none_on_unknown_wire_scalar`]
+        // (45ee563), and
+        // `caixa_arch::tests::invariant_kind_from_wire_rejects_unknown_byte_strings`
+        // (b9e4e61) rejection pins on the sibling closed-set typed-enum
+        // reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "Empty",
+            "EMPTY",
+            "Absolute",
+            "ABSOLUTE",
+            "ParentEscape",
+            "PARENTESCAPE",
+            "parentescape",
+            "parent_escape",
+            "parent escape",
+            "parent-escap",
+            "biblioteca",
+            "servico",
+            "safety",
+            "hint",
+            "one-for-one",
+            "empty ",
+            " empty",
+            "empty\n",
+            "empty\t",
+        ] {
+            assert!(
+                PathShapeViolation::from_wire(bad).is_none(),
+                "PathShapeViolation::from_wire({bad:?}) must return None — \
+                 the parser's accept-set is exactly the three \
+                 PathShapeViolation::as_str outputs; a widening would \
+                 silently split the parser's accept-set from the \
+                 emitter's arm-set",
+            );
+        }
     }
 
     // ── is_lisp_extension — `:behavior :on-*` + `:upgrade-from ───────────
