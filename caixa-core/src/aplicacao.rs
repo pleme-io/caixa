@@ -577,6 +577,98 @@ impl WitShape {
             Self::Capability => "capability",
         }
     }
+
+    /// Reverse projection on the [`WitShape`] closed-set enum's
+    /// canonical-projection axis — parses a `"http"` / `"pubsub"` /
+    /// `"store"` / `"capability"` census-label byte-string back to the
+    /// typed enum, or returns [`None`] when `s` lies outside the four-
+    /// arm accept-set [`Self::as_str`] emits. The single `&str → Self`
+    /// projection every future re-entry point on the [`WitShape`]
+    /// census-label axis dispatches through (a future
+    /// `feira app graph --by-wit-shape=<http|pubsub|store|capability>`
+    /// CLI arg-parse that binds the wire byte-string into the typed
+    /// enum before dispatching to the per-arm histogram column, a
+    /// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook
+    /// rejection body re-parsing a prior emission's per-arm audit-column
+    /// tag back to the typed enum for accepted-shape policy classification,
+    /// a `tracing::field::Value::Str`-arm structured-log re-loader binding
+    /// a prior [`std::fmt::Display`]-formatted [`WitShape`] output back to the
+    /// typed enum for cross-run shape-flavor histogram diff) would have
+    /// had to re-inline a four-arm `match s` cascade that expressed no
+    /// compile-time link back to the substrate primitive.
+    ///
+    /// Distinct axis from the peer [`Self::classify`] total classifier,
+    /// which takes the *raw* `:contratos :wit` identifier (`"wasi:http/proxy"`,
+    /// `"nats:events"`, `"wasi:keyvalue/store"`, everything else) and
+    /// returns the arm the payload-arm prefix-set dispatch resolves to —
+    /// a total function on the WIT-identifier axis. [`Self::from_wire`]
+    /// takes the *census-label* byte-string (`"http"` / `"pubsub"` /
+    /// `"store"` / `"capability"`, the paired output of [`Self::as_str`])
+    /// and returns the arm — a partial function on the closed four-string
+    /// census-label axis. The two axes carry different accept-sets by
+    /// design, not drift: [`Self::classify`] accepts every `&str` and
+    /// falls through to [`Self::Capability`] on the empty and every
+    /// structurally-malformed input; [`Self::from_wire`] accepts exactly
+    /// the four census labels [`Self::as_str`] emits and rejects
+    /// everything else (including every raw WIT identifier [`Self::classify`]
+    /// would classify — so a caller who accidentally routes a raw
+    /// `:contratos :wit` value through [`Self::from_wire`] instead of
+    /// [`Self::classify`] observes [`None`] rather than a plausibly-wrong
+    /// arm silently). The paired axis discipline mirrors the sibling
+    /// [`crate::CaixaKind::as_str`] / [`crate::CaixaKind::from_wire`]
+    /// pair on the top-level `:kind` axis.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`crate::dialeto::CaixaDialeto::from_wire`] (d0e65ea) /
+    /// [`crate::supervisor::RestartStrategy::from_wire`] (4eec29c) /
+    /// [`crate::supervisor::RestartPolicy::from_wire`] (dd32ccf) /
+    /// [`PlacementStrategy::from_wire`] (18c7342) /
+    /// [`crate::dep::DepList::from_wire`] (45ee563) /
+    /// [`crate::render::PathShapeViolation::from_wire`] (aebd9c6) /
+    /// `caixa_arch::invariants::InvariantKind::from_wire` (b9e4e61) /
+    /// `caixa_arch::report::ArchVerdict::from_wire` (6afe564) /
+    /// `caixa_lint::diagnostic::Severity::from_wire` (5afff0e) /
+    /// `caixa_lint::diagnostic::FixSafety::from_wire` (bd505a1) /
+    /// `caixa_theme::style::Semantic::from_wire` (e7bca7b) /
+    /// `caixa_provedor::ferrite::FerriteRuntime::from_wire` (1e4cc81)
+    /// typed enums carry on the peer wire-side `str → Self` axes —
+    /// extends the substrate-wide `(as_str, from_wire)` round-trip
+    /// family onto the first `:contratos :wit` raw-classification
+    /// axis to converge on the reverse-projection discipline, matching
+    /// the same two-way `str ↔ Self` round-trip every sibling closed-
+    /// set enum already carries. Method-named `from_wire` (not
+    /// `from_str`) to match the peer shapes verbatim and side-step a
+    /// `clippy::should_implement_trait` lint that a plain `from_str`
+    /// name would otherwise trigger without paired [`std::str::FromStr`]
+    /// impl scaffolding this axis does not carry today. Returns
+    /// `Option<Self>` (rather than `Result<Self, _>`) to match the peer
+    /// shapes: the caller picks the diagnostic form appropriate for its
+    /// use site (a future `feira app graph --by-wit-shape` CLI arg-parse
+    /// renders its own per-verb error message; a future admission-webhook
+    /// rejection body wraps the [`None`] outcome with the accepted-set
+    /// enumeration `WitShape::ALL.iter().map(WitShape::as_str)` for
+    /// operator diagnostics).
+    ///
+    /// Pinned load-bearing at the substrate-primitive level by
+    /// [`tests::wit_shape_from_wire_accepts_every_as_str_output`]
+    /// (round-trip witness against the peer [`Self::as_str`] axis) and
+    /// [`tests::wit_shape_from_wire_rejects_unknown_byte_strings`]
+    /// (rejection witness against silent accept-set widening,
+    /// including the raw `:contratos :wit` identifiers [`Self::classify`]
+    /// consumes on the sibling axis — so a caller who confuses the two
+    /// axes trips the pin at caixa-core build time rather than at a
+    /// downstream consumer's silent misclassification).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "http" => Some(Self::Http),
+            "pubsub" => Some(Self::PubSub),
+            "store" => Some(Self::Store),
+            "capability" => Some(Self::Capability),
+            _ => None,
+        }
+    }
 }
 
 /// Route [`std::fmt::Display`] through [`WitShape::as_str`], so every
@@ -14580,6 +14672,233 @@ mod tests {
             classify_via_const_fn("wasi:http/proxy").as_str().as_bytes(),
             b"http"
         ));
+    }
+
+    #[test]
+    fn wit_shape_from_wire_accepts_every_as_str_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`WitShape::from_wire`] reverse projection: every arm in
+        // [`WitShape::ALL`] must parse back through `from_wire` when fed
+        // its own [`WitShape::as_str`] output, landing on
+        // `Some(same_variant)`. A regression that hand-rolled either
+        // side's per-arm match without threading through the shared
+        // four-string closed set would silently disagree on any future
+        // arm rename (or a new arm the WIT-shape space grows — a
+        // hypothetical `wasi:sockets/*` transport-layer shape, an
+        // `oci:*` capability-import carrier per the sibling
+        // [`wit_shape_matches`] docstring's trajectory bullet) and this
+        // pin flags it at caixa-core build time rather than at a
+        // downstream `feira app graph --by-wit-shape` consumer's silent
+        // tag misclassification.
+        //
+        // Peer of the sibling
+        // `caixa_provedor::ferrite::tests::ferrite_runtime_from_wire_accepts_every_variant_slug_output`
+        // (1e4cc81) /
+        // `caixa_theme::style::tests::semantic_from_wire_accepts_every_as_str_output`
+        // (e7bca7b) /
+        // `caixa_lint::diagnostic::tests::fix_safety_from_wire_accepts_every_as_str_output`
+        // (bd505a1) /
+        // `caixa_lint::diagnostic::tests::severity_from_wire_accepts_every_as_str_output`
+        // (5afff0e) /
+        // `caixa_arch::report::tests::arch_verdict_from_wire_accepts_every_as_str_output`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_accepts_every_as_str_output`
+        // (b9e4e61) round-trip pins on the peer caixa-provedor /
+        // caixa-theme / caixa-lint / caixa-arch closed-set-enum
+        // reverse-projection axes, and of the sibling
+        // `crate::kind::tests::caixa_kind_wire_round_trips_through_from_wire`
+        // (2aa6d23) /
+        // `crate::dialeto::tests::caixa_dialeto_from_wire_accepts_every_as_str_output`
+        // (d0e65ea) /
+        // `placement_strategy_from_wire_accepts_every_lifted_constant`
+        // (18c7342) /
+        // `crate::dep::tests::dep_list_round_trips_through_as_str_and_from_wire`
+        // (45ee563) /
+        // `crate::render::tests::path_shape_violation_from_wire_accepts_every_as_str_output`
+        // (aebd9c6) round-trip pins on the sibling caixa-core closed-
+        // set typed-enum reverse-projection axes.
+        for &variant in WitShape::ALL {
+            let wire = variant.as_str();
+            let parsed = WitShape::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "WitShape::from_wire({wire:?}) must accept every \
+                     WitShape::as_str output — got None for the wire \
+                     byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "WitShape::from_wire(WitShape::{variant:?}.as_str()) must \
+                 return WitShape::{variant:?} — the (as_str, from_wire) \
+                 pair must form a total round-trip on the closed four-arm \
+                 WitShape arm-set",
+            );
+        }
+        // Pin the exact per-arm accept-set so a future rebrand of the
+        // census-label byte-strings ("http" / "pubsub" / "store" /
+        // "capability") surfaces at this pin rather than at a downstream
+        // consumer's silent tag drift.
+        assert_eq!(WitShape::from_wire("http"), Some(WitShape::Http));
+        assert_eq!(WitShape::from_wire("pubsub"), Some(WitShape::PubSub));
+        assert_eq!(WitShape::from_wire("store"), Some(WitShape::Store));
+        assert_eq!(
+            WitShape::from_wire("capability"),
+            Some(WitShape::Capability),
+        );
+    }
+
+    #[test]
+    fn wit_shape_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the [`WitShape::from_wire`] parser's
+        // accept-set: any string outside the four-arm
+        // [`WitShape::as_str`] output set must return [`None`]. A future
+        // accidental widening of the accept-set (a case-insensitive
+        // match that accepts `"HTTP"` / `"Http"`, a silent acceptance of
+        // the PascalCase Debug-derived shapes `"Http"` / `"PubSub"` /
+        // `"Store"` / `"Capability"` on the wire axis, a Levenshtein-
+        // forgiving arm-lookup that admits typos, a silent absorption of
+        // the sibling raw `:contratos :wit` identifiers [`Self::classify`]
+        // consumes on the peer classifier axis — `"wasi:http/proxy"`,
+        // `"nats:events"`, `"wasi:keyvalue/store"`, `"kafka:topic"`,
+        // `"kv:cache"`, `"http:incoming"` — a silent absorption of the
+        // paired [`WitTarget::label`] short-form tags every downstream
+        // renderer already handles on the post-validation axis) would
+        // silently drift the parser's accept-set from the emitter's — a
+        // downstream re-loader that bound a prior emission's
+        // [`Self::as_str`] output back to the typed enum through this
+        // parser would then bind a malformed byte-string to a
+        // plausibly-wrong typed arm the caller does not route through
+        // any fallback, silently misclassifying the reloaded row.
+        //
+        // The raw `:contratos :wit` identifier vectors are load-bearing:
+        // [`WitShape::classify`] is a *total* function on every `&str`
+        // (falling through to [`WitShape::Capability`] on unknown
+        // prefixes), so a caller who confuses the two axes and routes a
+        // raw WIT identifier through [`from_wire`] instead of
+        // [`classify`] must observe [`None`] here rather than a plausibly-
+        // wrong `Some(WitShape::Capability)` silently — the peer axes
+        // carry different accept-sets by design.
+        //
+        // Peer of the sibling
+        // `caixa_provedor::ferrite::tests::ferrite_runtime_from_wire_rejects_unknown_byte_strings`
+        // (1e4cc81) /
+        // `caixa_theme::style::tests::semantic_from_wire_rejects_unknown_byte_strings`
+        // (e7bca7b) /
+        // `caixa_lint::diagnostic::tests::fix_safety_from_wire_rejects_unknown_byte_strings`
+        // (bd505a1) /
+        // `caixa_lint::diagnostic::tests::severity_from_wire_rejects_unknown_byte_strings`
+        // (5afff0e) /
+        // `caixa_arch::report::tests::arch_verdict_from_wire_rejects_unknown_byte_strings`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_rejects_unknown_byte_strings`
+        // (b9e4e61) rejection pins on the peer caixa-provedor /
+        // caixa-theme / caixa-lint / caixa-arch axes, and of the sibling
+        // `caixa_kind_from_wire_rejects_unknown_byte_strings` (2aa6d23),
+        // `caixa_dialeto_from_wire_rejects_unknown_byte_strings`
+        // (d0e65ea),
+        // `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // (18c7342),
+        // `dep_list_from_wire_returns_none_on_unknown_wire_scalar`
+        // (45ee563), and
+        // `path_shape_violation_from_wire_rejects_unknown_byte_strings`
+        // (aebd9c6) rejection pins on the sibling caixa-core axes.
+        for bad in [
+            "",
+            " ",
+            "http ",
+            " http",
+            "HTTP",
+            "Http",
+            "PUBSUB",
+            "PubSub",
+            "pub_sub",
+            "pub-sub",
+            "STORE",
+            "Store",
+            "CAPABILITY",
+            "Capability",
+            "kv",
+            "nats",
+            "kafka",
+            "wasi:http/proxy",
+            "wasi:http/",
+            "http:",
+            "http:incoming",
+            "nats:events",
+            "kafka:topic",
+            "wasi:keyvalue/store",
+            "wasi:keyvalue/",
+            "kv:cache",
+            "kv:",
+            "oci:capability",
+            "wasi:sockets/tcp",
+            "\u{200b}http",
+            "http\u{200b}",
+        ] {
+            assert!(
+                WitShape::from_wire(bad).is_none(),
+                "WitShape::from_wire({bad:?}) must reject byte-strings \
+                 outside the four-arm WitShape::as_str output set — got \
+                 {:?}",
+                WitShape::from_wire(bad),
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_wire_and_classify_partition_the_axis() {
+        // Cross-axis discipline pin: [`WitShape::classify`] is a total
+        // function on the raw `:contratos :wit` identifier axis (every
+        // `&str` classifies), while [`WitShape::from_wire`] is a partial
+        // function on the census-label axis (the four
+        // [`WitShape::as_str`] outputs and nothing else). The two axes
+        // meet on exactly zero strings by construction — the four
+        // census labels (`"http"` / `"pubsub"` / `"store"` /
+        // `"capability"`) are not prefix-matched by any of
+        // [`WIT_HTTP_SHAPE_PREFIXES`] / [`WIT_PUBSUB_SHAPE_PREFIXES`] /
+        // [`WIT_STORE_SHAPE_PREFIXES`], so on the shared four-string
+        // census-label set:
+        //
+        //   * [`WitShape::from_wire`] returns `Some(<matching arm>)`
+        //     per [`WitShape::as_str`]'s output;
+        //   * [`WitShape::classify`] falls through to the
+        //     [`WitShape::Capability`] catch-all fallback (since none of
+        //     the payload-arm prefix sets begin with `"http"` /
+        //     `"pubsub"` / `"store"` / `"capability"`).
+        //
+        // A future WIT-prefix set edit that accidentally started with
+        // one of the four census labels (a hypothetical
+        // `"http"` prefix directly, a `"pubsub://"` scheme addition, a
+        // `"store:"` capability-carrier extension) would silently
+        // collide the two axes on the same string — [`from_wire`] would
+        // still yield the census-label arm while [`classify`] would
+        // route the payload-arm dispatch through the accidental overlap.
+        // Locking the partition here means such a prefix-set edit
+        // trips this pin at caixa-core build time before the collision
+        // becomes observable at any downstream consumer.
+        for &variant in WitShape::ALL {
+            let label = variant.as_str();
+            // The census-label axis half — [`from_wire`] resolves to
+            // the emitter's arm identity.
+            assert_eq!(
+                WitShape::from_wire(label),
+                Some(variant),
+                "WitShape::from_wire({label:?}) must resolve to the \
+                 emitter's arm identity on the census-label axis",
+            );
+            // The raw-classifier axis half — [`classify`] falls through
+            // to [`WitShape::Capability`] on every census label under
+            // the current prefix set. Any future overlap trips here.
+            assert_eq!(
+                WitShape::classify(label),
+                WitShape::Capability,
+                "WitShape::classify({label:?}) must fall through to \
+                 WitShape::Capability on every census label — a match \
+                 to any payload arm here means a payload-prefix set \
+                 has silently collided the census-label axis with the \
+                 raw-classifier axis",
+            );
+        }
     }
 
     #[test]
