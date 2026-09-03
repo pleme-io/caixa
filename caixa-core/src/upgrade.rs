@@ -1695,6 +1695,82 @@ impl UpgradeInstruction {
         }
     }
 
+    /// Substrate-canonical per-`UpgradeInstruction` kebab-case wire-form
+    /// discriminator every consumer that lands on the un-prefixed
+    /// kebab byte-string (matching serde's
+    /// `#[serde(tag = "kind", rename_all = "kebab-case")]` derive's
+    /// per-variant tag output and the
+    /// [`gen_platform::Discriminant`]-derived [`Self::discriminant`]
+    /// fleet-catalog identity) reaches through — returns `"load-module"`
+    /// / `"state-change"` / `"soft-purge"` / `"purge"` / `"restart"`,
+    /// byte-for-byte the same five strings the JSON `"kind"` tag carries
+    /// (per the sibling
+    /// [`crate::tests::dispatcher_registration::reflection_round_trips_through_serde_tags`]
+    /// pin) and the fleet-wide dispatcher-catalog registers under
+    /// `"caixa.upgrade-instruction"` (per
+    /// [`crate::tests::dispatcher_registration::variant_kinds_match_otp_appup_kebab`]).
+    ///
+    /// Distinct axis from the peer [`Self::lisp_form`] accessor, which
+    /// returns the tatara-lisp author-surface form with the leading `:`
+    /// prefix (`":load-module"` / `":state-change"` / `":soft-purge"` /
+    /// `":purge"` / `":restart"`) that lands in `feira lint` per-
+    /// instruction diagnostics and every
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] const's docstring.
+    /// The two axes carry different bytes by design, not drift: the lisp
+    /// form is the author-facing tag the caixa.lisp grep-and-fix
+    /// workflow reaches for (`grep '(:load-module '` finds the offending
+    /// entry verbatim), while [`Self::as_str`] is the wire-format byte-
+    /// string every serde-serialized CR / [`std::fmt::Display`]-formatted
+    /// diagnostic line / [`AsRef<str>`]-bound consumer / fleet-catalog
+    /// identity converge onto — the same two-axis discipline the sibling
+    /// [`crate::CaixaKind::as_str`] / [`crate::CaixaKind::wire_name`]
+    /// pair (2aa6d23) documents on the top-level `:kind` closed-set
+    /// discriminator, extended here onto the M2 OTP-appup
+    /// per-instruction tag axis.
+    ///
+    /// Peer of the sibling closed-set typed enums' `as_str` /
+    /// `as_suffix` canonical-projection accessors:
+    /// [`crate::CaixaKind::as_str`] (6b1f4fb),
+    /// [`crate::supervisor::RestartStrategy::as_str`] (09ffb2d),
+    /// [`crate::supervisor::RestartPolicy::as_str`] (ccdf955),
+    /// [`crate::aplicacao::PlacementStrategy::as_str`] (cc8f749),
+    /// [`crate::aplicacao::RateLimitUnit::as_suffix`] (6bce03d) — the
+    /// last closed-set typed enum on the caixa `:upgrade-from` surface
+    /// to converge onto the substrate-canonical
+    /// `(as_str, AsRef<str>, Display)` triple through one lifted
+    /// `const fn` scalar accessor, so a future author-facing rebrand
+    /// (a per-consumer disambiguation of the OTP-appup vocabulary, a
+    /// hypothetical `:reload` collapse of `:load-module` under an
+    /// Elixir/Phoenix hot-reload convergence, an M4-side rename of
+    /// `:state-change` onto Erlang's own `code_change/3` verbatim) lands
+    /// at one match arm — the paired [`std::fmt::Display`] impl and
+    /// [`AsRef<str>`] impl route through this accessor by construction,
+    /// so every consumer downstream of any of the three reaches the same
+    /// per-arm byte-string in lockstep.
+    ///
+    /// `pub const fn` matches the peer accessors' const-context posture:
+    /// downstream `const`-context callers (a module-scope
+    /// `const _:() = assert!(<variant>.as_str().len() > 0)` invariant
+    /// pin, a `const fn` per-instruction wire-shape audit table the M4
+    /// admission webhook materializes at build time) reach the accessor
+    /// through one dispatch on the substrate primitive without an
+    /// intermediate non-`const` step. Returns `&'static str` (not
+    /// `&str` bound to `&self`'s lifetime) so callers can stash the
+    /// returned label in `&'static`-bounded positions (a static logger's
+    /// format argument, a `HashMap<&'static str, _>` key, a `matches!`-
+    /// style slice-of-`&'static str` accept-set) without re-borrowing
+    /// through the instruction reference.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::LoadModule { .. } => "load-module",
+            Self::StateChange { .. } => "state-change",
+            Self::SoftPurge { .. } => "soft-purge",
+            Self::Purge { .. } => "purge",
+            Self::Restart => "restart",
+        }
+    }
+
     /// Validate the instruction's typed shape. Path existence is
     /// checked separately by [`crate::layout::StandardLayout`].
     ///
@@ -1944,6 +2020,118 @@ impl UpgradeInstruction {
     #[must_use]
     pub const fn is_cleanup(&self) -> bool {
         self.is_soft_purge() || self.is_purge()
+    }
+}
+
+/// [`std::fmt::Display`] routed through [`UpgradeInstruction::as_str`],
+/// so the pretty-printed byte-string every consumer that formats the
+/// per-`:upgrade-from :instructions` entry's OTP-appup tag as user-
+/// facing text lands on (the future wasm-operator's
+/// `install_release/1` per-instruction dispatch log line, the future
+/// `feira lint --upgrade-from` per-entry annotation, an M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection body
+/// naming the offending instruction's kind, an LSP hover projecting
+/// the instruction kind onto a text-document diagnostic) reaches for
+/// the same wire byte-string the un-`rename`d
+/// `#[serde(tag = "kind", rename_all = "kebab-case")]` derive emits
+/// under the paired [`crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND`]
+/// tag key.
+///
+/// Peer of the sibling closed-set typed enums' `Display` route through
+/// their `as_str` accessor: [`crate::CaixaKind`] (2aa6d23),
+/// [`crate::supervisor::RestartStrategy`] (supervisor.rs),
+/// [`crate::supervisor::RestartPolicy`] (supervisor.rs), and
+/// [`crate::aplicacao::PlacementStrategy`] (aplicacao.rs) — the last
+/// M2 OTP-shape closed-set typed enum on the caixa `:upgrade-from`
+/// surface to converge onto the `Display`-through-`as_str` discipline.
+///
+/// Deliberately routes through the wire-aligned
+/// [`UpgradeInstruction::as_str`] axis (kebab-case, no `:` prefix),
+/// not the tatara-lisp author-surface [`UpgradeInstruction::lisp_form`]
+/// axis (kebab-case, with `:` prefix): the two axes carry different
+/// bytes by design, and Rust convention pairs [`std::fmt::Display`]
+/// with the wire byte-string every serde-carried CR / structured-log /
+/// catalog identity reaches. The two-axis split is preserved
+/// structurally by the pin
+/// [`tests::upgrade_instruction_display_matches_as_str_and_not_lisp_form`]
+/// so a future accidental collapse (routing `Display` through
+/// [`Self::lisp_form`] via a mistaken match-arm re-inlining) trips at
+/// caixa-core test time rather than silently merging the two axes at
+/// some future consumer's per-instruction dispatch step.
+///
+/// Discards the per-variant scalar data (`module: String` on
+/// `LoadModule` / `SoftPurge` / `Purge`; `script: PathBuf` on
+/// `StateChange`) by design — the `Display` axis is the *tag*
+/// projection, not a full value dump; consumers wanting the field
+/// scalar reach for [`Self::declared_module`] /
+/// [`Self::declared_path`] on the sibling scalar-accessor family. The
+/// `{:?}` [`std::fmt::Debug`] derive stays untouched for callers that
+/// want the full variant + field rendering.
+impl std::fmt::Display for UpgradeInstruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Substrate-canonical [`AsRef<str>`] projection on the M2 OTP-appup
+/// per-instruction [`UpgradeInstruction`] closed-set typed enum —
+/// routes through the same [`UpgradeInstruction::as_str`]
+/// `pub const fn` scalar accessor the paired [`std::fmt::Display`]
+/// impl and the un-`rename`d [`serde::Serialize`] derive already key
+/// off, so any future consumer that binds an [`UpgradeInstruction`]
+/// through the standard-library `impl AsRef<str>` bound (a deferred
+/// wasm-operator per-instruction structured-log recorder that accepts
+/// `impl AsRef<str>` at the `tracing::field::Value` `Str`-arm, a
+/// [`std::collections::HashMap`] lookup keyed on the instruction wire
+/// byte through `map.get::<str>(instr.as_ref())` on a future
+/// per-instruction dispatch table an M4 admission webhook composes,
+/// a [`std::process::Command::arg`] shell-out threading the instruction
+/// tag through a deferred `feira upgrade-from --dry-run <kind>` verb)
+/// reaches the same kebab-case wire byte-string the
+/// [`Self::as_str`] accessor returns through one substrate-primitive
+/// dispatch rather than an open-coded `.as_str()` projection at
+/// every wire-up.
+///
+/// Peer of the sibling [`std::fmt::Display`] impl on the same
+/// primitive — both delegate to the shared
+/// [`UpgradeInstruction::as_str`] `pub const fn` accessor, so
+/// `format!("{v}")`, `v.as_str()`, and
+/// `<UpgradeInstruction as AsRef<str>>::as_ref(&v)` resolve to the
+/// same byte-string per instance by construction. A future variant
+/// rename or `#[serde(rename_all = "…")]` attribute-drift on the enum
+/// reaches every one of the three paths (plus the wire-format
+/// `Serialize` derive that already routes through the same kebab
+/// vocabulary and the [`gen_platform::Discriminant`]-derived
+/// [`Self::discriminant`] catalog identity) through exactly one
+/// caixa-core edit — the [`Self::as_str`] match arms.
+///
+/// Same "route the trait impl through the substrate-primitive
+/// accessor" discipline the sibling
+/// [`crate::supervisor::RestartStrategy`] [`AsRef<str>`] impl
+/// (63eb1a4), [`crate::supervisor::RestartPolicy`] [`AsRef<str>`]
+/// impl (419ea81), [`crate::aplicacao::PlacementStrategy`]
+/// [`AsRef<str>`] impl (d86edd2), [`crate::CaixaKind`]
+/// [`AsRef<str>`] impl (cd2091f), [`crate::aplicacao::RateLimitUnit`]
+/// [`AsRef<str>`] impl (d8136db), and [`crate::CaixaVersion`]
+/// [`AsRef<str>`] impl (16d5c7e) carry — closes the substrate
+/// primitive's [`AsRef<str>`] projection axis onto the last M2
+/// OTP-shape closed-set typed enum on the caixa `:upgrade-from`
+/// surface, so every closed-set typed enum on the caixa typed
+/// surface now carries the paired [`AsRef<str>`] +
+/// [`fmt::Display`] + `as_str` triple.
+///
+/// Pinned load-bearing by
+/// [`tests::upgrade_instruction_as_ref_str_routes_through_as_str_accessor`]
+/// — any future silent detour that routes the impl through a
+/// divergent projection (a per-arm inline `match self { … }`
+/// re-inlining that opens a compile-time link to the un-lifted arm-
+/// literal, a swap onto the [`Self::lisp_form`] tatara-lisp axis
+/// that would collide the wire axis with the author-surface axis)
+/// trips at caixa-core test time under `assert_eq!` rather than at a
+/// downstream `impl AsRef<str>`-bound consumer's silent split.
+impl AsRef<str> for UpgradeInstruction {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -10097,5 +10285,267 @@ mod tests {
                  wrap on the same fixture",
             );
         }
+    }
+
+    /// Fixture roster covering every [`UpgradeInstruction`] arm — a
+    /// concrete-instance witness per variant so the four
+    /// canonical-projection-triple pin tests below sweep the same five
+    /// arms without duplicating the arm-shape declaration at each
+    /// probe site. A future arm addition (a `Discard` peer the
+    /// `code:delete/1` analog might inspire, a `SoftPurge` split into
+    /// `SoftPurgeCoop` / `SoftPurgeForce` as the drain-cool-down policy
+    /// grows a two-arm shape) extends this fixture list as a single
+    /// edit; the pin sweeps below then reach the new arm by iteration
+    /// rather than a hand-authored per-arm probe.
+    fn upgrade_instruction_arm_roster() -> Vec<(UpgradeInstruction, &'static str)> {
+        vec![
+            (
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                "load-module",
+            ),
+            (
+                UpgradeInstruction::StateChange {
+                    script: std::path::PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                "state-change",
+            ),
+            (
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+                "soft-purge",
+            ),
+            (
+                UpgradeInstruction::Purge {
+                    module: "hello-rio-old".into(),
+                },
+                "purge",
+            ),
+            (UpgradeInstruction::Restart, "restart"),
+        ]
+    }
+
+    #[test]
+    fn upgrade_instruction_as_str_returns_canonical_kebab_wire_bytes() {
+        // Fail-before-pass-after pin on the [`UpgradeInstruction::as_str`]
+        // canonical-projection accessor: the five match arms each return
+        // the un-prefixed kebab wire byte-string every serde-carried CR /
+        // structured-log / fleet-catalog identity consumer converges onto.
+        // A future variant rename or a per-arm typo (e.g. dropping the
+        // hyphen from `"load-module"` → `"loadmodule"`) trips at
+        // caixa-core test time rather than surfacing as a downstream K8s-
+        // CR round-trip miss where the paired `Deserialize` derive
+        // rejects the drifted arm on every apply.
+        for (variant, expected) in upgrade_instruction_arm_roster() {
+            assert_eq!(
+                variant.as_str(),
+                expected,
+                "UpgradeInstruction::{variant:?}.as_str() must return the \
+                 canonical un-prefixed kebab wire byte-string"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_as_str_matches_discriminant_derive() {
+        // Load-bearing pin on the two-source alignment: the hand-authored
+        // [`UpgradeInstruction::as_str`] match arms must byte-equal the
+        // [`gen_platform::Discriminant`]-derived [`Self::discriminant`]
+        // per-arm output for every variant. `.discriminant()` is the
+        // fleet-wide dispatcher-catalog identity (registered under
+        // `"caixa.upgrade-instruction"` by the sibling
+        // `gen_platform::register_dispatcher!` macro invocation at
+        // upgrade.rs:88); [`Self::as_str`] is the standard-library
+        // `AsRef<str>` / [`std::fmt::Display`]-routed diagnostic byte-
+        // string. Both must stay aligned so a consumer that reaches
+        // through either path lands on the same per-arm byte-string.
+        // A future rename on either side (a per-arm serde-attribute
+        // drift silently splitting the derive's kebab output from the
+        // hand-authored arms, a hand-authored typo on the [`Self::as_str`]
+        // match arm silently splitting the standard-library-routed path
+        // from the catalog identity) trips here at caixa-core test time
+        // rather than as a divergent per-consumer dispatch at some future
+        // downstream site.
+        for (variant, _expected) in upgrade_instruction_arm_roster() {
+            assert_eq!(
+                variant.as_str(),
+                variant.discriminant(),
+                "UpgradeInstruction::{variant:?}.as_str() must byte-equal \
+                 the gen_platform::Discriminant-derived discriminant() \
+                 output — the two axes are the substrate's kebab-case wire \
+                 identity and must stay aligned by construction"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_as_str_matches_serialize_wire_kind_tag() {
+        // Load-bearing pin on the derive-to-hand alignment on the *wire*
+        // axis: the hand-authored [`UpgradeInstruction::as_str`] match
+        // arms must byte-equal the JSON tag the un-`rename`d
+        // `#[serde(tag = "kind", rename_all = "kebab-case")]` derive
+        // emits under the paired
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND`] tag key.
+        // A future accidental `rename_all = "snake_case"` /
+        // `"UPPERCASE"` attribute drift at the derive surface, or a
+        // per-variant `#[serde(rename = "…")]` overlay silently
+        // targeting one arm, would silently split the wire byte-shape
+        // every K8s-CR / tatara-lisp round-trip / fleet-catalog
+        // consumer reads through the two paths — pinning the identity
+        // here makes any such drift a caixa-core-test-time failure.
+        // Sibling in shape to
+        // [`crate::kind::tests::caixa_kind_wire_name_matches_serialize_wire_byte_string`]
+        // on the top-level [`crate::CaixaKind`] axis.
+        for (variant, _expected) in upgrade_instruction_arm_roster() {
+            let json = serde_json::to_value(&variant).expect("serialize must succeed");
+            let kind_tag = json
+                .get(crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND)
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "serialized UpgradeInstruction::{variant:?} must \
+                         carry the M2_UPGRADE_INSTRUCTION_KEY_KIND tag as \
+                         a JSON string"
+                    )
+                });
+            assert_eq!(
+                variant.as_str(),
+                kind_tag,
+                "UpgradeInstruction::{variant:?}.as_str() must byte-equal \
+                 the serde-derived JSON \"kind\" tag — a mismatch means \
+                 either the derive attributes drifted or the as_str match \
+                 arms drifted; either way downstream K8s-CR round-trip \
+                 silently splits from the accessor-routed source of truth"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_display_routes_through_as_str_helper() {
+        // Fail-before-pass-after pin on the two-path convergence: pre-
+        // lift [`UpgradeInstruction`] carried no [`std::fmt::Display`]
+        // surface at all — every consumer past the wire format had to
+        // pick between [`Self::lisp_form`] returning the tatara-lisp
+        // author-surface with `:` prefix or `format!("{v:?}")` on the
+        // `Debug` derive returning the PascalCase variant name plus
+        // struct-literal fields. Wiring [`std::fmt::Display`] through
+        // [`Self::as_str`] closes the drift footgun: every
+        // `format!("{v}")` call reaches the same kebab wire byte-string
+        // the [`Self::as_str`] helper returns, so a future variant
+        // rename lands at exactly one place. Pin the routing here so a
+        // future `impl std::fmt::Display for UpgradeInstruction`
+        // reimplementation that hand-rolls the arms instead of
+        // delegating to [`Self::as_str`] fails at caixa-core build
+        // time. Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_display_routes_through_as_str_helper`]
+        // /
+        // [`crate::supervisor::tests::restart_policy_display_routes_through_as_str_helper`]
+        // /
+        // [`crate::kind::tests::caixa_kind_display_routes_through_as_str_helper`]
+        // pins on the sibling closed-set typed-enum discriminator axes.
+        for (variant, _expected) in upgrade_instruction_arm_roster() {
+            assert_eq!(
+                variant.to_string(),
+                variant.as_str(),
+                "UpgradeInstruction::{variant:?} Display must route \
+                 through UpgradeInstruction::as_str (single source of \
+                 truth: the kebab wire byte-string per arm)"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_display_matches_as_str_and_not_lisp_form() {
+        // Two-axis-split pin: the tatara-lisp author-surface form
+        // ([`UpgradeInstruction::lisp_form`], with `:` prefix) and the
+        // wire form ([`UpgradeInstruction::as_str`], without `:`
+        // prefix) are structurally distinct by design. The pin here
+        // makes the split load-bearing: a future accidental collapse
+        // of either axis onto the other (routing `Display` through
+        // [`Self::lisp_form`] via a mistaken match-arm re-inlining, or
+        // routing [`Self::lisp_form`] through [`Self::as_str`] and
+        // dropping the `:` prefix) would trip here at caixa-core
+        // build time rather than silently merging the two axes at
+        // some future consumer's per-instruction dispatch step. Peer
+        // of the sibling
+        // [`crate::kind::tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin on the top-level [`crate::CaixaKind`] two-axis surface.
+        for (variant, _expected) in upgrade_instruction_arm_roster() {
+            let display = variant.to_string();
+            let lisp = variant.lisp_form();
+            assert_eq!(
+                display,
+                variant.as_str(),
+                "UpgradeInstruction::{variant:?} Display must byte-equal \
+                 as_str (kebab wire form, no `:` prefix)"
+            );
+            assert_ne!(
+                display, lisp,
+                "UpgradeInstruction::{variant:?} Display / as_str (wire \
+                 kebab form) must stay structurally distinct from \
+                 lisp_form (tatara-lisp author-surface with `:` prefix) — \
+                 collapsing the two axes would break the tatara-lisp \
+                 grep-and-fix workflow that keys off the `:` prefix"
+            );
+            assert!(
+                lisp.starts_with(':'),
+                "UpgradeInstruction::{variant:?}.lisp_form() must open \
+                 with a `:` prefix (tatara-lisp author-surface form)"
+            );
+            assert!(
+                !display.starts_with(':'),
+                "UpgradeInstruction::{variant:?} Display must not open \
+                 with a `:` prefix (wire form is un-prefixed kebab-case)"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_as_ref_str_routes_through_as_str_accessor() {
+        // Byte-parity pin on the standard-library `impl AsRef<str>`
+        // route: every arm's `<UpgradeInstruction as
+        // AsRef<str>>::as_ref(&v)` must byte-equal `v.as_str()`. Any
+        // future silent detour that routes the impl through a
+        // divergent projection (a per-arm inline `match self { … }`
+        // re-inlining that opens a compile-time link to the un-lifted
+        // arm-literal, a swap onto [`Self::lisp_form`] that would
+        // collide the wire axis with the tatara-lisp author-surface
+        // axis) trips here at caixa-core test time rather than at a
+        // downstream `impl AsRef<str>`-bound consumer's silent split.
+        // Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_as_ref_str_routes_through_as_str_accessor`]
+        // /
+        // [`crate::kind::tests::caixa_kind_as_ref_str_routes_through_as_str_accessor`]
+        // pins.
+        for (variant, _expected) in upgrade_instruction_arm_roster() {
+            assert_eq!(
+                <UpgradeInstruction as AsRef<str>>::as_ref(&variant),
+                variant.as_str(),
+                "UpgradeInstruction::{variant:?} AsRef<str> must route \
+                 through UpgradeInstruction::as_str"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_as_str_is_const_fn() {
+        // Const-context pin: [`UpgradeInstruction::as_str`] must remain
+        // `const fn`. Downstream consumers reaching for the accessor
+        // from a `const` context (a module-scope `const _:() =
+        // assert!(<variant>.as_str().len() > 0)` invariant pin, a
+        // `const fn` per-instruction wire-shape audit table an M4
+        // admission webhook materializes at build time) rely on the
+        // const-ness. A future accidental downgrade to non-`const`
+        // (an added runtime helper reachable only from a non-`const`
+        // context, a manual hand-rolled `impl` that shadows this
+        // method) trips at caixa-core build time rather than
+        // surfacing as a downstream `const`-context regression far
+        // from the accessor declaration. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_name_is_const_fn`] pin
+        // on the top-level [`crate::CaixaKind`] axis.
+        const RESTART_WIRE: &str = UpgradeInstruction::Restart.as_str();
+        assert_eq!(RESTART_WIRE, "restart");
     }
 }
