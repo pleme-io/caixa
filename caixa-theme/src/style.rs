@@ -281,6 +281,119 @@ impl AsRef<str> for Semantic {
     }
 }
 
+/// Trait-idiomatic reverse projection on the [`Semantic`] closed 16-arm
+/// caixa-theme semantic-style axis — routes byte-for-byte through the
+/// paired substrate-primitive [`Semantic::from_wire`] `Option<Self>`
+/// accessor so every future consumer that binds a canonical semantic
+/// tag through the standard-library `.try_into()` / [`TryFrom`] axis
+/// (a future `feira lint --semantic=<kebab>` CLI arg-parse that
+/// composes into `let sem: Semantic = s.try_into()?`, a future
+/// `caixa-lsp` per-token re-parse hydrating a prior
+/// [`Semantic::as_str`] output back to the typed enum for
+/// `SemanticTokenType` dispatch, a future `caixa.nvim` per-highlight-
+/// group re-loader binding a stored kebab byte-string back through the
+/// typed enum, a generic `<T: TryFrom<&str>>`-bound theme-overlay
+/// re-loader over any of the substrate's closed-set typed enums)
+/// reaches the same 16-arm accept-set the sibling
+/// [`Semantic::from_wire`] resolver parses through and the sibling
+/// [`Semantic::as_str`] emits, rather than an open-coded per-arm
+/// `match s { "keyword" => …, "symbol" => …, … _ => … }` cascade whose
+/// arm-set has no compile-time link back to the substrate primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`Semantic::as_str`]) with
+/// the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so
+/// a caller who can project *out to* a `&str` can also project *in
+/// from* one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint the sibling method-named [`Semantic::from_wire`] would trigger
+/// under a `FromStr` impl (the same design tradeoff the peer
+/// [`caixa_core::CaixaKind`] (3c83606),
+/// [`caixa_core::CaixaDialeto`] (bf33136),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (6fd00cd),
+/// [`caixa_core::supervisor::RestartStrategy`] (5b828ed),
+/// [`caixa_core::supervisor::RestartPolicy`] (6fdd0d9),
+/// [`caixa_core::aplicacao::WitShape`] (5472902),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (bf78400),
+/// [`caixa_core::render::PathShapeViolation`] (e67e48a),
+/// `caixa_arch::invariants::InvariantKind` (e21a857),
+/// `caixa_arch::report::ArchVerdict` (0a4cc45),
+/// `caixa_lint::diagnostic::Severity` (a7bf74c), and
+/// `caixa_lint::diagnostic::FixSafety` (df86c94) blocks note) — this
+/// impl closes the trait-idiomatic reverse axis without disturbing the
+/// method-named `from_wire` shape every peer closed-set typed enum
+/// already carries.
+///
+/// `type Error = ()` matches the sibling [`Semantic::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site
+/// (a future `feira lint --semantic` CLI arg-parse composes its own
+/// per-verb "unknown semantic-style tag: <arg> — accepted: {…}"
+/// message enumerating [`Semantic::ALL`], a future admission-webhook
+/// rejection body wraps the `Err(())` outcome with the accepted-set
+/// enumeration for operator diagnostics, a `Result::map_err` at the
+/// call site lifts the axis-error to a per-verb error type). Same
+/// shape the peer sibling reverse-projection axes carry. The return-
+/// shape uses fully-qualified `<Self as TryFrom<&str>>::Error` because
+/// the associated-type name would otherwise collide with the
+/// [`Self::Error`] variant on the same primitive (the identical
+/// ambiguous-associated-item defect the sibling
+/// `impl TryFrom<&str> for Severity` (a7bf74c) already threads around
+/// under `#[deny(future_incompatible)]`).
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same 16-arm accept-
+/// set the [`Semantic::from_wire`] resolver dispatches through, so any
+/// future arm addition (a `Namespace` tier between [`Self::Symbol`]
+/// and [`Self::KeywordArg`] for the M4 tatara-lisp module system's
+/// qualified-name semantic-token dispatch, a `Deleted` tier for a
+/// hard-delete-mark distinct from [`Self::Removed`] the future 3-way
+/// diff surface grows — both trajectory items the sibling
+/// [`Semantic::ALL`] doc block already names) grows the trait-
+/// idiomatic axis by construction: one caixa-theme edit on
+/// [`Semantic::from_wire`] extends both the method-named reverse
+/// projection every existing consumer keys off and the trait-
+/// idiomatic reverse projection this impl exposes, without a
+/// coordinated rewrite across every future `TryFrom<&str>`-bound
+/// consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// reverse-projection family ([`caixa_core::CaixaKind`] via 3c83606,
+/// [`caixa_core::CaixaDialeto`] via bf33136,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via 6fd00cd,
+/// [`caixa_core::supervisor::RestartStrategy`] via 5b828ed,
+/// [`caixa_core::supervisor::RestartPolicy`] via 6fdd0d9,
+/// [`caixa_core::aplicacao::WitShape`] via 5472902,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via bf78400,
+/// [`caixa_core::render::PathShapeViolation`] via e67e48a,
+/// `caixa_arch::invariants::InvariantKind` via e21a857,
+/// `caixa_arch::report::ArchVerdict` via 0a4cc45,
+/// `caixa_lint::diagnostic::Severity` via a7bf74c, and
+/// `caixa_lint::diagnostic::FixSafety` via df86c94) onto the first
+/// closed-set fieldless typed enum on the caixa-theme surface — the
+/// semantic-style 16-arm accept-set every per-Semantic paint dispatch,
+/// every future `caixa-lsp` per-SemanticTokenType wire-up, and every
+/// future `caixa.nvim` per-highlight-group re-loader keys off. The
+/// thirteenth peer on the substrate surface, and the first inside
+/// `caixa-theme`; with `caixa_provedor::FerriteRuntime` remaining as
+/// the only outside-caixa-core closed-set fieldless typed enum whose
+/// trait-idiomatic axis is still open.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`Semantic::from_wire`] across the 16-arm
+/// accept-set) and
+/// [`tests::semantic_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for Semantic {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, <Self as TryFrom<&str>>::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -748,5 +861,232 @@ mod tests {
         const { assert!(Semantic::Error.is_error()) };
         const { assert!(Semantic::Added.is_added()) };
         const { assert!(Semantic::Unchanged.is_unchanged()) };
+    }
+
+    #[test]
+    fn semantic_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for Semantic` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::Semantic::from_wire`] `Option<Self>` accessor
+        // resolve to the same 16-arm accept-set across every arm the
+        // exhaustive [`super::Semantic::ALL`] slice enumerates. Any
+        // future silent detour that routes the trait impl through a
+        // divergent projection (a per-arm inline `match s { "keyword"
+        // => Ok(Self::Keyword), … }` re-inlining that opens a
+        // compile-time link to the un-lifted arm-literal, a silent
+        // case-fold that admits `"Keyword"` / `"KEYWORD"` and would
+        // collide the canonical-lowercase accept-set the emitter
+        // dispatches on) trips at caixa-theme test time under
+        // `assert_eq!` rather than at a downstream
+        // `impl TryFrom<&str>`-bound consumer's silent split. Sweeps
+        // every one of the 16 arms [`super::Semantic::ALL`] carries so
+        // no arm's projection is covered only by the sibling method-
+        // named `from_wire` path.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136),
+        // `placement_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (6fd00cd),
+        // `rate_limit_unit_try_from_str_routes_through_from_suffix_accessor`
+        // (bf78400),
+        // `path_shape_violation_try_from_str_routes_through_from_wire_accessor`
+        // (e67e48a),
+        // `caixa_arch::invariants::tests::invariant_kind_try_from_str_routes_through_from_wire_accessor`
+        // (e21a857),
+        // `caixa_arch::report::tests::arch_verdict_try_from_str_routes_through_from_wire_accessor`
+        // (0a4cc45),
+        // `caixa_lint::diagnostic::tests::severity_try_from_str_routes_through_from_wire_accessor`
+        // (a7bf74c), and
+        // `caixa_lint::diagnostic::tests::fix_safety_try_from_str_routes_through_from_wire_accessor`
+        // (df86c94) — extends the trait-idiomatic reverse-projection
+        // axis onto the first closed-set fieldless typed enum on the
+        // caixa-theme surface (the semantic-style axis).
+        for &variant in Semantic::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <Semantic as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on Semantic must round-trip \
+                 Semantic::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(Semantic::{variant:?}) — divergence from \
+                 Semantic::from_wire signals a silent detour off the \
+                 substrate-primitive accessor",
+            );
+            assert_eq!(
+                <Semantic as TryFrom<&str>>::try_from(wire).ok(),
+                Semantic::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must \
+                 byte-equal Semantic::from_wire on the same input",
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for Semantic` —
+        // sweeps a candidate set of byte-strings outside the 16-arm
+        // canonical-lowercase kebab wire accept-set the sibling
+        // [`super::Semantic::as_str`] emits and asserts every one
+        // lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("keyword") => Ok(…)` case-fold
+        // path, a silent acceptance of the pre-lift PascalCase Debug-
+        // derived shapes `"Keyword"` / `"Symbol"` / `"KeywordArg"` on
+        // the wire axis, a Levenshtein-forgiving arm-lookup that
+        // admits `"kwd"` / `"sym"` / `"kw"` typos — the exact form a
+        // `format!("{:?}", …).to_lowercase()` round-trip on the paired
+        // [`std::fmt::Debug`] derive would otherwise land on) trips at
+        // caixa-theme test time. The candidate set includes the empty
+        // string, whitespace-only padding, uppercase / PascalCase
+        // rebrand candidates, Levenshtein-neighbor typos, sibling
+        // closed-set-enum canonical tags not shared with this axis
+        // (peer `caixa_lint::diagnostic::FixSafety::as_str` two-arm
+        // `"safe"` / `"unsafe"`, peer `caixa_arch::InvariantKind::as_str`
+        // three-arm `"safety"` / `"compliance"`, peer
+        // `caixa_arch::ArchVerdict::as_str` two-arm `"proven"` /
+        // `"rejected"`), the trajectory-item candidates
+        // (`"namespace"`, `"deleted"`) the sibling [`Semantic::ALL`]
+        // doc block already names, whitespace-padded canonical tags,
+        // and CamelCase spellings of the multi-word `KeywordArg`
+        // variant (`"KeywordArg"`, `"keywordarg"`, `"keyword_arg"`,
+        // `"keyword.arg"`) that would silently admit
+        // if the accept-set widened to a case-fold or separator-
+        // normalization rule.
+        //
+        // Peer of the sibling
+        // `caixa_kind_try_from_str_rejects_unknown_byte_strings`
+        // (3c83606),
+        // `caixa_dialeto_try_from_str_rejects_unknown_byte_strings`
+        // (bf33136),
+        // `rate_limit_unit_try_from_str_rejects_unknown_byte_strings`
+        // (bf78400),
+        // `path_shape_violation_try_from_str_rejects_unknown_byte_strings`
+        // (e67e48a),
+        // `invariant_kind_try_from_str_rejects_unknown_byte_strings`
+        // (e21a857),
+        // `arch_verdict_try_from_str_rejects_unknown_byte_strings`
+        // (0a4cc45),
+        // `severity_try_from_str_rejects_unknown_byte_strings`
+        // (a7bf74c), and
+        // `fix_safety_try_from_str_rejects_unknown_byte_strings`
+        // (df86c94) rejection pins on the sibling closed-set typed-
+        // enum trait-idiomatic reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "Keyword",
+            "KEYWORD",
+            "Symbol",
+            "KeywordArg",
+            "keywordarg",
+            "keyword_arg",
+            "keyword.arg",
+            "String",
+            "Number",
+            "Literal",
+            "Comment",
+            "Accent",
+            "Muted",
+            "Error",
+            "ERROR",
+            "Warning",
+            "Info",
+            "Hint",
+            "Added",
+            "Removed",
+            "Unchanged",
+            "kwd",
+            "sym",
+            "kw",
+            "str",
+            "num",
+            "lit",
+            "cmt",
+            "safe",
+            "unsafe",
+            "safety",
+            "compliance",
+            "proven",
+            "rejected",
+            "namespace",
+            "deleted",
+            "highlight",
+            "identifier",
+            "keyword ",
+            " keyword",
+            "keyword\n",
+            "keyword\t",
+            "keyword-arg ",
+            " keyword-arg",
+            "added ",
+            " added",
+            "unchanged ",
+            " unchanged",
+        ] {
+            assert_eq!(
+                <Semantic as TryFrom<&str>>::try_from(bad),
+                Err(()),
+                "TryFrom<&str> for Semantic({bad:?}) must return \
+                 Err(()) — the trait impl's accept-set is exactly the \
+                 16 Semantic::as_str outputs; a widening would \
+                 silently split the trait impl's accept-set from the \
+                 emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin: the trait-idiomatic
+        // [`TryFrom<&str>`] and the method-named
+        // [`super::Semantic::from_wire`] projections must return
+        // equivalent decisions on every input — the trait impl's
+        // `.ok()` project-out from `Result<Self, ()>` and the method's
+        // `Option<Self>` return must byte-equal each other on both
+        // accepts and rejects. A future silent bifurcation (the trait
+        // impl gaining a case-fold path the method does not carry, the
+        // method gaining a synonym alias the trait impl does not
+        // honor) trips at caixa-theme test time under a single pin
+        // rather than at a downstream generic-bound consumer that
+        // dispatches through one axis while a peer dispatches through
+        // the other. Sweeps both the 16-arm accept-set (via
+        // [`super::Semantic::ALL`] threaded through
+        // [`super::Semantic::as_str`]) and a canonical rejection
+        // sample so both halves of the partition are covered. Peer of
+        // the sibling
+        // `severity_try_from_str_and_from_wire_partition_the_accept_set`
+        // (a7bf74c) and
+        // `fix_safety_try_from_str_and_from_wire_partition_the_accept_set`
+        // (df86c94) partition pins.
+        for &variant in Semantic::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <Semantic as TryFrom<&str>>::try_from(wire).ok(),
+                Semantic::from_wire(wire),
+                "TryFrom<&str>::ok() and from_wire must agree on \
+                 Semantic::{variant:?}.as_str() = {wire:?}",
+            );
+        }
+        for bad in [
+            "",
+            "Keyword",
+            "unknown",
+            "safety",
+            "safe",
+            "proven",
+            "namespace",
+            "keywordarg",
+        ] {
+            assert_eq!(
+                <Semantic as TryFrom<&str>>::try_from(bad).ok(),
+                Semantic::from_wire(bad),
+                "TryFrom<&str>::ok() and from_wire must agree on the \
+                 rejection outcome for {bad:?}",
+            );
+        }
     }
 }
