@@ -766,6 +766,98 @@ impl AsRef<str> for RestartPolicy {
     }
 }
 
+/// Trait-idiomatic reverse projection on the M2-OTP-shape per-child
+/// restart-policy [`RestartPolicy`] closed-set typed enum — routes
+/// byte-for-byte through the paired substrate-primitive
+/// [`RestartPolicy::from_wire`] `Option<Self>` accessor so every future
+/// consumer that binds a `PascalCase` `:children :restart` wire
+/// byte-string through the standard-library `.try_into()` / [`TryFrom`]
+/// axis (a future [`caixa-feira`] `feira supervisor --restart
+/// <Permanent|Temporary|Transient>` CLI arg-parse that composes into
+/// `let restart: RestartPolicy = s.try_into()?`, a future
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR admission-webhook that folds a
+/// `spec.children[*].restart: String` field through
+/// `RestartPolicy::try_from(&s)?`, a generic
+/// `<T: TryFrom<&str>>`-bound loader over any of the substrate's closed-
+/// set typed enums) reaches the same three-arm accept-set the sibling
+/// [`RestartPolicy::from_wire`] resolver parses through and the sibling
+/// [`RestartPolicy::as_str`] emits, rather than an open-coded per-arm
+/// `match s { "Permanent" => …, "Temporary" => …, "Transient" => …, _ =>
+/// … }` cascade whose arm-set has no compile-time link back to the
+/// substrate primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`RestartPolicy::as_str`])
+/// with the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so a
+/// caller who can project *out to* a `&str` can also project *in from*
+/// one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint the sibling method-named [`RestartPolicy::from_wire`] would
+/// trigger under a `FromStr` impl and to avoid colliding with the
+/// [`std::str::FromStr`] impl the [`gen_platform::FromStrKind`] derive
+/// already installs on the paired *kebab-case dispatcher-catalog* axis
+/// (which parses `"permanent"` / `"temporary"` / `"transient"`, the
+/// inverse of [`Self::discriminant`]) — this impl closes the trait-
+/// idiomatic reverse axis on the *`PascalCase` wire* half without
+/// disturbing either the method-named `from_wire` shape every sibling
+/// closed-set typed enum on the substrate already carries or the
+/// pre-existing `FromStr` on the dispatcher-catalog half, keeping the
+/// two-axis split the sibling [`Self::from_wire`] doc block motivates.
+///
+/// `type Error = ()` matches the sibling [`RestartPolicy::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing: the
+/// caller picks the diagnostic form appropriate for its use site (a
+/// future `feira supervisor --restart` arg-parse composes its own
+/// per-verb "unknown restart: <arg> — accepted: {…}" message enumerating
+/// [`RestartPolicy::ALL`], a future M4 admission-webhook rejection body
+/// wraps the `Err(())` outcome with the accepted-set enumeration for
+/// operator diagnostics, a `Result::map_err` at the call site lifts the
+/// unit-error to a per-verb error type). Same shape the peer
+/// [`RestartStrategy`] (5b828ed) on the sibling per-supervisor axis,
+/// [`crate::CaixaKind`] (3c83606), [`crate::CaixaDialeto`] (bf33136), and
+/// [`crate::aplicacao::PlacementStrategy`] (6fd00cd) blocks motivate on
+/// their peer closed-set typed enums' reverse projections.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same three-arm accept-
+/// set the [`RestartPolicy::from_wire`] resolver dispatches through, so
+/// any future arm addition (an OTP-`intrinsic` fourth arm the theory
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// might reach for once the three canonical OTP restart policies stop
+/// covering the substrate's discovered load-shape) grows the trait-
+/// idiomatic axis by construction — one caixa-core edit on
+/// [`RestartPolicy::from_wire`] extends both the method-named reverse
+/// projection every existing consumer keys off and the trait-idiomatic
+/// reverse projection this impl exposes, without a coordinated rewrite
+/// across every future `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum reverse-projection family
+/// ([`crate::CaixaKind`] via 3c83606, [`crate::CaixaDialeto`] via
+/// bf33136, [`crate::aplicacao::PlacementStrategy`] via 6fd00cd, and
+/// [`RestartStrategy`] via 5b828ed) onto the third and final OTP-shape
+/// closed-enum discriminator axis on the caixa surface — the paired
+/// per-child `:children :restart` closed set the future wasm-operator's
+/// hierarchical reconciliation scheduler's per-child post-exit
+/// restart-decision branch keys off end-to-end.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`RestartPolicy::from_wire`] across the
+/// three-arm accept-set),
+/// [`tests::restart_policy_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening), and
+/// [`tests::restart_policy_try_from_str_and_from_wire_partition_the_accept_set`]
+/// (cross-axis partition pin locking the trait and method-named
+/// projections onto one accept-set).
+impl TryFrom<&str> for RestartPolicy {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -6719,6 +6811,172 @@ mod tests {
             let via_trait: Option<RestartStrategy> =
                 <RestartStrategy as TryFrom<&str>>::try_from(input).ok();
             let via_method: Option<RestartStrategy> = RestartStrategy::from_wire(input);
+            assert_eq!(
+                via_trait, via_method,
+                "TryFrom<&str> and from_wire must resolve identically on \
+                 input {input:?} — divergence signals the two reverse-\
+                 projection paths have drifted onto different accept-sets"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for RestartPolicy` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`RestartPolicy::from_wire`] `Option<Self>` accessor resolve to
+        // the same three-arm accept-set across every arm the exhaustive
+        // [`RestartPolicy::ALL`] slice enumerates. Any future silent
+        // detour that routes the trait impl through a divergent
+        // projection (a per-arm inline `match s { "Permanent" =>
+        // Ok(Self::Permanent), … }` re-inlining that opens a compile-time
+        // link to the un-lifted arm-literal, a hypothetical
+        // `#[serde(rename_all = "…")]` attribute drift that silently
+        // splits the wire byte-string from every consumer that reaches
+        // for this typed dispatch, an accidental swap onto the kebab-case
+        // dispatcher-catalog axis the pre-existing [`std::str::FromStr`]
+        // impl parses through and which would collide the two-axis
+        // wire/catalog split the sibling [`RestartPolicy::from_wire`]
+        // doc block makes load-bearing) trips at caixa-core test time
+        // under `assert_eq!` rather than at a downstream
+        // `impl TryFrom<&str>`-bound consumer's silent split. Sweeps
+        // every one of the three arms [`RestartPolicy::ALL`] carries so
+        // no arm's projection is covered only by the sibling method-
+        // named `from_wire` path. Peer of the sibling
+        // [`restart_strategy_try_from_str_routes_through_from_wire_accessor`]
+        // (5b828ed) — extends the trait-idiomatic reverse-projection
+        // axis onto the third and final M2-OTP-shape closed-set typed
+        // enum on the caixa surface (the paired per-child restart-
+        // decision-policy sibling on the same M2 `:supervisor` slot).
+        for &variant in RestartPolicy::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <RestartPolicy as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on RestartPolicy must round-trip \
+                 RestartPolicy::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(RestartPolicy::{variant:?}) — divergence from \
+                 RestartPolicy::from_wire signals a silent detour off \
+                 the substrate-primitive accessor"
+            );
+            assert_eq!(
+                <RestartPolicy as TryFrom<&str>>::try_from(wire).ok(),
+                RestartPolicy::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must byte-\
+                 equal RestartPolicy::from_wire on the same input"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for
+        // RestartPolicy` — sweeps a candidate set of byte-strings
+        // outside the three-arm PascalCase wire accept-set the sibling
+        // [`RestartPolicy::as_str`] emits and asserts every one lands on
+        // `Err(())`, so a future accidental widening of the trait impl's
+        // accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("Permanent") => Ok(…)` case-fold
+        // path, a silent inclusion of the kebab-case dispatcher-catalog
+        // byte-string the pre-existing [`std::str::FromStr`] impl the
+        // [`gen_platform::FromStrKind`] derive installs parses onto the
+        // wire axis — which would collide the two-axis
+        // wire/dispatcher-catalog split the sibling
+        // [`RestartPolicy::from_wire`] doc block makes load-bearing —
+        // an English-rebrand or plural-arm silent alias that would widen
+        // the wire accept-set past the OTP-canonical three) trips at
+        // caixa-core test time. The candidate set includes the empty
+        // string, whitespace-only padding, the kebab-case dispatcher-
+        // catalog byte-strings on the sibling axis (a caller who
+        // confuses the two axes trips here rather than at a downstream
+        // consumer's silent reject), a lowercase / uppercase / mixed-case
+        // fold of each PascalCase arm (a caller who assumes case-fold
+        // acceptance trips here), leading/trailing whitespace padding,
+        // the trailing-newline shape, quote-wrapped candidates, and a
+        // residual set of plausible-but-wrong English rebrand
+        // candidates. Peer of the sibling
+        // [`restart_strategy_try_from_str_rejects_unknown_byte_strings`]
+        // (5b828ed) rejection witness.
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "\n",
+            "\t",
+            "permanent",
+            "temporary",
+            "transient",
+            "PERMANENT",
+            "TEMPORARY",
+            "TRANSIENT",
+            "Permanents",
+            "Permanent ",
+            " Permanent",
+            " Temporary ",
+            "Permanent\n",
+            "Transient\t",
+            "\"Permanent\"",
+            "Ephemeral",
+            "Always",
+            "Never",
+            "OnAbnormalExit",
+            "intrinsic",
+            "?",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <RestartPolicy as TryFrom<&str>>::try_from(input),
+                Err(()),
+                "TryFrom<&str> impl on RestartPolicy must reject the \
+                 non-wire byte-string {input:?} — silent acceptance \
+                 signals an accept-set widening off the paired \
+                 RestartPolicy::from_wire resolver"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin: the paired `TryFrom<&str>` and
+        // `from_wire` reverse projections must resolve identically on
+        // *every* input, not just the ones [`RestartPolicy::ALL`]
+        // enumerates. Sweeps a mixed candidate set spanning accepted
+        // (three-arm PascalCase wire byte-strings) and rejected (kebab-
+        // case dispatcher-catalog byte-strings, empty, whitespace-
+        // padded, quoted, English-rebrand candidates) inputs and asserts
+        // the trait's `Result::ok()` projection byte-equals the method-
+        // named resolver's `Option<Self>` return-shape on each, locking
+        // the two paths together by construction so any future detour
+        // (a stray `try_from` special-case that widens or narrows the
+        // accept-set outside the paired `from_wire` resolver, an
+        // accidental swap onto the kebab-case [`std::str::FromStr`]
+        // impl the [`gen_platform::FromStrKind`] derive installs on the
+        // sibling dispatcher-catalog axis) trips at caixa-core test
+        // time. Peer of the sibling
+        // [`restart_strategy_try_from_str_and_from_wire_partition_the_accept_set`]
+        // pin — extends the round-trip discipline onto the M2-OTP-shape
+        // per-child restart-policy axis.
+        let candidates: &[&str] = &[
+            "Permanent",
+            "Temporary",
+            "Transient",
+            "",
+            "permanent",
+            "temporary",
+            "transient",
+            "PERMANENT",
+            "unknown",
+            "Permanent ",
+            " Permanent",
+            "\"Permanent\"",
+            "Ephemeral",
+            "OnAbnormalExit",
+            "?",
+        ];
+        for &input in candidates {
+            let via_trait: Option<RestartPolicy> =
+                <RestartPolicy as TryFrom<&str>>::try_from(input).ok();
+            let via_method: Option<RestartPolicy> = RestartPolicy::from_wire(input);
             assert_eq!(
                 via_trait, via_method,
                 "TryFrom<&str> and from_wire must resolve identically on \
