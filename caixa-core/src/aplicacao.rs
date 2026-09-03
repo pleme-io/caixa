@@ -4963,6 +4963,91 @@ impl AsRef<str> for RateLimitUnit {
     }
 }
 
+/// Trait-idiomatic reverse projection on the M3-mesh-primitive-defining
+/// [`RateLimitUnit`] closed-set typed enum — routes byte-for-byte through
+/// the paired substrate-primitive [`RateLimitUnit::from_suffix`]
+/// `Option<Self>` accessor so every future consumer that binds a
+/// canonical `:politicas :rate-limit` unit-suffix byte-string through the
+/// standard-library `.try_into()` / [`TryFrom`] axis (a future
+/// `feira app policy --rate-limit-unit <s|m|h>` CLI arg-parse that
+/// composes into `let unit: RateLimitUnit = s.try_into()?`, a future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook that folds a
+/// `spec.politicas.rateLimit.unit: String` field through
+/// `RateLimitUnit::try_from(&s)?`, a generic `<T: TryFrom<&str>>`-bound
+/// loader over any of the substrate's closed-set typed enums) reaches
+/// the same three-arm accept-set the sibling
+/// [`RateLimitUnit::from_suffix`] resolver parses through and the sibling
+/// [`RateLimitUnit::as_suffix`] emits, rather than an open-coded per-arm
+/// `match s { "s" => …, "m" => …, "h" => …, _ => … }` cascade whose
+/// arm-set has no compile-time link back to the substrate primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`RateLimitUnit::as_suffix`])
+/// with the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so
+/// a caller who can project *out to* a `&str` can also project *in
+/// from* one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint the sibling method-named [`RateLimitUnit::from_suffix`] would
+/// trigger under a `FromStr` impl (the same design tradeoff the peer
+/// [`crate::CaixaKind`] (3c83606), [`crate::CaixaDialeto`] (bf33136),
+/// [`PlacementStrategy`] (6fd00cd), [`crate::supervisor::RestartStrategy`]
+/// (5b828ed), [`crate::supervisor::RestartPolicy`] (6fdd0d9), and
+/// [`WitShape`] (5472902) blocks note) — this impl closes the trait-
+/// idiomatic reverse axis without disturbing the method-named
+/// `from_suffix` shape the peer closed-set typed enums already carry.
+///
+/// `type Error = ()` matches the sibling [`RateLimitUnit::from_suffix`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site (a
+/// future `feira app policy --rate-limit-unit` arg-parse composes its
+/// own per-verb "unknown rate-limit unit: <arg> — accepted: {…}"
+/// message enumerating [`RateLimitUnit::ALL`], a future M4 admission-
+/// webhook rejection body wraps the `Err(())` outcome with the accepted-
+/// set enumeration for operator diagnostics, a `Result::map_err` at the
+/// call site lifts the unit-error to a per-verb error type). Same shape
+/// the peer sibling reverse-projection axes carry.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same three-arm accept-
+/// set the [`RateLimitUnit::from_suffix`] resolver dispatches through,
+/// so any future arm addition (a `"d"` day suffix once Envoy's
+/// `rate_limit_action` grows daily-bucket support, a `"ms"` sub-second
+/// window once high-throughput per-edge policies come into scope per
+/// MESH-COMPOSITION §III.2 #3 — both trajectory items the sibling
+/// [`RateLimitUnit::window_from_suffix`] doc block already names) grows
+/// the trait-idiomatic axis by construction — one caixa-core edit on
+/// [`RateLimitUnit::from_suffix`] extends both the method-named reverse
+/// projection every existing consumer keys off and the trait-idiomatic
+/// reverse projection this impl exposes, without a coordinated rewrite
+/// across every future `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic reverse-
+/// projection family ([`crate::CaixaKind`] via 3c83606,
+/// [`crate::CaixaDialeto`] via bf33136, [`PlacementStrategy`] via
+/// 6fd00cd, [`crate::supervisor::RestartStrategy`] via 5b828ed,
+/// [`crate::supervisor::RestartPolicy`] via 6fdd0d9, [`WitShape`] via
+/// 5472902) onto the third M3-mesh-primitive-defining slot enum on the
+/// caixa surface — the `:politicas :rate-limit` unit-suffix closed set
+/// the caixa-mesh renderer keys off end-to-end for per-Aplicacao Envoy
+/// `local_rate_limit.token_bucket.fill_interval` overlay emission, and
+/// the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-
+/// webhook's per-`:politicas` accept-set validation.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_try_from_str_routes_through_from_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::from_suffix`] across the
+/// three-arm accept-set) and
+/// [`tests::rate_limit_unit_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for RateLimitUnit {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_suffix(s).ok_or(())
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -22559,6 +22644,139 @@ mod tests {
                 "RateLimitUnit::from_suffix({bad:?}) must return None — the \
                  parser's accept-set is exactly the three RateLimitUnit::as_suffix \
                  outputs"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_try_from_str_routes_through_from_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for RateLimitUnit` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::RateLimitUnit::from_suffix`] `Option<Self>` accessor
+        // resolve to the same three-arm accept-set across every arm the
+        // exhaustive [`super::RateLimitUnit::ALL`] slice enumerates. Any
+        // future silent detour that routes the trait impl through a
+        // divergent projection (a per-arm inline
+        // `match s { "s" => Ok(Self::Second), … }` re-inlining that
+        // opens a compile-time link to the un-lifted arm-literal, a
+        // silent case-fold that admits `"S"` / `"M"` / `"H"` and would
+        // collide the canonical-suffix accept-set the codec's parse arm
+        // dispatches on) trips at caixa-core test time under
+        // `assert_eq!` rather than at a downstream `impl TryFrom<&str>`-
+        // bound consumer's silent split. Sweeps every one of the three
+        // arms [`super::RateLimitUnit::ALL`] carries so no arm's
+        // projection is covered only by the sibling method-named
+        // `from_suffix` path. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136), and
+        // `placement_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (6fd00cd) — extends the trait-idiomatic reverse-projection
+        // axis onto the third M3-mesh-primitive-defining slot enum on
+        // the caixa surface (the `:politicas :rate-limit` unit-suffix
+        // closed set the caixa-mesh renderer keys off end-to-end).
+        for &unit in super::RateLimitUnit::ALL {
+            let suffix = unit.as_suffix();
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<&str>>::try_from(suffix),
+                Ok(unit),
+                "TryFrom<&str> impl on RateLimitUnit must round-trip \
+                 RateLimitUnit::{unit:?}.as_suffix() = {suffix:?} back to \
+                 Ok(RateLimitUnit::{unit:?}) — divergence from \
+                 RateLimitUnit::from_suffix signals a silent detour off \
+                 the substrate-primitive accessor"
+            );
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<&str>>::try_from(suffix).ok(),
+                super::RateLimitUnit::from_suffix(suffix),
+                "TryFrom<&str> ok()-projection on {suffix:?} must \
+                 byte-equal RateLimitUnit::from_suffix on the same input"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for RateLimitUnit`
+        // — sweeps a candidate set of byte-strings outside the three-arm
+        // canonical-suffix wire accept-set the sibling
+        // [`super::RateLimitUnit::as_suffix`] emits and asserts every
+        // one lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("s") => Ok(…)` case-fold path, a
+        // silent inclusion of a long-form English rebrand of the
+        // canonical suffix like `"second"` / `"minute"` / `"hour"` that
+        // would collide the one-letter-suffix discipline the sibling
+        // [`super::RateLimitUnit::from_suffix`] carries, a silent
+        // acceptance of the `"1s"` / `"1m"` / `"1h"` full-rate-limit
+        // shape that would collide the codec-composed `<n>/<unit>` axis
+        // onto the unit-suffix axis) trips at caixa-core test time. The
+        // candidate set includes the empty string, whitespace-only
+        // padding, uppercase rebrand candidates, long-form English
+        // rebrand candidates (`"second"`, `"minute"`, `"hour"`),
+        // trailing/leading-whitespace-padded canonical suffixes,
+        // sub-second and multi-day trajectory-item candidates
+        // (`"ms"`, `"d"`, `"week"`), digits-prefixed shapes that would
+        // collide with the `<n>/<unit>` parent codec, the quoted-shape
+        // (`"\"s\""`) that would signal a stray serde-quote survival,
+        // and the `"?"` sentinel. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (3c83606) rejection witness, and
+        // `placement_strategy_try_from_str_rejects_unknown_byte_strings`
+        // (6fd00cd).
+        let rejected: &[&str] = &[
+            "", " ", "\n", "\t", "S", "M", "H", "s ", " s", "m ", " h", "s\n", "second", "minute",
+            "hour", "sec", "min", "hr", "d", "ms", "ns", "us", "week", "1s", "1m", "1h", "100/s",
+            "s/", "?", "\"s\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<&str>>::try_from(input),
+                Err(()),
+                "TryFrom<&str> impl on RateLimitUnit must reject the \
+                 non-suffix byte-string {input:?} — silent acceptance \
+                 signals an accept-set widening off the paired \
+                 RateLimitUnit::from_suffix resolver"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_try_from_str_and_from_suffix_partition_the_accept_set() {
+        // Cross-axis partition pin on the two `str → Option<Self>` /
+        // `str → Result<Self, ()>` projections on
+        // [`super::RateLimitUnit`]: the trait-idiomatic
+        // [`TryFrom<&str>`] axis (newly lifted) and the method-named
+        // [`super::RateLimitUnit::from_suffix`] axis (pre-existing) must
+        // partition every input into the same accept-set / reject-set
+        // — a `TryFrom<&str>` `Ok(v)` outcome iff `from_suffix` returns
+        // `Some(v)`, and a `TryFrom<&str>` `Err(())` outcome iff
+        // `from_suffix` returns `None`. Sweeps a mixed input set of
+        // canonical accepts + rejections so any future divergence
+        // between the two projection paths (a hand-rolled `try_from`
+        // rewrite that no longer routes through `from_suffix`, a
+        // hypothetical `from_suffix` widening that admits a byte-string
+        // the trait impl still rejects) surfaces here at caixa-core
+        // test time rather than at a downstream consumer's silent
+        // split. Peer of the sibling
+        // `wit_shape_try_from_str_and_from_wire_partition_the_accept_set`
+        // (5472902) cross-axis partition pin on the sibling M3-mesh-
+        // primitive closed-set typed enum.
+        let inputs: &[&str] = &[
+            "s", "m", "h", "", " ", "S", "second", "d", "ms", "1s", "?", "\"s\"", "sec",
+        ];
+        for &input in inputs {
+            let via_try_from: Option<super::RateLimitUnit> =
+                <super::RateLimitUnit as TryFrom<&str>>::try_from(input).ok();
+            let via_from_suffix: Option<super::RateLimitUnit> =
+                super::RateLimitUnit::from_suffix(input);
+            assert_eq!(
+                via_try_from, via_from_suffix,
+                "TryFrom<&str> and from_suffix must partition the \
+                 accept-set identically on input {input:?} — got \
+                 TryFrom = {via_try_from:?}, from_suffix = {via_from_suffix:?}"
             );
         }
     }
