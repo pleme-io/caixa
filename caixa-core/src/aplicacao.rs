@@ -6658,6 +6658,81 @@ impl AsRef<str> for PlacementStrategy {
     }
 }
 
+/// Trait-idiomatic reverse projection on the M3-mesh-primitive-defining
+/// [`PlacementStrategy`] closed-set typed enum — routes byte-for-byte
+/// through the paired substrate-primitive [`PlacementStrategy::from_wire`]
+/// `Option<Self>` accessor so every future consumer that binds a
+/// camelCase-schema `:placement :estrategia` wire byte-string through the
+/// standard-library `.try_into()` / [`TryFrom`] axis (a future `feira app
+/// placement --set <SingleNode|Replicated|Sharded>` CLI arg-parse that
+/// composes into `let estrategia: PlacementStrategy = s.try_into()?`, a
+/// future `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook that
+/// folds a `spec.placement.estrategia: String` field through
+/// `PlacementStrategy::try_from(&s)?`, a generic `<T: TryFrom<&str>>`-
+/// bound loader over any of the substrate's closed-set typed enums)
+/// reaches the same three-arm accept-set the sibling
+/// [`PlacementStrategy::from_wire`] resolver parses through and the
+/// sibling [`PlacementStrategy::as_str`] emits, rather than an open-coded
+/// per-arm `match s { "SingleNode" => …, "Replicated" => …, "Sharded" =>
+/// …, _ => … }` cascade whose arm-set has no compile-time link back to
+/// the substrate primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`PlacementStrategy::as_str`])
+/// with the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so a
+/// caller who can project *out to* a `&str` can also project *in from*
+/// one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint the sibling method-named [`PlacementStrategy::from_wire`] would
+/// trigger under a `FromStr` impl (the same design tradeoff the peer
+/// [`crate::CaixaKind`] (3c83606), [`crate::CaixaDialeto`] (bf33136), and
+/// [`crate::provedor::ferrite::FerriteRuntime::from_wire`] blocks note)
+/// — this impl closes the trait-idiomatic reverse axis without
+/// disturbing the method-named `from_wire` shape every sibling closed-set
+/// typed enum on the substrate already carries.
+///
+/// `type Error = ()` matches the sibling [`PlacementStrategy::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site (a
+/// future `feira app placement --set` arg-parse composes its own per-verb
+/// "unknown strategy: <arg> — accepted: {…}" message enumerating
+/// [`PlacementStrategy::ALL`], a future M4 admission-webhook rejection
+/// body wraps the `Err(())` outcome with the accepted-set enumeration for
+/// operator diagnostics, a `Result::map_err` at the call site lifts the
+/// unit-error to a per-verb error type).
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same three-arm accept-
+/// set the [`PlacementStrategy::from_wire`] resolver dispatches through,
+/// so any future arm addition (an `Anycast` mesh-anycast arm the
+/// MESH-COMPOSITION §II.5 hint names as a trajectory item) grows the
+/// trait-idiomatic axis by construction — one caixa-core edit on
+/// [`PlacementStrategy::from_wire`] extends both the method-named reverse
+/// projection every existing consumer keys off and the trait-idiomatic
+/// reverse projection this impl exposes, without a coordinated rewrite
+/// across every future `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum reverse-projection family
+/// ([`crate::CaixaKind`] via 3c83606, [`crate::CaixaDialeto`] via
+/// bf33136) onto the first M3-mesh-primitive-defining slot enum on the
+/// caixa surface — the `:placement :estrategia` closed set the
+/// caixa-mesh renderer keys off end-to-end.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::from_wire`] across the
+/// three-arm accept-set) and
+/// [`tests::placement_strategy_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for PlacementStrategy {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -20750,6 +20825,111 @@ mod tests {
                 "PlacementStrategy::from_wire of the Serialize derive's wire \
                  byte-string for PlacementStrategy::{variant:?} must round-trip \
                  to the same variant; got {parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for PlacementStrategy` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`PlacementStrategy::from_wire`] `Option<Self>` accessor
+        // resolve to the same three-arm accept-set across every arm the
+        // exhaustive [`PlacementStrategy::ALL`] slice enumerates. Any
+        // future silent detour that routes the trait impl through a
+        // divergent projection (a per-arm inline `match s { "SingleNode"
+        // => Ok(Self::SingleNode), … }` re-inlining that opens a
+        // compile-time link to the un-lifted arm-literal, a stray
+        // `#[serde(rename_all = "…")]` attribute drift that silently
+        // splits the wire byte-string from every consumer that reaches
+        // for this typed dispatch) trips at caixa-core test time under
+        // `assert_eq!` rather than at a downstream `impl TryFrom<&str>`-
+        // bound consumer's silent split. Sweeps every one of the three
+        // arms [`PlacementStrategy::ALL`] carries so no arm's projection
+        // is covered only by the sibling method-named `from_wire` path.
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606) and
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136) — extends the trait-idiomatic reverse-projection
+        // axis onto the first M3-mesh-primitive-defining slot enum on
+        // the caixa surface.
+        for &variant in PlacementStrategy::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <PlacementStrategy as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on PlacementStrategy must round-trip \
+                 PlacementStrategy::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(PlacementStrategy::{variant:?}) — divergence from \
+                 PlacementStrategy::from_wire signals a silent detour off \
+                 the substrate-primitive accessor"
+            );
+            assert_eq!(
+                <PlacementStrategy as TryFrom<&str>>::try_from(wire).ok(),
+                PlacementStrategy::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must byte-equal \
+                 PlacementStrategy::from_wire on the same input"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for
+        // PlacementStrategy` — sweeps a candidate set of byte-strings
+        // outside the three-arm camelCase-schema wire accept-set the
+        // sibling [`PlacementStrategy::as_str`] emits and asserts every
+        // one lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("SingleNode") => Ok(…)` case-
+        // fold path, a silent inclusion of a kebab-case rebrand of the
+        // wire byte-string that would collide the two-axis split the
+        // sibling `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // pin makes load-bearing) trips at caixa-core test time. The
+        // candidate set includes the empty string, whitespace-only
+        // padding, kebab-case rebrand candidates (`"single-node"`),
+        // snake_case rebrand candidates (`"single_node"`), uppercase
+        // rebrand candidates, trailing/leading-whitespace-padded
+        // canonical scalars, the trailing-newline shape, English-rebrand
+        // candidates (`"Anycast"`, `"Global"`), and the residual `"?"`
+        // to trip on any future accidental widening onto the sentinel
+        // shape sibling enums use for unknown-arm diagnostics.
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (3c83606) rejection witness.
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "\n",
+            "\t",
+            "single-node",
+            "singlenode",
+            "SingleNodes",
+            "single_node",
+            "single node",
+            "SINGLENODE",
+            "SingleNode ",
+            " SingleNode",
+            " Sharded ",
+            "Sharded\n",
+            "replicated ",
+            "sharded",
+            "REPLICATED",
+            "Anycast",
+            "Global",
+            "?",
+            "\"Sharded\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <PlacementStrategy as TryFrom<&str>>::try_from(input),
+                Err(()),
+                "TryFrom<&str> impl on PlacementStrategy must reject the \
+                 non-wire byte-string {input:?} — silent acceptance signals \
+                 an accept-set widening off the paired \
+                 PlacementStrategy::from_wire resolver"
             );
         }
     }
