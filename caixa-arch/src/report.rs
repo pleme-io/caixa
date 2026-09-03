@@ -267,6 +267,82 @@ impl AsRef<str> for ArchVerdict {
     }
 }
 
+/// Trait-idiomatic reverse projection on the [`ArchVerdict`] closed-
+/// set enum: routes byte-for-byte through the paired
+/// [`ArchVerdict::from_wire`] substrate-primitive `Option<Self>`
+/// accessor, so every future substrate-side consumer that binds a
+/// canonical verdict-outcome tag through the standard-library
+/// `.try_into()` / [`TryFrom`] axis (a `feira arch --verdict
+/// <proven|rejected>` CLI arg-parse that folds the operator's `String`
+/// through `ArchVerdict::try_from(&s)?`, a future M4
+/// `mesh.pleme.io/v1alpha1/ArchAudit` CR materializer's admission-
+/// time re-parse of the per-manifest verdict axis, an `iac-forge`
+/// audit-report re-loader binding a prior [`ArchVerdict::as_str`]
+/// output back to the typed enum through the trait-bound axis, a
+/// generic `<T: TryFrom<&str>>`-bound audit-report re-loader over any
+/// of the substrate's closed-set typed enums) reaches the same two-arm
+/// accept-set the sibling [`ArchVerdict::from_wire`] resolver
+/// dispatches through — without an open-coded per-arm cascade with no
+/// compile-time link back to the typed enum.
+///
+/// `type Error = ()` matches the peer sibling
+/// [`crate::invariants::InvariantKind`] (e21a857),
+/// [`caixa_core::CaixaKind`] (3c83606),
+/// [`caixa_core::CaixaDialeto`] (bf33136),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (6fd00cd),
+/// [`caixa_core::supervisor::RestartStrategy`] (5b828ed),
+/// [`caixa_core::supervisor::RestartPolicy`] (6fdd0d9),
+/// [`caixa_core::aplicacao::WitShape`] (5472902),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (bf78400), and
+/// [`caixa_core::render::PathShapeViolation`] (e67e48a)
+/// [`TryFrom<&str>`] impls: the axis-error carries no payload because
+/// the paired [`ArchVerdict::from_wire`] accessor already returns
+/// `None` on rejection, and the caller picks the diagnostic form
+/// appropriate for its use site (a `feira arch --verdict` arg-parse
+/// wraps the `Err(())` outcome with an "unknown verdict axis: <arg>
+/// — accepted: {…}" message enumerating [`ArchVerdict::ALL`], a
+/// future M4 admission-webhook rejection body wraps the same
+/// `Err(())` outcome for operator diagnostics, a `Result::map_err`
+/// at the call site lifts the axis-error to a per-verb error type).
+/// Same shape the peer sibling reverse-projection axes carry.
+///
+/// A future arm addition (a `PartiallyProven` tier the `iac-forge`
+/// policy-engine grows for compliance-only violation sets, an
+/// `Unknown` tier for the M4 admission-webhook's timeout-during-check
+/// outcome — both trajectory items the sibling [`ArchVerdict::ALL`]
+/// doc block already names) grows the trait-idiomatic axis by
+/// construction through one caixa-arch edit on
+/// [`ArchVerdict::from_wire`], not a coordinated rewrite across every
+/// future `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// reverse-projection family onto the second closed-set fieldless
+/// typed enum on the caixa-arch surface — the verdict-outcome axis,
+/// after the peer severity-classification axis on
+/// [`crate::invariants::InvariantKind`]. Method-named `from_wire` (not
+/// `from_str`) is preserved on the paired accessor to side-step the
+/// `clippy::should_implement_trait` lint a plain `from_str` name would
+/// otherwise trigger without paired [`std::str::FromStr`] scaffolding
+/// this axis does not carry today — same design tradeoff every prior
+/// sibling reverse-projection lift already carries.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`ArchVerdict::from_wire`] across the two-
+/// arm accept-set),
+/// [`tests::arch_verdict_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening), and
+/// [`tests::arch_verdict_try_from_str_and_from_wire_partition_the_accept_set`]
+/// (cross-axis partition pin locking trait and method-named
+/// projections to the same `Option<Self>` output on every input).
+impl TryFrom<&str> for ArchVerdict {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchReport {
     pub verdict: ArchVerdict,
@@ -597,6 +673,171 @@ mod tests {
                  ArchVerdict::as_str outputs; a widening would \
                  silently split the parser's accept-set from the \
                  emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for ArchVerdict` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::ArchVerdict::from_wire`] `Option<Self>` accessor
+        // resolve to the same two-arm accept-set across every arm the
+        // exhaustive [`super::ArchVerdict::ALL`] slice enumerates. Any
+        // future silent detour that routes the trait impl through a
+        // divergent projection (a per-arm inline `match s { "proven"
+        // => Ok(Self::Proven), … }` re-inlining that opens a compile-
+        // time link to the un-lifted arm-literal, a silent case-fold
+        // that admits `"Proven"` / `"Rejected"` and would collide the
+        // canonical-lowercase accept-set the emitter dispatches on)
+        // trips at caixa-arch test time under `assert_eq!` rather
+        // than at a downstream `impl TryFrom<&str>`-bound consumer's
+        // silent split. Sweeps every one of the two arms
+        // [`super::ArchVerdict::ALL`] carries so no arm's projection
+        // is covered only by the sibling method-named `from_wire`
+        // path.
+        //
+        // Peer of the sibling
+        // [`crate::invariants::tests::invariant_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (e21a857) on the peer caixa-arch severity-classification
+        // axis, and of
+        // [`caixa_core::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606) / `caixa_dialeto_try_from_str_routes_through_from_wire_accessor`
+        // (bf33136) / `placement_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (6fd00cd) / `rate_limit_unit_try_from_str_routes_through_from_suffix_accessor`
+        // (bf78400) / `path_shape_violation_try_from_str_routes_through_from_wire_accessor`
+        // (e67e48a) — extends the trait-idiomatic reverse-projection
+        // axis onto the second closed-set fieldless typed enum on the
+        // caixa-arch surface (the verdict-outcome axis).
+        for &variant in ArchVerdict::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <ArchVerdict as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on ArchVerdict must round-trip \
+                 ArchVerdict::{variant:?}.as_str() = {wire:?} back \
+                 to Ok(ArchVerdict::{variant:?}) — divergence from \
+                 ArchVerdict::from_wire signals a silent detour off \
+                 the substrate-primitive accessor",
+            );
+            assert_eq!(
+                <ArchVerdict as TryFrom<&str>>::try_from(wire).ok(),
+                ArchVerdict::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must \
+                 byte-equal ArchVerdict::from_wire on the same input",
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for
+        // ArchVerdict` — sweeps a candidate set of byte-strings
+        // outside the two-arm canonical-lowercase wire accept-set the
+        // sibling [`super::ArchVerdict::as_str`] emits and asserts
+        // every one lands on `Err(())`, so a future accidental
+        // widening of the trait impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("proven") => Ok(…)` case-fold
+        // path, a silent acceptance of the pre-lift PascalCase Debug-
+        // derived shapes `"Proven"` / `"Rejected"` on the wire axis,
+        // a Levenshtein-forgiving arm-lookup that admits `"provn"`
+        // typos — the exact form a `format!("{:?}", …).to_lowercase()`
+        // round-trip on the paired [`std::fmt::Debug`] derive would
+        // otherwise land on, the drift footgun the emitter's
+        // documentation explicitly names as the reason the substrate-
+        // canonical lowercase `"proven"` / `"rejected"` slug set
+        // exists) trips at caixa-arch test time. The candidate set
+        // includes the empty string, whitespace-only padding,
+        // uppercase rebrand candidates, Levenshtein-neighbor typos,
+        // sibling closed-set-enum canonical tags on the peer
+        // [`crate::invariants::InvariantKind`] three-arm severity axis
+        // (`"safety"` / `"compliance"` / `"hint"`) — non-shared with
+        // this axis's two-arm verdict-outcome set (accepting them
+        // here would silently split the parser's accept-set from the
+        // emitter's arm-set and misclassify a severity-shaped byte-
+        // string as a verdict), sibling `caixa_lint::Severity`
+        // four-arm severity tags (`"error"` / `"warning"` / `"info"`)
+        // that the verdict axis must not absorb, and
+        // trailing/leading-whitespace-padded canonical tags.
+        //
+        // Peer of the sibling
+        // [`crate::invariants::tests::invariant_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (e21a857) rejection pin on the peer caixa-arch severity-
+        // classification axis.
+        for bad in [
+            "",
+            " ",
+            "Proven",
+            "PROVEN",
+            "Rejected",
+            "REJECTED",
+            "provn",
+            "rejcted",
+            "safety",
+            "compliance",
+            "hint",
+            "warning",
+            "error",
+            "info",
+            "fatal",
+            "biblioteca",
+            "servico",
+            "one-for-one",
+            "empty",
+            "proven ",
+            " proven",
+            "proven\n",
+            "proven\t",
+            "rejected ",
+            " rejected",
+        ] {
+            assert_eq!(
+                <ArchVerdict as TryFrom<&str>>::try_from(bad),
+                Err(()),
+                "TryFrom<&str> for ArchVerdict({bad:?}) must return \
+                 Err(()) — the trait impl's accept-set is exactly \
+                 the two ArchVerdict::as_str outputs; a widening \
+                 would silently split the trait impl's accept-set \
+                 from the emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin: the trait-idiomatic
+        // [`TryFrom<&str>`] and the method-named
+        // [`super::ArchVerdict::from_wire`] projections must return
+        // equivalent decisions on every input — the trait impl's
+        // `.ok()` project-out from `Result<Self, ()>` and the
+        // method's `Option<Self>` return must byte-equal each other
+        // on both accepts and rejects. A future silent bifurcation
+        // (the trait impl gaining a case-fold path the method does
+        // not carry, the method gaining a synonym alias the trait
+        // impl does not honor) trips at caixa-arch test time under
+        // a single pin rather than at a downstream generic-bound
+        // consumer that dispatches through one axis while a peer
+        // dispatches through the other. Sweeps both the two-arm
+        // accept-set (via [`super::ArchVerdict::ALL`] threaded
+        // through [`super::ArchVerdict::as_str`]) and a canonical
+        // rejection sample so both halves of the partition are
+        // covered.
+        for &variant in ArchVerdict::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <ArchVerdict as TryFrom<&str>>::try_from(wire).ok(),
+                ArchVerdict::from_wire(wire),
+                "TryFrom<&str>::ok() and from_wire must agree on \
+                 ArchVerdict::{variant:?}.as_str() = {wire:?}",
+            );
+        }
+        for bad in ["", "Proven", "unknown", "safety", "warning"] {
+            assert_eq!(
+                <ArchVerdict as TryFrom<&str>>::try_from(bad).ok(),
+                ArchVerdict::from_wire(bad),
+                "TryFrom<&str>::ok() and from_wire must agree on the \
+                 rejection outcome for {bad:?}",
             );
         }
     }
