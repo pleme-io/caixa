@@ -573,6 +573,85 @@ impl AsRef<str> for FixSafety {
     }
 }
 
+/// Route the standard-library [`TryFrom<&str>`] projection on
+/// [`FixSafety`] through the substrate-canonical
+/// [`FixSafety::from_wire`] `Option<Self>` accessor so every future
+/// consumer that binds a fix-safety-tier byte-string through the
+/// trait-idiomatic `.try_into()` / [`TryFrom`] axis (a future
+/// `feira lint --fix-safety=<safe|unsafe>` CLI arg-parse composing into
+/// `let sev: FixSafety = s.try_into()?`, a `caixa-lsp`-side per-fix
+/// re-parse hydrating a prior [`FixSafety::as_str`] output back for
+/// `CodeActionKind::QuickFix` policy dispatch, a future M4
+/// `mesh.pleme.io/v1alpha1/LintReport` CR admission-webhook body parser
+/// folding `spec.fixes[*].safety: String` through
+/// `FixSafety::try_from(&s)?`, any generic `<T: TryFrom<&str>>`-bound
+/// lint-report re-loader) reaches the same two-arm accept-set the
+/// sibling [`FixSafety::from_wire`] resolver dispatches through, without
+/// an open-coded per-arm cascade with no compile-time link back to the
+/// typed enum.
+///
+/// `type Error = ()` matches the peer reverse-projection axes'
+/// deliberate deferral of error typing — the caller picks the diagnostic
+/// form appropriate for its use site (a CLI arg-parse renders its own
+/// per-verb error message; an admission-webhook rejection body wraps
+/// the `Err(())` outcome with the accepted-set enumeration
+/// `FixSafety::ALL.iter().map(…)` for operator diagnostics). Chosen
+/// over [`std::str::FromStr`] to sidestep the
+/// `clippy::should_implement_trait` lint the sibling method-named
+/// [`FixSafety::from_wire`] would trigger under a plain `FromStr` impl
+/// — same design tradeoff every prior sibling reverse-projection lift
+/// already carries.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same two-arm accept-
+/// set the [`FixSafety::from_wire`] resolver dispatches through, so any
+/// future arm addition (an `Experimental` tier between [`Self::Safe`]
+/// and [`Self::Unsafe`] the M3-and-later lint runner grows for
+/// AI-suggested rewrites that need explicit review-and-accept — the
+/// trajectory item the sibling [`FixSafety::ALL`] doc block already
+/// names) grows the trait-idiomatic axis by construction: one caixa-
+/// lint edit on [`FixSafety::from_wire`] extends both the method-named
+/// reverse projection every existing consumer keys off and the
+/// trait-idiomatic reverse projection this impl exposes, without a
+/// coordinated rewrite across every future `TryFrom<&str>`-bound
+/// consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// reverse-projection family ([`caixa_core::CaixaKind`] via 3c83606,
+/// [`caixa_core::CaixaDialeto`] via bf33136,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via 6fd00cd,
+/// [`caixa_core::supervisor::RestartStrategy`] via 5b828ed,
+/// [`caixa_core::supervisor::RestartPolicy`] via 6fdd0d9,
+/// [`caixa_core::aplicacao::WitShape`] via 5472902,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via bf78400,
+/// [`caixa_core::render::PathShapeViolation`] via e67e48a,
+/// [`caixa_arch::invariants::InvariantKind`] via e21a857,
+/// [`caixa_arch::report::ArchVerdict`] via 0a4cc45, and the paired
+/// sibling [`Severity`] via a7bf74c) onto the second (and last)
+/// closed-set fieldless typed enum on the caixa-lint surface — the
+/// fix-safety-tier two-arm accept-set every `feira lint --fix` per-fix
+/// dispatch, every `caixa-lsp`-side per-fix `CodeActionKind::QuickFix`
+/// policy dispatch, and every future M4 admission-webhook / lint-report
+/// re-loader dispatches through. The twelfth peer on the substrate
+/// surface, closing the caixa-lint crate's two closed-set fieldless
+/// typed enums onto the two-way `str ↔ Self` round-trip.
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`FixSafety::from_wire`] across the two-arm
+/// accept-set),
+/// [`tests::fix_safety_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening), and
+/// [`tests::fix_safety_try_from_str_and_from_wire_partition_the_accept_set`]
+/// (cross-axis partition pin locking trait and method-named projections
+/// to the same `Option<Self>` output on every input).
+impl TryFrom<&str> for FixSafety {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, <Self as TryFrom<&str>>::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: &'static str,
@@ -1607,5 +1686,203 @@ mod tests {
         // (6ad94f3) pin on the paired severity axis.
         assert_eq!(format!("{}", FixSafety::Safe), "safe");
         assert_eq!(format!("{}", FixSafety::Unsafe), "unsafe");
+    }
+
+    #[test]
+    fn fix_safety_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for FixSafety` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::FixSafety::from_wire`] `Option<Self>` accessor resolve
+        // to the same two-arm accept-set across every arm the exhaustive
+        // [`super::FixSafety::ALL`] slice enumerates. Any future silent
+        // detour that routes the trait impl through a divergent
+        // projection (a per-arm inline `match s { "safe" =>
+        // Ok(Self::Safe), … }` re-inlining that opens a compile-time
+        // link to the un-lifted arm-literal, a silent case-fold that
+        // admits `"Safe"` / `"Unsafe"` and would collide the canonical-
+        // lowercase accept-set the emitter dispatches on) trips at
+        // caixa-lint test time under `assert_eq!` rather than at a
+        // downstream `impl TryFrom<&str>`-bound consumer's silent split.
+        // Sweeps every one of the two arms [`super::FixSafety::ALL`]
+        // carries so no arm's projection is covered only by the sibling
+        // method-named `from_wire` path.
+        //
+        // Peer of the sibling
+        // [`severity_try_from_str_routes_through_from_wire_accessor`]
+        // (a7bf74c) on the paired caixa-lint diagnostic-severity axis,
+        // [`caixa_core::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136),
+        // `placement_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (6fd00cd),
+        // `rate_limit_unit_try_from_str_routes_through_from_suffix_accessor`
+        // (bf78400),
+        // `path_shape_violation_try_from_str_routes_through_from_wire_accessor`
+        // (e67e48a),
+        // `caixa_arch::invariants::tests::invariant_kind_try_from_str_routes_through_from_wire_accessor`
+        // (e21a857), and
+        // `caixa_arch::report::tests::arch_verdict_try_from_str_routes_through_from_wire_accessor`
+        // (0a4cc45) — extends the trait-idiomatic reverse-projection
+        // axis onto the second (and last) closed-set fieldless typed
+        // enum on the caixa-lint surface (the fix-safety-tier axis),
+        // closing the caixa-lint crate onto the substrate-wide two-way
+        // `str ↔ Self` round-trip family.
+        for &variant in FixSafety::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <FixSafety as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on FixSafety must round-trip \
+                 FixSafety::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(FixSafety::{variant:?}) — divergence from \
+                 FixSafety::from_wire signals a silent detour off the \
+                 substrate-primitive accessor",
+            );
+            assert_eq!(
+                <FixSafety as TryFrom<&str>>::try_from(wire).ok(),
+                FixSafety::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must byte-equal \
+                 FixSafety::from_wire on the same input",
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for FixSafety` —
+        // sweeps a candidate set of byte-strings outside the two-arm
+        // canonical-lowercase wire accept-set the sibling
+        // [`super::FixSafety::as_str`] emits and asserts every one lands
+        // on `Err(())`, so a future accidental widening of the trait
+        // impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("safe") => Ok(…)` case-fold path,
+        // a silent acceptance of the pre-lift PascalCase Debug-derived
+        // shapes `"Safe"` / `"Unsafe"` on the wire axis, a Levenshtein-
+        // forgiving arm-lookup that admits `"saf"` / `"unsaf"` typos —
+        // the exact form a `format!("{:?}", …).to_lowercase()` round-
+        // trip on the paired [`std::fmt::Debug`] derive would otherwise
+        // land on, the drift footgun the emitter's documentation
+        // explicitly names as the reason the substrate-canonical
+        // lowercase `"safe"` / `"unsafe"` slug set exists) trips at
+        // caixa-lint test time. The candidate set includes the empty
+        // string, whitespace-only padding, uppercase / PascalCase
+        // rebrand candidates, Levenshtein-neighbor typos, the M3-and-
+        // later trajectory-item candidate `"experimental"` the sibling
+        // [`super::FixSafety::ALL`] doc block names (which must reject
+        // today and pass by construction when the arm lands), sibling
+        // closed-set-enum canonical tags on the peer
+        // [`super::Severity::as_str`] four-arm severity set (`"error"` /
+        // `"warning"` / `"info"` / `"hint"`), the
+        // `caixa_arch::invariants::InvariantKind::as_str` three-arm
+        // arch-severity set (`"safety"` / `"compliance"` — the `"hint"`
+        // arm shared with the caixa-lint severity axis is a coincidence
+        // of lowercase-tag choice, but neither belongs to the
+        // fix-safety-tier axis), the
+        // `caixa_arch::report::ArchVerdict::as_str` two-arm outcome set
+        // (`"proven"` / `"rejected"`), cross-crate kind / strategy
+        // tags, and trailing/leading-whitespace-padded canonical tags.
+        //
+        // Peer of the sibling
+        // [`severity_try_from_str_rejects_unknown_byte_strings`]
+        // (a7bf74c) on the paired caixa-lint diagnostic-severity axis,
+        // [`caixa_core::kind::tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (3c83606),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_try_from_str_rejects_unknown_byte_strings`]
+        // (bf33136),
+        // `rate_limit_unit_try_from_str_rejects_unknown_byte_strings`
+        // (bf78400),
+        // `path_shape_violation_try_from_str_rejects_unknown_byte_strings`
+        // (e67e48a),
+        // `invariant_kind_try_from_str_rejects_unknown_byte_strings`
+        // (e21a857), and
+        // `arch_verdict_try_from_str_rejects_unknown_byte_strings`
+        // (0a4cc45) rejection pins on the sibling closed-set typed-enum
+        // trait-idiomatic reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "\t",
+            "Safe",
+            "SAFE",
+            "Unsafe",
+            "UNSAFE",
+            "saf",
+            "unsaf",
+            "safer",
+            "unsafer",
+            "un-safe",
+            "un_safe",
+            "experimental",
+            "error",
+            "warning",
+            "info",
+            "hint",
+            "safety",
+            "compliance",
+            "proven",
+            "rejected",
+            "biblioteca",
+            "servico",
+            "one-for-one",
+            "safe ",
+            " safe",
+            "safe\n",
+            "safe\t",
+            "unsafe ",
+            " unsafe",
+        ] {
+            assert_eq!(
+                <FixSafety as TryFrom<&str>>::try_from(bad),
+                Err(()),
+                "TryFrom<&str> for FixSafety({bad:?}) must return \
+                 Err(()) — the trait impl's accept-set is exactly the \
+                 two FixSafety::as_str outputs; a widening would \
+                 silently split the trait impl's accept-set from the \
+                 emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin: the trait-idiomatic
+        // [`TryFrom<&str>`] and the method-named
+        // [`super::FixSafety::from_wire`] projections must return
+        // equivalent decisions on every input — the trait impl's `.ok()`
+        // project-out from `Result<Self, ()>` and the method's
+        // `Option<Self>` return must byte-equal each other on both
+        // accepts and rejects. A future silent bifurcation (the trait
+        // impl gaining a case-fold path the method does not carry, the
+        // method gaining a synonym alias the trait impl does not honor)
+        // trips at caixa-lint test time under a single pin rather than
+        // at a downstream generic-bound consumer that dispatches through
+        // one axis while a peer dispatches through the other. Sweeps
+        // both the two-arm accept-set (via [`super::FixSafety::ALL`]
+        // threaded through [`super::FixSafety::as_str`]) and a canonical
+        // rejection sample so both halves of the partition are covered.
+        //
+        // Peer of the sibling
+        // [`severity_try_from_str_and_from_wire_partition_the_accept_set`]
+        // (a7bf74c) partition pin on the paired caixa-lint severity
+        // axis.
+        for &variant in FixSafety::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <FixSafety as TryFrom<&str>>::try_from(wire).ok(),
+                FixSafety::from_wire(wire),
+                "TryFrom<&str>::ok() and from_wire must agree on \
+                 FixSafety::{variant:?}.as_str() = {wire:?}",
+            );
+        }
+        for bad in ["", "Safe", "unknown", "error", "hint", "experimental"] {
+            assert_eq!(
+                <FixSafety as TryFrom<&str>>::try_from(bad).ok(),
+                FixSafety::from_wire(bad),
+                "TryFrom<&str>::ok() and from_wire must agree on the \
+                 rejection outcome for {bad:?}",
+            );
+        }
     }
 }
