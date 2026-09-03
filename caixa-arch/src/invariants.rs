@@ -116,6 +116,71 @@ impl InvariantKind {
             Self::Hint => "hint",
         }
     }
+
+    /// Substrate-canonical reverse projection on the [`InvariantKind`]
+    /// closed-set arch-severity axis — parses the lowercase per-arm
+    /// byte-string [`Self::as_str`] emits back to the typed variant, or
+    /// `None` when `s` is outside the closed three-arm accept-set
+    /// (`"safety"` / `"compliance"` / `"hint"`). Walks exactly the same
+    /// three byte-strings the sibling [`Self::as_str`] forward emitter
+    /// returns, so the parse and emit halves of the round-trip migrate
+    /// through one caixa-arch edit on any future arm addition (a
+    /// `Warning` tier between [`Self::Compliance`] and [`Self::Hint`] the
+    /// `iac-forge` policy-engine grows, a `Fatal` tier above
+    /// [`Self::Safety`]): the compiler-checked exhaustiveness on
+    /// [`Self::as_str`]'s `match self` arms and the round-trip pin
+    /// [`tests::invariant_kind_from_wire_accepts_every_as_str_output`]
+    /// together lock the two halves mutually.
+    ///
+    /// Prior to this lift the substrate carried only the forward
+    /// `Self → &str` projection on the arch-severity axis (the
+    /// [`Self::as_str`] emitter, the paired [`std::fmt::Display`] impl
+    /// routed through it, the paired [`AsRef<str>`] impl routed through
+    /// it) — every future consumer that wanted to promote the arch-
+    /// verdict tag back to the typed enum (a future `feira arch
+    /// --severity <safety|compliance|hint>` CLI arg-parse that binds
+    /// the wire byte-string into the typed enum before dispatching to
+    /// the per-arm filter, a future M4 `mesh.pleme.io/v1alpha1/ArchAudit`
+    /// CR materializer's admission-time re-parse of the per-violation
+    /// severity axis, an `iac-forge` policy-engine audit-report re-loader
+    /// that binds a prior [`Self::as_str`] output back to the typed enum
+    /// for cross-run severity-histogram diff) would have had to re-inline
+    /// a three-arm `match s` cascade that expressed no compile-time link
+    /// back to the typed [`InvariantKind`] enum.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`caixa_core::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`caixa_core::CaixaDialeto::from_wire`] (d0e65ea) /
+    /// [`caixa_core::supervisor::RestartStrategy::from_wire`] (4eec29c) /
+    /// [`caixa_core::supervisor::RestartPolicy::from_wire`] (dd32ccf) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`caixa_core::dep::DepList::from_wire`] (45ee563) typed enums
+    /// carry on the peer wire-side `str → Self` axes — extends the
+    /// substrate-wide `(as_str, from_wire)` round-trip family onto the
+    /// first outside-caixa-core closed-set fieldless typed enum on the
+    /// caixa surface (the caixa-arch invariant-severity axis), matching
+    /// the same two-way `str ↔ Self` round-trip every sibling
+    /// closed-set enum already carries. Method-named `from_wire` (not
+    /// `from_str`) to match the peer shapes verbatim and side-step a
+    /// `clippy::should_implement_trait` lint that a plain `from_str`
+    /// name would otherwise trigger without paired
+    /// [`std::str::FromStr`] impl scaffolding this axis does not carry
+    /// today. Returns `Option<Self>` (rather than `Result<Self, _>`) to
+    /// match the peer shapes: the caller picks the diagnostic form
+    /// appropriate for its use site (a `feira arch --severity` CLI
+    /// arg-parse renders its own per-verb error message; an admission-
+    /// webhook rejection body wraps the `None` outcome with the
+    /// accepted-set enumeration `InvariantKind::ALL.iter().map(…)` for
+    /// operator diagnostics).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "safety" => Some(Self::Safety),
+            "compliance" => Some(Self::Compliance),
+            "hint" => Some(Self::Hint),
+            _ => None,
+        }
+    }
 }
 
 /// Route the derived-style [`std::fmt::Display`] impl on [`InvariantKind`]
@@ -608,6 +673,119 @@ mod tests {
                 via_display, via_as_str,
                 "InvariantKind::{arm:?} Display::fmt() must byte-equal \
                  as_str()",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_wire_accepts_every_as_str_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`InvariantKind::from_wire`] reverse projection: every arm in
+        // [`InvariantKind::ALL`] must parse back through `from_wire`
+        // when fed its own [`InvariantKind::as_str`] output, landing on
+        // `Some(same_variant)`. A regression that hand-rolled either
+        // side's per-arm match without threading through the shared
+        // three-string closed set would silently disagree on any future
+        // arm rename (or a new arm the `iac-forge` policy-engine grows
+        // — a `Warning` tier between `Compliance` and `Hint`, a `Fatal`
+        // tier above `Safety`) and this pin flags it at caixa-arch build
+        // time rather than at a downstream `feira arch --severity`
+        // consumer's silent tag misclassification. Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_wire_round_trips_through_from_wire`]
+        // (2aa6d23), the caixa-core
+        // `caixa_dialeto_from_wire_accepts_every_as_str_output` (d0e65ea),
+        // `placement_strategy_from_wire_accepts_every_lifted_constant`
+        // (18c7342), and `dep_list_round_trips_through_as_str_and_from_wire`
+        // (45ee563) round-trip pins on the sibling closed-set typed-enum
+        // reverse-projection axes.
+        for &variant in InvariantKind::ALL {
+            let wire = variant.as_str();
+            let parsed = InvariantKind::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "InvariantKind::from_wire({wire:?}) must accept every \
+                     InvariantKind::as_str output — got None for the wire \
+                     byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "InvariantKind::from_wire(InvariantKind::{variant:?}.as_str()) \
+                 must return InvariantKind::{variant:?} — the (as_str, \
+                 from_wire) pair must form a total round-trip on the \
+                 closed three-arm InvariantKind arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the [`InvariantKind::from_wire`] parser's
+        // accept-set: any string outside the three-arm
+        // [`InvariantKind::as_str`] output set must return `None`. A
+        // future accidental widening of the accept-set (a case-
+        // insensitive match that accepts `"SAFETY"` / `"Safety"`, a
+        // silent acceptance of the pre-lift PascalCase Debug-derived
+        // shapes `"Safety"` / `"Compliance"` / `"Hint"` on the wire axis,
+        // a Levenshtein-forgiving arm-lookup that admits `"safey"`
+        // typos, a silent absorption of the sibling
+        // [`caixa_lint::Severity::as_str`] four-arm accept-set
+        // (`"error"` / `"warning"` / `"info"` / `"hint"`) — the two axes
+        // share the `"hint"` byte-string but disagree everywhere else,
+        // so accepting `"error"` on this axis would silently misclassify
+        // a lint-severity-shaped byte-string as a caixa-arch invariant
+        // severity) would silently drift the parser's accept-set from
+        // the emitter's — a downstream audit-report re-loader that
+        // bound a prior audit's [`Self::as_str`] output back to the
+        // typed enum through this parser would then bind a malformed
+        // byte-string to a plausibly-wrong typed arm the caller does
+        // not route through any fallback, silently misclassifying the
+        // reloaded row.
+        //
+        // Also rejects the sibling
+        // [`caixa_lint::Severity::as_str`] axis's non-shared arms
+        // (`"error"` / `"warning"` / `"info"`) which are distinct-axis
+        // projections on a peer closed-set enum — the two axes' shared
+        // `"hint"` arm is a coincidence of lowercase-tag choice, not a
+        // typed cross-axis promise, and accepting `"error"` /
+        // `"warning"` / `"info"` on this axis would silently split the
+        // parser's accept-set from the emitter's arm-set. Peer of the
+        // sibling
+        // [`caixa_core::kind::tests::caixa_kind_from_wire_rejects_unknown_byte_strings`]
+        // (2aa6d23),
+        // `caixa_dialeto_from_wire_rejects_unknown_byte_strings`
+        // (d0e65ea),
+        // `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // (18c7342), and
+        // `dep_list_from_wire_returns_none_on_unknown_wire_scalar`
+        // (45ee563) rejection pins on the sibling closed-set typed-enum
+        // reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "Safety",
+            "SAFETY",
+            "Compliance",
+            "COMPLIANCE",
+            "Hint",
+            "HINT",
+            "safey",
+            "hnt",
+            "warning",
+            "error",
+            "info",
+            "fatal",
+            "safety ",
+            " safety",
+            "safety\n",
+            "safety\t",
+        ] {
+            assert!(
+                InvariantKind::from_wire(bad).is_none(),
+                "InvariantKind::from_wire({bad:?}) must return None — \
+                 the parser's accept-set is exactly the three \
+                 InvariantKind::as_str outputs; a widening would \
+                 silently split the parser's accept-set from the \
+                 emitter's arm-set",
             );
         }
     }
