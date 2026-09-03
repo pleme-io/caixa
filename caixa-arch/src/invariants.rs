@@ -233,6 +233,97 @@ impl AsRef<str> for InvariantKind {
     }
 }
 
+/// Trait-idiomatic reverse projection on the [`InvariantKind`]
+/// closed-set caixa-arch invariant-severity axis — routes byte-for-byte
+/// through the paired substrate-primitive [`InvariantKind::from_wire`]
+/// `Option<Self>` accessor so every future consumer that binds a
+/// canonical arch-severity tag through the standard-library
+/// `.try_into()` / [`TryFrom`] axis (a future
+/// `feira arch --severity=<safety|compliance|hint>` CLI arg-parse that
+/// composes into `let axis: InvariantKind = s.try_into()?`, a future M4
+/// `mesh.pleme.io/v1alpha1/ArchAudit` CR admission-webhook rejection-body
+/// parser that folds a prior audit's `spec.severity: String` through
+/// `InvariantKind::try_from(&s)?`, a generic `<T: TryFrom<&str>>`-bound
+/// audit-report re-loader over any of the substrate's closed-set typed
+/// enums) reaches the same three-arm accept-set the sibling
+/// [`InvariantKind::from_wire`] resolver parses through and the sibling
+/// [`InvariantKind::as_str`] emits, rather than an open-coded per-arm
+/// `match s { "safety" => …, "compliance" => …, "hint" => …, _ => … }`
+/// cascade whose arm-set has no compile-time link back to the substrate
+/// primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`InvariantKind::as_str`])
+/// with the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so a
+/// caller who can project *out to* a `&str` can also project *in from*
+/// one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint the sibling method-named [`InvariantKind::from_wire`] would
+/// trigger under a `FromStr` impl (the same design tradeoff the peer
+/// [`caixa_core::CaixaKind`] (3c83606), [`caixa_core::CaixaDialeto`]
+/// (bf33136), [`caixa_core::aplicacao::PlacementStrategy`] (6fd00cd),
+/// [`caixa_core::supervisor::RestartStrategy`] (5b828ed),
+/// [`caixa_core::supervisor::RestartPolicy`] (6fdd0d9),
+/// [`caixa_core::aplicacao::WitShape`] (5472902),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (bf78400), and
+/// [`caixa_core::render::PathShapeViolation`] (e67e48a) blocks note) —
+/// this impl closes the trait-idiomatic reverse axis without disturbing
+/// the method-named `from_wire` shape every peer closed-set typed enum
+/// already carries.
+///
+/// `type Error = ()` matches the sibling [`InvariantKind::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing: the
+/// caller picks the diagnostic form appropriate for its use site (a
+/// future `feira arch --severity` CLI arg-parse composes its own per-verb
+/// "unknown arch-severity axis: <arg> — accepted: {…}" message
+/// enumerating [`InvariantKind::ALL`], a future M4 admission-webhook
+/// rejection body wraps the `Err(())` outcome with the accepted-set
+/// enumeration for operator diagnostics, a `Result::map_err` at the
+/// call site lifts the axis-error to a per-verb error type). Same
+/// shape the peer sibling reverse-projection axes carry.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same three-arm
+/// accept-set the [`InvariantKind::from_wire`] resolver dispatches
+/// through, so any future arm addition (a `Warning` tier between
+/// [`Self::Compliance`] and [`Self::Hint`] the `iac-forge` policy-engine
+/// grows, a `Fatal` tier above [`Self::Safety`] — both trajectory items
+/// the sibling [`InvariantKind::ALL`] doc block already names) grows the
+/// trait-idiomatic axis by construction: one caixa-arch edit on
+/// [`InvariantKind::from_wire`] extends both the method-named reverse
+/// projection every existing consumer keys off and the trait-idiomatic
+/// reverse projection this impl exposes, without a coordinated rewrite
+/// across every future `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// reverse-projection family ([`caixa_core::CaixaKind`] via 3c83606,
+/// [`caixa_core::CaixaDialeto`] via bf33136,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via 6fd00cd,
+/// [`caixa_core::supervisor::RestartStrategy`] via 5b828ed,
+/// [`caixa_core::supervisor::RestartPolicy`] via 6fdd0d9,
+/// [`caixa_core::aplicacao::WitShape`] via 5472902,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via bf78400, and
+/// [`caixa_core::render::PathShapeViolation`] via e67e48a) onto the first
+/// outside-`caixa-core` closed-set fieldless typed enum on the caixa
+/// surface — the caixa-arch invariant-severity three-arm accept-set every
+/// `feira arch` / `feira tofu` per-violation render site and every future
+/// M4 admission-webhook / policy-engine audit-loader dispatches through.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`InvariantKind::from_wire`] across the
+/// three-arm accept-set) and
+/// [`tests::invariant_kind_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for InvariantKind {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -786,6 +877,175 @@ mod tests {
                  InvariantKind::as_str outputs; a widening would \
                  silently split the parser's accept-set from the \
                  emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for InvariantKind` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::InvariantKind::from_wire`] `Option<Self>` accessor
+        // resolve to the same three-arm accept-set across every arm the
+        // exhaustive [`super::InvariantKind::ALL`] slice enumerates. Any
+        // future silent detour that routes the trait impl through a
+        // divergent projection (a per-arm inline `match s { "safety" =>
+        // Ok(Self::Safety), … }` re-inlining that opens a compile-time
+        // link to the un-lifted arm-literal, a silent case-fold that
+        // admits `"Safety"` / `"Compliance"` / `"Hint"` and would collide
+        // the canonical-lowercase accept-set the emitter dispatches on)
+        // trips at caixa-arch test time under `assert_eq!` rather than at
+        // a downstream `impl TryFrom<&str>`-bound consumer's silent split.
+        // Sweeps every one of the three arms
+        // [`super::InvariantKind::ALL`] carries so no arm's projection is
+        // covered only by the sibling method-named `from_wire` path.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136),
+        // `placement_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (6fd00cd),
+        // `rate_limit_unit_try_from_str_routes_through_from_suffix_accessor`
+        // (bf78400), and
+        // `path_shape_violation_try_from_str_routes_through_from_wire_accessor`
+        // (e67e48a) — extends the trait-idiomatic reverse-projection axis
+        // onto the first outside-caixa-core closed-set fieldless typed
+        // enum on the caixa surface (the caixa-arch invariant-severity
+        // axis).
+        for &variant in InvariantKind::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <InvariantKind as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on InvariantKind must round-trip \
+                 InvariantKind::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(InvariantKind::{variant:?}) — divergence from \
+                 InvariantKind::from_wire signals a silent detour off the \
+                 substrate-primitive accessor",
+            );
+            assert_eq!(
+                <InvariantKind as TryFrom<&str>>::try_from(wire).ok(),
+                InvariantKind::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must byte-equal \
+                 InvariantKind::from_wire on the same input",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for InvariantKind`
+        // — sweeps a candidate set of byte-strings outside the three-arm
+        // canonical-lowercase wire accept-set the sibling
+        // [`super::InvariantKind::as_str`] emits and asserts every one
+        // lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("safety") => Ok(…)` case-fold
+        // path, a silent acceptance of the pre-lift PascalCase Debug-
+        // derived shapes `"Safety"` / `"Compliance"` / `"Hint"` on the
+        // wire axis, a Levenshtein-forgiving arm-lookup that admits
+        // `"safey"` typos — the exact form a
+        // `format!("{:?}", …).to_lowercase()` round-trip on the paired
+        // [`std::fmt::Debug`] derive would otherwise land on, the drift
+        // footgun the emitter's documentation explicitly names as the
+        // reason the substrate-canonical lowercase `"safety"` /
+        // `"compliance"` / `"hint"` slug set exists) trips at caixa-arch
+        // test time. The candidate set includes the empty string,
+        // whitespace-only padding, uppercase rebrand candidates,
+        // Levenshtein-neighbor typos, sibling closed-set-enum canonical
+        // tags on the peer [`caixa_lint::Severity`] four-arm severity
+        // axis (`"error"` / `"warning"` / `"info"`) — non-shared with
+        // this axis's three-arm arch-severity set (the two axes' shared
+        // `"hint"` arm is a coincidence of lowercase-tag choice, not a
+        // typed cross-axis promise; accepting `"error"` / `"warning"` /
+        // `"info"` on this axis would silently split the parser's
+        // accept-set from the emitter's arm-set and misclassify a
+        // lint-severity-shaped byte-string as a caixa-arch invariant
+        // severity), and trailing/leading-whitespace-padded canonical
+        // tags.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (3c83606),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_try_from_str_rejects_unknown_byte_strings`]
+        // (bf33136),
+        // `rate_limit_unit_try_from_str_rejects_unknown_byte_strings`
+        // (bf78400), and
+        // `path_shape_violation_try_from_str_rejects_unknown_byte_strings`
+        // (e67e48a) rejection pins on the sibling closed-set typed-enum
+        // trait-idiomatic reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "Safety",
+            "SAFETY",
+            "Compliance",
+            "COMPLIANCE",
+            "Hint",
+            "HINT",
+            "safey",
+            "hnt",
+            "warning",
+            "error",
+            "info",
+            "fatal",
+            "biblioteca",
+            "servico",
+            "one-for-one",
+            "empty",
+            "safety ",
+            " safety",
+            "safety\n",
+            "safety\t",
+        ] {
+            assert_eq!(
+                <InvariantKind as TryFrom<&str>>::try_from(bad),
+                Err(()),
+                "TryFrom<&str> for InvariantKind({bad:?}) must return \
+                 Err(()) — the trait impl's accept-set is exactly the \
+                 three InvariantKind::as_str outputs; a widening would \
+                 silently split the trait impl's accept-set from the \
+                 emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin: the trait-idiomatic
+        // [`TryFrom<&str>`] and the method-named
+        // [`super::InvariantKind::from_wire`] projections must return
+        // equivalent decisions on every input — the trait impl's `.ok()`
+        // project-out from `Result<Self, ()>` and the method's
+        // `Option<Self>` return must byte-equal each other on both
+        // accepts and rejects. A future silent bifurcation (the trait
+        // impl gaining a case-fold path the method does not carry, the
+        // method gaining a synonym alias the trait impl does not honor)
+        // trips at caixa-arch test time under a single pin rather than at
+        // a downstream generic-bound consumer that dispatches through one
+        // axis while a peer dispatches through the other. Sweeps both the
+        // three-arm accept-set (via [`super::InvariantKind::ALL`]
+        // threaded through [`super::InvariantKind::as_str`]) and a
+        // canonical rejection sample so both halves of the partition are
+        // covered.
+        for &variant in InvariantKind::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <InvariantKind as TryFrom<&str>>::try_from(wire).ok(),
+                InvariantKind::from_wire(wire),
+                "TryFrom<&str>::ok() and from_wire must agree on \
+                 InvariantKind::{variant:?}.as_str() = {wire:?}",
+            );
+        }
+        for bad in ["", "Safety", "unknown", "warning", "one-for-one"] {
+            assert_eq!(
+                <InvariantKind as TryFrom<&str>>::try_from(bad).ok(),
+                InvariantKind::from_wire(bad),
+                "TryFrom<&str>::ok() and from_wire must agree on the \
+                 rejection outcome for {bad:?}",
             );
         }
     }
