@@ -450,6 +450,75 @@ impl AsRef<str> for CaixaKind {
     }
 }
 
+/// Trait-idiomatic reverse projection on the top-level [`CaixaKind`]
+/// closed-set typed enum — routes byte-for-byte through the paired
+/// substrate-primitive [`CaixaKind::from_wire`] `Option<Self>` accessor
+/// so every future consumer that binds a `PascalCase` wire byte-string
+/// through the standard-library `.try_into()` / [`TryFrom`] axis (a
+/// future `feira --kind <Biblioteca|Servico|…>` CLI arg-parse that
+/// composes into `let kind: CaixaKind = s.try_into()?`, a future
+/// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook that folds a
+/// `spec.kind: String` field through `CaixaKind::try_from(&s)?`, a
+/// generic `<T: TryFrom<&str>>`-bound loader over any of the
+/// substrate's closed-set typed enums) reaches the same six-arm
+/// accept-set the sibling [`CaixaKind::from_wire`] parses through and
+/// the sibling [`CaixaKind::wire_name`] emits, rather than an open-
+/// coded per-arm `match s { "Biblioteca" => …, … }` cascade whose
+/// arm-set has no compile-time link back to the substrate primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`CaixaKind::as_str`]) with
+/// the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so
+/// a caller who can project *out to* a `&str` can also project *in
+/// from* one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint that the sibling method-named `from_wire` would trigger under
+/// a `FromStr` impl (the same design tradeoff the peer
+/// [`crate::provedor::ferrite::FerriteRuntime::from_wire`] block
+/// notes) — this impl closes the trait-idiomatic reverse axis without
+/// disturbing the method-named `from_wire` shape every sibling
+/// closed-set typed enum on the substrate already carries.
+///
+/// `type Error = ()` matches the sibling [`CaixaKind::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site
+/// (a future `feira --kind` arg-parse composes its own per-verb
+/// "unknown kind: <arg> — accepted: {…}" message enumerating
+/// [`CaixaKind::ALL`], a future admission-webhook rejection body
+/// wraps the `Err(())` outcome with the accepted-set enumeration for
+/// operator diagnostics, a `Result::map_err` at the call site lifts
+/// the unit-error to a per-verb error type). Same shape the peer
+/// [`FerriteRuntime::from_wire`] doc block motivates on the
+/// `caixa-provedor` closed-set typed enum's reverse projection.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same six-arm accept-
+/// set the [`CaixaKind::from_wire`] resolver dispatches through, so
+/// any future arm addition (a virtual-actor `Actor` arm the
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// M5 Orleans-inspired kind reaches through) grows the trait-
+/// idiomatic axis by construction — one caixa-core edit on
+/// [`CaixaKind::from_wire`] extends both the method-named reverse
+/// projection every existing consumer keys off and the trait-
+/// idiomatic reverse projection this impl exposes, without a
+/// coordinated rewrite across every future `TryFrom<&str>`-bound
+/// consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`CaixaKind::from_wire`] across the
+/// six-arm accept-set) and
+/// [`tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for CaixaKind {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1185,6 +1254,151 @@ mod tests {
             assert_eq!(via_as_ref, via_accessor);
             assert_eq!(via_display, via_accessor);
             assert_eq!(via_as_ref, via_display.as_str());
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for CaixaKind` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`CaixaKind::from_wire`] `Option<Self>` accessor resolve to
+        // the same six-arm accept-set across every arm the exhaustive
+        // [`CaixaKind::ALL`] slice enumerates. Any future silent detour
+        // that routes the trait impl through a divergent projection
+        // (a per-arm inline `match s { "Biblioteca" => Ok(Self::Biblioteca),
+        // … }` re-inlining that opens a compile-time link to the
+        // un-lifted arm-literal, a hypothetical `#[serde(rename_all =
+        // "…")]` attribute drift that silently splits the wire byte-
+        // string from every consumer that reaches for this typed
+        // dispatch) trips at caixa-core test time under `assert_eq!`
+        // rather than at a downstream `impl TryFrom<&str>`-bound
+        // consumer's silent split. Sweeps every one of the six arms
+        // [`CaixaKind::ALL`] carries so no arm's projection is covered
+        // only by the sibling method-named `from_wire` path.
+        for &variant in CaixaKind::ALL {
+            let wire = variant.wire_name();
+            assert_eq!(
+                <CaixaKind as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on CaixaKind must round-trip \
+                 CaixaKind::{variant:?}.wire_name() = {wire:?} back to \
+                 Ok(CaixaKind::{variant:?}) — divergence from \
+                 CaixaKind::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <CaixaKind as TryFrom<&str>>::try_from(wire).ok(),
+                CaixaKind::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must \
+                 byte-equal CaixaKind::from_wire on the same input"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for CaixaKind`
+        // — sweeps a candidate set of byte-strings outside the six-arm
+        // PascalCase wire accept-set the sibling [`CaixaKind::wire_name`]
+        // emits and asserts every one lands on `Err(())`, so a future
+        // accidental widening of the trait impl's accept-set (a stray
+        // additional `_ if s.eq_ignore_ascii_case("Biblioteca") =>
+        // Ok(…)` case-fold path, a silent inclusion of the lowercase
+        // Portuguese [`CaixaKind::as_str`] surface onto the wire axis
+        // that would collide the two-axis split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin makes load-bearing) trips at caixa-core test time. The
+        // candidate set includes the empty string, the six-arm
+        // lowercase Portuguese diagnostic byte-strings the peer
+        // [`CaixaKind::as_str`] axis emits (a caller who confuses the
+        // wire axis with the diagnostic axis trips here rather than at
+        // a downstream consumer's silent reject), a lowercase / mixed-
+        // case fold of each PascalCase arm (a caller who assumes
+        // case-fold acceptance trips here), and a small residual set
+        // of plausible-but-wrong strings.
+        let rejected: &[&str] = &[
+            "",
+            "biblioteca",
+            "binario",
+            "servico",
+            "supervisor",
+            "aplicacao",
+            "acao",
+            "BIBLIOTECA",
+            "BINARIO",
+            "SERVICO",
+            "SUPERVISOR",
+            "APLICACAO",
+            "ACAO",
+            "biBlioteca",
+            "Bibliotecas",
+            "Servicos",
+            "library",
+            "binary",
+            "service",
+            "application",
+            " Biblioteca",
+            "Biblioteca ",
+            "Biblioteca\n",
+            "\"Biblioteca\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <CaixaKind as TryFrom<&str>>::try_from(input),
+                Err(()),
+                "TryFrom<&str> impl on CaixaKind must reject the \
+                 non-wire byte-string {input:?} — silent acceptance \
+                 signals an accept-set widening off the paired \
+                 CaixaKind::from_wire resolver"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin: the paired `TryFrom<&str>` and
+        // `from_wire` reverse projections must resolve identically on
+        // *every* input, not just the ones [`CaixaKind::ALL`]
+        // enumerates. Sweeps a mixed candidate set spanning accepted
+        // (six-arm PascalCase wire byte-strings) and rejected
+        // (lowercase diagnostic axis, empty, whitespace-padded,
+        // quoted, English rebrand candidates) inputs and asserts the
+        // trait's `Result::ok()` projection byte-equals the method-
+        // named resolver's `Option<Self>` return-shape on each,
+        // locking the two paths together by construction so any future
+        // detour (a stray `try_from` special-case that widens or
+        // narrows the accept-set outside the paired `from_wire`
+        // resolver) trips at caixa-core test time. Pairs with the
+        // sibling
+        // [`caixa_kind_wire_round_trips_through_from_wire`] pin (which
+        // asserts the forward+reverse round-trip on the method-named
+        // axis) — this pin extends the round-trip discipline onto the
+        // trait-idiomatic reverse axis.
+        let candidates: &[&str] = &[
+            "Biblioteca",
+            "Binario",
+            "Servico",
+            "Supervisor",
+            "Aplicacao",
+            "Acao",
+            "",
+            "biblioteca",
+            "servico",
+            "unknown",
+            "biBlioteca",
+            "\"Biblioteca\"",
+            " Servico ",
+        ];
+        for &input in candidates {
+            let via_trait: Option<CaixaKind> = <CaixaKind as TryFrom<&str>>::try_from(input).ok();
+            let via_method: Option<CaixaKind> = CaixaKind::from_wire(input);
+            assert_eq!(
+                via_trait, via_method,
+                "TryFrom<&str> and from_wire must resolve identically \
+                 on input {input:?} — divergence signals the two reverse-\
+                 projection paths have drifted onto different accept-sets"
+            );
         }
     }
 
