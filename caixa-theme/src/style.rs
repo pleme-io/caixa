@@ -135,6 +135,91 @@ impl Semantic {
             Self::Unchanged => "unchanged",
         }
     }
+
+    /// Reverse projection on the [`Semantic`] closed 16-arm enum's
+    /// canonical kebab-tag axis — parses a `"keyword"` / `"symbol"` /
+    /// `"keyword-arg"` / `"string"` / `"number"` / `"literal"` /
+    /// `"comment"` / `"accent"` / `"muted"` / `"error"` / `"warning"` /
+    /// `"info"` / `"hint"` / `"added"` / `"removed"` / `"unchanged"` wire
+    /// byte-string back to the typed enum, or returns `None` when `s`
+    /// lies outside the 16-arm accept-set [`Self::as_str`] emits. The
+    /// single `&str → Self` projection every future re-entry point on
+    /// the caixa-theme semantic-style axis dispatches through (a future
+    /// `feira lint --list-styles` operator-facing enumeration verb
+    /// hydrating a per-arm row from a stored kebab identifier back to
+    /// the typed enum before rendering, a future `caixa-lsp`-side
+    /// per-`SemanticTokenType` re-parse binding a prior
+    /// [`Self::as_str`] output back to the typed enum for
+    /// per-Semantic-highlight dispatch, a future `caixa.nvim` per-
+    /// Semantic highlight-group resolver re-loading a stored kebab
+    /// identifier back to the typed enum, a future `blackmatter-shell`
+    /// per-arm classname reverse-lookup binding a
+    /// `data-semantic="<kebab>"` DOM attribute back to the typed enum
+    /// for per-arm style dispatch, a `tracing::field::Value::Str`-arm
+    /// structured-log re-loader binding a prior emission's
+    /// [`Self::as_str`] output back to the typed enum for cross-run
+    /// per-Semantic-paint-histogram diff) would have had to re-inline a
+    /// 16-arm `match s` cascade that expressed no compile-time link back
+    /// to the substrate primitive.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`caixa_core::CaixaKind::from_wire`] (2aa6d23),
+    /// [`caixa_core::CaixaDialeto::from_wire`] (d0e65ea),
+    /// [`caixa_core::supervisor::RestartStrategy::from_wire`] (4eec29c),
+    /// [`caixa_core::supervisor::RestartPolicy::from_wire`] (dd32ccf),
+    /// [`caixa_core::aplicacao::PlacementStrategy::from_wire`] (18c7342),
+    /// [`caixa_core::dep::DepList::from_wire`] (45ee563),
+    /// [`caixa_core::render::PathShapeViolation::from_wire`] (aebd9c6),
+    /// `caixa_arch::invariants::InvariantKind::from_wire` (b9e4e61),
+    /// `caixa_arch::report::ArchVerdict::from_wire` (6afe564),
+    /// `caixa_lint::diagnostic::Severity::from_wire` (5afff0e), and
+    /// `caixa_lint::diagnostic::FixSafety::from_wire` (bd505a1) typed
+    /// enums carry on the peer wire-side `str → Self` axes — extends
+    /// the substrate-wide `(as_str, from_wire)` round-trip family onto
+    /// the caixa-theme closed-set fieldless typed-enum axis (the first
+    /// closed-set fieldless typed enum on `caixa-theme` to converge on
+    /// the reverse-projection discipline), matching the same two-way
+    /// `str ↔ Self` round-trip every sibling closed-set enum already
+    /// carries. Method-named `from_wire` (not `from_str`) to match the
+    /// peer shapes verbatim and side-step a
+    /// `clippy::should_implement_trait` lint that a plain `from_str`
+    /// name would otherwise trigger without paired
+    /// [`std::str::FromStr`] impl scaffolding this axis does not carry
+    /// today. Returns `Option<Self>` (rather than `Result<Self, _>`) to
+    /// match the peer shapes: the caller picks the diagnostic form
+    /// appropriate for its use site (a `feira lint --list-styles` CLI
+    /// arg-parse renders its own per-verb error message; a future
+    /// admission-webhook rejection body wraps the `None` outcome with
+    /// the accepted-set enumeration `Semantic::ALL.iter().map(…)` for
+    /// operator diagnostics).
+    ///
+    /// Pinned load-bearing at the substrate-primitive level by
+    /// [`tests::semantic_from_wire_accepts_every_as_str_output`]
+    /// (round-trip witness against the peer [`Self::as_str`] axis) and
+    /// [`tests::semantic_from_wire_rejects_unknown_byte_strings`]
+    /// (rejection witness against silent accept-set widening).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "keyword" => Some(Self::Keyword),
+            "symbol" => Some(Self::Symbol),
+            "keyword-arg" => Some(Self::KeywordArg),
+            "string" => Some(Self::String),
+            "number" => Some(Self::Number),
+            "literal" => Some(Self::Literal),
+            "comment" => Some(Self::Comment),
+            "accent" => Some(Self::Accent),
+            "muted" => Some(Self::Muted),
+            "error" => Some(Self::Error),
+            "warning" => Some(Self::Warning),
+            "info" => Some(Self::Info),
+            "hint" => Some(Self::Hint),
+            "added" => Some(Self::Added),
+            "removed" => Some(Self::Removed),
+            "unchanged" => Some(Self::Unchanged),
+            _ => None,
+        }
+    }
 }
 
 /// [`std::fmt::Display`] routed through [`Semantic::as_str`], so the
@@ -456,6 +541,193 @@ mod tests {
         const { assert!(KEYWORD.as_bytes()[0] == b'k') };
         const { assert!(ERROR.as_bytes()[0] == b'e') };
         const { assert!(UNCHANGED.as_bytes()[0] == b'u') };
+    }
+
+    #[test]
+    fn semantic_from_wire_accepts_every_as_str_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`Semantic::from_wire`] reverse projection: every arm in
+        // [`Semantic::ALL`] must parse back through `from_wire` when fed
+        // its own [`Semantic::as_str`] output, landing on
+        // `Some(same_variant)`. A regression that hand-rolled either
+        // side's per-arm match without threading through the shared
+        // 16-string closed set would silently disagree on any future
+        // arm rename (a `Symbol` → `Identifier` rebrand tracking a
+        // hypothetical LSP-side `SemanticTokenType` reshuffle, an
+        // `Accent` → `Highlight` rebrand tracking a `blackmatter-shell`
+        // classname rework) or new arm the theme grows (a `Namespace`
+        // tier between `Symbol` and `KeywordArg` for the M4 tatara-lisp
+        // module system's qualified-name semantic-token dispatch, a
+        // `Deleted` tier for a hard-delete-mark distinct from `Removed`
+        // the future 3-way diff surface grows) and this pin flags it at
+        // caixa-theme build time rather than at a downstream
+        // `feira lint --list-styles` operator-facing enumeration verb's
+        // silent tag misclassification.
+        //
+        // Peer of the sibling
+        // `caixa_lint::diagnostic::tests::severity_from_wire_accepts_every_as_str_output`
+        // (5afff0e) /
+        // `caixa_lint::diagnostic::tests::fix_safety_from_wire_accepts_every_as_str_output`
+        // (bd505a1) /
+        // `caixa_arch::report::tests::arch_verdict_from_wire_accepts_every_as_str_output`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_accepts_every_as_str_output`
+        // (b9e4e61) round-trip pins on the peer caixa-lint / caixa-arch
+        // closed-set-enum reverse-projection axes, and of the sibling
+        // `caixa_core::kind::tests::caixa_kind_wire_round_trips_through_from_wire`
+        // (2aa6d23) /
+        // `caixa_core::dialeto::tests::caixa_dialeto_from_wire_accepts_every_as_str_output`
+        // (d0e65ea) /
+        // `caixa_core::aplicacao::tests::placement_strategy_from_wire_accepts_every_lifted_constant`
+        // (18c7342) /
+        // `caixa_core::dep::tests::dep_list_round_trips_through_as_str_and_from_wire`
+        // (45ee563) /
+        // `caixa_core::render::tests::path_shape_violation_from_wire_accepts_every_as_str_output`
+        // (aebd9c6) round-trip pins on the sibling caixa-core closed-
+        // set typed-enum reverse-projection axes.
+        for &variant in Semantic::ALL {
+            let wire = variant.as_str();
+            let parsed = Semantic::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "Semantic::from_wire({wire:?}) must accept every \
+                     Semantic::as_str output — got None for the wire \
+                     byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "Semantic::from_wire(Semantic::{variant:?}.as_str()) \
+                 must return Semantic::{variant:?} — the (as_str, \
+                 from_wire) pair must form a total round-trip on the \
+                 closed 16-arm Semantic arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the [`Semantic::from_wire`] parser's accept-
+        // set: any string outside the 16-arm [`Semantic::as_str`] output
+        // set must return `None`. A future accidental widening of the
+        // accept-set (a case-insensitive match that accepts `"KEYWORD"`
+        // / `"Keyword"`, a silent acceptance of the pre-lift PascalCase
+        // Debug-derived shapes `"Keyword"` / `"KeywordArg"` /
+        // `"Unchanged"` on the wire axis, a snake_case drift accepting
+        // `"keyword_arg"` beside the canonical kebab-case
+        // `"keyword-arg"`, a Levenshtein-forgiving arm-lookup that
+        // admits `"kewyord"` typos, a silent absorption of a hypothetical
+        // future `Namespace` / `Deleted` arm before it lands on the enum
+        // and its paired [`Semantic::as_str`] emitter arm) would
+        // silently drift the parser's accept-set from the emitter's — a
+        // downstream style-report re-loader that bound a prior report's
+        // [`Self::as_str`] output back to the typed enum through this
+        // parser would then bind a malformed byte-string to a plausibly-
+        // wrong typed arm the caller does not route through any
+        // fallback, silently misclassifying the reloaded row.
+        //
+        // Peer of the sibling
+        // `caixa_lint::diagnostic::tests::severity_from_wire_rejects_unknown_byte_strings`
+        // (5afff0e) /
+        // `caixa_lint::diagnostic::tests::fix_safety_from_wire_rejects_unknown_byte_strings`
+        // (bd505a1) /
+        // `caixa_arch::report::tests::arch_verdict_from_wire_rejects_unknown_byte_strings`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_rejects_unknown_byte_strings`
+        // (b9e4e61) rejection pins on the peer caixa-lint / caixa-arch
+        // axes, and of the sibling
+        // `caixa_kind_from_wire_rejects_unknown_byte_strings` (2aa6d23),
+        // `caixa_dialeto_from_wire_rejects_unknown_byte_strings`
+        // (d0e65ea),
+        // `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // (18c7342),
+        // `dep_list_from_wire_returns_none_on_unknown_wire_scalar`
+        // (45ee563), and
+        // `path_shape_violation_from_wire_rejects_unknown_byte_strings`
+        // (aebd9c6) rejection pins on the sibling caixa-core axes.
+        //
+        // The rejection set also covers overlapping-byte-string tags
+        // from peer axes: caixa-lint `Severity::as_str` outputs
+        // `"error"`/`"warning"`/`"info"`/`"hint"` and caixa-arch
+        // `InvariantKind::as_str` outputs `"safety"`/`"compliance"`
+        // share zero canonical byte-strings with the widened 16-arm
+        // Semantic set here — a widened parser that admitted the peer's
+        // arm on the sibling axis would still not admit an arm foreign
+        // to the caixa-theme semantic-style discriminator's own accept-
+        // set. Yet four peer-axis strings DO overlap with the
+        // caixa-theme set here (`Severity`'s
+        // `"error"`/`"warning"`/`"info"`/`"hint"` map identically onto
+        // the caixa-theme diagnostic-severity sub-region
+        // `Semantic::Error`/`Warning`/`Info`/`Hint`) — a widened parser
+        // that admitted them under a different arm would collapse the
+        // two axes and silently mislabel; the pin excludes those four
+        // from the rejection set precisely because they must accept.
+        for bad in [
+            "",
+            " ",
+            "Keyword",
+            "KEYWORD",
+            "Symbol",
+            "SYMBOL",
+            "KeywordArg",
+            "keyword_arg",
+            "keywordarg",
+            "String",
+            "STRING",
+            "Number",
+            "Literal",
+            "Comment",
+            "Accent",
+            "Muted",
+            "Error",
+            "ERROR",
+            "Warning",
+            "WARNING",
+            "Info",
+            "INFO",
+            "Hint",
+            "HINT",
+            "Added",
+            "ADDED",
+            "Removed",
+            "REMOVED",
+            "Unchanged",
+            "UNCHANGED",
+            "kewyord",
+            "sym",
+            "kw",
+            "str",
+            "num",
+            "lit",
+            "cmt",
+            "safe",
+            "unsafe",
+            "safety",
+            "compliance",
+            "proven",
+            "rejected",
+            "namespace",
+            "deleted",
+            "highlight",
+            "identifier",
+            "keyword ",
+            " keyword",
+            "keyword\n",
+            "keyword\t",
+            "keyword-arg ",
+            " keyword-arg",
+            "added ",
+            " added",
+            "unchanged ",
+            " unchanged",
+        ] {
+            assert!(
+                Semantic::from_wire(bad).is_none(),
+                "Semantic::from_wire({bad:?}) must return None — the \
+                 parser's accept-set is exactly the 16 Semantic::as_str \
+                 outputs; a widening would silently split the parser's \
+                 accept-set from the emitter's arm-set",
+            );
+        }
     }
 
     #[test]
