@@ -451,6 +451,77 @@ impl AsRef<str> for CaixaDialeto {
     }
 }
 
+/// Trait-idiomatic reverse projection on the [`CaixaDialeto`] closed-set
+/// dialect-classification typed enum — routes byte-for-byte through the
+/// paired substrate-primitive [`CaixaDialeto::from_wire`] `Option<Self>`
+/// accessor so every future consumer that binds a `PascalCase` variant-
+/// name byte-string through the standard-library `.try_into()` /
+/// [`TryFrom`] axis (a future `feira dialeto --filter
+/// <Pacote|Molde|MoldePosicional|Desconhecido>` CLI arg-parse that
+/// composes into `let d: CaixaDialeto = s.try_into()?`, a future audit-
+/// report re-loader binding a prior [`CaixaDialeto::as_str`] output
+/// through `CaixaDialeto::try_from(&s)?`, a generic
+/// `<T: TryFrom<&str>>`-bound loader over any of the substrate's closed-
+/// set typed enums) reaches the same four-arm accept-set the sibling
+/// [`CaixaDialeto::from_wire`] parses through and the sibling
+/// [`CaixaDialeto::as_str`] emits, rather than an open-coded per-arm
+/// `match s { "Pacote" => …, … }` cascade whose arm-set has no
+/// compile-time link back to the substrate primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`CaixaDialeto::as_str`]) with
+/// the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so a
+/// caller who can project *out to* a `&str` can also project *in from*
+/// one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint that the sibling method-named `from_wire` would trigger under a
+/// `FromStr` impl (the same design tradeoff the peer
+/// [`crate::CaixaKind`] `TryFrom<&str>` impl (3c83606) and the peer
+/// [`crate::provedor::ferrite::FerriteRuntime::from_wire`] block note)
+/// — this impl closes the trait-idiomatic reverse axis without disturbing
+/// the method-named `from_wire` shape every sibling closed-set typed
+/// enum on the substrate already carries.
+///
+/// `type Error = ()` matches the sibling [`CaixaDialeto::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site
+/// (a future `feira dialeto --filter` arg-parse composes its own per-verb
+/// "unknown dialect: <arg> — accepted: {…}" message enumerating
+/// [`CaixaDialeto::ALL`], a future admission-webhook rejection body
+/// wraps the `Err(())` outcome with the accepted-set enumeration for
+/// operator diagnostics, a `Result::map_err` at the call site lifts the
+/// unit-error to a per-verb error type). Same shape the peer
+/// [`crate::CaixaKind`] `TryFrom<&str>` impl (3c83606) and the peer
+/// [`FerriteRuntime::from_wire`] doc block motivate on the sibling
+/// closed-set typed enums' reverse projections.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same four-arm accept-
+/// set the [`CaixaDialeto::from_wire`] resolver dispatches through, so
+/// any future arm addition (the module doc's "third dialect" hazard
+/// actualises as a fifth arm belonging to the `defmolde` family or a
+/// wholly new declaration) grows the trait-idiomatic axis by
+/// construction — one caixa-core edit on [`CaixaDialeto::from_wire`]
+/// extends both the method-named reverse projection every existing
+/// consumer keys off and the trait-idiomatic reverse projection this
+/// impl exposes, without a coordinated rewrite across every future
+/// `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::from_wire`] across the four-
+/// arm accept-set) and
+/// [`tests::caixa_dialeto_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for CaixaDialeto {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -1671,6 +1742,144 @@ mod tests {
                  DialetoError::leitura({reason:?}) — a drift here means \
                  the wire-up de-lifted its tatara-lisp-reader fallthrough \
                  arm off the substrate primitive"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl TryFrom<&str> for CaixaDialeto`: for every arm in
+        // [`CaixaDialeto::ALL`], the `.try_into()` / `TryFrom::try_from`
+        // path must resolve to the same variant the sibling
+        // [`CaixaDialeto::from_wire`] resolver returns on the same
+        // [`CaixaDialeto::as_str`] wire byte-string input. Pins the
+        // three-path convergence discipline the [`CaixaDialeto`] closed-
+        // set typed enum now carries on the `str → Self` reverse-
+        // projection axis: `<CaixaDialeto as TryFrom<&str>>::try_from(s)`
+        // (the newly lifted trait-idiomatic reverse projection),
+        // `CaixaDialeto::from_wire(s)` (the substrate-primitive method-
+        // named `Option<Self>` accessor the trait impl delegates through),
+        // and the round-trip identity `variant.as_str() → variant`
+        // (the four-arm closed accept-set shared between the emitter and
+        // both reverse-projection consumers) must resolve to the same
+        // typed [`CaixaDialeto`] discriminator on every arm.
+        //
+        // A future silent detour that routes the impl through a
+        // divergent projection (a per-arm inline
+        // `match s { "Pacote" => …, … }` re-inlining that opens a
+        // compile-time link to the un-lifted arm-literal, a swap onto
+        // the second-axis [`CaixaDialeto::palavra_canonica`] /
+        // [`CaixaDialeto::consumidor`] / [`CaixaDialeto::descricao`]
+        // accessors that carry distinct byte-shapes per axis, an accept-
+        // set widening that silently accepts one axis's byte-shapes as
+        // parseable on the other axis) trips at caixa-core test time
+        // under `assert_eq!` rather than at a downstream
+        // `TryFrom<&str>`-bound consumer's silent split. Peer of the
+        // sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606) on the top-level [`crate::CaixaKind`] closed-set
+        // discriminator's reverse-projection axis — extends the trait-
+        // idiomatic reverse-projection axis onto the seventh closed-set
+        // fieldless typed enum on the caixa surface (the second one to
+        // carry the paired `TryFrom<&str>` impl).
+        for &variant in CaixaDialeto::ALL {
+            let wire = variant.as_str();
+            let via_try_from: CaixaDialeto = <CaixaDialeto as TryFrom<&str>>::try_from(wire)
+                .unwrap_or_else(|()| {
+                    panic!(
+                        "CaixaDialeto::try_from({wire:?}) must accept every \
+                         CaixaDialeto::as_str output — got Err(()) for the \
+                         wire byte-string of {variant:?}"
+                    )
+                });
+            let via_from_wire: CaixaDialeto = CaixaDialeto::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "CaixaDialeto::from_wire({wire:?}) must accept every \
+                     CaixaDialeto::as_str output — got None for the wire \
+                     byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                via_try_from, variant,
+                "CaixaDialeto::try_from(CaixaDialeto::{variant:?}.as_str()) \
+                 must return CaixaDialeto::{variant:?} — the trait-idiomatic \
+                 reverse projection must land on the same arm the method-named \
+                 from_wire resolver does",
+            );
+            assert_eq!(
+                via_try_from, via_from_wire,
+                "CaixaDialeto::try_from({wire:?}) ({via_try_from:?}) must \
+                 byte-equal CaixaDialeto::from_wire({wire:?}) ({via_from_wire:?}) \
+                 on the same input — divergence signals a silent detour off the \
+                 shared substrate-primitive resolver",
+            );
+            assert_eq!(
+                <CaixaDialeto as TryFrom<&str>>::try_from(wire).ok(),
+                CaixaDialeto::from_wire(wire),
+                "the Result::ok() projection of TryFrom<&str> must byte-equal \
+                 the sibling from_wire Option<Self> output on {wire:?} — the \
+                 two accessors must share the same accept-set and typed \
+                 outcome per arm",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the trait-idiomatic reverse-projection
+        // axis: any string outside the four-arm [`CaixaDialeto::as_str`]
+        // output set must resolve to `Err(())` through the lifted
+        // [`impl TryFrom<&str> for CaixaDialeto`]. A future accidental
+        // widening of the accept-set (a case-insensitive match that
+        // accepts `"pacote"` on the wire axis, a hand-rolled Levenshtein-
+        // forgiving arm-lookup that admits `"Pacotee"` typos, a silent
+        // acceptance of the sibling [`CaixaDialeto::palavra_canonica`]
+        // `"defcaixa"` / `"defmolde"` byte-shapes on this axis, a swap
+        // onto the [`CaixaDialeto::consumidor`] `"pleme-doc-gen"` /
+        // `"caixa-core / feira"` / `"nobody known"` byte-shapes) would
+        // silently drift the trait-idiomatic parser's accept-set from
+        // the sibling [`CaixaDialeto::from_wire`] resolver's — a
+        // downstream `TryFrom<&str>`-bound consumer binding a malformed
+        // byte-string through this impl would then bind a plausibly-
+        // wrong typed arm the caller does not route through any fallback,
+        // silently misclassifying the reloaded row.
+        //
+        // Sweeps the same rejection set the sibling
+        // [`caixa_dialeto_from_wire_rejects_unknown_byte_strings`] pin
+        // walks (the shared `from_wire` resolver both accessors delegate
+        // through) so the trait-idiomatic axis and the method-named axis
+        // stay locked to the same accept-set by construction. Peer of the
+        // sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (3c83606) on the top-level [`crate::CaixaKind`] closed-set
+        // discriminator's trait-idiomatic reverse-projection axis.
+        for bad in [
+            "",
+            " ",
+            "pacote",
+            "PACOTE",
+            "molde",
+            "MoldePositional",
+            "desconhecido",
+            "Unknown",
+            "defcaixa",
+            "defmolde",
+            "?",
+            "caixa-core / feira",
+            "pleme-doc-gen",
+            "nobody known",
+            "Pacote ",
+            " Pacote",
+        ] {
+            assert_eq!(
+                <CaixaDialeto as TryFrom<&str>>::try_from(bad),
+                Err(()),
+                "CaixaDialeto::try_from({bad:?}) must return Err(()) — the \
+                 trait-idiomatic parser's accept-set is exactly the four \
+                 CaixaDialeto::as_str outputs; a widening would silently \
+                 split the trait-idiomatic reverse-projection axis from the \
+                 sibling from_wire resolver's arm-set"
             );
         }
     }
