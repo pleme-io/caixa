@@ -95,6 +95,70 @@ impl FerriteRuntime {
             Self::Arena => "ferrite-arena",
         }
     }
+
+    /// Reverse projection on the [`FerriteRuntime`] closed-set enum's
+    /// canonical-slug axis — parses a `"ferrite-safe"` / `"ferrite-arena"`
+    /// wire byte-string back to the typed enum, or returns `None` when
+    /// `s` lies outside the two-arm accept-set [`Self::variant_slug`]
+    /// emits. The single `&str → Self` projection every future re-entry
+    /// point on the ferrite-runtime axis dispatches through (a future
+    /// `feira publish-provider --runtime=<ferrite-safe|ferrite-arena>`
+    /// CLI arg-parse that binds the wire byte-string into the typed
+    /// enum before dispatching to the per-arm emitter, a future
+    /// admission-webhook rejection body re-parsing a prior emission's
+    /// header-comment slug back to the typed enum for policy-tier
+    /// classification, a `tracing::field::Value::Str`-arm structured-
+    /// log re-loader binding a prior `Display`-formatted output back
+    /// to the typed enum for cross-run runtime-flavor histogram diff)
+    /// would have had to re-inline a two-arm `match s` cascade that
+    /// expressed no compile-time link back to the substrate primitive.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`caixa_core::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`caixa_core::CaixaDialeto::from_wire`] (d0e65ea) /
+    /// [`caixa_core::supervisor::RestartStrategy::from_wire`] (4eec29c) /
+    /// [`caixa_core::supervisor::RestartPolicy::from_wire`] (dd32ccf) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`caixa_core::dep::DepList::from_wire`] (45ee563) /
+    /// [`caixa_core::render::PathShapeViolation::from_wire`] (aebd9c6) /
+    /// `caixa_arch::invariants::InvariantKind::from_wire` (b9e4e61) /
+    /// `caixa_arch::report::ArchVerdict::from_wire` (6afe564) /
+    /// `caixa_lint::diagnostic::Severity::from_wire` (5afff0e) /
+    /// `caixa_lint::diagnostic::FixSafety::from_wire` (bd505a1) /
+    /// `caixa_theme::style::Semantic::from_wire` (e7bca7b) typed enums
+    /// carry on the peer wire-side `str → Self` axes — extends the
+    /// substrate-wide `(as_str, from_wire)` round-trip family (here
+    /// `(variant_slug, from_wire)`) onto the first `caixa-provedor`
+    /// closed-set fieldless typed enum to converge on the reverse-
+    /// projection discipline, matching the same two-way `str ↔ Self`
+    /// round-trip every sibling closed-set enum already carries.
+    /// Method-named `from_wire` (not `from_str`) to match the peer
+    /// shapes verbatim and side-step a `clippy::should_implement_trait`
+    /// lint that a plain `from_str` name would otherwise trigger
+    /// without paired [`std::str::FromStr`] impl scaffolding this axis
+    /// does not carry today. Returns `Option<Self>` (rather than
+    /// `Result<Self, _>`) to match the peer shapes: the caller picks
+    /// the diagnostic form appropriate for its use site (a future
+    /// `feira publish-provider --runtime` CLI arg-parse renders its
+    /// own per-verb error message; a future admission-webhook
+    /// rejection body wraps the `None` outcome with the accepted-set
+    /// enumeration `FerriteRuntime::ALL.iter().map(…)` for operator
+    /// diagnostics).
+    ///
+    /// Pinned load-bearing at the substrate-primitive level by
+    /// [`tests::ferrite_runtime_from_wire_accepts_every_variant_slug_output`]
+    /// (round-trip witness against the peer [`Self::variant_slug`]
+    /// axis) and
+    /// [`tests::ferrite_runtime_from_wire_rejects_unknown_byte_strings`]
+    /// (rejection witness against silent accept-set widening).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "ferrite-safe" => Some(Self::Safe),
+            "ferrite-arena" => Some(Self::Arena),
+            _ => None,
+        }
+    }
 }
 
 /// Route the derived-style [`std::fmt::Display`] impl on
@@ -376,5 +440,194 @@ mod tests {
             <FerriteRuntime as AsRef<str>>::as_ref(&FerriteRuntime::Arena),
             "ferrite-arena",
         );
+    }
+
+    #[test]
+    fn ferrite_runtime_from_wire_accepts_every_variant_slug_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`FerriteRuntime::from_wire`] reverse projection: every arm
+        // in [`FerriteRuntime::ALL`] must parse back through `from_wire`
+        // when fed its own [`FerriteRuntime::variant_slug`] output,
+        // landing on `Some(same_variant)`. A regression that hand-rolled
+        // either side's per-arm match without threading through the
+        // shared two-string closed set would silently disagree on any
+        // future arm rename (or a new arm the ferrite roadmap grows — a
+        // `Region` tier between [`FerriteRuntime::Safe`] and
+        // [`FerriteRuntime::Arena`] for the intermediate
+        // `ferrite/rt/region` checked-arena flavor) and this pin flags
+        // it at caixa-provedor build time rather than at a downstream
+        // `feira publish-provider --runtime` consumer's silent tag
+        // misclassification.
+        //
+        // Peer of the sibling
+        // `caixa_theme::style::tests::semantic_from_wire_accepts_every_as_str_output`
+        // (e7bca7b) /
+        // `caixa_lint::diagnostic::tests::fix_safety_from_wire_accepts_every_as_str_output`
+        // (bd505a1) /
+        // `caixa_lint::diagnostic::tests::severity_from_wire_accepts_every_as_str_output`
+        // (5afff0e) /
+        // `caixa_arch::report::tests::arch_verdict_from_wire_accepts_every_as_str_output`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_accepts_every_as_str_output`
+        // (b9e4e61) round-trip pins on the peer caixa-theme / caixa-lint
+        // / caixa-arch closed-set-enum reverse-projection axes, and of
+        // the sibling
+        // `caixa_core::kind::tests::caixa_kind_wire_round_trips_through_from_wire`
+        // (2aa6d23) /
+        // `caixa_core::dialeto::tests::caixa_dialeto_from_wire_accepts_every_as_str_output`
+        // (d0e65ea) /
+        // `caixa_core::aplicacao::tests::placement_strategy_from_wire_accepts_every_lifted_constant`
+        // (18c7342) /
+        // `caixa_core::dep::tests::dep_list_round_trips_through_as_str_and_from_wire`
+        // (45ee563) /
+        // `caixa_core::render::tests::path_shape_violation_from_wire_accepts_every_as_str_output`
+        // (aebd9c6) round-trip pins on the sibling caixa-core closed-
+        // set typed-enum reverse-projection axes.
+        for &variant in FerriteRuntime::ALL {
+            let wire = variant.variant_slug();
+            let parsed = FerriteRuntime::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "FerriteRuntime::from_wire({wire:?}) must accept \
+                     every FerriteRuntime::variant_slug output — got \
+                     None for the wire byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "FerriteRuntime::from_wire(FerriteRuntime::{variant:?}\
+                 .variant_slug()) must return FerriteRuntime::{variant:?} \
+                 — the (variant_slug, from_wire) pair must form a total \
+                 round-trip on the closed two-arm FerriteRuntime arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the [`FerriteRuntime::from_wire`] parser's
+        // accept-set: any string outside the two-arm
+        // [`FerriteRuntime::variant_slug`] output set must return
+        // `None`. A future accidental widening of the accept-set (a
+        // case-insensitive match that accepts `"FERRITE-SAFE"` /
+        // `"Ferrite-Safe"`, a silent acceptance of the pre-lift
+        // PascalCase Debug-derived shapes `"Safe"` / `"Arena"` on the
+        // wire axis, a Levenshtein-forgiving arm-lookup that admits
+        // `"ferrite-saf"` / `"arena"` typos, a silent absorption of the
+        // sibling short-form `"safe"` / `"arena"` that the
+        // caixa-lint `FixSafety::as_str` axis emits, a silent
+        // absorption of the peer per-arm Go-import projection
+        // [`FerriteRuntime::rt_import`] emits) would silently drift the
+        // parser's accept-set from the emitter's — a downstream
+        // provider-emit re-loader that bound a prior emission's
+        // [`Self::variant_slug`] output back to the typed enum through
+        // this parser would then bind a malformed byte-string to a
+        // plausibly-wrong typed arm the caller does not route through
+        // any fallback, silently misclassifying the reloaded row.
+        //
+        // Peer of the sibling
+        // `caixa_theme::style::tests::semantic_from_wire_rejects_unknown_byte_strings`
+        // (e7bca7b) /
+        // `caixa_lint::diagnostic::tests::fix_safety_from_wire_rejects_unknown_byte_strings`
+        // (bd505a1) /
+        // `caixa_lint::diagnostic::tests::severity_from_wire_rejects_unknown_byte_strings`
+        // (5afff0e) /
+        // `caixa_arch::report::tests::arch_verdict_from_wire_rejects_unknown_byte_strings`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_rejects_unknown_byte_strings`
+        // (b9e4e61) rejection pins on the peer caixa-theme / caixa-lint
+        // / caixa-arch axes, and of the sibling
+        // `caixa_kind_from_wire_rejects_unknown_byte_strings` (2aa6d23),
+        // `caixa_dialeto_from_wire_rejects_unknown_byte_strings`
+        // (d0e65ea),
+        // `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // (18c7342),
+        // `dep_list_from_wire_returns_none_on_unknown_wire_scalar`
+        // (45ee563), and
+        // `path_shape_violation_from_wire_rejects_unknown_byte_strings`
+        // (aebd9c6) rejection pins on the sibling caixa-core axes.
+        for bad in [
+            "",
+            " ",
+            "Safe",
+            "SAFE",
+            "safe",
+            "Arena",
+            "ARENA",
+            "arena",
+            "Ferrite-Safe",
+            "FERRITE-SAFE",
+            "Ferrite-Arena",
+            "FERRITE-ARENA",
+            "ferrite_safe",
+            "ferrite_arena",
+            "ferritesafe",
+            "ferritearena",
+            "ferrite-saf",
+            "ferrite-aren",
+            "region",
+            "ferrite-region",
+            "unsafe",
+            "gc",
+            "rt \"github.com/pleme-io/ferrite/rt\"",
+            "rt \"github.com/pleme-io/ferrite/rt/arena\"",
+            "ferrite-safe ",
+            " ferrite-safe",
+            "ferrite-safe\n",
+            "ferrite-safe\t",
+            "ferrite-arena ",
+            " ferrite-arena",
+        ] {
+            assert!(
+                FerriteRuntime::from_wire(bad).is_none(),
+                "FerriteRuntime::from_wire({bad:?}) must return None — \
+                 the parser's accept-set is exactly the two \
+                 FerriteRuntime::variant_slug outputs; a widening would \
+                 silently split the parser's accept-set from the \
+                 emitter's arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_wire_round_trips_through_display_and_as_ref() {
+        // Three-path convergence pin against the sibling
+        // `(variant_slug, Display, AsRef<str>)` canonical-projection
+        // triple: [`FerriteRuntime::from_wire`] must accept the byte-
+        // string every path emits, so a caller that binds a prior
+        // emission through any of the three paths and re-parses it
+        // through the reverse projection reaches the same typed enum
+        // by construction.
+        //
+        // A future silent detour that routes one of the three emitting
+        // paths through a divergent projection (a per-arm inline
+        // `match self { … }` re-inlining that opens a compile-time link
+        // to the un-lifted arm-literal, a swap onto the sibling
+        // [`FerriteRuntime::rt_import`] Go-import projection that would
+        // collide the runtime-slug axis with the import-line axis)
+        // would trip this pin under `assert_eq!` rather than at a
+        // downstream re-loader's silent split.
+        for &variant in FerriteRuntime::ALL {
+            let via_slug = variant.variant_slug();
+            let via_display = format!("{variant}");
+            let via_as_ref = <FerriteRuntime as AsRef<str>>::as_ref(&variant).to_owned();
+            assert_eq!(
+                FerriteRuntime::from_wire(via_slug),
+                Some(variant),
+                "FerriteRuntime::from_wire(variant_slug) must return \
+                 Some({variant:?})",
+            );
+            assert_eq!(
+                FerriteRuntime::from_wire(&via_display),
+                Some(variant),
+                "FerriteRuntime::from_wire(Display) must return \
+                 Some({variant:?})",
+            );
+            assert_eq!(
+                FerriteRuntime::from_wire(&via_as_ref),
+                Some(variant),
+                "FerriteRuntime::from_wire(AsRef<str>) must return \
+                 Some({variant:?})",
+            );
+        }
     }
 }
