@@ -704,6 +704,80 @@ impl AsRef<str> for WitShape {
     }
 }
 
+/// Standard-library trait-idiomatic reverse projection on the
+/// [`WitShape`] closed-set typed enum. Routes byte-for-byte through the
+/// paired substrate-primitive [`WitShape::from_wire`] `Option<Self>`
+/// accessor so `s.try_into::<WitShape>()` /
+/// `WitShape::try_from(&s)` reaches the same four-arm `"http"` /
+/// `"pubsub"` / `"store"` / `"capability"` census-label accept-set the
+/// sibling method-named resolver dispatches through and the sibling
+/// [`WitShape::as_str`] emits.
+///
+/// `type Error = ()` — matches the sibling [`WitShape::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site (a
+/// future `feira app graph --by-wit-shape <arm>` CLI arg-parse composes
+/// its own per-verb "unknown wit-shape: <arg> — accepted: {…}" message
+/// enumerating [`WitShape::ALL`], a future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook wraps
+/// `Err(())` with a per-CR structured refusal body enumerating the
+/// four-arm census set, a `Result::map_err` at the call site lifts the
+/// unit-error to a per-verb error type). Same shape the sibling
+/// [`crate::CaixaKind`] (3c83606), [`crate::CaixaDialeto`] (bf33136),
+/// [`PlacementStrategy`] (6fd00cd), [`crate::supervisor::RestartStrategy`]
+/// (5b828ed), and [`crate::supervisor::RestartPolicy`] (6fdd0d9)
+/// `TryFrom<&str>` impls carry.
+///
+/// Chosen over [`std::str::FromStr`] to sidestep both
+/// `clippy::should_implement_trait` on the method-named
+/// [`WitShape::from_wire`] and the two-axis discipline the paired
+/// [`WitShape::classify`] total function keeps on the *raw* WIT
+/// identifier axis — the sibling
+/// `wit_shape_from_wire_and_classify_partition_the_axis` pin makes this
+/// two-axis split load-bearing, and a `FromStr` impl on the census-label
+/// axis would obscure which of the two axes a plain
+/// `s.parse::<WitShape>()` reaches. `TryFrom<&str>` keeps the trait-
+/// idiomatic reverse projection anchored to the same census-label axis
+/// [`WitShape::from_wire`] resolves through, leaving the raw
+/// [`WitShape::classify`] axis untouched.
+///
+/// The paired [`WitShape::from_wire`] resolver's accept-set is shared by
+/// construction, so any future arm addition (a hypothetical
+/// `wasi:sockets/*` transport-layer shape or `oci:*` capability-import
+/// carrier the sibling [`wit_shape_matches`] docstring names as a
+/// trajectory item) grows the trait-idiomatic axis by construction —
+/// one caixa-core edit on [`WitShape::from_wire`] extends both the
+/// method-named reverse projection every existing consumer keys off and
+/// the trait-idiomatic reverse projection this impl exposes, without a
+/// coordinated rewrite across every future `TryFrom<&str>`-bound
+/// consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic reverse-
+/// projection family ([`crate::CaixaKind`] via 3c83606,
+/// [`crate::CaixaDialeto`] via bf33136, [`PlacementStrategy`] via
+/// 6fd00cd, [`crate::supervisor::RestartStrategy`] via 5b828ed,
+/// [`crate::supervisor::RestartPolicy`] via 6fdd0d9) onto the second
+/// M3-mesh-primitive-defining slot enum on the caixa surface — the
+/// `:contratos :wit` census-label closed set the caixa-mesh renderer
+/// keys off end-to-end for per-edge programs.yaml fan-out.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`WitShape::from_wire`] across the four-arm
+/// accept-set),
+/// [`tests::wit_shape_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening), and
+/// [`tests::wit_shape_try_from_str_and_from_wire_partition_the_accept_set`]
+/// (cross-axis partition pin locking trait and method-named projections
+/// to the same `Option<Self>` output on every input).
+impl TryFrom<&str> for WitShape {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -14972,6 +15046,196 @@ mod tests {
                  to any payload arm here means a payload-prefix set \
                  has silently collided the census-label axis with the \
                  raw-classifier axis",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for WitShape` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`WitShape::from_wire`] `Option<Self>` accessor resolve to the
+        // same four-arm census-label accept-set across every arm the
+        // exhaustive [`WitShape::ALL`] slice enumerates. Any future
+        // silent detour that routes the trait impl through a divergent
+        // projection (a per-arm inline `match s { "http" =>
+        // Ok(Self::Http), … }` re-inlining that opens a compile-time
+        // link to the un-lifted arm-literal, a stray attribute drift
+        // that silently splits the wire byte-string from every consumer
+        // that reaches for this typed dispatch) trips at caixa-core test
+        // time under `assert_eq!` rather than at a downstream
+        // `impl TryFrom<&str>`-bound consumer's silent split. Sweeps
+        // every one of the four arms [`WitShape::ALL`] carries so no
+        // arm's projection is covered only by the sibling method-named
+        // `from_wire` path.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136),
+        // [`tests::placement_strategy_try_from_str_routes_through_from_wire_accessor`]
+        // (6fd00cd),
+        // [`crate::supervisor::tests::restart_strategy_try_from_str_routes_through_from_wire_accessor`]
+        // (5b828ed), and
+        // [`crate::supervisor::tests::restart_policy_try_from_str_routes_through_from_wire_accessor`]
+        // (6fdd0d9) round-trip pins on the sibling caixa-core closed-
+        // set typed-enum trait-idiomatic reverse-projection axes.
+        for &variant in WitShape::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <WitShape as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on WitShape must round-trip \
+                 WitShape::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(WitShape::{variant:?}) — divergence from \
+                 WitShape::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <WitShape as TryFrom<&str>>::try_from(wire).ok(),
+                WitShape::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must byte-equal \
+                 WitShape::from_wire on the same input"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for WitShape` —
+        // sweeps a candidate set of byte-strings outside the four-arm
+        // census-label wire accept-set the sibling [`WitShape::as_str`]
+        // emits and asserts every one lands on `Err(())`, so a future
+        // accidental widening of the trait impl's accept-set (a stray
+        // additional `_ if s.eq_ignore_ascii_case("http") => Ok(…)`
+        // case-fold path, a silent inclusion of a PascalCase rebrand of
+        // the wire byte-string that would collide the two-axis split the
+        // sibling `wit_shape_from_wire_rejects_unknown_byte_strings` pin
+        // makes load-bearing, a silent overlap with the raw WIT
+        // identifier accept-set the paired [`WitShape::classify`] total
+        // function consumes on the sibling axis that the
+        // `wit_shape_from_wire_and_classify_partition_the_axis` cross-
+        // axis discipline pin locks the accept-sets against) trips at
+        // caixa-core test time. The candidate set includes the empty
+        // string, whitespace-only padding, PascalCase rebrand candidates
+        // (`"Http"`, `"PubSub"`), snake_case rebrand candidates
+        // (`"pub_sub"`), uppercase rebrand candidates (`"HTTP"`,
+        // `"CAPABILITY"`), kebab-case rebrand candidates (`"pub-sub"`),
+        // trailing/leading-whitespace-padded canonical scalars, the
+        // trailing-newline shape, English-rebrand candidates
+        // (`"messaging"`, `"cache"`), raw `:contratos :wit` identifiers
+        // the sibling [`WitShape::classify`] axis consumes
+        // (`"wasi:http/proxy"`, `"nats:events"`,
+        // `"wasi:keyvalue/store"`) that must not silently leak across
+        // the two-axis partition, the residual `"?"` and JSON-quoted
+        // `"\"http\""` shape.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_str_rejects_unknown_byte_strings`]
+        // (3c83606),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_str_rejects_unknown_byte_strings`]
+        // (bf33136),
+        // [`tests::placement_strategy_try_from_str_rejects_unknown_byte_strings`]
+        // (6fd00cd),
+        // [`crate::supervisor::tests::restart_strategy_try_from_str_rejects_unknown_byte_strings`]
+        // (5b828ed), and
+        // [`crate::supervisor::tests::restart_policy_try_from_str_rejects_unknown_byte_strings`]
+        // (6fdd0d9) rejection witnesses.
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "\n",
+            "\t",
+            "Http",
+            "HTTP",
+            "PubSub",
+            "PUBSUB",
+            "Store",
+            "STORE",
+            "Capability",
+            "CAPABILITY",
+            "pub-sub",
+            "pub_sub",
+            "pubSub",
+            "http ",
+            " http",
+            " store ",
+            "capability\n",
+            "http/",
+            "messaging",
+            "cache",
+            "wasi:http/proxy",
+            "wasi:keyvalue/store",
+            "nats:events",
+            "?",
+            "\"http\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <WitShape as TryFrom<&str>>::try_from(input),
+                Err(()),
+                "TryFrom<&str> impl on WitShape must reject the \
+                 non-wire byte-string {input:?} — silent acceptance \
+                 signals an accept-set widening off the paired \
+                 WitShape::from_wire resolver, or a cross-axis leak \
+                 from the raw-identifier axis WitShape::classify consumes"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin locking the newly lifted
+        // `impl TryFrom<&str> for WitShape` and the substrate-primitive
+        // [`WitShape::from_wire`] accessor to the same `Option<Self>`
+        // output on every input — the two axes converge on the same
+        // partition of `&str` by construction, and this pin asserts
+        // that convergence directly rather than only through
+        // [`WitShape::ALL`]'s per-arm sweep. Any future divergence (a
+        // stray case-fold path on the trait axis that widens acceptance
+        // past what `from_wire` admits, a silent per-arm short-circuit
+        // that returns `Err(())` on an input `from_wire` accepts) trips
+        // here under `assert_eq!` on every input in the sweep.
+        //
+        // Sweeps the four accepted census labels plus a representative
+        // rejection set covering the same categories the sibling
+        // `wit_shape_try_from_str_rejects_unknown_byte_strings` pin
+        // enumerates, so a regression on either axis surfaces at the
+        // partition pin rather than at a downstream consumer's silent
+        // observation split.
+        //
+        // Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_try_from_str_and_from_wire_partition_the_accept_set`]
+        // (5b828ed) and
+        // [`crate::supervisor::tests::restart_policy_try_from_str_and_from_wire_partition_the_accept_set`]
+        // (6fdd0d9) cross-axis partition pins.
+        let inputs: &[&str] = &[
+            "http",
+            "pubsub",
+            "store",
+            "capability",
+            "",
+            " ",
+            "Http",
+            "PubSub",
+            "HTTP",
+            "pub-sub",
+            "http ",
+            "wasi:http/proxy",
+            "wasi:keyvalue/store",
+            "nats:events",
+            "messaging",
+            "?",
+        ];
+        for &input in inputs {
+            assert_eq!(
+                <WitShape as TryFrom<&str>>::try_from(input).ok(),
+                WitShape::from_wire(input),
+                "TryFrom<&str> and from_wire must agree on WitShape \
+                 for {input:?} — the trait-idiomatic and method-named \
+                 axes must partition the accept-set identically"
             );
         }
     }
