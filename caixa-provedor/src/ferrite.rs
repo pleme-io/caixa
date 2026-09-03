@@ -267,6 +267,115 @@ impl AsRef<str> for FerriteRuntime {
     }
 }
 
+/// Trait-idiomatic reverse projection on the [`FerriteRuntime`] closed
+/// two-arm caixa-provedor ferrite-runtime axis — routes byte-for-byte
+/// through the paired substrate-primitive [`FerriteRuntime::from_wire`]
+/// `Option<Self>` accessor so every future consumer that binds a
+/// canonical runtime slug through the standard-library `.try_into()` /
+/// [`TryFrom`] axis (a future `feira publish-provider
+/// --runtime=<slug>` CLI arg-parse composing into `let rt: FerriteRuntime
+/// = s.try_into()?`, a future M4 provider-CR admission-webhook folding a
+/// `spec.runtime: String` through `FerriteRuntime::try_from(&s)?`, a
+/// generic `<T: TryFrom<&str>>`-bound provider-flavor loader over any of
+/// the substrate's closed-set typed enums, a future `caixa provedor
+/// switch --runtime <ferrite-safe|ferrite-arena>` verb) reaches the
+/// same two-arm accept-set the sibling [`FerriteRuntime::from_wire`]
+/// resolver parses through and the sibling [`FerriteRuntime::variant_slug`]
+/// emits, rather than an open-coded per-arm
+/// `match s { "ferrite-safe" => …, "ferrite-arena" => …, _ => … }`
+/// cascade whose arm-set has no compile-time link back to the substrate
+/// primitive.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`FerriteRuntime::variant_slug`])
+/// with the paired trait-idiomatic reverse-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`AsRef<str>`] with either
+/// [`std::str::FromStr`] or [`TryFrom<&str>`] on the same primitive so a
+/// caller who can project *out to* a `&str` can also project *in from*
+/// one. The [`TryFrom<&str>`] axis is deliberately chosen over
+/// [`std::str::FromStr`] to sidestep the `clippy::should_implement_trait`
+/// lint the sibling method-named [`FerriteRuntime::from_wire`] would
+/// trigger under a `FromStr` impl (the same design tradeoff the peer
+/// [`caixa_core::CaixaKind`] (3c83606), [`caixa_core::CaixaDialeto`]
+/// (bf33136), [`caixa_core::aplicacao::PlacementStrategy`] (6fd00cd),
+/// [`caixa_core::supervisor::RestartStrategy`] (5b828ed),
+/// [`caixa_core::supervisor::RestartPolicy`] (6fdd0d9),
+/// [`caixa_core::aplicacao::WitShape`] (5472902),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (bf78400),
+/// [`caixa_core::render::PathShapeViolation`] (e67e48a),
+/// `caixa_arch::invariants::InvariantKind` (e21a857),
+/// `caixa_arch::report::ArchVerdict` (0a4cc45),
+/// `caixa_lint::diagnostic::Severity` (a7bf74c),
+/// `caixa_lint::diagnostic::FixSafety` (df86c94), and
+/// `caixa_theme::style::Semantic` (bd7da69) blocks note) — this impl
+/// closes the trait-idiomatic reverse axis without disturbing the
+/// method-named `from_wire` shape every peer closed-set typed enum
+/// already carries.
+///
+/// `type Error = ()` matches the sibling [`FerriteRuntime::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site
+/// (a future `feira publish-provider --runtime` CLI arg-parse composes
+/// its own per-verb "unknown ferrite-runtime slug: <arg> — accepted:
+/// {…}" message enumerating [`FerriteRuntime::ALL`], a future M4
+/// provider-CR admission-webhook wraps `Err(())` with a per-CR
+/// structured refusal body enumerating the two-arm accept-set, a
+/// `Result::map_err` at the call site lifts the axis-error to a per-
+/// verb error type). Same shape every peer sibling reverse-projection
+/// axis carries.
+///
+/// The paired [`TryFrom<&str>`] impl reaches the same two-arm accept-
+/// set the [`FerriteRuntime::from_wire`] resolver dispatches through,
+/// so any future variant addition (a `Region` tier between [`Self::Safe`]
+/// and [`Self::Arena`] for the intermediate `ferrite/rt/region`
+/// checked-arena flavor the ferrite roadmap grows — the trajectory item
+/// every sibling [`FerriteRuntime`] doc block already names) grows the
+/// trait-idiomatic axis by construction: one caixa-provedor edit on
+/// [`FerriteRuntime::from_wire`] extends both the method-named reverse
+/// projection every existing consumer keys off and the trait-idiomatic
+/// reverse projection this impl exposes, without a coordinated rewrite
+/// across every future `TryFrom<&str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic reverse-
+/// projection family ([`caixa_core::CaixaKind`] via 3c83606,
+/// [`caixa_core::CaixaDialeto`] via bf33136,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via 6fd00cd,
+/// [`caixa_core::supervisor::RestartStrategy`] via 5b828ed,
+/// [`caixa_core::supervisor::RestartPolicy`] via 6fdd0d9,
+/// [`caixa_core::aplicacao::WitShape`] via 5472902,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via bf78400,
+/// [`caixa_core::render::PathShapeViolation`] via e67e48a,
+/// `caixa_arch::invariants::InvariantKind` via e21a857,
+/// `caixa_arch::report::ArchVerdict` via 0a4cc45,
+/// `caixa_lint::diagnostic::Severity` via a7bf74c,
+/// `caixa_lint::diagnostic::FixSafety` via df86c94, and
+/// `caixa_theme::style::Semantic` via bd7da69) onto the first closed-
+/// set fieldless typed enum on the caixa-provedor surface — the
+/// ferrite-runtime two-arm accept-set every emit-side header comment
+/// (`// Code generated by caixa-provedor (<variant-slug>). DO NOT EDIT.`),
+/// every ferrite-runtime-family gate, and every future
+/// provider-CR admission-webhook keys off. The fourteenth and final
+/// peer on the substrate surface — this lift closes the trait-idiomatic
+/// reverse-projection campaign across every closed-set fieldless typed
+/// enum in the caixa workspace.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`FerriteRuntime::from_wire`] across the
+/// two-arm accept-set),
+/// [`tests::ferrite_runtime_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening), and
+/// [`tests::ferrite_runtime_try_from_str_and_from_wire_partition_the_accept_set`]
+/// (cross-axis partition pin locking trait and method-named projections
+/// to the same `Option<Self>` output on every input).
+impl TryFrom<&str> for FerriteRuntime {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
 /// Free-function wrapper preserved for the crate-level `pub use`
 /// re-export in [`crate`]; routes through the substrate-primitive
 /// method [`FerriteRuntime::rt_import`].
@@ -627,6 +736,243 @@ mod tests {
                 Some(variant),
                 "FerriteRuntime::from_wire(AsRef<str>) must return \
                  Some({variant:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for FerriteRuntime` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::FerriteRuntime::from_wire`] `Option<Self>` accessor
+        // resolve to the same two-arm accept-set across every arm the
+        // exhaustive [`super::FerriteRuntime::ALL`] slice enumerates.
+        // Any future silent detour that routes the trait impl through a
+        // divergent projection (a per-arm inline `match s {
+        // "ferrite-safe" => Ok(Self::Safe), … }` re-inlining that opens
+        // a compile-time link to the un-lifted arm-literal, a silent
+        // case-fold that admits `"Ferrite-Safe"` / `"FERRITE-SAFE"` and
+        // would collide the canonical-lowercase accept-set the emitter
+        // dispatches on, a swap onto the sibling
+        // [`super::FerriteRuntime::rt_import`] Go-import projection
+        // that would collide the runtime-slug axis with the import-line
+        // axis) trips at caixa-provedor test time under `assert_eq!`
+        // rather than at a downstream `impl TryFrom<&str>`-bound
+        // consumer's silent split. Sweeps every one of the two arms
+        // [`super::FerriteRuntime::ALL`] carries so no arm's projection
+        // is covered only by the sibling method-named `from_wire` path.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_try_from_str_routes_through_from_wire_accessor`]
+        // (3c83606),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_try_from_str_routes_through_from_wire_accessor`]
+        // (bf33136),
+        // `placement_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (6fd00cd),
+        // `wit_shape_try_from_str_routes_through_from_wire_accessor`
+        // (5472902),
+        // `rate_limit_unit_try_from_str_routes_through_from_suffix_accessor`
+        // (bf78400),
+        // `path_shape_violation_try_from_str_routes_through_from_wire_accessor`
+        // (e67e48a),
+        // `caixa_arch::invariants::tests::invariant_kind_try_from_str_routes_through_from_wire_accessor`
+        // (e21a857),
+        // `caixa_arch::report::tests::arch_verdict_try_from_str_routes_through_from_wire_accessor`
+        // (0a4cc45),
+        // `caixa_lint::diagnostic::tests::severity_try_from_str_routes_through_from_wire_accessor`
+        // (a7bf74c),
+        // `caixa_lint::diagnostic::tests::fix_safety_try_from_str_routes_through_from_wire_accessor`
+        // (df86c94), and
+        // `caixa_theme::style::tests::semantic_try_from_str_routes_through_from_wire_accessor`
+        // (bd7da69) — extends the trait-idiomatic reverse-projection
+        // axis onto the first (and only) closed-set fieldless typed
+        // enum on the caixa-provedor surface (the ferrite-runtime axis),
+        // closing the fourteenth and final peer on the substrate-wide
+        // reverse-projection campaign.
+        for &variant in FerriteRuntime::ALL {
+            let wire = variant.variant_slug();
+            assert_eq!(
+                <FerriteRuntime as TryFrom<&str>>::try_from(wire),
+                Ok(variant),
+                "TryFrom<&str> impl on FerriteRuntime must round-trip \
+                 FerriteRuntime::{variant:?}.variant_slug() = {wire:?} \
+                 back to Ok(FerriteRuntime::{variant:?}) — divergence \
+                 from FerriteRuntime::from_wire signals a silent detour \
+                 off the substrate-primitive accessor",
+            );
+            assert_eq!(
+                <FerriteRuntime as TryFrom<&str>>::try_from(wire).ok(),
+                FerriteRuntime::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must \
+                 byte-equal FerriteRuntime::from_wire on the same input",
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for
+        // FerriteRuntime` — sweeps a candidate set of byte-strings
+        // outside the two-arm canonical-lowercase kebab wire accept-set
+        // the sibling [`super::FerriteRuntime::variant_slug`] emits and
+        // asserts every one lands on `Err(())`, so a future accidental
+        // widening of the trait impl's accept-set (a stray additional
+        // `_ if s.eq_ignore_ascii_case("ferrite-safe") => Ok(…)`
+        // case-fold path, a silent acceptance of the pre-lift
+        // PascalCase Debug-derived shapes `"Safe"` / `"Arena"` on the
+        // wire axis, a Levenshtein-forgiving arm-lookup that admits
+        // `"ferrite-saf"` / `"ferrite-aren"` typos, a cross-axis leak
+        // that admits the sibling [`super::FerriteRuntime::rt_import`]
+        // Go-import lines `"rt \"github.com/pleme-io/ferrite/rt\""` /
+        // `"rt \"github.com/pleme-io/ferrite/rt/arena\""` — the exact
+        // form a caller that stored `format!("{runtime}").as_str()` on
+        // the wrong projection would otherwise land on) trips at
+        // caixa-provedor test time. The candidate set includes the
+        // empty string, whitespace-only padding, PascalCase / uppercase
+        // rebrand candidates, Levenshtein-neighbor typos, snake_case
+        // and no-separator variants, the trajectory-item candidate
+        // `"ferrite-region"` (the intermediate `ferrite/rt/region`
+        // checked-arena flavor every sibling [`FerriteRuntime`] doc
+        // block already names as the next arm), the sibling
+        // [`super::FerriteRuntime::rt_import`] Go-import projection
+        // output on both arms, and whitespace-padded canonical tags.
+        //
+        // Peer of the sibling
+        // `caixa_kind_try_from_str_rejects_unknown_byte_strings`
+        // (3c83606),
+        // `caixa_dialeto_try_from_str_rejects_unknown_byte_strings`
+        // (bf33136),
+        // `placement_strategy_try_from_str_rejects_unknown_byte_strings`
+        // (6fd00cd),
+        // `wit_shape_try_from_str_rejects_unknown_byte_strings`
+        // (5472902),
+        // `rate_limit_unit_try_from_str_rejects_unknown_byte_strings`
+        // (bf78400),
+        // `path_shape_violation_try_from_str_rejects_unknown_byte_strings`
+        // (e67e48a),
+        // `invariant_kind_try_from_str_rejects_unknown_byte_strings`
+        // (e21a857),
+        // `arch_verdict_try_from_str_rejects_unknown_byte_strings`
+        // (0a4cc45),
+        // `severity_try_from_str_rejects_unknown_byte_strings`
+        // (a7bf74c),
+        // `fix_safety_try_from_str_rejects_unknown_byte_strings`
+        // (df86c94), and
+        // `semantic_try_from_str_rejects_unknown_byte_strings`
+        // (bd7da69) rejection pins on the sibling closed-set typed-
+        // enum reverse-projection axes.
+        for bad in [
+            "",
+            " ",
+            "Safe",
+            "SAFE",
+            "safe",
+            "Arena",
+            "ARENA",
+            "arena",
+            "Ferrite-Safe",
+            "FERRITE-SAFE",
+            "Ferrite-Arena",
+            "FERRITE-ARENA",
+            "ferrite_safe",
+            "ferrite_arena",
+            "ferritesafe",
+            "ferritearena",
+            "ferrite-saf",
+            "ferrite-aren",
+            "region",
+            "ferrite-region",
+            "unsafe",
+            "gc",
+            "rt \"github.com/pleme-io/ferrite/rt\"",
+            "rt \"github.com/pleme-io/ferrite/rt/arena\"",
+            "ferrite-safe ",
+            " ferrite-safe",
+            "ferrite-safe\n",
+            "ferrite-safe\t",
+            "ferrite-arena ",
+            " ferrite-arena",
+            "?",
+            "\"ferrite-safe\"",
+        ] {
+            assert_eq!(
+                <FerriteRuntime as TryFrom<&str>>::try_from(bad),
+                Err(()),
+                "TryFrom<&str> impl on FerriteRuntime must reject \
+                 {bad:?} — the two-arm canonical-lowercase kebab \
+                 accept-set is exactly {{\"ferrite-safe\", \
+                 \"ferrite-arena\"}}; a widening would silently split \
+                 the trait-idiomatic axis from the sibling \
+                 FerriteRuntime::from_wire resolver",
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_try_from_str_and_from_wire_partition_the_accept_set() {
+        // Cross-axis partition pin locking the newly lifted
+        // `impl TryFrom<&str> for FerriteRuntime` and the substrate-
+        // primitive [`super::FerriteRuntime::from_wire`] accessor to
+        // the same `Option<Self>` output on every input — the two axes
+        // converge on the same partition of `&str` by construction,
+        // and this pin asserts that convergence directly rather than
+        // only through [`super::FerriteRuntime::ALL`]'s per-arm sweep.
+        // Any future divergence (a stray case-fold path on the trait
+        // axis that widens acceptance past what `from_wire` admits, a
+        // silent per-arm short-circuit that returns `Err(())` on an
+        // input `from_wire` accepts) trips here under `assert_eq!` on
+        // every input in the sweep.
+        //
+        // Sweeps the two accepted variant-slug outputs plus a
+        // representative rejection set covering the same categories
+        // the sibling
+        // `ferrite_runtime_try_from_str_rejects_unknown_byte_strings`
+        // pin enumerates, so a regression on either axis surfaces at
+        // the partition pin rather than at a downstream consumer's
+        // silent observation split.
+        //
+        // Peer of the sibling
+        // `wit_shape_try_from_str_and_from_wire_partition_the_accept_set`
+        // (5472902),
+        // `restart_strategy_try_from_str_and_from_wire_partition_the_accept_set`
+        // (5b828ed),
+        // `restart_policy_try_from_str_and_from_wire_partition_the_accept_set`
+        // (6fdd0d9), and
+        // `semantic_try_from_str_and_from_wire_partition_the_accept_set`
+        // (bd7da69) cross-axis partition pins on the sibling closed-
+        // set typed-enum reverse-projection axes.
+        let inputs: &[&str] = &[
+            "ferrite-safe",
+            "ferrite-arena",
+            "",
+            " ",
+            "Safe",
+            "Arena",
+            "SAFE",
+            "ARENA",
+            "Ferrite-Safe",
+            "FERRITE-SAFE",
+            "ferrite_safe",
+            "ferrite_arena",
+            "ferritesafe",
+            "ferrite-saf",
+            "ferrite-region",
+            "region",
+            "unsafe",
+            "rt \"github.com/pleme-io/ferrite/rt\"",
+            "ferrite-safe ",
+            " ferrite-safe",
+            "?",
+        ];
+        for &input in inputs {
+            assert_eq!(
+                <FerriteRuntime as TryFrom<&str>>::try_from(input).ok(),
+                FerriteRuntime::from_wire(input),
+                "TryFrom<&str> and from_wire must agree on \
+                 FerriteRuntime for {input:?} — the trait-idiomatic \
+                 and method-named axes must partition the accept-set \
+                 identically",
             );
         }
     }
