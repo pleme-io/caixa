@@ -99,6 +99,71 @@ impl Severity {
             Self::Hint => Semantic::Hint,
         }
     }
+
+    /// Reverse projection on the [`Severity`] closed-set enum's
+    /// canonical-tag axis — parses a `"error"` / `"warning"` / `"info"`
+    /// / `"hint"` wire byte-string back to the typed enum, or returns
+    /// `None` when `s` lies outside the four-arm accept-set
+    /// [`Self::as_str`] emits. The single `&str → Self` projection every
+    /// future re-entry point on the diagnostic-severity axis dispatches
+    /// through (a future `feira lint --severity <error|warning|info|hint>`
+    /// CLI arg-parse that binds the wire byte-string into the typed enum
+    /// before dispatching to the per-arm filter, a future
+    /// `caixa-lsp`-side per-diagnostic re-parse that hydrates a prior
+    /// [`Self::as_str`] output back to the typed enum for
+    /// `DiagnosticSeverity` mapping, a future M4
+    /// `mesh.pleme.io/v1alpha1/LintReport` CR materializer's admission-
+    /// time re-parse of the per-diagnostic severity column, a
+    /// `tracing::field::Value::Str`-arm structured-log re-loader
+    /// binding a prior emission's [`Self::as_str`] output back to the
+    /// typed enum for cross-run severity-histogram diff) would have had
+    /// to re-inline a four-arm `match s` cascade that expressed no
+    /// compile-time link back to the substrate primitive.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`caixa_core::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`caixa_core::CaixaDialeto::from_wire`] (d0e65ea) /
+    /// [`caixa_core::supervisor::RestartStrategy::from_wire`] (4eec29c) /
+    /// [`caixa_core::supervisor::RestartPolicy::from_wire`] (dd32ccf) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`caixa_core::dep::DepList::from_wire`] (45ee563) /
+    /// [`caixa_core::render::PathShapeViolation::from_wire`] (aebd9c6) /
+    /// `caixa_arch::invariants::InvariantKind::from_wire` (b9e4e61) /
+    /// `caixa_arch::report::ArchVerdict::from_wire` (6afe564) typed
+    /// enums carry on the peer wire-side `str → Self` axes — extends the
+    /// substrate-wide `(as_str, from_wire)` round-trip family onto the
+    /// first closed-set fieldless typed enum on the `caixa-lint` surface
+    /// (the diagnostic-severity axis; the paired [`FixSafety`]
+    /// fix-safety-tier axis remains open, an available follow-up),
+    /// matching the same two-way `str ↔ Self` round-trip every sibling
+    /// closed-set enum already carries. Method-named `from_wire` (not
+    /// `from_str`) to match the peer shapes verbatim and side-step a
+    /// `clippy::should_implement_trait` lint that a plain `from_str`
+    /// name would otherwise trigger without paired
+    /// [`std::str::FromStr`] impl scaffolding this axis does not carry
+    /// today. Returns `Option<Self>` (rather than `Result<Self, _>`) to
+    /// match the peer shapes: the caller picks the diagnostic form
+    /// appropriate for its use site (a `feira lint --severity` CLI
+    /// arg-parse renders its own per-verb error message; an admission-
+    /// webhook rejection body wraps the `None` outcome with the
+    /// accepted-set enumeration `Severity::ALL.iter().map(…)` for
+    /// operator diagnostics).
+    ///
+    /// Pinned load-bearing at the substrate-primitive level by
+    /// [`tests::severity_from_wire_accepts_every_as_str_output`]
+    /// (round-trip witness against the peer [`Self::as_str`] axis) and
+    /// [`tests::severity_from_wire_rejects_unknown_byte_strings`]
+    /// (rejection witness against silent accept-set widening).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "error" => Some(Self::Error),
+            "warning" => Some(Self::Warning),
+            "info" => Some(Self::Info),
+            "hint" => Some(Self::Hint),
+            _ => None,
+        }
+    }
 }
 
 /// Route the standard-library `&str`-projection trait through the
@@ -889,6 +954,144 @@ mod tests {
                 via_display, via_as_str,
                 "FixSafety::{arm:?} Display::fmt() must byte-equal \
                  as_str()",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_wire_accepts_every_as_str_output() {
+        // Fail-before-pass-after per-arm accept pin on the newly lifted
+        // [`Severity::from_wire`] reverse projection: every arm in
+        // [`Severity::ALL`] must parse back through `from_wire` when
+        // fed its own [`Severity::as_str`] output, landing on
+        // `Some(same_variant)`. A regression that hand-rolled either
+        // side's per-arm match without threading through the shared
+        // four-string closed set would silently disagree on any future
+        // arm rename (or a new arm the rulebook grows — a `Debug` tier
+        // below [`Severity::Hint`] once verbose per-node lint traces
+        // enter scope, a `Critical` tier above [`Severity::Error`] the
+        // M3-and-later LSP surfaces for build-halting failures) and
+        // this pin flags it at caixa-lint build time rather than at a
+        // downstream `feira lint --severity` consumer's silent tag
+        // misclassification.
+        //
+        // Peer of the sibling
+        // `caixa_arch::report::tests::arch_verdict_from_wire_accepts_every_as_str_output`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_accepts_every_as_str_output`
+        // (b9e4e61) round-trip pins on the peer caixa-arch closed-set-
+        // enum reverse-projection axes, and of the sibling
+        // `caixa_core::kind::tests::caixa_kind_wire_round_trips_through_from_wire`
+        // (2aa6d23) /
+        // `caixa_core::dialeto::tests::caixa_dialeto_from_wire_accepts_every_as_str_output`
+        // (d0e65ea) /
+        // `caixa_core::aplicacao::tests::placement_strategy_from_wire_accepts_every_lifted_constant`
+        // (18c7342) /
+        // `caixa_core::dep::tests::dep_list_round_trips_through_as_str_and_from_wire`
+        // (45ee563) /
+        // `caixa_core::render::tests::path_shape_violation_from_wire_accepts_every_as_str_output`
+        // (aebd9c6) round-trip pins on the sibling caixa-core closed-
+        // set typed-enum reverse-projection axes.
+        for &variant in Severity::ALL {
+            let wire = variant.as_str();
+            let parsed = Severity::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "Severity::from_wire({wire:?}) must accept every \
+                     Severity::as_str output — got None for the wire \
+                     byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "Severity::from_wire(Severity::{variant:?}.as_str()) \
+                 must return Severity::{variant:?} — the (as_str, \
+                 from_wire) pair must form a total round-trip on the \
+                 closed four-arm Severity arm-set",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the [`Severity::from_wire`] parser's
+        // accept-set: any string outside the four-arm
+        // [`Severity::as_str`] output set must return `None`. A future
+        // accidental widening of the accept-set (a case-insensitive
+        // match that accepts `"ERROR"` / `"Error"`, a silent acceptance
+        // of the pre-lift PascalCase Debug-derived shapes `"Error"` /
+        // `"Warning"` / `"Info"` / `"Hint"` on the wire axis, a
+        // Levenshtein-forgiving arm-lookup that admits `"eror"` /
+        // `"warn"` typos, a silent absorption of the sibling
+        // [`FixSafety::as_str`] two-arm accept-set — the two axes share
+        // no byte-strings but a widened parser could still misclassify
+        // a peer's arm-tag as a severity, a silent absorption of the
+        // sibling `caixa_arch::invariants::InvariantKind::as_str` set
+        // where the two axes DO share `"hint"` — the parser must not
+        // widen the accept-set beyond the four-arm severity tag alphabet
+        // even when a peer axis emits an overlapping byte-string) would
+        // silently drift the parser's accept-set from the emitter's — a
+        // downstream lint-report re-loader that bound a prior report's
+        // [`Self::as_str`] output back to the typed enum through this
+        // parser would then bind a malformed byte-string to a plausibly-
+        // wrong typed arm the caller does not route through any
+        // fallback, silently misclassifying the reloaded row.
+        //
+        // Peer of the sibling
+        // `caixa_arch::report::tests::arch_verdict_from_wire_rejects_unknown_byte_strings`
+        // (6afe564) /
+        // `caixa_arch::invariants::tests::invariant_kind_from_wire_rejects_unknown_byte_strings`
+        // (b9e4e61) rejection pins on the peer caixa-arch axes, and of
+        // the sibling
+        // `caixa_kind_from_wire_rejects_unknown_byte_strings` (2aa6d23),
+        // `caixa_dialeto_from_wire_rejects_unknown_byte_strings`
+        // (d0e65ea),
+        // `placement_strategy_from_wire_rejects_unknown_byte_strings`
+        // (18c7342),
+        // `dep_list_from_wire_returns_none_on_unknown_wire_scalar`
+        // (45ee563), and
+        // `path_shape_violation_from_wire_rejects_unknown_byte_strings`
+        // (aebd9c6) rejection pins on the sibling caixa-core axes.
+        for bad in [
+            "",
+            " ",
+            "Error",
+            "ERROR",
+            "Warning",
+            "WARNING",
+            "Info",
+            "INFO",
+            "Hint",
+            "HINT",
+            "eror",
+            "warn",
+            "informational",
+            "hnt",
+            "safe",
+            "unsafe",
+            "safety",
+            "compliance",
+            "proven",
+            "rejected",
+            "fatal",
+            "debug",
+            "critical",
+            "error ",
+            " error",
+            "error\n",
+            "error\t",
+            "warning ",
+            " warning",
+            "info ",
+            " info",
+            "hint ",
+            " hint",
+        ] {
+            assert!(
+                Severity::from_wire(bad).is_none(),
+                "Severity::from_wire({bad:?}) must return None — the \
+                 parser's accept-set is exactly the four Severity::as_str \
+                 outputs; a widening would silently split the parser's \
+                 accept-set from the emitter's arm-set",
             );
         }
     }
