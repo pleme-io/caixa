@@ -31,8 +31,8 @@ pub use aplicacao::{
     MeshPolicy, PLACEMENT_ESTRATEGIA_DEFAULT, POLICY_BREAKER_MAX_FAILURES_MAX,
     POLICY_BREAKER_WINDOW_MAX, POLICY_RATE_LIMIT_MAX, POLICY_RETRIES_MAX, POLICY_TIMEOUT_MAX,
     Placement, PlacementStrategy, RateLimit, RateLimitUnit, SERVICO_PORT_MIN, WitContract,
-    WitTarget, wit_shape_is_capability, wit_shape_is_http, wit_shape_is_pubsub, wit_shape_is_store,
-    wit_shape_matches,
+    WitShape, WitTarget, wit_shape_is_capability, wit_shape_is_http, wit_shape_is_pubsub,
+    wit_shape_is_store, wit_shape_matches,
 };
 pub use behavior::{BehaviorError, BehaviorSpec};
 pub use dep::{Dep, DepError, DepList, DepSource};

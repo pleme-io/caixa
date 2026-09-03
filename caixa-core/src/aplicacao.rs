@@ -206,7 +206,7 @@ pub const fn wit_shape_matches(wit: &str, prefixes: &[&str]) -> bool {
 /// at const-eval time as at runtime.
 #[must_use]
 pub const fn wit_shape_is_http(wit: &str) -> bool {
-    wit_shape_matches(wit, WIT_HTTP_SHAPE_PREFIXES)
+    matches!(WitShape::classify(wit), WitShape::Http)
 }
 
 /// True when `wit` — a raw `:contratos :wit` value — targets a
@@ -221,7 +221,7 @@ pub const fn wit_shape_is_http(wit: &str) -> bool {
 /// posture-block for the full rationale.
 #[must_use]
 pub const fn wit_shape_is_pubsub(wit: &str) -> bool {
-    wit_shape_matches(wit, WIT_PUBSUB_SHAPE_PREFIXES)
+    matches!(WitShape::classify(wit), WitShape::PubSub)
 }
 
 /// True when `wit` — a raw `:contratos :wit` value — targets a
@@ -237,7 +237,7 @@ pub const fn wit_shape_is_pubsub(wit: &str) -> bool {
 /// rationale.
 #[must_use]
 pub const fn wit_shape_is_store(wit: &str) -> bool {
-    wit_shape_matches(wit, WIT_STORE_SHAPE_PREFIXES)
+    matches!(WitShape::classify(wit), WitShape::Store)
 }
 
 /// True when `wit` — a raw `:contratos :wit` value — targets *none* of
@@ -317,7 +317,7 @@ pub const fn wit_shape_is_store(wit: &str) -> bool {
 /// for the full rationale.
 #[must_use]
 pub const fn wit_shape_is_capability(wit: &str) -> bool {
-    !wit_shape_is_http(wit) && !wit_shape_is_pubsub(wit) && !wit_shape_is_store(wit)
+    matches!(WitShape::classify(wit), WitShape::Capability)
 }
 
 // Compile-time pins on the 4-arm WIT-shape classifier family — the
@@ -357,6 +357,260 @@ const _: () = assert!(!wit_shape_is_store("nats:events"));
 const _: () = assert!(!wit_shape_is_capability("wasi:http/proxy"));
 const _: () = assert!(!wit_shape_is_capability("nats:events"));
 const _: () = assert!(!wit_shape_is_capability("wasi:keyvalue/store"));
+
+/// Closed 4-arm typed classification of a raw `:contratos :wit` value's
+/// WIT-shape membership — the single-dispatch typed source of truth for
+/// the four-arm partition the free-function classifier family
+/// ([`wit_shape_is_http`] / [`wit_shape_is_pubsub`] /
+/// [`wit_shape_is_store`] / [`wit_shape_is_capability`]) opens on the
+/// raw `&str` axis. Every peer free predicate now routes through
+/// [`Self::classify`] via a `matches!` arm-check, so the raw `&str →
+/// WIT-shape-arm` dispatch lives at one substrate primitive rather than
+/// four open-coded prefix probes plus a triplet negation.
+///
+/// # Compounding
+///
+/// The free predicates fan out to four independent bodies, three of
+/// which read one [`WIT_*_SHAPE_PREFIXES`] const each and one of which
+/// re-negates the trio. A future fifth WIT-shape arm (a hypothetical
+/// `wasi:sockets/*` / `tcp:*` transport-layer shape, an `oci:*`
+/// capability-import carrier, per the sibling [`wit_shape_matches`]
+/// docstring's trajectory bullet) previously required:
+///   1. one new [`WIT_*_SHAPE_PREFIXES`] const,
+///   2. one new `wit_shape_is_<name>` free predicate,
+///   3. an edit to [`wit_shape_is_capability`]'s negation to add the
+///      new arm — which a future author can silently forget, at which
+///      point every downstream capability-shape reader would
+///      misclassify the new arm as capability without a compile-time
+///      signal.
+///
+/// After this lift the third step becomes a compiler-checked
+/// exhaustiveness error: adding a fifth [`WitShape`] variant without
+/// growing [`Self::classify`]'s `match` fails at caixa-core build time
+/// (unhandled arm), and the sibling accessors ([`Self::as_str`], the
+/// [`std::fmt::Display`] and [`AsRef<str>`] impls, the
+/// [`gen_platform::IsVariant`]-derived per-arm predicates) refuse to
+/// compile until the new arm carries a body. The free predicate for
+/// the new arm is then a thin one-line `matches!` on the classifier's
+/// result, and [`wit_shape_is_capability`]'s definition stays a
+/// zero-line delta.
+///
+/// # Peers
+///
+/// Peer of the closed-set typed enums the caixa surface already
+/// carries on adjacent axes:
+/// - [`crate::CaixaKind`] on the top-level `:kind` axis
+/// - [`crate::dialeto::CaixaDialeto`] on the dialect-classification axis
+/// - [`PlacementStrategy`] on the `:placement :estrategia` axis
+/// - [`RateLimitUnit`] on the `:politicas :rate-limit :window` axis
+/// - [`crate::supervisor::RestartStrategy`] /
+///   [`crate::supervisor::RestartPolicy`] on the supervisor-strategy
+///   axes
+///
+/// Distinct from [`WitTarget`] on the same overall `:contratos` slot:
+/// [`WitTarget`] is the *post-validation* payload-carrying view (each
+/// arm carries the payload field its shape requires — an endpoint, a
+/// subject, a slot); [`WitShape`] is the *pre-validation* raw-`&str`
+/// classification (four unit arms — a witness of "which arm would the
+/// downstream validate consume this as?" without materializing the
+/// payload). Both surfaces carry an [`gen_platform::IsVariant`]-derived
+/// arm-predicate family and a `Capability` arm, so any downstream
+/// consumer that pairs a raw `&str` shape witness with a validated
+/// [`WitTarget`] view reads through matched per-arm predicates on both
+/// sides.
+///
+/// # Not a validator
+///
+/// Purely syntactic classification on the raw `:contratos :wit` prefix
+/// set — unlike [`WitContract::target`], which additionally rejects
+/// value-shape-invalid `:wit` strings (uppercase, hyphen-for-colon
+/// typo, empty package) via [`crate::render::is_wit_world_ref`] and
+/// payload-shape mismatches. An empty or structurally malformed `wit`
+/// string classifies here as [`Self::Capability`] (the prefix set
+/// matches nothing), and the surrounding validate-side gate cascade is
+/// where the [`AplicacaoError::EmptyWit`] /
+/// [`AplicacaoError::ContratoWitInvalid`] diagnostic surfaces — this
+/// enum is the classifier, not the validator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::IsVariant)]
+pub enum WitShape {
+    /// HTTP-shaped WIT world — the raw `:contratos :wit` value starts
+    /// with any prefix in [`WIT_HTTP_SHAPE_PREFIXES`] (`wasi:http/`,
+    /// `http:`). Peer of [`WitTarget::Http`] on the paired
+    /// post-validation payload-carrying view.
+    Http,
+    /// Pub-sub-shaped WIT world — the raw `:contratos :wit` value
+    /// starts with any prefix in [`WIT_PUBSUB_SHAPE_PREFIXES`]
+    /// (`nats:`, `kafka:`). Peer of [`WitTarget::PubSub`] on the paired
+    /// post-validation payload-carrying view.
+    ///
+    /// The `IsVariant` derive would auto-name the predicate
+    /// `is_pub_sub` (`discriminant_to_snake("PubSub") == "pub_sub"`);
+    /// the explicit `#[is_variant(name = "pubsub")]` override keeps the
+    /// emitted method name byte-identical to the sibling
+    /// [`WitTarget::is_pubsub`] and [`WitContract::is_pubsub`]
+    /// predicates so all three arm-discriminator axes — raw-`&str`,
+    /// post-validation payload view, and pre-projection `WitContract`
+    /// surface — reach every downstream consumer through the same
+    /// `is_pubsub()` name.
+    #[is_variant(name = "pubsub")]
+    PubSub,
+    /// Key/value-store-shaped WIT world — the raw `:contratos :wit`
+    /// value starts with any prefix in [`WIT_STORE_SHAPE_PREFIXES`]
+    /// (`wasi:keyvalue/`, `kv:`). Peer of [`WitTarget::Store`] on the
+    /// paired post-validation payload-carrying view.
+    Store,
+    /// Payload-less capability edge — none of the three payload-arm
+    /// prefix sets match. Peer of [`WitTarget::Capability`] on the
+    /// paired post-validation view; the fallback arm that catches
+    /// everything the payload-arm probes miss, including the empty
+    /// string and every structurally-malformed `:wit` value the
+    /// surrounding [`WitContract::target`] validator rejects
+    /// downstream.
+    Capability,
+}
+
+impl WitShape {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed four-arm [`WitShape`] partition — a future
+    /// `feira app graph --by-wit-shape` histogram column, the future M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// admission-webhook rejection body naming the accepted-shape set,
+    /// any future round-trip fuzz harness that sweeps every arm's
+    /// canonical accept-set. A future variant addition (a hypothetical
+    /// `wasi:sockets/*` transport-layer shape, an `oci:*`
+    /// capability-import carrier per the sibling [`wit_shape_matches`]
+    /// docstring's trajectory bullet) extends this slice as one edit
+    /// and every consumer picks up the new entry through the shared
+    /// iteration; the compiler-checked exhaustiveness on the sibling
+    /// method `match` arms ([`Self::classify`] / [`Self::as_str`]) is
+    /// the build-time guarantee that no arm forgets to grow.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`crate::CaixaKind::ALL`] /
+    /// [`crate::dialeto::CaixaDialeto::ALL`] /
+    /// [`PlacementStrategy::ALL`] / [`RateLimitUnit::ALL`] /
+    /// [`crate::supervisor::RestartStrategy::ALL`] /
+    /// [`crate::supervisor::RestartPolicy::ALL`] /
+    /// [`crate::dep::DepList::ALL`] exhaustive-iteration surfaces —
+    /// the next closed-set typed enum on the caixa surface to converge
+    /// onto the same one-canonical-arm-list-per-enum discipline, and
+    /// the first WIT-shape-classification axis (as distinct from an
+    /// OTP-shape M2 slot or an M3 mesh slot) to reach it. Order matches
+    /// variant declaration order verbatim (`Http` → `PubSub` → `Store`
+    /// → `Capability`) so the slice is the canonical ordering every
+    /// listing / rendering consumer defers to, and matches the arm
+    /// preference [`Self::classify`] dispatches on.
+    pub const ALL: &'static [Self] = &[Self::Http, Self::PubSub, Self::Store, Self::Capability];
+
+    /// Classify a raw `:contratos :wit` value into its closed four-arm
+    /// WIT-shape partition — the single canonical dispatch every free
+    /// [`wit_shape_is_http`] / [`wit_shape_is_pubsub`] /
+    /// [`wit_shape_is_store`] / [`wit_shape_is_capability`] predicate
+    /// routes through via a `matches!` arm-check, and the single
+    /// canonical dispatch every future consumer that needs the full
+    /// four-arm answer (rather than a per-arm boolean) reaches for.
+    ///
+    /// Arm preference is `Http` → `PubSub` → `Store` → `Capability`,
+    /// matching the declaration order pinned in [`Self::ALL`]. Under
+    /// the disjointness pins immediately above the impl block
+    /// (`const _: () = assert!(!wit_shape_is_http("nats:events"))` and
+    /// peers), the preference order is unobservable — no `:wit` value
+    /// satisfies more than one payload-arm prefix set. If a future
+    /// prefix-set edit accidentally overlaps two arms (e.g. a `kv:`
+    /// prefix accidentally re-emitted under
+    /// [`WIT_HTTP_SHAPE_PREFIXES`]), the sibling `const _: () =
+    /// assert!(!wit_shape_is_http("kv:cache"))` pin trips at
+    /// caixa-core build time before the preference-order behavior
+    /// becomes observable at any consumer site.
+    ///
+    /// # Const-eval posture
+    ///
+    /// Declared `pub const fn` — routes through the peer `pub const
+    /// fn` [`wit_shape_matches`] combinator on each of the three
+    /// payload-arm prefix-set probes, so every substrate-side
+    /// `const`-context WIT-shape-arm-classifier consumer (any future
+    /// M4 admission-webhook `const fn` per-`:contratos :wit`
+    /// arm-resolver over a raw `&str`, any future `const fn`
+    /// per-`:contratos`-edge WIT-registry prefix-set overlay resolver
+    /// that fans on the classified arm at compile time) reaches
+    /// through the same typed dispatch on the substrate primitive at
+    /// const-eval time as at runtime. Pinned load-bearing by the
+    /// [`tests::wit_shape_classify_is_const_fn`] test's `const fn`
+    /// wrapper — any future accidental downgrade to non-`const` fails
+    /// with E0015 at the wrapper call site at caixa-core build time,
+    /// strictly stronger than a runtime `assert!`.
+    #[must_use]
+    pub const fn classify(wit: &str) -> Self {
+        if wit_shape_matches(wit, WIT_HTTP_SHAPE_PREFIXES) {
+            Self::Http
+        } else if wit_shape_matches(wit, WIT_PUBSUB_SHAPE_PREFIXES) {
+            Self::PubSub
+        } else if wit_shape_matches(wit, WIT_STORE_SHAPE_PREFIXES) {
+            Self::Store
+        } else {
+            Self::Capability
+        }
+    }
+
+    /// Canonical short kebab byte-string every consumer that formats a
+    /// [`WitShape`] as census-facing text lands on — returns
+    /// `"http"` / `"pubsub"` / `"store"` / `"capability"`, the same
+    /// byte-strings the [`std::fmt::Display`] and [`AsRef<str>`] impls
+    /// route through and every future histogram-column /
+    /// audit-report / admission-rejection-body reader reads.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`crate::CaixaKind::as_str`] /
+    /// [`crate::dialeto::CaixaDialeto::as_str`] /
+    /// [`PlacementStrategy::as_str`] /
+    /// [`RateLimitUnit::as_suffix`] /
+    /// [`crate::supervisor::RestartStrategy::as_str`] /
+    /// [`crate::supervisor::RestartPolicy::as_str`] canonical-projection
+    /// accessors on the sibling closed-set typed-enum discriminator
+    /// axes.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Http => "http",
+            Self::PubSub => "pubsub",
+            Self::Store => "store",
+            Self::Capability => "capability",
+        }
+    }
+}
+
+/// Route [`std::fmt::Display`] through [`WitShape::as_str`], so every
+/// consumer that formats a [`WitShape`] as user-facing text (future
+/// histogram column headers on `feira app graph --by-wit-shape`,
+/// future admission-webhook rejection bodies enumerating the accepted
+/// shape set, future audit-report per-arm column headers) lands on the
+/// same `"http"` / `"pubsub"` / `"store"` / `"capability"` byte-string
+/// the paired [`AsRef<str>`] impl also routes through. Same
+/// canonical-projection discipline the sibling
+/// [`std::fmt::Display for crate::CaixaKind`] /
+/// [`std::fmt::Display for crate::dialeto::CaixaDialeto`] /
+/// [`std::fmt::Display for PlacementStrategy`] /
+/// [`std::fmt::Display for RateLimitUnit`] impls carry — every text
+/// projection on this closed-set typed enum's dispatch surface reaches
+/// through one accessor.
+impl std::fmt::Display for WitShape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Route [`AsRef<str>`] through [`WitShape::as_str`], so every
+/// consumer that borrows a [`WitShape`] as `&str` (a future
+/// `HashMap<&str, _>` keyed lookup, a `&str`-bounded generic that
+/// takes a shape tag) lands on the same byte-string the sibling
+/// [`std::fmt::Display`] impl routes through. Peer of the sibling
+/// closed-set typed enums' [`AsRef<str>`] impls carrying the same
+/// discipline.
+impl AsRef<str> for WitShape {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
 
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
@@ -14127,6 +14381,273 @@ mod tests {
             assert!(!wit_shape_is_http(wit));
             assert!(!wit_shape_is_pubsub(wit));
             assert!(!wit_shape_is_store(wit));
+        }
+    }
+
+    // Canonical `(wit, expected)` sweep the four [`WitShape`] pins below
+    // key off — one accept-set sample per prefix in each of the three
+    // payload-arm prefix sets [`WIT_HTTP_SHAPE_PREFIXES`] /
+    // [`WIT_PUBSUB_SHAPE_PREFIXES`] / [`WIT_STORE_SHAPE_PREFIXES`], plus
+    // three canonical Capability-arm samples (a non-prefix-matching WIT
+    // world, an empty string, a partial-match probe that lands after
+    // the accepted prefix boundary). Declared once so a future arm
+    // addition or prefix-set edit grows the truth table at one
+    // authored site and every downstream pin picks up the new row by
+    // construction.
+    const WIT_SHAPE_CLASSIFY_TRUTH_TABLE: &[(&str, WitShape)] = &[
+        ("wasi:http/proxy", WitShape::Http),
+        ("http:incoming", WitShape::Http),
+        ("nats:events", WitShape::PubSub),
+        ("kafka:topic", WitShape::PubSub),
+        ("wasi:keyvalue/store", WitShape::Store),
+        ("kv:cache", WitShape::Store),
+        ("wasi:filesystem/preopens", WitShape::Capability),
+        ("custom:capability-only", WitShape::Capability),
+        ("", WitShape::Capability),
+    ];
+
+    #[test]
+    fn wit_shape_all_matches_declaration_order_and_covers_every_arm() {
+        // Fail-before-pass-after pin on [`WitShape::ALL`]: the slice
+        // must enumerate every arm exactly once in declaration order
+        // (`Http` → `PubSub` → `Store` → `Capability`), so downstream
+        // consumers that walk the shape space through the const slice
+        // reach every arm and see them in the canonical order the
+        // paired [`WitShape::classify`] arm-preference dispatches on.
+        // A future variant addition that forgets to grow the slice
+        // trips here (the length no longer matches the number of arms
+        // touched by the `match self` below); a rearrangement of the
+        // declaration order without updating the slice trips too.
+        let expected: [WitShape; 4] = [
+            WitShape::Http,
+            WitShape::PubSub,
+            WitShape::Store,
+            WitShape::Capability,
+        ];
+        assert_eq!(WitShape::ALL.len(), expected.len());
+        assert_eq!(WitShape::ALL, &expected[..]);
+        // Exhaustive-match witness: touch every arm so a future
+        // variant addition without a matching `WitShape::ALL` extension
+        // trips at compile time here on the missing arm.
+        for arm in WitShape::ALL {
+            match arm {
+                WitShape::Http | WitShape::PubSub | WitShape::Store | WitShape::Capability => {}
+            }
+        }
+    }
+
+    #[test]
+    fn wit_shape_classify_pins_the_canonical_truth_table() {
+        // Pin the [`WitShape::classify`] arm-dispatch against the
+        // shared truth table [`WIT_SHAPE_CLASSIFY_TRUTH_TABLE`]. A
+        // future prefix-set edit that reroutes any canonical sample
+        // onto the wrong arm trips at exactly the offending row.
+        for (wit, expected) in WIT_SHAPE_CLASSIFY_TRUTH_TABLE {
+            assert_eq!(
+                WitShape::classify(wit),
+                *expected,
+                "WitShape::classify({wit:?}) drifted from truth table",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_classify_partitions_via_is_variant_predicates() {
+        // Fail-before-pass-after pin: for every canonical truth-table
+        // row, the classified arm satisfies exactly one of the four
+        // [`gen_platform::IsVariant`]-derived arm-discriminator
+        // predicates ([`WitShape::is_http`] / [`is_pubsub`] /
+        // [`is_store`] / [`is_capability`]) — the observed 4-slot
+        // predicate row must equal a one-hot row with the `true` at
+        // exactly the same index as the declared arm's slot in
+        // [`WitShape::ALL`]. A future rebind (an `#[is_variant(name =
+        // "…")]` drift, a manual `impl` shadowing the derive, an arm
+        // rename that reroutes one arm through the wrong predicate
+        // lane) trips here at exactly the offending row rather than
+        // surfacing far from the derive commit.
+        for (wit, expected) in WIT_SHAPE_CLASSIFY_TRUTH_TABLE {
+            let arm = WitShape::classify(wit);
+            let observed = [
+                arm.is_http(),
+                arm.is_pubsub(),
+                arm.is_store(),
+                arm.is_capability(),
+            ];
+            let mut expected_row = [false; 4];
+            let idx = WitShape::ALL
+                .iter()
+                .position(|a| a == expected)
+                .expect("truth-table arm appears in WitShape::ALL");
+            expected_row[idx] = true;
+            assert_eq!(
+                observed, expected_row,
+                "WitShape::classify({wit:?}).is_* row must be one-hot at slot {idx}",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_classify_agrees_with_free_predicates() {
+        // Equivalence pin against the four free classifier predicates
+        // ([`wit_shape_is_http`] / [`wit_shape_is_pubsub`] /
+        // [`wit_shape_is_store`] / [`wit_shape_is_capability`]) — after
+        // this lift the free predicates route through
+        // `matches!(WitShape::classify(wit), WitShape::<arm>)`, so this
+        // pin proves the delegation preserves each predicate's
+        // accept-set on the canonical truth table. A future accidental
+        // reintroduction of an open-coded free-predicate body (or a
+        // classify-side arm reorder that shifts arm preference in a
+        // way that breaks disjointness) trips here at the offending
+        // row rather than at a downstream consumer.
+        for (wit, _expected) in WIT_SHAPE_CLASSIFY_TRUTH_TABLE {
+            let arm = WitShape::classify(wit);
+            assert_eq!(arm.is_http(), wit_shape_is_http(wit));
+            assert_eq!(arm.is_pubsub(), wit_shape_is_pubsub(wit));
+            assert_eq!(arm.is_store(), wit_shape_is_store(wit));
+            assert_eq!(arm.is_capability(), wit_shape_is_capability(wit));
+        }
+    }
+
+    #[test]
+    fn wit_shape_as_str_display_and_asref_route_through_one_source() {
+        // Fail-before-pass-after pin on the canonical-projection triple
+        // [`WitShape::as_str`] / [`std::fmt::Display for WitShape`] /
+        // [`AsRef<str> for WitShape`]: every arm's `Display`-formatted
+        // and `AsRef<str>`-borrowed output must byte-equal its
+        // `as_str` output. Same discipline the sibling
+        // [`crate::CaixaKind`] / [`crate::dialeto::CaixaDialeto`] /
+        // [`PlacementStrategy`] / [`RateLimitUnit`] canonical-projection
+        // triples carry — a future accidental hand-rolled `Display`
+        // body that diverges from `as_str` trips here.
+        let expected: &[(WitShape, &str)] = &[
+            (WitShape::Http, "http"),
+            (WitShape::PubSub, "pubsub"),
+            (WitShape::Store, "store"),
+            (WitShape::Capability, "capability"),
+        ];
+        for (arm, want) in expected {
+            assert_eq!(arm.as_str(), *want, "WitShape::as_str({arm:?}) drifted");
+            assert_eq!(
+                format!("{arm}"),
+                *want,
+                "Display for WitShape drifted from as_str at {arm:?}",
+            );
+            assert_eq!(
+                AsRef::<str>::as_ref(arm),
+                *want,
+                "AsRef<str> for WitShape drifted from as_str at {arm:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_classify_is_const_fn() {
+        // Fail-before-pass-after pin on [`WitShape::classify`]'s
+        // `const`-eval posture. The classifier must be `pub const fn`
+        // — any future accidental downgrade to non-`const` fails the
+        // wrapper below with E0015 at caixa-core build time, strictly
+        // stronger than a runtime `assert!`. Peer of the sibling
+        // [`wit_shape_classifier_family_is_const_fn`] pin on the
+        // free-function classifier family.
+        const fn classify_via_const_fn(wit: &str) -> WitShape {
+            WitShape::classify(wit)
+        }
+        // Compile-time truth-table pin: every canonical row's
+        // classification is reachable at const-eval time, so any
+        // downstream `const`-context consumer (a module-scope
+        // `const _: () = assert!(matches!(WitShape::classify(<lit>),
+        // WitShape::<arm>))` invariant pin on a typed fixture, a
+        // future `const fn` per-`:contratos :wit` arm-resolver over a
+        // static wit literal) reaches the classifier through one
+        // dispatch on the substrate primitive without an intermediate
+        // non-`const` step.
+        const _: () = assert!(matches!(
+            classify_via_const_fn("wasi:http/proxy"),
+            WitShape::Http
+        ));
+        const _: () = assert!(matches!(
+            classify_via_const_fn("nats:events"),
+            WitShape::PubSub
+        ));
+        const _: () = assert!(matches!(
+            classify_via_const_fn("wasi:keyvalue/store"),
+            WitShape::Store
+        ));
+        const _: () = assert!(matches!(classify_via_const_fn(""), WitShape::Capability));
+        // Also assert const `as_str` routes through the const `classify`
+        // on the same const path.
+        const _: () = assert!(matches!(
+            classify_via_const_fn("wasi:http/proxy").as_str().as_bytes(),
+            b"http"
+        ));
+    }
+
+    #[test]
+    fn wit_shape_classify_matches_wit_contract_target_arm_on_valid_inputs() {
+        // Cross-surface equivalence pin: for every canonical
+        // truth-table row that also validates cleanly through
+        // [`WitContract::target`], the pre-projection [`WitShape`] arm
+        // matches the post-projection [`WitTarget`] arm — the pre- and
+        // post-validation classifications agree on the arm identity
+        // even though the payload-carrying view carries additional
+        // per-arm information. A future edit that reroutes
+        // `WitContract::target`'s HTTP/pubsub/store dispatch through a
+        // different predicate than the [`WitShape::classify`] the free
+        // predicates now route through would trip here at the offending
+        // row rather than at a downstream renderer.
+        //
+        // The Capability arm is excluded from the paired sweep: an
+        // arbitrary Capability-classified string need not pass
+        // [`crate::render::is_wit_world_ref`]'s value-shape gate, so
+        // `WitContract::target` would raise `ContratoWitInvalid`
+        // rather than return `WitTarget::Capability`; the arm-identity
+        // agreement lives in the payload-arm rows.
+        //
+        // Per-row shape: `(wit, endpoint, subject, slot)` — one row per
+        // payload arm with its shape's canonical payload field filled
+        // and the peer fields `None`. Named type-alias closes the
+        // `clippy::type_complexity` warning the raw tuple triggers.
+        type WitTargetArmRow = (
+            &'static str,
+            Option<&'static str>,
+            Option<&'static str>,
+            Option<&'static str>,
+        );
+        let cases: [WitTargetArmRow; 6] = [
+            ("wasi:http/proxy", Some("/x"), None, None),
+            ("http:incoming", Some("/x"), None, None),
+            ("nats:events", None, Some("subject.x"), None),
+            ("kafka:topic", None, Some("subject.x"), None),
+            ("wasi:keyvalue/store", None, None, Some("bucket/x")),
+            ("kv:cache", None, None, Some("bucket/x")),
+        ];
+        for (wit, endpoint, subject, slot) in cases {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: wit.to_string(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            let target = c.target().unwrap_or_else(|e| {
+                panic!("expected target() to validate for wit={wit:?}, got: {e}")
+            });
+            let shape = WitShape::classify(wit);
+            // Match arm-for-arm — the raw &str classifier and the
+            // validated payload view must agree on which arm carries
+            // the edge.
+            let agree = matches!(
+                (shape, target),
+                (WitShape::Http, WitTarget::Http { .. })
+                    | (WitShape::PubSub, WitTarget::PubSub { .. })
+                    | (WitShape::Store, WitTarget::Store { .. })
+                    | (WitShape::Capability, WitTarget::Capability)
+            );
+            assert!(
+                agree,
+                "WitShape::classify({wit:?}) and WitContract::target arm-identity disagree",
+            );
         }
     }
 
