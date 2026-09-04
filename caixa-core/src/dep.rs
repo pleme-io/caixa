@@ -3483,6 +3483,65 @@ impl From<DepList> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on the two-list dep-graph
+/// [`DepList`] closed-set typed enum from a *borrowed* input onto the
+/// `&'static str` axis — the borrowed-input companion to the paired
+/// owned-input [`From<DepList> for &'static str`] impl immediately
+/// above. Routes byte-for-byte through the same substrate-primitive
+/// [`DepList::as_str`] `pub const fn` accessor so every consumer that
+/// binds a `&DepList` through the standard-library `.into()` /
+/// [`From<&Self> for &'static str`] axis (a
+/// `DepList::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer that iterates the substrate-
+/// canonical [`DepList::ALL`] slice — whose iterator yields `&DepList`,
+/// not `DepList`, so the owned-input [`From<DepList>`] axis alone
+/// forces every call site through an explicit `.copied()` /
+/// dereference / [`Copy`]-bound restatement rather than the direct
+/// trait-idiomatic projection; a future generic
+/// `<T: Copy + for<'a> Into<&'static str>>`-bound diagnostic column
+/// that walks the `iter().map(Into::into)` shape verbatim; the future
+/// M4 admission-webhook rejection body that composes the accepted-set
+/// enumeration from an iterated `DepList::ALL.iter().map(|l| l.into())`
+/// pipe rather than a per-arm `match l { … }` cascade) reaches the same
+/// two-arm lifted [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] const the paired
+/// owned-input [`From<DepList> for &'static str`], the sibling
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`DepList::as_str`]
+/// surfaces already return.
+///
+/// Opens the substrate-wide trait-idiomatic *borrowed-input*
+/// forward-projection family on the last-touched closed-set fieldless
+/// typed enum — first-mover on the borrowed-input axis, mirroring the
+/// role [`crate::supervisor::RestartStrategy`] played on the owned-
+/// input axis (523157d). Rust's `From` trait does not auto-derive the
+/// `From<&Self>` sibling from a `From<Self>` impl (the blanket
+/// `impl<T, U> From<&T> for U where T: Copy, U: From<T>` does not exist
+/// in `core`), so every closed-set typed enum that carries the
+/// owned-input axis but not the borrowed-input axis forces every
+/// borrowed-input call site through a `.copied()` /
+/// `<&'static str>::from(*list)` / `list.as_str()` detour whose type
+/// bounds have no compile-time link to the substrate primitive. The
+/// remaining fourteen substrate-wide closed-set fieldless typed enum
+/// peers (`CaixaKind`, `CaixaDialeto`, `RestartStrategy`,
+/// `RestartPolicy`, `WitShape`, `RateLimitUnit`, `PlacementStrategy`,
+/// `PathShapeViolation`, `InvariantKind`, `ArchVerdict`, `Severity`,
+/// `FixSafety`, `Semantic`, `FerriteRuntime`) are the future targets
+/// of this campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`] across the two-arm
+/// emit-set via a borrowed input, plus a `const`-context materialization
+/// witness) and
+/// [`tests::dep_list_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<DepList> for &'static str`] impl).
+impl From<&DepList> for &'static str {
+    fn from(list: &DepList) -> &'static str {
+        list.as_str()
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -17724,6 +17783,104 @@ mod tests {
                  different vocabularies"
             );
         }
+    }
+
+    #[test]
+    fn dep_list_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&DepList> for &'static str` — asserts the borrowed-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::DepList::as_str`] `pub const fn` accessor resolve to
+        // the same two-arm emit-set across every arm the exhaustive
+        // [`super::DepList::ALL`] slice enumerates. Rust's `From` trait
+        // does not auto-derive the borrowed-input sibling from a paired
+        // owned-input impl (no `impl<T, U> From<&T> for U where T: Copy,
+        // U: From<T>` blanket in `core`), so the borrowed-input axis is
+        // a distinct trait-idiomatic surface that a `.iter().map(Into::into)`
+        // shape over [`super::DepList::ALL`] (whose iterator yields
+        // `&DepList`, not `DepList`) reaches through this impl and no
+        // other — the paired owned-input [`From<DepList>`] impl requires
+        // an explicit `.copied()` / dereference before the trait fires.
+        // Materializes the `<&'static str as From<&DepList>>::from`
+        // output in a `const`-shape binding to make the `'static`
+        // lifetime promise a build-time invariant.
+        const PROD: &str = super::DepList::Prod.as_str();
+        const DEV: &str = super::DepList::Dev.as_str();
+        for list in super::DepList::ALL {
+            let via_trait: &'static str = <&'static str as From<&super::DepList>>::from(list);
+            let via_method: &'static str = list.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&DepList> for &'static str impl must round-trip \
+                 &DepList::{list:?} to the same lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* const \
+                 DepList::as_str returns — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            let via_into: &'static str = list.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &DepList::{list:?} must \
+                 byte-equal DepList::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [PROD, DEV],
+            [
+                crate::render::DEP_AUTHOR_KEY_DEPS,
+                crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+            ],
+            "const-context DepList::as_str must resolve to the two lifted \
+             DEP_AUTHOR_KEY_DEPS* consts — the borrowed-input \
+             From<&DepList> for &'static str impl inherits its `'static` \
+             lifetime promise from the same accessor the owned-input \
+             sibling routes through"
+        );
+    }
+
+    #[test]
+    fn dep_list_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<DepList> for &'static str` (523157d
+        // campaign-shape) and borrowed-input `From<&DepList> for
+        // &'static str` (this lift) forward projections must resolve
+        // identically on every arm, locking the two input-shape paths
+        // together so any future detour trips at caixa-core test time.
+        // Then a witness that a `.iter().map(Into::into)` pipe over
+        // [`super::DepList::ALL`] (whose iterator yields `&DepList`)
+        // materializes the two-arm accept-set through the borrowed-
+        // input axis alone — the exact shape a future M4 admission-
+        // webhook rejection body composer, a future substrate-wide
+        // per-arm diagnostic column, or a
+        // `HashMap::<&'static str, DepList>::from_iter(DepList::ALL.iter()
+        //     .map(|l| (l.into(), *l)))`-style per-list lookup reaches
+        // through — closing the two-way owned/borrowed input-shape
+        // symmetry on the forward-projection trait-idiomatic axis.
+        for &list in super::DepList::ALL {
+            let owned: &'static str = <&'static str as From<super::DepList>>::from(list);
+            let borrowed: &'static str = <&'static str as From<&super::DepList>>::from(&list);
+            assert_eq!(
+                owned, borrowed,
+                "From<DepList> and From<&DepList> for &'static str must \
+                 resolve identically on DepList::{list:?} — divergence \
+                 signals the owned-input and borrowed-input forward-\
+                 projection paths have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> = super::DepList::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> =
+            super::DepList::ALL.iter().map(|l| l.as_str()).collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over DepList::ALL must byte-equal \
+             `.iter().map(|l| l.as_str())` on every arm — the borrowed-\
+             input `From<&DepList> for &'static str` axis is what makes \
+             the `.iter().map(Into::into)` shape route through the \
+             substrate-primitive `DepList::as_str` accessor rather than \
+             through a per-call-site `.copied()` / dereference detour"
+        );
     }
 }
 
