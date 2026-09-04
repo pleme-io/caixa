@@ -324,6 +324,87 @@ impl TryFrom<&str> for InvariantKind {
     }
 }
 
+/// Standard-library trait-idiomatic forward projection on the
+/// [`InvariantKind`] closed-set caixa-arch invariant-severity axis.
+/// Routes byte-for-byte through the paired substrate-primitive
+/// [`InvariantKind::as_str`] `pub const fn` accessor so
+/// `<&'static str>::from(kind)` / `kind.into::<&'static str>()` reaches
+/// the same three-arm `"safety"` / `"compliance"` / `"hint"` canonical-
+/// lowercase emit-set the sibling method-named accessor dispatches
+/// through and the sibling [`std::fmt::Display for InvariantKind`] /
+/// [`AsRef<str> for InvariantKind`] impls also route through.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// forward-projection family
+/// ([`caixa_core::supervisor::RestartStrategy`] via 523157d,
+/// [`caixa_core::supervisor::RestartPolicy`] via 9fb37d0,
+/// [`caixa_core::CaixaKind`] via edb827b,
+/// [`caixa_core::CaixaDialeto`] via c189a6f,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via afa3562,
+/// [`caixa_core::aplicacao::WitShape`] via 56998ec,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via 7fdfbf4,
+/// [`caixa_core::render::PathShapeViolation`] via 070a6de) onto the
+/// first outside-`caixa-core` closed-set fieldless typed enum on the
+/// caixa surface — the caixa-arch invariant-severity three-arm accept-
+/// set every `feira arch` / `feira tofu` per-violation render site and
+/// every future M4 admission-webhook / policy-engine audit-loader
+/// dispatches through. Opens the trait-idiomatic forward-projection
+/// family on the outside-caixa-core closed-set fieldless typed-enum
+/// surface so a downstream `impl From<T> for &'static str`-bound generic
+/// consumer reaches the caixa-arch invariant-severity axis through the
+/// same uniform trait dispatch every caixa-core sibling already carries.
+///
+/// Pairs with the sibling [`TryFrom<&str> for InvariantKind`] impl
+/// (e21a857) to close the two-way `Self ↔ &'static str` round-trip on
+/// the trait-idiomatic axis pair, mirroring the pre-existing
+/// method-named [`InvariantKind::as_str`] +
+/// [`InvariantKind::from_wire`] pair on the substrate-primitive axis
+/// pair.
+///
+/// Return type is `&'static str` by construction — every
+/// [`InvariantKind::as_str`] arm resolves to an inline `"safety"` /
+/// `"compliance"` / `"hint"` `&'static str` literal, so the trait's
+/// return-type promise is upheld structurally without a
+/// [`String::leak`] cast or a per-arm inline literal outside the paired
+/// [`InvariantKind::as_str`] dispatch.
+///
+/// The paired [`InvariantKind::as_str`] accessor's three-arm emit-set
+/// is the single source of truth — every future arm addition (a
+/// `Warning` tier between [`Self::Compliance`] and [`Self::Hint`] the
+/// `iac-forge` policy-engine grows, a `Fatal` tier above
+/// [`Self::Safety`] — both trajectory items the sibling
+/// [`InvariantKind::ALL`] doc block already names) grows the trait-
+/// idiomatic forward axis by construction: one caixa-arch edit on
+/// [`InvariantKind::as_str`] extends every one of the sibling forward-
+/// projection paths ([`std::fmt::Display`], [`AsRef<str>`],
+/// [`InvariantKind::as_str`] itself, and this
+/// [`From<Self> for &'static str`]) without a coordinated rewrite
+/// across every future `Into<&'static str>`-bound consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the three-
+/// arm emit-set, plus a `const`-context materialization witness for the
+/// `&'static str` lifetime promise routed through the paired
+/// [`InvariantKind::as_str`] `pub const fn` accessor, plus a paired
+/// `.into()` shape assertion covering the blanket-derived
+/// `Into<&'static str>` shape) and
+/// [`tests::invariant_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as
+/// From<InvariantKind>>::from` and [`InvariantKind::as_str`] agree on
+/// every arm, plus a two-way direct round-trip witness through the
+/// paired trait-idiomatic [`TryFrom<&str>`] axis that closes the two-way
+/// `Self ↔ &'static str` round-trip on the trait-idiomatic axis pair —
+/// the emit-side [`InvariantKind::as_str`] and the parse-side
+/// [`InvariantKind::from_wire`] dispatch on the same three inline
+/// canonical-lowercase byte-strings by construction, so round-tripping
+/// composes the two trait impls directly).
+impl From<InvariantKind> for &'static str {
+    fn from(kind: InvariantKind) -> &'static str {
+        kind.as_str()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -1046,6 +1127,180 @@ mod tests {
                 InvariantKind::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<InvariantKind> for &'static str` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`super::InvariantKind::as_str`] `pub const fn` accessor
+        // resolve to the same three-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`super::InvariantKind::ALL`]
+        // slice enumerates. Any future silent detour that routes the
+        // trait impl through a divergent projection (a per-arm inline
+        // `match kind { Safety => "safety", … }` re-inlining that opens
+        // a compile-time link to the un-lifted arm-literal outside the
+        // paired [`super::InvariantKind::as_str`] dispatch, a swap onto
+        // a `format!("{:?}", …).to_lowercase()` round-trip through the
+        // `#[derive(Debug)]` output whose stability is *not* guaranteed
+        // and would silently reroute the diagnostic tag through a stale
+        // byte-string with no downstream signal until an operator
+        // scrolled the `feira tofu` terminal — the exact drift footgun
+        // the sibling [`super::InvariantKind::as_str`] documentation
+        // explicitly names) trips at caixa-arch test time under
+        // `assert_eq!` rather than at a downstream `impl Into<&'static
+        // str>`-bound consumer's silent split. Sweeps every one of the
+        // three arms [`super::InvariantKind::ALL`] carries so no arm's
+        // projection is covered only by the sibling method-named
+        // `as_str` / [`std::fmt::Display`] / [`AsRef<str>`] paths.
+        // Materializes the `<&'static str as
+        // From<InvariantKind>>::from` output in three `const`-shape
+        // bindings against the paired [`super::InvariantKind::as_str`]
+        // `pub const fn` accessor to make the `'static` lifetime promise
+        // a build-time invariant — a future accidental downgrade of any
+        // of the three arms' inline canonical-lowercase byte-strings to
+        // a non-`&'static str` (a `String::leak()`-produced return, a
+        // `Box::leak`-cast, an intermediate lifetime-erasing helper)
+        // trips at caixa-arch build time rather than at a downstream
+        // `'static`-bound consumer.
+        //
+        // Peer of the sibling
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_routes_through_as_str_accessor`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_routes_through_as_str_accessor`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_routes_through_as_suffix_accessor`]
+        // (7fdfbf4), and
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_routes_through_as_str_accessor`]
+        // (070a6de) pins on the sibling closed-set typed-enum forward-
+        // projection axes — extends the trait-idiomatic forward-
+        // projection axis onto the first outside-caixa-core closed-set
+        // fieldless typed enum on the caixa surface (the caixa-arch
+        // invariant-severity axis), opening the trait-idiomatic
+        // forward-projection family on the outside-caixa-core surface.
+        const SAFETY: &str = super::InvariantKind::Safety.as_str();
+        const COMPLIANCE: &str = super::InvariantKind::Compliance.as_str();
+        const HINT: &str = super::InvariantKind::Hint.as_str();
+        for &variant in super::InvariantKind::ALL {
+            let via_trait: &'static str =
+                <&'static str as From<super::InvariantKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<InvariantKind> for &'static str impl must round-trip \
+                 InvariantKind::{variant:?} to the same canonical-lowercase \
+                 byte-string InvariantKind::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on InvariantKind::{variant:?} \
+                 must byte-equal InvariantKind::as_str on the same input \
+                 — the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [SAFETY, COMPLIANCE, HINT],
+            ["safety", "compliance", "hint"],
+            "const-context InvariantKind::as_str must resolve to the \
+             three canonical-lowercase byte-strings — a future accidental \
+             downgrade of any arm to a non-const or non-static \
+             byte-string breaks the `&'static str`-lifetime promise the \
+             paired From<InvariantKind> for &'static str impl carries by \
+             construction"
+        );
+    }
+
+    #[test]
+    fn invariant_kind_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<InvariantKind> for &'static str` forward projection and
+        // the method-named [`super::InvariantKind::as_str`] forward
+        // projection must resolve identically on *every* arm, not just
+        // the ones named in the primary byte-parity pin above. Sweeps
+        // every [`super::InvariantKind::ALL`] arm and asserts the
+        // trait's `From::from` output byte-equals the method-named
+        // accessor's return-value on each, locking the two forward-
+        // projection paths together by construction so any future
+        // detour (a stray `From` special-case that lands on a divergent
+        // per-arm literal outside the paired `as_str` dispatch, a
+        // hypothetical rebrand touching one axis without the other)
+        // trips at caixa-arch test time.
+        //
+        // Peer of the sibling forward-projection partition pins
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_and_as_suffix_partition_the_emit_set`]
+        // (7fdfbf4), and
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (070a6de) — extends the round-trip discipline onto the first
+        // outside-caixa-core closed-set fieldless typed enum on the
+        // caixa surface, closing the two-way `Self ↔ &'static str`
+        // round-trip on the trait-idiomatic pair (`From<Self> for
+        // &'static str` + `TryFrom<&str> for Self`) as well as the
+        // pre-existing method-named pair (`as_str` + `from_wire`).
+        for &variant in super::InvariantKind::ALL {
+            let via_trait: &'static str =
+                <&'static str as From<super::InvariantKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<InvariantKind> for &'static str and \
+                 InvariantKind::as_str must resolve identically on \
+                 InvariantKind::{variant:?} — divergence signals the two \
+                 forward-projection paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output re-parses
+        // through the paired trait-idiomatic reverse `TryFrom<&str>` back
+        // to the original variant. Closes the two-way `InvariantKind ↔
+        // &'static str` round-trip on the trait-idiomatic axis pair
+        // directly (no wire-vocab intermediate — the emit-side
+        // [`super::InvariantKind::as_str`] and the parse-side
+        // [`super::InvariantKind::from_wire`] dispatch on the same three
+        // inline canonical-lowercase byte-strings by construction),
+        // mirroring the pre-existing method-named `as_str` + `from_wire`
+        // round-trip on the substrate-primitive axis pair and the peer
+        // [`super::InvariantKind`] two-halves lock pin
+        // [`tests::invariant_kind_try_from_str_and_from_wire_partition_the_accept_set`]
+        // on the sibling parse axis.
+        for &variant in super::InvariantKind::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<super::InvariantKind, ()> =
+                <super::InvariantKind as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic axis pair must round-trip \
+                 InvariantKind::{variant:?} through `.into::<&'static \
+                 str>()` and back through `TryFrom<&str>` — a break \
+                 signals the forward-emit and reverse-parse axes have \
+                 drifted onto different vocabularies"
             );
         }
     }
