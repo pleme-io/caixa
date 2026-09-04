@@ -324,6 +324,92 @@ impl TryFrom<&str> for Severity {
     }
 }
 
+/// Standard-library trait-idiomatic forward projection on the
+/// [`Severity`] closed-set caixa-lint diagnostic-severity axis.
+/// Routes byte-for-byte through the paired substrate-primitive
+/// [`Severity::as_str`] `pub const fn` accessor so
+/// `<&'static str>::from(sev)` / `sev.into::<&'static str>()`
+/// reaches the same four-arm `"error"` / `"warning"` / `"info"` /
+/// `"hint"` canonical-lowercase emit-set the sibling method-named
+/// accessor dispatches through and the sibling
+/// [`std::fmt::Display for Severity`] / [`AsRef<str> for Severity`]
+/// impls also route through.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// forward-projection family
+/// ([`caixa_core::supervisor::RestartStrategy`] via 523157d,
+/// [`caixa_core::supervisor::RestartPolicy`] via 9fb37d0,
+/// [`caixa_core::CaixaKind`] via edb827b,
+/// [`caixa_core::CaixaDialeto`] via c189a6f,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via afa3562,
+/// [`caixa_core::aplicacao::WitShape`] via 56998ec,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via 7fdfbf4,
+/// [`caixa_core::render::PathShapeViolation`] via 070a6de,
+/// [`caixa_arch::invariants::InvariantKind`] via f2ca7bc, and
+/// [`caixa_arch::report::ArchVerdict`] via d4559cb) onto the first
+/// closed-set fieldless typed enum on the caixa-lint surface — the
+/// diagnostic-severity four-arm accept-set every `feira lint`
+/// per-diagnostic render site, every `caixa-lsp`-side per-severity
+/// `DiagnosticSeverity` mapping, and every future M4 admission-webhook
+/// / lint-report re-loader dispatches through. Extends the
+/// trait-idiomatic forward-projection family onto the third
+/// outside-caixa-core closed-set fieldless typed enum on the caixa
+/// surface (after the two peer caixa-arch axes at f2ca7bc / d4559cb),
+/// so a downstream `impl From<T> for &'static str`-bound generic
+/// consumer reaches the caixa-lint diagnostic-severity axis through
+/// the same uniform trait dispatch every caixa-core sibling and the
+/// two peer caixa-arch axes already carry.
+///
+/// Pairs with the sibling [`TryFrom<&str> for Severity`] impl
+/// (a7bf74c) to close the two-way `Self ↔ &'static str` round-trip on
+/// the trait-idiomatic axis pair, mirroring the pre-existing
+/// method-named [`Severity::as_str`] + [`Severity::from_wire`] pair
+/// on the substrate-primitive axis pair.
+///
+/// Return type is `&'static str` by construction — every
+/// [`Severity::as_str`] arm resolves to an inline `"error"` /
+/// `"warning"` / `"info"` / `"hint"` `&'static str` literal, so the
+/// trait's return-type promise is upheld structurally without a
+/// [`String::leak`] cast or a per-arm inline literal outside the
+/// paired [`Severity::as_str`] dispatch.
+///
+/// The paired [`Severity::as_str`] accessor's four-arm emit-set is
+/// the single source of truth — every future arm addition (a `Debug`
+/// tier below [`Self::Hint`] once verbose per-node lint traces enter
+/// scope, a `Critical` tier above [`Self::Error`] the M3-and-later
+/// LSP surfaces for build-halting failures — both trajectory items
+/// the sibling [`Severity::ALL`] doc block already names) grows the
+/// trait-idiomatic forward axis by construction: one caixa-lint edit
+/// on [`Severity::as_str`] extends every one of the sibling
+/// forward-projection paths ([`std::fmt::Display`], [`AsRef<str>`],
+/// [`Severity::as_str`] itself, and this [`From<Self> for &'static
+/// str`]) without a coordinated rewrite across every future
+/// `Into<&'static str>`-bound consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Severity::as_str`] across the four-arm
+/// emit-set, plus a `const`-context materialization witness for the
+/// `&'static str` lifetime promise routed through the paired
+/// [`Severity::as_str`] `pub const fn` accessor, plus a paired
+/// `.into()` shape assertion covering the blanket-derived
+/// `Into<&'static str>` shape) and
+/// [`tests::severity_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as
+/// From<Severity>>::from` and [`Severity::as_str`] agree on every
+/// arm, plus a two-way direct round-trip witness through the paired
+/// trait-idiomatic [`TryFrom<&str>`] axis that closes the two-way
+/// `Self ↔ &'static str` round-trip on the trait-idiomatic axis pair
+/// — the emit-side [`Severity::as_str`] and the parse-side
+/// [`Severity::from_wire`] dispatch on the same four inline
+/// canonical-lowercase byte-strings by construction, so round-tripping
+/// composes the two trait impls directly).
+impl From<Severity> for &'static str {
+    fn from(severity: Severity) -> &'static str {
+        severity.as_str()
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -1523,6 +1609,191 @@ mod tests {
                 Severity::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Severity> for &'static str` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`super::Severity::as_str`] `pub const fn` accessor resolve
+        // to the same four-arm canonical-lowercase emit-set across
+        // every arm the exhaustive [`super::Severity::ALL`] slice
+        // enumerates. Any future silent detour that routes the trait
+        // impl through a divergent projection (a per-arm inline
+        // `match sev { Error => "error", … }` re-inlining that opens
+        // a compile-time link to the un-lifted arm-literal outside
+        // the paired [`super::Severity::as_str`] dispatch, a swap
+        // onto a `format!("{:?}", …).to_lowercase()` round-trip
+        // through the `#[derive(Debug)]` output whose stability is
+        // *not* guaranteed and would silently reroute the diagnostic
+        // tag through a stale byte-string with no downstream signal
+        // until an operator scrolled the `feira lint` terminal —
+        // the exact drift footgun the sibling
+        // [`super::Severity::as_str`] documentation explicitly
+        // names) trips at caixa-lint test time under `assert_eq!`
+        // rather than at a downstream `impl Into<&'static
+        // str>`-bound consumer's silent split. Sweeps every one of
+        // the four arms [`super::Severity::ALL`] carries so no arm's
+        // projection is covered only by the sibling method-named
+        // `as_str` / [`std::fmt::Display`] / [`AsRef<str>`] paths.
+        // Materializes the `<&'static str as
+        // From<Severity>>::from` output in four `const`-shape
+        // bindings against the paired [`super::Severity::as_str`]
+        // `pub const fn` accessor to make the `'static` lifetime
+        // promise a build-time invariant — a future accidental
+        // downgrade of any arm's inline canonical-lowercase
+        // byte-string to a non-`&'static str` (a `String::leak()`-
+        // produced return, a `Box::leak`-cast, an intermediate
+        // lifetime-erasing helper) trips at caixa-lint build time
+        // rather than at a downstream `'static`-bound consumer.
+        //
+        // Peer of the sibling
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_routes_through_as_str_accessor`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_routes_through_as_str_accessor`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_routes_through_as_suffix_accessor`]
+        // (7fdfbf4),
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_routes_through_as_str_accessor`]
+        // (070a6de),
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_static_str_routes_through_as_str_accessor`
+        // (f2ca7bc), and
+        // `caixa_arch::report::tests::arch_verdict_from_into_static_str_routes_through_as_str_accessor`
+        // (d4559cb) pins on the sibling closed-set typed-enum forward-
+        // projection axes — extends the trait-idiomatic forward-
+        // projection axis onto the first closed-set fieldless typed
+        // enum on the caixa-lint surface (the diagnostic-severity
+        // axis), the third outside-caixa-core closed-set fieldless
+        // typed enum on the caixa surface (after the two peer
+        // caixa-arch axes at f2ca7bc / d4559cb).
+        const ERROR: &str = Severity::Error.as_str();
+        const WARNING: &str = Severity::Warning.as_str();
+        const INFO: &str = Severity::Info.as_str();
+        const HINT: &str = Severity::Hint.as_str();
+        for &variant in Severity::ALL {
+            let via_trait: &'static str = <&'static str as From<Severity>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<Severity> for &'static str impl must round-trip \
+                 Severity::{variant:?} to the same canonical-lowercase \
+                 byte-string Severity::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on Severity::{variant:?} \
+                 must byte-equal Severity::as_str on the same input \
+                 — the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [ERROR, WARNING, INFO, HINT],
+            ["error", "warning", "info", "hint"],
+            "const-context Severity::as_str must resolve to the four \
+             canonical-lowercase byte-strings — a future accidental \
+             downgrade of any arm to a non-const or non-static \
+             byte-string breaks the `&'static str`-lifetime promise \
+             the paired From<Severity> for &'static str impl carries \
+             by construction"
+        );
+    }
+
+    #[test]
+    fn severity_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<Severity> for &'static str` forward projection and
+        // the method-named [`super::Severity::as_str`] forward
+        // projection must resolve identically on *every* arm, not
+        // just the ones named in the primary byte-parity pin above.
+        // Sweeps every [`super::Severity::ALL`] arm and asserts the
+        // trait's `From::from` output byte-equals the method-named
+        // accessor's return-value on each, locking the two forward-
+        // projection paths together by construction so any future
+        // detour (a stray `From` special-case that lands on a
+        // divergent per-arm literal outside the paired `as_str`
+        // dispatch, a hypothetical rebrand touching one axis without
+        // the other) trips at caixa-lint test time.
+        //
+        // Peer of the sibling forward-projection partition pins
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_and_as_suffix_partition_the_emit_set`]
+        // (7fdfbf4),
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (070a6de),
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (f2ca7bc), and
+        // `caixa_arch::report::tests::arch_verdict_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (d4559cb) — extends the round-trip discipline onto the
+        // first closed-set fieldless typed enum on the caixa-lint
+        // surface, closing the two-way `Self ↔ &'static str`
+        // round-trip on the trait-idiomatic pair (`From<Self> for
+        // &'static str` + `TryFrom<&str> for Self`) as well as the
+        // pre-existing method-named pair (`as_str` + `from_wire`).
+        for &variant in Severity::ALL {
+            let via_trait: &'static str = <&'static str as From<Severity>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<Severity> for &'static str and Severity::as_str \
+                 must resolve identically on Severity::{variant:?} — \
+                 divergence signals the two forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output
+        // re-parses through the paired trait-idiomatic reverse
+        // `TryFrom<&str>` back to the original variant. Closes the
+        // two-way `Severity ↔ &'static str` round-trip on the
+        // trait-idiomatic axis pair directly (no wire-vocab
+        // intermediate — the emit-side [`super::Severity::as_str`]
+        // and the parse-side [`super::Severity::from_wire`] dispatch
+        // on the same four inline canonical-lowercase byte-strings
+        // by construction, so round-tripping through the paired
+        // `From<Self> for &'static str` + `TryFrom<&str> for Self`
+        // trait impls composes to the identity on `Severity::ALL`).
+        for &variant in Severity::ALL {
+            let emitted: &'static str = <&'static str as From<Severity>>::from(variant);
+            let reparsed = <Severity as TryFrom<&str>>::try_from(emitted).unwrap_or_else(|()| {
+                panic!(
+                    "TryFrom<&str> for Severity must accept every \
+                     From<Severity> for &'static str output — got \
+                     Err(()) for Severity::{variant:?}'s emit \
+                     byte-string {emitted:?}"
+                )
+            });
+            assert_eq!(
+                reparsed, variant,
+                "trait-idiomatic Severity ↔ &'static str round-trip \
+                 must be the identity on Severity::{variant:?} — the \
+                 From<Self> for &'static str + TryFrom<&str> for Self \
+                 pair must compose to the identity on the closed \
+                 four-arm accept-set"
             );
         }
     }
