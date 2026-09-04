@@ -519,6 +519,122 @@ impl TryFrom<&str> for CaixaKind {
     }
 }
 
+/// Trait-idiomatic *forward* projection on the structurally most
+/// fundamental closed-set typed enum on the caixa surface — every
+/// [`crate::Caixa`] carries a `:kind` — routing through the paired
+/// substrate-primitive [`CaixaKind::as_str`] `pub const fn` accessor so
+/// every future consumer that binds a [`CaixaKind`] through the
+/// standard-library `.into()` / [`From<Self> for &'static str`]
+/// (equivalently [`Into<&'static str>`]) axis (a future
+/// `tracing::field::valuable::Value::Str(kind.into())` structured-log
+/// recorder where the `Str` arm typing demands `&'static str` and the
+/// sibling [`AsRef<str>`] impl's borrowed `&str` return-type does not
+/// satisfy the bound, a future
+/// `Cow::Borrowed::<'static, str>(kind.into())` composer on the future
+/// M4 admission-webhook rejection body where the `Cow<'static, str>`
+/// typing rules out the sibling [`AsRef<str>`] borrowed return, a
+/// generic `<T: Into<&'static str>>`-bound serializer on a per-kind
+/// diagnostic column, a per-kind [`std::collections::HashMap`] whose
+/// key type is `&'static str` requiring the `'static` bound through
+/// [`Into::into`]) reaches the same lifted
+/// [`crate::render::CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`crate::render::CAIXA_KIND_LABEL_BINARIO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SERVICO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SUPERVISOR`] /
+/// [`crate::render::CAIXA_KIND_LABEL_APLICACAO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_ACAO`] const the paired
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`CaixaKind::as_str`]
+/// surfaces already return, rather than an open-coded per-arm
+/// `match kind { Biblioteca => "biblioteca", … }` cascade whose
+/// arm-set has no compile-time link back to the substrate primitive.
+///
+/// Complements the pre-existing quadruple ([`std::fmt::Display`],
+/// [`AsRef<str>`], [`CaixaKind::as_str`], [`TryFrom<&str>`] via
+/// 3c83606) with the paired trait-idiomatic forward-projection axis:
+/// Rust-side newtype/typed-enum convention pairs [`TryFrom<&str>`]
+/// (trait-idiomatic reverse) with [`From<Self> for &'static str`]
+/// (trait-idiomatic forward) on the same primitive so a caller who
+/// can project *in from* a `&str` via the trait axis can also project
+/// *out to* one — mirroring the `strum::IntoStaticStr` /
+/// `serde::Serialize`-shape idiom where both projection halves share
+/// one trait-driven vocabulary. Before this lift the substrate
+/// carried a `&str`-returning [`AsRef<str>`] but not the paired
+/// `&'static str`-returning [`From<Self> for &'static str`] axis
+/// every downstream generic that specifically needs `'static`
+/// byte-string bytes reaches for.
+///
+/// Deliberately routes through the human-readable
+/// [`CaixaKind::as_str`] axis, not the `PascalCase`
+/// [`CaixaKind::wire_name`] axis — the two-axis split the sibling
+/// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+/// pin makes load-bearing is preserved here by construction: the
+/// paired [`AsRef<str>`], [`std::fmt::Display`], and this
+/// [`From<Self> for &'static str`] trait triple all land on the
+/// diagnostic byte-string, while the wire axis (tatara-lisp author
+/// surface `:kind Biblioteca`) stays reachable only through the
+/// explicit [`CaixaKind::wire_name`] + [`serde::Serialize`] paths.
+///
+/// The paired [`CaixaKind::as_str`] returns `&'static str` by
+/// construction (each `match` arm resolves to a
+/// [`crate::render::CAIXA_KIND_LABEL_*`] `pub const &str` with static
+/// lifetime), so the trait's return-type promise is upheld
+/// structurally. Any future silent detour that routes the impl
+/// through a non-static projection (a per-arm inline
+/// `String::from("biblioteca")`-shaped re-inlining that would
+/// `.leak()`-cast for the `'static` bound, a hypothetical rebrand of
+/// one arm's [`crate::render::CAIXA_KIND_LABEL_*`] const to a
+/// non-`const &str`) is a caixa-core-build-time failure through the
+/// `pub const fn as_str` signature the trait routes through.
+///
+/// The paired impl reaches the same six-arm emit-set the
+/// [`CaixaKind::as_str`] accessor dispatches through, so any future
+/// arm addition (a virtual-actor `Actor` arm the
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// M5 Orleans-inspired kind reaches through — a candidate future arm
+/// named in the sibling [`CaixaKind::from_wire`] doc block) grows
+/// the trait-idiomatic forward axis by construction — one caixa-core
+/// edit on [`CaixaKind::as_str`] extends every one of the four
+/// sibling forward-projection paths ([`std::fmt::Display`],
+/// [`AsRef<str>`], [`CaixaKind::as_str`] itself, and this
+/// [`From<Self> for &'static str`]) without a coordinated rewrite
+/// across every future `Into<&'static str>`-bound consumer's arm-set.
+///
+/// Extends the substrate-wide trait-idiomatic *forward*-projection
+/// family opened on [`crate::supervisor::RestartStrategy`] (523157d)
+/// and [`crate::supervisor::RestartPolicy`] (9fb37d0) — the two M2
+/// OTP-shape closed-set typed enum peers whose paired
+/// `From<Self> for &'static str` axis established the "route through
+/// `as_str`" precedent — onto the structurally most fundamental
+/// closed-set typed enum on the caixa surface. Third peer on the
+/// forward-projection family, and the first outside the M2 OTP-shape
+/// sibling axis pair; the remaining eleven closed-set typed enums on
+/// the caixa substrate surface (`CaixaDialeto`, `PlacementStrategy`,
+/// `WitShape`, `RateLimitUnit`, `PathShapeViolation`, `InvariantKind`,
+/// `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`, `FerriteRuntime`)
+/// are the future targets of this campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] across the six-arm
+/// emit-set, plus a `const`-context materialization witness for the
+/// `&'static str` lifetime promise) and
+/// [`tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as From<CaixaKind>>::from`
+/// and [`CaixaKind::as_str`] agree on every arm, plus a two-way
+/// round-trip witness through the paired trait-idiomatic
+/// [`TryFrom<&str>`] axis on the `PascalCase` wire vocabulary that
+/// closes the two-way `Self ↔ &'static str` round-trip on the
+/// trait-idiomatic axis pair via the intermediate
+/// [`CaixaKind::wire_name`] axis — the two projection endpoints
+/// resolve to different vocabularies by design, so the round-trip
+/// crosses through the wire axis rather than composing the two trait
+/// impls directly).
+impl From<CaixaKind> for &'static str {
+    fn from(kind: CaixaKind) -> &'static str {
+        kind.as_str()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1423,5 +1539,202 @@ mod tests {
             "CaixaKind::ALL length must byte-equal the six-arm closed-set \
              cardinality at const-fold time"
         );
+    }
+
+    #[test]
+    fn caixa_kind_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<CaixaKind> for &'static str` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`CaixaKind::as_str`] `pub const fn` accessor resolve to the
+        // same six-arm emit-set across every arm the exhaustive
+        // [`CaixaKind::ALL`] slice enumerates. Any future silent detour
+        // that routes the trait impl through a divergent projection (a
+        // per-arm inline `match kind { Biblioteca => "biblioteca", … }`
+        // re-inlining that opens a compile-time link to the un-lifted
+        // arm-literal, an accidental swap onto the sibling `PascalCase`
+        // [`CaixaKind::wire_name`] axis that would collide the two-axis
+        // human-readable/wire split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin makes load-bearing) trips at caixa-core test time under
+        // `assert_eq!` rather than at a downstream
+        // `impl Into<&'static str>`-bound consumer's silent split.
+        // Sweeps every one of the six arms [`CaixaKind::ALL`] carries so
+        // no arm's projection is covered only by the sibling method-
+        // named `as_str` / [`std::fmt::Display`] / [`AsRef<str>`] paths.
+        // Materializes the `<&'static str as From<CaixaKind>>::from`
+        // output in a `const`-shape binding to make the `'static`
+        // lifetime promise a build-time invariant — a future accidental
+        // downgrade of any of the six arms'
+        // [`crate::render::CAIXA_KIND_LABEL_*`] constants to a
+        // non-`&'static str` (a `String::leak()`-produced return, a
+        // `Box::leak`-cast) trips at caixa-core build time rather than
+        // at a downstream `'static`-bound consumer.
+        const BIBLIOTECA: &str = CaixaKind::Biblioteca.as_str();
+        const BINARIO: &str = CaixaKind::Binario.as_str();
+        const SERVICO: &str = CaixaKind::Servico.as_str();
+        const SUPERVISOR: &str = CaixaKind::Supervisor.as_str();
+        const APLICACAO: &str = CaixaKind::Aplicacao.as_str();
+        const ACAO: &str = CaixaKind::Acao.as_str();
+        for &variant in CaixaKind::ALL {
+            let via_trait: &'static str = <&'static str as From<CaixaKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<CaixaKind> for &'static str impl must round-trip \
+                 CaixaKind::{variant:?} to the same lifted \
+                 CAIXA_KIND_LABEL_* const CaixaKind::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on CaixaKind::{variant:?} must \
+                 byte-equal CaixaKind::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [BIBLIOTECA, BINARIO, SERVICO, SUPERVISOR, APLICACAO, ACAO],
+            [
+                crate::render::CAIXA_KIND_LABEL_BIBLIOTECA,
+                crate::render::CAIXA_KIND_LABEL_BINARIO,
+                crate::render::CAIXA_KIND_LABEL_SERVICO,
+                crate::render::CAIXA_KIND_LABEL_SUPERVISOR,
+                crate::render::CAIXA_KIND_LABEL_APLICACAO,
+                crate::render::CAIXA_KIND_LABEL_ACAO,
+            ],
+            "const-context CaixaKind::as_str must resolve to the six \
+             lifted CAIXA_KIND_LABEL_* consts — a future accidental \
+             downgrade of any arm to a non-const or non-static byte-\
+             string breaks the `&'static str`-lifetime promise the \
+             paired From<CaixaKind> for &'static str impl carries by \
+             construction"
+        );
+    }
+
+    #[test]
+    fn caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<CaixaKind> for &'static str` forward projection and the
+        // method-named [`CaixaKind::as_str`] forward projection must
+        // resolve identically on *every* arm, not just the ones named
+        // in the primary byte-parity pin above. Sweeps every
+        // [`CaixaKind::ALL`] arm and asserts the trait's `From::from`
+        // output byte-equals the method-named accessor's return-value
+        // on each, locking the two forward-projection paths together by
+        // construction so any future detour (a stray `From` special-
+        // case that lands on a divergent per-arm literal outside the
+        // paired `as_str` dispatch, a hypothetical rebrand touching one
+        // axis without the other) trips at caixa-core test time. Peer
+        // of the sibling M2-OTP-shape
+        // [`crate::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d) and
+        // [`crate::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0) partition pins on the sibling M2-OTP-shape closed-
+        // set typed-enum discriminator axes — extends the round-trip
+        // discipline onto the trait-idiomatic *forward* axis on the
+        // structurally most fundamental closed-set typed enum on the
+        // caixa surface.
+        //
+        // Also asserts three-path convergence on the diagnostic axis:
+        // `<&'static str as From<CaixaKind>>::from`, `AsRef<str>::as_ref`,
+        // and `std::fmt::Display` all resolve to the same lifted
+        // [`crate::render::CAIXA_KIND_LABEL_*`] const per arm. The four-
+        // path family (with the substrate-primitive
+        // [`CaixaKind::as_str`] accessor) is closed by construction so
+        // any future silent bifurcation lands at caixa-core test time.
+        //
+        // The round-trip on the trait-idiomatic axis pair
+        // (`From<Self> for &'static str` + `TryFrom<&str> for Self`)
+        // crosses through the [`CaixaKind::wire_name`] intermediate
+        // vocabulary: the two projection endpoints resolve to
+        // different byte-strings by design (the human-readable
+        // lowercase Portuguese `"biblioteca"` on the forward axis vs.
+        // the `PascalCase` wire `"Biblioteca"` on the reverse axis —
+        // the two-axis split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin makes load-bearing). The round-trip witness threads
+        // through [`CaixaKind::wire_name`] as the reverse-axis
+        // vocabulary, so a future silent accidental collapse of either
+        // axis onto the other (routing `From<Self> for &'static str`
+        // through `wire_name`, or routing `TryFrom<&str>` through
+        // `as_str`) trips here.
+        for &variant in CaixaKind::ALL {
+            let via_trait: &'static str = <&'static str as From<CaixaKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            let via_as_ref: &str = variant.as_ref();
+            let via_display: String = variant.to_string();
+            assert_eq!(
+                via_trait, via_method,
+                "From<CaixaKind> for &'static str and CaixaKind::as_str \
+                 must resolve identically on CaixaKind::{variant:?} — \
+                 divergence signals the two forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                via_trait, via_as_ref,
+                "From<CaixaKind> for &'static str and AsRef<str>::as_ref \
+                 must resolve identically on CaixaKind::{variant:?} — \
+                 the four-path forward-projection family (as_str, \
+                 AsRef, Display, From<Self> for &'static str) must \
+                 land on one lifted CAIXA_KIND_LABEL_* const per arm"
+            );
+            assert_eq!(
+                via_trait,
+                via_display.as_str(),
+                "From<CaixaKind> for &'static str and Display must \
+                 resolve identically on CaixaKind::{variant:?} — the \
+                 four-path forward-projection family (as_str, AsRef, \
+                 Display, From<Self> for &'static str) must land on one \
+                 lifted CAIXA_KIND_LABEL_* const per arm"
+            );
+        }
+        // Round-trip witness: every arm's forward-projected
+        // `wire_name` output re-parses through the paired trait-
+        // idiomatic reverse `TryFrom<&str>` back to the original
+        // variant. The reverse `TryFrom<&str>` axis parses the
+        // `PascalCase` wire vocabulary that [`CaixaKind::wire_name`]
+        // emits, not the lowercase Portuguese diagnostic vocabulary
+        // this commit's `From<Self> for &'static str` axis emits —
+        // the two-axis split is by design, and the wire round-trip
+        // through `wire_name` + `TryFrom<&str>` closes the vocabulary
+        // gap by construction.
+        for &variant in CaixaKind::ALL {
+            let wire: &'static str = variant.wire_name();
+            let re_parsed: Result<CaixaKind, ()> = <CaixaKind as TryFrom<&str>>::try_from(wire);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic reverse axis (TryFrom<&str>) must \
+                 round-trip CaixaKind::{variant:?} through wire_name \
+                 back to Ok(CaixaKind::{variant:?}) — a break signals \
+                 the wire-emit and reverse-parse axes have drifted \
+                 onto different vocabularies"
+            );
+        }
+        // Explicit two-axis-split witness: the forward
+        // `From<Self> for &'static str` axis and the reverse
+        // `TryFrom<&str>` axis land on *different* byte-strings by
+        // design on every arm whose human-readable label differs from
+        // its PascalCase wire form. Assert the two vocabularies stay
+        // disjoint per-arm so a future accidental collapse (routing
+        // one through the other's accessor) trips at caixa-core test
+        // time under the inequality assertion below.
+        for &variant in CaixaKind::ALL {
+            let forward: &'static str = <&'static str as From<CaixaKind>>::from(variant);
+            let wire: &'static str = variant.wire_name();
+            assert_ne!(
+                forward, wire,
+                "forward `From<CaixaKind> for &'static str` axis \
+                 (lowercase Portuguese label) and `wire_name` axis \
+                 (PascalCase wire) must stay disjoint on \
+                 CaixaKind::{variant:?} — a byte-equal collapse \
+                 signals the two-axis split the substrate keys off has \
+                 silently merged onto one vocabulary"
+            );
+        }
     }
 }
