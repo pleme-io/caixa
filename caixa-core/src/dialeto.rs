@@ -624,6 +624,81 @@ impl From<CaixaDialeto> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on [`CaixaDialeto`] from a
+/// *borrowed* input onto the `&'static str` axis — the borrowed-input
+/// companion to the paired owned-input [`From<CaixaDialeto> for &'static
+/// str`] impl immediately above. Routes byte-for-byte through the same
+/// substrate-primitive [`CaixaDialeto::as_str`] `pub const fn` accessor so
+/// every consumer that binds a `&CaixaDialeto` through the standard-
+/// library `.into()` / [`From<&Self> for &'static str`] axis (a
+/// `CaixaDialeto::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer — whose iterator over
+/// `&'static [CaixaDialeto]` yields `&CaixaDialeto`, not `CaixaDialeto`,
+/// so the owned-input [`From<CaixaDialeto>`] axis alone forces every call
+/// site through an explicit `.copied()` / dereference / [`Copy`]-bound
+/// restatement rather than the direct trait-idiomatic projection; a
+/// future generic `<T: Copy + for<'a> Into<&'static str>>`-bound
+/// diagnostic column that walks the `iter().map(Into::into)` shape
+/// verbatim over any of the substrate's closed-set typed enums; the
+/// future M4 admission-webhook rejection body composer's per-dialect
+/// accepted-set enumeration built from an iterated
+/// `CaixaDialeto::ALL.iter().map(|d| d.into())` pipe rather than a
+/// per-arm `match d { … }` cascade; a
+/// `HashMap::<&'static str, CaixaDialeto>::from_iter(
+///     CaixaDialeto::ALL.iter().map(|d| (d.into(), *d)))`-style
+/// per-dialect reverse-lookup table the sibling [`TryFrom<&str>`] impl
+/// cannot compose without this borrowed-input axis in place) reaches the
+/// same four `"Pacote"` / `"Molde"` / `"MoldePosicional"` /
+/// `"Desconhecido"` byte-strings the paired owned-input
+/// [`From<CaixaDialeto> for &'static str`], the sibling
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`CaixaDialeto::as_str`]
+/// surfaces already return.
+///
+/// Third peer on the substrate-wide trait-idiomatic *borrowed-input*
+/// forward-projection family opened on
+/// [`crate::dep::DepList`] (64aa742) and extended onto
+/// [`crate::CaixaKind`] (5ab993a). Rust's `From` trait does not
+/// auto-derive the `From<&Self>` sibling from a `From<Self>` impl (the
+/// blanket `impl<T, U> From<&T> for U where T: Copy, U: From<T>` does
+/// not exist in `core`), so every closed-set typed enum that carries
+/// the owned-input axis but not the borrowed-input axis forces every
+/// borrowed-input call site through a `.copied()` /
+/// `<&'static str>::from(*dialeto)` / `dialeto.as_str()` detour whose
+/// type bounds have no compile-time link to the substrate primitive.
+///
+/// Unlike the peer [`crate::CaixaKind`] impl (which carries a two-axis
+/// split between the lowercase Portuguese `as_str` diagnostic axis and
+/// the `PascalCase` `wire_name` author-surface axis, so a `.into()`
+/// pipe over `CaixaKind::ALL` yields the diagnostic vocabulary rather
+/// than the wire vocabulary), [`CaixaDialeto`]'s [`CaixaDialeto::as_str`]
+/// and [`CaixaDialeto::from_wire`] share the same `PascalCase`
+/// vocabulary by construction — the borrowed-input projection this impl
+/// exposes therefore composes directly with the sibling
+/// [`TryFrom<&str>`] axis to build reverse-lookup tables without the
+/// wire-vocab intermediate hop the peer axis pair requires.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`] across the four-arm
+/// emit-set via a borrowed input, plus a `const`-context materialization
+/// witness for the `&'static str` lifetime promise, plus a blanket
+/// `.into()` shape assertion) and
+/// [`tests::caixa_dialeto_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<CaixaDialeto> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over [`CaixaDialeto::ALL`]
+/// that materializes the four-arm accept-set through the borrowed-input
+/// axis alone, plus a direct round-trip witness through the paired
+/// trait-idiomatic [`TryFrom<&str>`] axis that closes the two-way
+/// `&Self → &'static str → Self` round-trip on the borrowed-input axis
+/// without the wire-vocab intermediate the peer [`crate::CaixaKind`]
+/// axis pair requires).
+impl From<&CaixaDialeto> for &'static str {
+    fn from(dialeto: &CaixaDialeto) -> &'static str {
+        dialeto.as_str()
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -2153,6 +2228,147 @@ mod tests {
                  building blocks would let a future arm rename land at one \
                  path and drift at the other, which is exactly the drift \
                  the IsVariant lift refuses"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&CaixaDialeto> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`CaixaDialeto::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm emit-set across every arm the
+        // exhaustive [`CaixaDialeto::ALL`] slice enumerates. Rust's
+        // `From` trait does not auto-derive the borrowed-input sibling
+        // from a paired owned-input impl (no `impl<T, U> From<&T> for U
+        // where T: Copy, U: From<T>` blanket in `core`), so the
+        // borrowed-input axis is a distinct trait-idiomatic surface that
+        // a `.iter().map(Into::into)` shape over [`CaixaDialeto::ALL`]
+        // (whose iterator yields `&CaixaDialeto`, not `CaixaDialeto`)
+        // reaches through this impl and no other — the paired owned-
+        // input [`From<CaixaDialeto>`] impl requires an explicit
+        // `.copied()` / dereference before the trait fires.
+        // Materializes the `<&'static str as From<&CaixaDialeto>>::from`
+        // output in a `const`-shape binding to make the `'static`
+        // lifetime promise a build-time invariant — a future accidental
+        // downgrade of any of the four arms' returned literals to a
+        // non-`&'static str` trips at caixa-core build time rather than
+        // at a downstream `'static`-bound consumer. Peer of the sibling
+        // [`crate::dep::tests::dep_list_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (64aa742) /
+        // [`crate::kind::tests::caixa_kind_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (5ab993a) pins on the sibling closed-set typed-enum borrowed-
+        // input forward-projection axes — extends the borrowed-input
+        // axis discipline onto the third peer on the substrate-wide
+        // campaign, the dialect-classification axis.
+        const PACOTE: &str = CaixaDialeto::Pacote.as_str();
+        const MOLDE: &str = CaixaDialeto::Molde.as_str();
+        const MOLDE_POSICIONAL: &str = CaixaDialeto::MoldePosicional.as_str();
+        const DESCONHECIDO: &str = CaixaDialeto::Desconhecido.as_str();
+        for variant in CaixaDialeto::ALL {
+            let via_trait: &'static str = <&'static str as From<&CaixaDialeto>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&CaixaDialeto> for &'static str impl must round-trip \
+                 &CaixaDialeto::{variant:?} to the same `PascalCase` byte-\
+                 string CaixaDialeto::as_str returns — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &CaixaDialeto::{variant:?} must \
+                 byte-equal CaixaDialeto::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same as_str \
+                 dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [PACOTE, MOLDE, MOLDE_POSICIONAL, DESCONHECIDO],
+            ["Pacote", "Molde", "MoldePosicional", "Desconhecido"],
+            "const-context CaixaDialeto::as_str must resolve to the four \
+             `PascalCase` variant-name byte-strings — the borrowed-input \
+             From<&CaixaDialeto> for &'static str impl inherits its \
+             `'static` lifetime promise from the same accessor the owned-\
+             input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn caixa_dialeto_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<CaixaDialeto> for &'static str` and
+        // borrowed-input `From<&CaixaDialeto> for &'static str` (this
+        // lift) forward projections must resolve identically on every
+        // arm, locking the two input-shape paths together so any future
+        // detour trips at caixa-core test time. Then a witness that a
+        // `.iter().map(Into::into)` pipe over [`CaixaDialeto::ALL`]
+        // (whose iterator yields `&CaixaDialeto`) materializes the four-
+        // arm accept-set through the borrowed-input axis alone — the
+        // exact shape a future M4 admission-webhook rejection body
+        // composer, a future substrate-wide per-arm diagnostic column,
+        // or a `HashMap::<&'static str, CaixaDialeto>::from_iter(
+        //     CaixaDialeto::ALL.iter().map(|d| (d.into(), *d)))`-style
+        // per-dialect lookup reaches through — closing the two-way
+        // owned/borrowed input-shape symmetry on the forward-projection
+        // trait-idiomatic axis. Peer of the sibling
+        // [`crate::dep::tests::dep_list_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (64aa742) /
+        // [`crate::kind::tests::caixa_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (5ab993a) partition pins — extends the borrowed-input axis
+        // discipline onto the third peer on the substrate-wide campaign.
+        for &variant in CaixaDialeto::ALL {
+            let owned: &'static str = <&'static str as From<CaixaDialeto>>::from(variant);
+            let borrowed: &'static str = <&'static str as From<&CaixaDialeto>>::from(&variant);
+            assert_eq!(
+                owned, borrowed,
+                "From<CaixaDialeto> and From<&CaixaDialeto> for &'static str \
+                 must resolve identically on CaixaDialeto::{variant:?} — \
+                 divergence signals the owned-input and borrowed-input \
+                 forward-projection paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> = CaixaDialeto::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> = CaixaDialeto::ALL.iter().map(|d| d.as_str()).collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over CaixaDialeto::ALL must byte-\
+             equal `.iter().map(|d| d.as_str())` on every arm — the \
+             borrowed-input `From<&CaixaDialeto> for &'static str` axis \
+             is what makes the `.iter().map(Into::into)` shape route \
+             through the substrate-primitive `CaixaDialeto::as_str` \
+             accessor rather than through a per-call-site `.copied()` / \
+             dereference detour"
+        );
+        // Direct round-trip witness on the borrowed-input axis: every
+        // arm's borrowed `From` output re-parses through the paired
+        // trait-idiomatic reverse `TryFrom<&str>` back to the original
+        // variant. Unlike the peer [`crate::CaixaKind`] axis pair
+        // (whose forward `From<Self> for &'static str` emits the
+        // lowercase Portuguese `as_str` diagnostic vocabulary while
+        // the reverse `TryFrom<&str>` parses the `PascalCase`
+        // `wire_name` author-surface vocabulary, forcing the round-trip
+        // through an intermediate wire-vocab hop), [`CaixaDialeto`]'s
+        // [`CaixaDialeto::as_str`] emit and [`CaixaDialeto::from_wire`]
+        // parse share the same `PascalCase` vocabulary by construction,
+        // so the borrowed-input forward axis and the reverse axis
+        // compose directly.
+        for &variant in CaixaDialeto::ALL {
+            let borrowed: &'static str = <&'static str as From<&CaixaDialeto>>::from(&variant);
+            let re_parsed: Result<CaixaDialeto, ()> =
+                <CaixaDialeto as TryFrom<&str>>::try_from(borrowed);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic borrowed-input round-trip must project \
+                 &CaixaDialeto::{variant:?} through \
+                 `<&'static str>::from(&variant)` and back through \
+                 `TryFrom<&str>` — a break signals the borrowed-input \
+                 forward-emit axis and the reverse-parse axis have \
+                 drifted onto different vocabularies"
             );
         }
     }
