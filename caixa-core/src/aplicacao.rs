@@ -5110,6 +5110,88 @@ impl TryFrom<&str> for RateLimitUnit {
     }
 }
 
+/// Standard-library trait-idiomatic forward projection on the
+/// [`RateLimitUnit`] closed-set typed enum. Routes byte-for-byte through
+/// the paired substrate-primitive [`RateLimitUnit::as_suffix`]
+/// `pub const fn` accessor so `<&'static str>::from(unit)` /
+/// `unit.into::<&'static str>()` reaches the same three-arm `"s"` /
+/// `"m"` / `"h"` canonical-suffix emit-set the sibling method-named
+/// accessor dispatches through and the sibling
+/// [`std::fmt::Display for RateLimitUnit`] / [`AsRef<str> for RateLimitUnit`]
+/// impls also route through.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// forward-projection family
+/// ([`crate::supervisor::RestartStrategy`] via 523157d,
+/// [`crate::supervisor::RestartPolicy`] via 9fb37d0,
+/// [`crate::CaixaKind`] via edb827b,
+/// [`crate::CaixaDialeto`] via c189a6f,
+/// [`PlacementStrategy`] via afa3562,
+/// [`WitShape`] via 56998ec) onto the third
+/// M3-mesh-primitive-defining slot enum on the caixa surface — the
+/// `:politicas :rate-limit` canonical-unit-suffix closed set the
+/// caixa-mesh renderer keys off end-to-end for per-Aplicacao Envoy
+/// `local_rate_limit.token_bucket.fill_interval` overlay emission.
+/// Pairs with the sibling [`TryFrom<&str> for RateLimitUnit`] impl
+/// (bf78400) to close the two-way `Self ↔ &'static str` round-trip on
+/// the trait-idiomatic axis pair, mirroring the pre-existing
+/// method-named [`RateLimitUnit::as_suffix`] +
+/// [`RateLimitUnit::from_suffix`] pair on the substrate-primitive axis
+/// pair.
+///
+/// Return type is `&'static str` by construction — every
+/// [`RateLimitUnit::as_suffix`] arm resolves to an inline
+/// `"s"` / `"m"` / `"h"` `&'static str` literal, so the trait's
+/// return-type promise is upheld structurally without a
+/// [`String::leak`] cast or a per-arm inline literal outside the paired
+/// [`RateLimitUnit::as_suffix`] dispatch.
+///
+/// Deliberately routes through the canonical-suffix axis, not the
+/// second-magnitude [`RateLimitUnit::window`] axis — every closed-set
+/// forward-projection path on the caixa surface lands on the same
+/// author-surface-canonical byte-string the codec's parse and render
+/// arms both dispatch on, while the token-bucket-refill period stays
+/// reachable only through the explicit [`RateLimitUnit::window`] /
+/// [`RateLimitUnit::from_window`] paths.
+///
+/// The paired [`RateLimitUnit::as_suffix`] accessor's three-arm emit-set
+/// is the single source of truth — every future arm addition (a `"d"`
+/// day suffix once Envoy's `rate_limit_action` grows daily-bucket
+/// support, a `"ms"` sub-second window once high-throughput per-edge
+/// policies come into scope per MESH-COMPOSITION §III.2 #3 — both
+/// trajectory items the sibling [`RateLimitUnit::window_from_suffix`]
+/// doc block already names) grows the trait-idiomatic forward axis by
+/// construction: one caixa-core edit on [`RateLimitUnit::as_suffix`]
+/// extends every one of the sibling forward-projection paths
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`RateLimitUnit::as_suffix`]
+/// itself, and this [`From<Self> for &'static str`]) without a
+/// coordinated rewrite across every future `Into<&'static str>`-bound
+/// consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_into_static_str_routes_through_as_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::as_suffix`] across the
+/// three-arm emit-set, plus a `const`-context materialization witness
+/// for the `&'static str` lifetime promise routed through the paired
+/// [`RateLimitUnit::as_suffix`] `pub const fn` accessor, plus a paired
+/// `.into()` shape assertion covering the blanket-derived
+/// `Into<&'static str>` shape) and
+/// [`tests::rate_limit_unit_from_into_static_str_and_as_suffix_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as
+/// From<RateLimitUnit>>::from` and [`RateLimitUnit::as_suffix`] agree on
+/// every arm, plus a two-way direct round-trip witness through the
+/// paired trait-idiomatic [`TryFrom<&str>`] axis that closes the
+/// two-way `Self ↔ &'static str` round-trip on the trait-idiomatic axis
+/// pair — the emit-side [`RateLimitUnit::as_suffix`] and the parse-side
+/// [`RateLimitUnit::from_suffix`] dispatch on the same three inline
+/// canonical-suffix byte-strings by construction, so round-tripping
+/// composes the two trait impls directly).
+impl From<RateLimitUnit> for &'static str {
+    fn from(unit: RateLimitUnit) -> &'static str {
+        unit.as_suffix()
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -23249,6 +23331,170 @@ mod tests {
                 "TryFrom<&str> and from_suffix must partition the \
                  accept-set identically on input {input:?} — got \
                  TryFrom = {via_try_from:?}, from_suffix = {via_from_suffix:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_into_static_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RateLimitUnit> for &'static str` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] `pub const fn` accessor
+        // resolve to the same three-arm canonical-suffix emit-set across
+        // every arm the exhaustive [`super::RateLimitUnit::ALL`] slice
+        // enumerates. Any future silent detour that routes the trait
+        // impl through a divergent projection (a per-arm inline
+        // `match unit { Second => "s", … }` re-inlining that opens a
+        // compile-time link to the un-lifted arm-literal outside the
+        // paired [`super::RateLimitUnit::as_suffix`] dispatch, a swap
+        // onto the second-magnitude [`super::RateLimitUnit::window`]
+        // axis that would collide the canonical-suffix /
+        // token-bucket-refill two-axis split) trips at caixa-core test
+        // time under `assert_eq!` rather than at a downstream
+        // `impl Into<&'static str>`-bound consumer's silent split.
+        // Sweeps every one of the three arms
+        // [`super::RateLimitUnit::ALL`] carries so no arm's projection
+        // is covered only by the sibling method-named `as_suffix` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] paths. Materializes the
+        // `<&'static str as From<RateLimitUnit>>::from` output in three
+        // `const`-shape bindings against the paired
+        // [`super::RateLimitUnit::as_suffix`] `pub const fn` accessor to
+        // make the `'static` lifetime promise a build-time invariant —
+        // a future accidental downgrade of any of the three arms'
+        // inline canonical-suffix byte-strings to a non-`&'static str`
+        // (a `String::leak()`-produced return, a `Box::leak`-cast, an
+        // intermediate lifetime-erasing helper) trips at caixa-core
+        // build time rather than at a downstream `'static`-bound
+        // consumer.
+        //
+        // Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d),
+        // [`crate::supervisor::tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+        // (9fb37d0),
+        // [`crate::kind::tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+        // (edb827b),
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_static_str_routes_through_as_str_accessor`]
+        // (c189a6f),
+        // [`tests::placement_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (afa3562), and
+        // [`tests::wit_shape_from_into_static_str_routes_through_as_str_accessor`]
+        // (56998ec) pins on the sibling closed-set typed-enum forward-
+        // projection axes — extends the trait-idiomatic forward-
+        // projection axis onto the seventh closed-set fieldless typed
+        // enum on the caixa surface (the third M3-mesh-primitive-
+        // defining slot enum, the `:politicas :rate-limit`
+        // canonical-suffix axis the caixa-mesh renderer keys off end-
+        // to-end for per-Aplicacao Envoy
+        // `local_rate_limit.token_bucket.fill_interval` overlay
+        // emission).
+        const SECOND: &str = super::RateLimitUnit::Second.as_suffix();
+        const MINUTE: &str = super::RateLimitUnit::Minute.as_suffix();
+        const HOUR: &str = super::RateLimitUnit::Hour.as_suffix();
+        for &unit in super::RateLimitUnit::ALL {
+            let via_trait: &'static str = <&'static str as From<super::RateLimitUnit>>::from(unit);
+            let via_method: &'static str = unit.as_suffix();
+            assert_eq!(
+                via_trait, via_method,
+                "From<RateLimitUnit> for &'static str impl must \
+                 round-trip RateLimitUnit::{unit:?} to the same \
+                 canonical-suffix byte-string RateLimitUnit::as_suffix \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: &'static str = unit.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on RateLimitUnit::{unit:?} \
+                 must byte-equal RateLimitUnit::as_suffix on the same \
+                 input — the blanket-derived Into shape must resolve to \
+                 the same as_suffix dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [SECOND, MINUTE, HOUR],
+            ["s", "m", "h"],
+            "const-context RateLimitUnit::as_suffix must resolve to the \
+             three canonical-suffix byte-strings — a future accidental \
+             downgrade of any arm to a non-const or non-static \
+             byte-string breaks the `&'static str`-lifetime promise the \
+             paired From<RateLimitUnit> for &'static str impl carries \
+             by construction"
+        );
+    }
+
+    #[test]
+    fn rate_limit_unit_from_into_static_str_and_as_suffix_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<RateLimitUnit> for &'static str` forward projection and
+        // the method-named [`super::RateLimitUnit::as_suffix`] forward
+        // projection must resolve identically on *every* arm, not just
+        // the ones named in the primary byte-parity pin above. Sweeps
+        // every [`super::RateLimitUnit::ALL`] arm and asserts the
+        // trait's `From::from` output byte-equals the method-named
+        // accessor's return-value on each, locking the two forward-
+        // projection paths together by construction so any future
+        // detour (a stray `From` special-case that lands on a divergent
+        // per-arm literal outside the paired `as_suffix` dispatch, a
+        // hypothetical rebrand touching one axis without the other)
+        // trips at caixa-core test time.
+        //
+        // Peer of the sibling forward-projection partition pins
+        // [`crate::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d),
+        // [`crate::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0),
+        // [`crate::kind::tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (edb827b),
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (c189a6f),
+        // [`tests::placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (afa3562), and
+        // [`tests::wit_shape_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (56998ec) — extends the round-trip discipline onto the seventh
+        // closed-set typed enum on the caixa surface, closing the two-
+        // way `Self ↔ &'static str` round-trip on the trait-idiomatic
+        // pair (`From<Self> for &'static str` + `TryFrom<&str> for
+        // Self`) as well as the pre-existing method-named pair
+        // (`as_suffix` + `from_suffix`).
+        for &unit in super::RateLimitUnit::ALL {
+            let via_trait: &'static str = <&'static str as From<super::RateLimitUnit>>::from(unit);
+            let via_method: &'static str = unit.as_suffix();
+            assert_eq!(
+                via_trait, via_method,
+                "From<RateLimitUnit> for &'static str and \
+                 RateLimitUnit::as_suffix must resolve identically on \
+                 RateLimitUnit::{unit:?} — divergence signals the two \
+                 forward-projection paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output re-parses
+        // through the paired trait-idiomatic reverse `TryFrom<&str>` back
+        // to the original variant. Closes the two-way `RateLimitUnit ↔
+        // &'static str` round-trip on the trait-idiomatic axis pair
+        // directly (no wire-vocab intermediate the peer [`CaixaKind`]
+        // axis pair requires — the emit-side
+        // [`super::RateLimitUnit::as_suffix`] and the parse-side
+        // [`super::RateLimitUnit::from_suffix`] dispatch on the same
+        // three inline canonical-suffix byte-strings by construction),
+        // mirroring the pre-existing method-named `as_suffix` +
+        // `from_suffix` round-trip on the substrate-primitive axis pair
+        // and the peer [`super::WitShape`] round-trip (56998ec) on the
+        // sibling M3-mesh-primitive-defining slot enum.
+        for &unit in super::RateLimitUnit::ALL {
+            let emitted: &'static str = unit.into();
+            let re_parsed: Result<super::RateLimitUnit, ()> =
+                <super::RateLimitUnit as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(unit),
+                "trait-idiomatic axis pair must round-trip \
+                 RateLimitUnit::{unit:?} through `.into::<&'static \
+                 str>()` and back through `TryFrom<&str>` — a break \
+                 signals the forward-emit and reverse-parse axes have \
+                 drifted onto different vocabularies"
             );
         }
     }
