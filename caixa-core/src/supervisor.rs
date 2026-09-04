@@ -530,6 +530,91 @@ impl From<RestartStrategy> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on [`RestartStrategy`] from a
+/// *borrowed* input onto the `&'static str` axis — the borrowed-input
+/// companion to the paired owned-input [`From<RestartStrategy> for
+/// &'static str`] impl immediately above. Routes byte-for-byte through
+/// the same substrate-primitive [`RestartStrategy::as_str`] `pub const
+/// fn` accessor so every consumer that binds a `&RestartStrategy`
+/// through the standard-library `.into()` / [`From<&Self> for &'static
+/// str`] axis (a `RestartStrategy::ALL.iter().map(<&'static
+/// str>::from).collect::<Vec<_>>()` per-arm accept-set materializer —
+/// whose iterator over `&'static [RestartStrategy]` yields
+/// `&RestartStrategy`, not `RestartStrategy`, so the owned-input
+/// [`From<RestartStrategy>`] axis alone forces every call site through
+/// an explicit `.copied()` / dereference / [`Copy`]-bound restatement
+/// rather than the direct trait-idiomatic projection; a future generic
+/// `<T: Copy + for<'a> Into<&'static str>>`-bound diagnostic column
+/// that walks the `iter().map(Into::into)` shape verbatim across every
+/// substrate-wide closed-set typed enum; the future wasm-operator's
+/// per-supervisor sibling-restart-strategy diagnostic line that
+/// composes the accepted-set enumeration from an iterated
+/// `RestartStrategy::ALL.iter().map(|s| s.into())` pipe rather than a
+/// per-arm `match s { … }` cascade; a future
+/// `HashMap::<&'static str, RestartStrategy>::from_iter(
+///     RestartStrategy::ALL.iter().map(|s| (s.into(), *s)))`-style
+/// per-strategy reverse-lookup table the sibling [`TryFrom<&str>`]
+/// impl cannot compose without this borrowed-input axis in place)
+/// reaches the same four-arm lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const
+/// the paired owned-input [`From<RestartStrategy> for &'static str`],
+/// the sibling [`std::fmt::Display`], [`AsRef<str>`], and
+/// [`RestartStrategy::as_str`] surfaces already return.
+///
+/// Fourth peer on the substrate-wide trait-idiomatic *borrowed-input*
+/// forward-projection family opened on [`crate::dep::DepList`]
+/// (64aa742) and extended onto [`crate::CaixaKind`] (5ab993a) and
+/// [`crate::CaixaDialeto`] (807b0b5). Rust's `From` trait does not
+/// auto-derive the `From<&Self>` sibling from a `From<Self>` impl (the
+/// blanket `impl<T, U> From<&T> for U where T: Copy, U: From<T>` does
+/// not exist in `core`), so every closed-set typed enum that carries
+/// the owned-input axis but not the borrowed-input axis forces every
+/// borrowed-input call site through a `.copied()` /
+/// `<&'static str>::from(*strategy)` / `strategy.as_str()` detour whose
+/// type bounds have no compile-time link to the substrate primitive.
+/// [`RestartStrategy`] is the first M2 OTP-shape peer to converge onto
+/// this campaign (mirroring the first-mover role it played on the
+/// owned-input axis in 523157d); the remaining eleven substrate-wide
+/// closed-set fieldless typed enum peers (`RestartPolicy`, `WitShape`,
+/// `RateLimitUnit`, `PlacementStrategy`, `PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) are the future targets of this campaign.
+///
+/// Unlike the peer [`crate::CaixaKind`] axis pair (whose forward
+/// [`From<Self> for &'static str`] emits the lowercase Portuguese
+/// [`Self::as_str`] diagnostic vocabulary while the reverse
+/// [`TryFrom<&str>`] parses the `PascalCase` [`Self::wire_name`]
+/// author-surface vocabulary, forcing the round-trip through an
+/// intermediate wire-vocab hop), [`RestartStrategy`]'s
+/// [`Self::as_str`] emit and [`Self::from_wire`] parse share the same
+/// `PascalCase` vocabulary by construction, so the borrowed-input
+/// forward axis and the reverse axis compose directly — the round-trip
+/// witness pin below locks this direct composition without the
+/// intermediate hop the peer axis requires.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm emit-set via a borrowed input, plus a `const`-context
+/// materialization witness for the `&'static str` lifetime promise,
+/// plus a blanket `.into()` shape) and
+/// [`tests::restart_strategy_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<RestartStrategy> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over
+/// [`RestartStrategy::ALL`], plus a direct round-trip witness through
+/// [`TryFrom<&str>`] that closes the two-way `&Self → &'static str →
+/// Self` round-trip without the wire-vocab intermediate the peer
+/// [`crate::CaixaKind`] axis pair requires).
+impl From<&RestartStrategy> for &'static str {
+    fn from(strategy: &RestartStrategy) -> &'static str {
+        strategy.as_str()
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -7108,6 +7193,150 @@ mod tests {
                  RestartStrategy::{variant:?} through `.into::<&'static \
                  str>()` and back through `TryFrom<&str>` — a break signals \
                  the forward-emit and reverse-parse axes have drifted onto \
+                 different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartStrategy> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`RestartStrategy::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm emit-set across every arm the
+        // exhaustive [`RestartStrategy::ALL`] slice enumerates. Rust's
+        // `From` trait does not auto-derive the borrowed-input sibling
+        // from a paired owned-input impl (no `impl<T, U> From<&T> for U
+        // where T: Copy, U: From<T>` blanket in `core`), so the
+        // borrowed-input axis is a distinct trait-idiomatic surface
+        // that a `.iter().map(Into::into)` shape over
+        // [`RestartStrategy::ALL`] (whose iterator yields
+        // `&RestartStrategy`, not `RestartStrategy`) reaches through
+        // this impl and no other — the paired owned-input
+        // [`From<RestartStrategy>`] impl requires an explicit
+        // `.copied()` / dereference before the trait fires.
+        // Materializes the `<&'static str as
+        // From<&RestartStrategy>>::from` output in a `const`-shape
+        // binding to make the `'static` lifetime promise a build-time
+        // invariant.
+        const ONE_FOR_ONE: &str = RestartStrategy::OneForOne.as_str();
+        const ONE_FOR_ALL: &str = RestartStrategy::OneForAll.as_str();
+        const REST_FOR_ONE: &str = RestartStrategy::RestForOne.as_str();
+        const SIMPLE_ONE_FOR_ONE: &str = RestartStrategy::SimpleOneForOne.as_str();
+        for variant in RestartStrategy::ALL {
+            let via_trait: &'static str = <&'static str as From<&RestartStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&RestartStrategy> for &'static str impl must \
+                 round-trip &RestartStrategy::{variant:?} to the same \
+                 lifted SUPERVISOR_ESTRATEGIA_* const \
+                 RestartStrategy::as_str returns — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &RestartStrategy::{variant:?} \
+                 must byte-equal RestartStrategy::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE, SIMPLE_ONE_FOR_ONE],
+            [
+                crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE,
+                crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL,
+                crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE,
+                crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE,
+            ],
+            "const-context RestartStrategy::as_str must resolve to the \
+             four lifted SUPERVISOR_ESTRATEGIA_* consts — the borrowed-\
+             input From<&RestartStrategy> for &'static str impl inherits \
+             its `'static` lifetime promise from the same accessor the \
+             owned-input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn restart_strategy_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<RestartStrategy> for &'static str` (523157d
+        // campaign-shape) and borrowed-input `From<&RestartStrategy> for
+        // &'static str` (this lift) forward projections must resolve
+        // identically on every arm, locking the two input-shape paths
+        // together so any future detour trips at caixa-core test time.
+        // Then a witness that a `.iter().map(Into::into)` pipe over
+        // [`RestartStrategy::ALL`] (whose iterator yields
+        // `&RestartStrategy`) materializes the four-arm accept-set
+        // through the borrowed-input axis alone — the exact shape a
+        // future wasm-operator per-supervisor sibling-restart-strategy
+        // diagnostic line, a future substrate-wide per-arm diagnostic
+        // column, or a
+        // `HashMap::<&'static str, RestartStrategy>::from_iter(
+        //     RestartStrategy::ALL.iter().map(|s| (s.into(), *s)))`-style
+        // per-strategy lookup reaches through — closing the two-way
+        // owned/borrowed input-shape symmetry on the forward-projection
+        // trait-idiomatic axis. Peer of the sibling
+        // [`crate::dep::tests::dep_list_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (64aa742) /
+        // [`crate::kind::tests::caixa_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (5ab993a) /
+        // [`crate::dialeto::tests::caixa_dialeto_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (807b0b5) partition pins on the sibling closed-set typed-enum
+        // discriminator axes — extends the borrowed-input axis
+        // discipline onto the first M2 OTP-shape sibling-restart
+        // closed-set typed enum on the caixa surface. Also closes the
+        // direct two-way `&Self → &'static str → Self` round-trip via
+        // the paired [`TryFrom<&str>`] axis — unlike the peer
+        // [`crate::CaixaKind`] axis pair (whose forward `From` emits
+        // lowercase Portuguese diagnostic bytes while the reverse
+        // `TryFrom` parses `PascalCase` wire bytes, forcing the round-
+        // trip through an intermediate wire-vocab hop), the
+        // [`RestartStrategy::as_str`] emit and
+        // [`RestartStrategy::from_wire`] parse share the same
+        // `PascalCase` vocabulary by construction, so the borrowed-
+        // input forward axis and the reverse axis compose directly.
+        for &variant in RestartStrategy::ALL {
+            let owned: &'static str = <&'static str as From<RestartStrategy>>::from(variant);
+            let borrowed: &'static str = <&'static str as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                owned, borrowed,
+                "From<RestartStrategy> and From<&RestartStrategy> for \
+                 &'static str must resolve identically on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 owned-input and borrowed-input forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> = RestartStrategy::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> =
+            RestartStrategy::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over RestartStrategy::ALL must \
+             byte-equal `.iter().map(|s| s.as_str())` on every arm — the \
+             borrowed-input `From<&RestartStrategy> for &'static str` \
+             axis is what makes the `.iter().map(Into::into)` shape route \
+             through the substrate-primitive `RestartStrategy::as_str` \
+             accessor rather than through a per-call-site `.copied()` / \
+             dereference detour"
+        );
+        for variant in RestartStrategy::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<RestartStrategy, ()> =
+                <RestartStrategy as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(*variant),
+                "trait-idiomatic borrowed-input forward-projection + \
+                 reverse-projection axis pair must round-trip \
+                 &RestartStrategy::{variant:?} through `.into::<&'static \
+                 str>()` (via the borrowed-input axis) and back through \
+                 `TryFrom<&str>` — a break signals the borrowed-input \
+                 forward-emit and reverse-parse axes have drifted onto \
                  different vocabularies"
             );
         }
