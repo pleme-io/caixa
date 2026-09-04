@@ -6892,6 +6892,111 @@ impl TryFrom<&str> for PlacementStrategy {
     }
 }
 
+/// Trait-idiomatic forward projection on the M3-mesh-primitive-defining
+/// [`PlacementStrategy`] closed-set typed enum — routes byte-for-byte
+/// through the paired substrate-primitive [`PlacementStrategy::as_str`]
+/// `pub const fn` accessor via `strategy.as_str()`. Return type is
+/// `&'static str` by construction — every [`PlacementStrategy::as_str`]
+/// arm resolves to a paired lifted
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] `pub const &str`
+/// with static lifetime, so the trait's return-type promise is upheld
+/// structurally without a `String::leak()` cast or a per-arm inline
+/// literal.
+///
+/// Complements the pre-existing forward-projection triple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`PlacementStrategy::as_str`])
+/// with the trait-idiomatic forward-projection axis: Rust-side
+/// newtype/typed-enum convention pairs [`TryFrom<&str>`] with the mirror-
+/// image [`From<Self> for &'static str`] on the same primitive so a
+/// caller who can project *in from* a `&str` via the trait axis can also
+/// project *out to* one under a `'static`-lifetime bound. The
+/// [`AsRef<str>`] impl already carries the same emit-set on the borrowed
+/// return path; this impl closes the trait-idiomatic axis pair with the
+/// stricter `&'static str` lifetime the sibling [`AsRef<str>`] cannot
+/// promise (its return borrows from `&self`, not from the
+/// [`PlacementStrategy::as_str`] `pub const fn`'s static-string result).
+///
+/// Same "route the trait impl through the substrate-primitive accessor"
+/// discipline the sibling [`crate::supervisor::RestartStrategy`]
+/// `From<Self> for &'static str` impl (523157d — first-mover on this
+/// forward-projection family), [`crate::supervisor::RestartPolicy`]
+/// `From<Self> for &'static str` impl (9fb37d0 — second peer, closing
+/// the M2 OTP-shape sibling pair), [`crate::CaixaKind`]
+/// `From<Self> for &'static str` impl (edb827b — third peer, opening
+/// the campaign onto the top-level caixa surface), and
+/// [`crate::CaixaDialeto`] `From<Self> for &'static str` impl (c189a6f
+/// — fourth peer, extending onto the dialect-classification axis)
+/// carry — extends the substrate primitive's trait-idiomatic forward-
+/// projection axis onto the fifth closed-set fieldless typed enum on
+/// the caixa surface: the M3-mesh-primitive-defining `:placement
+/// :estrategia` closed-set axis the caixa-mesh renderer keys off end-
+/// to-end, previously carrying the paired [`std::fmt::Display`] /
+/// [`AsRef<str>`] / [`PlacementStrategy::as_str`] / [`TryFrom<&str>`] /
+/// [`PlacementStrategy::from_wire`] forward+reverse projections but not
+/// yet the trait-idiomatic forward projection with the `&'static str`
+/// lifetime bound.
+///
+/// Same shape as the sibling [`crate::CaixaDialeto`] axis pair:
+/// [`PlacementStrategy::as_str`] output and
+/// [`PlacementStrategy::from_wire`] input share the same camelCase-
+/// schema `PascalCase` vocabulary by construction (the same three
+/// lifted [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] constants
+/// dispatch on both halves) — the trait-idiomatic axis pair
+/// ([`From<Self> for &'static str`] + [`TryFrom<&str> for Self`])
+/// therefore round-trips directly, without an intermediate wire-vocab
+/// hop the peer [`crate::CaixaKind`] axis pair requires. This lift
+/// extends the "direct round-trip" precedent
+/// [`crate::CaixaDialeto`] (c189a6f) established onto the first M3-
+/// mesh-primitive-defining slot enum.
+///
+/// The paired [`PlacementStrategy::as_str`] accessor's three-arm emit-
+/// set is the single source of truth — every future arm addition (an
+/// `Anycast` mesh-anycast arm the MESH-COMPOSITION §II.5 hint names as
+/// a trajectory item, a hypothetical `WeightedShard` variant that
+/// carries a shard-key + per-cluster weight table under a promoted M5
+/// adaptive-placement engine) grows the trait-idiomatic forward axis
+/// by construction: one caixa-core edit on
+/// [`PlacementStrategy::as_str`] extends every one of the sibling
+/// forward-projection paths ([`std::fmt::Display`], [`AsRef<str>`],
+/// [`PlacementStrategy::as_str`] itself, and this [`From<Self> for
+/// &'static str`]) without a coordinated rewrite across every future
+/// `Into<&'static str>`-bound consumer's arm-set. This lift closes the
+/// fifth peer on the trait-idiomatic forward-projection campaign the
+/// recently-landed peer commits opened; the remaining nine closed-set
+/// typed enums on the caixa substrate surface (`WitShape`,
+/// `RateLimitUnit`, `PathShapeViolation`, `InvariantKind`,
+/// `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) are the future targets of this campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm emit-set, plus a `const`-context materialization witness
+/// for the `&'static str` lifetime promise routed through the paired
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] lifted constants, plus
+/// a paired `.into()` shape assertion covering the blanket-derived
+/// `Into<&'static str>` shape) and
+/// [`tests::placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as
+/// From<PlacementStrategy>>::from` and [`PlacementStrategy::as_str`]
+/// agree on every arm, plus a two-way direct round-trip witness through
+/// the paired trait-idiomatic [`TryFrom<&str>`] axis that closes the
+/// two-way `Self ↔ &'static str` round-trip on the trait-idiomatic
+/// axis pair without the wire-vocab intermediate the peer
+/// [`crate::CaixaKind`] axis pair requires — the emit-side
+/// [`PlacementStrategy::as_str`] and the parse-side
+/// [`PlacementStrategy::from_wire`] dispatch on the same three lifted
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] constants by
+/// construction, so round-tripping composes the two trait impls
+/// directly).
+impl From<PlacementStrategy> for &'static str {
+    fn from(strategy: PlacementStrategy) -> &'static str {
+        strategy.as_str()
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -21279,6 +21384,158 @@ mod tests {
                  non-wire byte-string {input:?} — silent acceptance signals \
                  an accept-set widening off the paired \
                  PlacementStrategy::from_wire resolver"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for &'static str` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`PlacementStrategy::as_str`] `pub const fn` accessor resolve
+        // to the same three-arm emit-set across every arm the exhaustive
+        // [`PlacementStrategy::ALL`] slice enumerates. Any future silent
+        // detour that routes the trait impl through a divergent
+        // projection (a per-arm inline `match strategy { SingleNode =>
+        // "SingleNode", … }` re-inlining that opens a compile-time link
+        // to the un-lifted arm-literal outside the paired
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] lifted constants,
+        // an accidental swap onto the sibling kebab-case
+        // [`gen_platform::Discriminant`] catalog identity that would
+        // collide the wire axis with the dispatcher-catalog axis the
+        // sibling [`PlacementStrategy::as_str`] doc block makes load-
+        // bearing) trips at caixa-core test time under `assert_eq!`
+        // rather than at a downstream `impl Into<&'static str>`-bound
+        // consumer's silent split. Sweeps every one of the three arms
+        // [`PlacementStrategy::ALL`] carries so no arm's projection is
+        // covered only by the sibling method-named `as_str` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] paths. Materializes the
+        // `<&'static str as From<PlacementStrategy>>::from` output in
+        // three `const`-shape bindings to make the `'static` lifetime
+        // promise a build-time invariant — a future accidental downgrade
+        // of any of the three arms'
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] constants to a
+        // non-`&'static str` (a `String::leak()`-produced return, a
+        // `Box::leak`-cast, an intermediate lifetime-erasing helper)
+        // trips at caixa-core build time rather than at a downstream
+        // `'static`-bound consumer. Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d) /
+        // [`crate::supervisor::tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+        // (9fb37d0) /
+        // [`crate::kind::tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+        // (edb827b) /
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_static_str_routes_through_as_str_accessor`]
+        // (c189a6f) pins on the sibling closed-set typed-enum forward-
+        // projection axes — extends the trait-idiomatic forward-
+        // projection axis onto the fifth closed-set fieldless typed
+        // enum on the caixa surface (the M3-mesh-primitive-defining
+        // `:placement :estrategia` axis, first-of-many on the M3 mesh
+        // slot family the caixa-mesh renderer keys off end-to-end).
+        const SINGLE_NODE: &str = PlacementStrategy::SingleNode.as_str();
+        const REPLICATED: &str = PlacementStrategy::Replicated.as_str();
+        const SHARDED: &str = PlacementStrategy::Sharded.as_str();
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: &'static str = <&'static str as From<PlacementStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<PlacementStrategy> for &'static str impl must \
+                 round-trip PlacementStrategy::{variant:?} to the same \
+                 lifted M3_PLACEMENT_ESTRATEGIA_* const \
+                 PlacementStrategy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on PlacementStrategy::{variant:?} \
+                 must byte-equal PlacementStrategy::as_str on the same \
+                 input — the blanket-derived Into shape must resolve to \
+                 the same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [SINGLE_NODE, REPLICATED, SHARDED],
+            [
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+            ],
+            "const-context PlacementStrategy::as_str must resolve to the \
+             three lifted M3_PLACEMENT_ESTRATEGIA_* consts — a future \
+             accidental downgrade of any arm to a non-const or non-static \
+             byte-string breaks the `&'static str`-lifetime promise the \
+             paired From<PlacementStrategy> for &'static str impl carries \
+             by construction"
+        );
+    }
+
+    #[test]
+    fn placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<PlacementStrategy> for &'static str` forward projection
+        // and the method-named [`PlacementStrategy::as_str`] forward
+        // projection must resolve identically on *every* arm, not just
+        // the ones named in the primary byte-parity pin above. Sweeps
+        // every [`PlacementStrategy::ALL`] arm and asserts the trait's
+        // `From::from` output byte-equals the method-named accessor's
+        // return-value on each, locking the two forward-projection paths
+        // together by construction so any future detour (a stray `From`
+        // special-case that lands on a divergent per-arm literal outside
+        // the paired `as_str` dispatch, a hypothetical rebrand touching
+        // one axis without the other) trips at caixa-core test time.
+        // Peer of the sibling forward-projection partition pins
+        // [`crate::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d) /
+        // [`crate::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0) /
+        // [`crate::kind::tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (edb827b) /
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (c189a6f) — extends the round-trip discipline onto the fifth
+        // closed-set typed enum on the caixa surface, closing the two-way
+        // `Self ↔ &'static str` round-trip on the trait-idiomatic pair
+        // (`From<Self> for &'static str` + `TryFrom<&str> for Self`) as
+        // well as the pre-existing method-named pair (`as_str` +
+        // `from_wire`).
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: &'static str = <&'static str as From<PlacementStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<PlacementStrategy> for &'static str and \
+                 PlacementStrategy::as_str must resolve identically on \
+                 PlacementStrategy::{variant:?} — divergence signals the \
+                 two forward-projection paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output re-parses
+        // through the paired trait-idiomatic reverse `TryFrom<&str>` back
+        // to the original variant. Closes the two-way `PlacementStrategy
+        // ↔ &'static str` round-trip on the trait-idiomatic axis pair
+        // directly (no wire-vocab intermediate the peer [`CaixaKind`]
+        // axis pair requires — the emit-side
+        // [`PlacementStrategy::as_str`] and the parse-side
+        // [`PlacementStrategy::from_wire`] dispatch on the same three
+        // lifted [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] constants
+        // by construction), mirroring the pre-existing method-named
+        // `as_str` + `from_wire` round-trip on the substrate-primitive
+        // axis pair.
+        for &variant in PlacementStrategy::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<PlacementStrategy, ()> =
+                <PlacementStrategy as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic axis pair must round-trip \
+                 PlacementStrategy::{variant:?} through `.into::<&'static \
+                 str>()` and back through `TryFrom<&str>` — a break \
+                 signals the forward-emit and reverse-parse axes have \
+                 drifted onto different vocabularies"
             );
         }
     }
