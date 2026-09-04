@@ -778,6 +778,68 @@ impl TryFrom<&str> for WitShape {
     }
 }
 
+/// Standard-library trait-idiomatic forward projection on the
+/// [`WitShape`] closed-set typed enum. Routes byte-for-byte through the
+/// paired substrate-primitive [`WitShape::as_str`] `pub const fn`
+/// accessor so `<&'static str>::from(shape)` / `shape.into::<&'static
+/// str>()` reaches the same four-arm `"http"` / `"pubsub"` / `"store"`
+/// / `"capability"` census-label emit-set the sibling method-named
+/// accessor dispatches through and the sibling
+/// [`std::fmt::Display for WitShape`] / [`AsRef<str> for WitShape`]
+/// impls also route through.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// forward-projection family
+/// ([`crate::supervisor::RestartStrategy`] via 523157d,
+/// [`crate::supervisor::RestartPolicy`] via 9fb37d0,
+/// [`crate::CaixaKind`] via edb827b,
+/// [`crate::CaixaDialeto`] via c189a6f,
+/// [`PlacementStrategy`] via afa3562) onto the second
+/// M3-mesh-primitive-defining slot enum on the caixa surface — the
+/// `:contratos :wit` census-label closed set the caixa-mesh renderer
+/// keys off end-to-end for per-edge programs.yaml fan-out. Pairs with
+/// the sibling [`TryFrom<&str> for WitShape`] impl (5472902) to close
+/// the two-way `Self ↔ &'static str` round-trip on the trait-idiomatic
+/// axis pair, mirroring the pre-existing method-named
+/// [`WitShape::as_str`] + [`WitShape::from_wire`] pair on the
+/// substrate-primitive axis pair.
+///
+/// The paired [`WitShape::as_str`] accessor's four-arm emit-set is the
+/// single source of truth — every future arm addition (a hypothetical
+/// `wasi:sockets/*` transport-layer shape or `oci:*` capability-import
+/// carrier the sibling [`wit_shape_matches`] docstring's trajectory
+/// bullet names) grows the trait-idiomatic forward axis by
+/// construction: one caixa-core edit on [`WitShape::as_str`] extends
+/// every one of the sibling forward-projection paths
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`WitShape::as_str`]
+/// itself, and this [`From<Self> for &'static str`]) without a
+/// coordinated rewrite across every future `Into<&'static str>`-bound
+/// consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`WitShape::as_str`] across the four-arm
+/// emit-set, plus a `const`-context materialization witness for the
+/// `&'static str` lifetime promise routed through the paired
+/// [`WitShape::as_str`] `pub const fn` accessor, plus a paired
+/// `.into()` shape assertion covering the blanket-derived
+/// `Into<&'static str>` shape) and
+/// [`tests::wit_shape_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as From<WitShape>>::from`
+/// and [`WitShape::as_str`] agree on every arm, plus a two-way direct
+/// round-trip witness through the paired trait-idiomatic
+/// [`TryFrom<&str>`] axis that closes the two-way `Self ↔ &'static
+/// str` round-trip on the trait-idiomatic axis pair — the emit-side
+/// [`WitShape::as_str`] and the parse-side [`WitShape::from_wire`]
+/// dispatch on the same four inline census-label byte-strings by
+/// construction, so round-tripping composes the two trait impls
+/// directly).
+impl From<WitShape> for &'static str {
+    fn from(shape: WitShape) -> &'static str {
+        shape.as_str()
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -15426,6 +15488,159 @@ mod tests {
                 "TryFrom<&str> and from_wire must agree on WitShape \
                  for {input:?} — the trait-idiomatic and method-named \
                  axes must partition the accept-set identically"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<WitShape> for &'static str` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`WitShape::as_str`] `pub const fn` accessor resolve to the
+        // same four-arm census-label emit-set across every arm the
+        // exhaustive [`WitShape::ALL`] slice enumerates. Any future
+        // silent detour that routes the trait impl through a divergent
+        // projection (a per-arm inline `match shape { Http => "http", …
+        // }` re-inlining that opens a compile-time link to the un-lifted
+        // arm-literal outside the paired [`WitShape::as_str`] dispatch,
+        // an accidental swap onto the sibling raw-identifier axis
+        // [`WitShape::classify`] consumes that would collide the two-axis
+        // wire/classifier split the sibling
+        // `wit_shape_from_wire_and_classify_partition_the_axis` pin makes
+        // load-bearing) trips at caixa-core test time under `assert_eq!`
+        // rather than at a downstream `impl Into<&'static str>`-bound
+        // consumer's silent split. Sweeps every one of the four arms
+        // [`WitShape::ALL`] carries so no arm's projection is covered
+        // only by the sibling method-named `as_str` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] paths. Materializes the
+        // `<&'static str as From<WitShape>>::from` output in four
+        // `const`-shape bindings against the paired [`WitShape::as_str`]
+        // `pub const fn` accessor to make the `'static` lifetime promise
+        // a build-time invariant — a future accidental downgrade of any
+        // of the four arms' inline census-label byte-strings to a non-
+        // `&'static str` (a `String::leak()`-produced return, a
+        // `Box::leak`-cast, an intermediate lifetime-erasing helper)
+        // trips at caixa-core build time rather than at a downstream
+        // `'static`-bound consumer.
+        //
+        // Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d),
+        // [`crate::supervisor::tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+        // (9fb37d0),
+        // [`crate::kind::tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+        // (edb827b),
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_static_str_routes_through_as_str_accessor`]
+        // (c189a6f), and
+        // [`tests::placement_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (afa3562) pins on the sibling closed-set typed-enum forward-
+        // projection axes — extends the trait-idiomatic forward-
+        // projection axis onto the sixth closed-set fieldless typed
+        // enum on the caixa surface (the second M3-mesh-primitive-
+        // defining slot enum, the `:contratos :wit` census-label axis
+        // the caixa-mesh renderer keys off end-to-end).
+        const HTTP: &str = WitShape::Http.as_str();
+        const PUBSUB: &str = WitShape::PubSub.as_str();
+        const STORE: &str = WitShape::Store.as_str();
+        const CAPABILITY: &str = WitShape::Capability.as_str();
+        for &variant in WitShape::ALL {
+            let via_trait: &'static str = <&'static str as From<WitShape>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<WitShape> for &'static str impl must round-trip \
+                 WitShape::{variant:?} to the same census-label \
+                 byte-string WitShape::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on WitShape::{variant:?} must \
+                 byte-equal WitShape::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [HTTP, PUBSUB, STORE, CAPABILITY],
+            ["http", "pubsub", "store", "capability"],
+            "const-context WitShape::as_str must resolve to the four \
+             canonical census-label byte-strings — a future accidental \
+             downgrade of any arm to a non-const or non-static byte-\
+             string breaks the `&'static str`-lifetime promise the \
+             paired From<WitShape> for &'static str impl carries by \
+             construction"
+        );
+    }
+
+    #[test]
+    fn wit_shape_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<WitShape> for &'static str` forward projection and the
+        // method-named [`WitShape::as_str`] forward projection must
+        // resolve identically on *every* arm, not just the ones named
+        // in the primary byte-parity pin above. Sweeps every
+        // [`WitShape::ALL`] arm and asserts the trait's `From::from`
+        // output byte-equals the method-named accessor's return-value
+        // on each, locking the two forward-projection paths together by
+        // construction so any future detour (a stray `From` special-case
+        // that lands on a divergent per-arm literal outside the paired
+        // `as_str` dispatch, a hypothetical rebrand touching one axis
+        // without the other) trips at caixa-core test time.
+        //
+        // Peer of the sibling forward-projection partition pins
+        // [`crate::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d),
+        // [`crate::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0),
+        // [`crate::kind::tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (edb827b),
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (c189a6f), and
+        // [`tests::placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (afa3562) — extends the round-trip discipline onto the sixth
+        // closed-set typed enum on the caixa surface, closing the two-
+        // way `Self ↔ &'static str` round-trip on the trait-idiomatic
+        // pair (`From<Self> for &'static str` + `TryFrom<&str> for
+        // Self`) as well as the pre-existing method-named pair
+        // (`as_str` + `from_wire`).
+        for &variant in WitShape::ALL {
+            let via_trait: &'static str = <&'static str as From<WitShape>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<WitShape> for &'static str and WitShape::as_str \
+                 must resolve identically on WitShape::{variant:?} — \
+                 divergence signals the two forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output re-parses
+        // through the paired trait-idiomatic reverse `TryFrom<&str>` back
+        // to the original variant. Closes the two-way `WitShape ↔
+        // &'static str` round-trip on the trait-idiomatic axis pair
+        // directly (no wire-vocab intermediate the peer [`CaixaKind`]
+        // axis pair requires — the emit-side [`WitShape::as_str`] and
+        // the parse-side [`WitShape::from_wire`] dispatch on the same
+        // four inline census-label byte-strings by construction), and
+        // in the same way the peer [`PlacementStrategy`] axis pair
+        // (afa3562) closes on its three-arm surface — mirroring the
+        // pre-existing method-named `as_str` + `from_wire` round-trip
+        // on the substrate-primitive axis pair.
+        for &variant in WitShape::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<WitShape, ()> = <WitShape as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic axis pair must round-trip \
+                 WitShape::{variant:?} through `.into::<&'static \
+                 str>()` and back through `TryFrom<&str>` — a break \
+                 signals the forward-emit and reverse-parse axes have \
+                 drifted onto different vocabularies"
             );
         }
     }
