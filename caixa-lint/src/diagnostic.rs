@@ -738,6 +738,89 @@ impl TryFrom<&str> for FixSafety {
     }
 }
 
+/// Standard-library trait-idiomatic forward projection on the
+/// [`FixSafety`] closed-set caixa-lint fix-safety-tier axis. Routes
+/// byte-for-byte through the paired substrate-primitive
+/// [`FixSafety::as_str`] `pub const fn` accessor so
+/// `<&'static str>::from(safety)` / `safety.into::<&'static str>()`
+/// reaches the same two-arm `"safe"` / `"unsafe"` canonical-lowercase
+/// emit-set the sibling method-named accessor dispatches through and
+/// the sibling [`std::fmt::Display for FixSafety`] /
+/// [`AsRef<str> for FixSafety`] impls also route through.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// forward-projection family
+/// ([`caixa_core::supervisor::RestartStrategy`] via 523157d,
+/// [`caixa_core::supervisor::RestartPolicy`] via 9fb37d0,
+/// [`caixa_core::CaixaKind`] via edb827b,
+/// [`caixa_core::CaixaDialeto`] via c189a6f,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via afa3562,
+/// [`caixa_core::aplicacao::WitShape`] via 56998ec,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via 7fdfbf4,
+/// [`caixa_core::render::PathShapeViolation`] via 070a6de,
+/// [`caixa_arch::invariants::InvariantKind`] via f2ca7bc,
+/// [`caixa_arch::report::ArchVerdict`] via d4559cb, and the paired
+/// sibling [`Severity`] via 5cc3b8b) onto the second (and last)
+/// closed-set fieldless typed enum on the caixa-lint surface — the
+/// fix-safety-tier two-arm accept-set every `feira lint --fix` per-fix
+/// dispatch, every `caixa-lsp`-side per-fix
+/// `CodeActionKind::QuickFix` policy dispatch, and every future M4
+/// admission-webhook / lint-report re-loader dispatches through.
+/// Closes the caixa-lint crate's two closed-set fieldless typed enums
+/// onto the trait-idiomatic forward-projection axis, matching the
+/// paired trait-idiomatic reverse-projection axis (already closed via
+/// df86c94 on this enum and a7bf74c on the sibling [`Severity`]).
+///
+/// Pairs with the sibling [`TryFrom<&str> for FixSafety`] impl
+/// (df86c94) to close the two-way `Self ↔ &'static str` round-trip on
+/// the trait-idiomatic axis pair, mirroring the pre-existing
+/// method-named [`FixSafety::as_str`] + [`FixSafety::from_wire`] pair
+/// on the substrate-primitive axis pair.
+///
+/// Return type is `&'static str` by construction — every
+/// [`FixSafety::as_str`] arm resolves to an inline `"safe"` /
+/// `"unsafe"` `&'static str` literal, so the trait's return-type
+/// promise is upheld structurally without a [`String::leak`] cast or
+/// a per-arm inline literal outside the paired [`FixSafety::as_str`]
+/// dispatch.
+///
+/// The paired [`FixSafety::as_str`] accessor's two-arm emit-set is
+/// the single source of truth — every future arm addition (an
+/// `Experimental` tier between [`Self::Safe`] and [`Self::Unsafe`] the
+/// M3-and-later lint runner grows for AI-suggested rewrites that need
+/// explicit review-and-accept — the trajectory item the sibling
+/// [`FixSafety::ALL`] doc block already names) grows the
+/// trait-idiomatic forward axis by construction: one caixa-lint edit
+/// on [`FixSafety::as_str`] extends every one of the sibling
+/// forward-projection paths ([`std::fmt::Display`], [`AsRef<str>`],
+/// [`FixSafety::as_str`] itself, and this
+/// [`From<Self> for &'static str`]) without a coordinated rewrite
+/// across every future `Into<&'static str>`-bound consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`FixSafety::as_str`] across the two-arm
+/// emit-set, plus a `const`-context materialization witness for the
+/// `&'static str` lifetime promise routed through the paired
+/// [`FixSafety::as_str`] `pub const fn` accessor, plus a paired
+/// `.into()` shape assertion covering the blanket-derived
+/// `Into<&'static str>` shape) and
+/// [`tests::fix_safety_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as
+/// From<FixSafety>>::from` and [`FixSafety::as_str`] agree on every
+/// arm, plus a two-way direct round-trip witness through the paired
+/// trait-idiomatic [`TryFrom<&str>`] axis that closes the two-way
+/// `Self ↔ &'static str` round-trip on the trait-idiomatic axis pair
+/// — the emit-side [`FixSafety::as_str`] and the parse-side
+/// [`FixSafety::from_wire`] dispatch on the same two inline
+/// canonical-lowercase byte-strings by construction, so round-tripping
+/// composes the two trait impls directly).
+impl From<FixSafety> for &'static str {
+    fn from(safety: FixSafety) -> &'static str {
+        safety.as_str()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: &'static str,
@@ -2153,6 +2236,193 @@ mod tests {
                 FixSafety::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<FixSafety> for &'static str` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`super::FixSafety::as_str`] `pub const fn` accessor resolve
+        // to the same two-arm canonical-lowercase emit-set across
+        // every arm the exhaustive [`super::FixSafety::ALL`] slice
+        // enumerates. Any future silent detour that routes the trait
+        // impl through a divergent projection (a per-arm inline
+        // `match safety { Safe => "safe", Unsafe => "unsafe" }`
+        // re-inlining that opens a compile-time link to the un-lifted
+        // arm-literal outside the paired [`super::FixSafety::as_str`]
+        // dispatch, a swap onto a `format!("{:?}", …).to_lowercase()`
+        // round-trip through the `#[derive(Debug)]` output whose
+        // stability is *not* guaranteed and would silently reroute
+        // the fix-safety tag through a stale byte-string with no
+        // downstream signal until an operator scrolled the
+        // `feira lint --fix` terminal — the exact drift footgun the
+        // sibling [`super::FixSafety::as_str`] documentation
+        // explicitly names) trips at caixa-lint test time under
+        // `assert_eq!` rather than at a downstream `impl
+        // Into<&'static str>`-bound consumer's silent split. Sweeps
+        // every one of the two arms [`super::FixSafety::ALL`] carries
+        // so no arm's projection is covered only by the sibling
+        // method-named `as_str` / [`std::fmt::Display`] /
+        // [`AsRef<str>`] paths. Materializes the `<&'static str as
+        // From<FixSafety>>::from` output in two `const`-shape bindings
+        // against the paired [`super::FixSafety::as_str`]
+        // `pub const fn` accessor to make the `'static` lifetime
+        // promise a build-time invariant — a future accidental
+        // downgrade of any arm's inline canonical-lowercase
+        // byte-string to a non-`&'static str` (a `String::leak()`-
+        // produced return, a `Box::leak`-cast, an intermediate
+        // lifetime-erasing helper) trips at caixa-lint build time
+        // rather than at a downstream `'static`-bound consumer.
+        //
+        // Peer of the sibling
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_routes_through_as_str_accessor`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_routes_through_as_str_accessor`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_routes_through_as_suffix_accessor`]
+        // (7fdfbf4),
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_routes_through_as_str_accessor`]
+        // (070a6de),
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_static_str_routes_through_as_str_accessor`
+        // (f2ca7bc),
+        // `caixa_arch::report::tests::arch_verdict_from_into_static_str_routes_through_as_str_accessor`
+        // (d4559cb), and the paired sibling
+        // [`severity_from_into_static_str_routes_through_as_str_accessor`]
+        // (5cc3b8b) pins on the sibling closed-set typed-enum
+        // forward-projection axes — extends the trait-idiomatic
+        // forward-projection axis onto the second (and last) closed-
+        // set fieldless typed enum on the caixa-lint surface (the
+        // fix-safety-tier axis), closing the caixa-lint crate's two
+        // closed-set fieldless typed enums onto the trait-idiomatic
+        // forward-projection family.
+        const SAFE: &str = FixSafety::Safe.as_str();
+        const UNSAFE: &str = FixSafety::Unsafe.as_str();
+        for &variant in FixSafety::ALL {
+            let via_trait: &'static str = <&'static str as From<FixSafety>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<FixSafety> for &'static str impl must round-trip \
+                 FixSafety::{variant:?} to the same canonical-lowercase \
+                 byte-string FixSafety::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on FixSafety::{variant:?} \
+                 must byte-equal FixSafety::as_str on the same input \
+                 — the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [SAFE, UNSAFE],
+            ["safe", "unsafe"],
+            "const-context FixSafety::as_str must resolve to the two \
+             canonical-lowercase byte-strings — a future accidental \
+             downgrade of any arm to a non-const or non-static \
+             byte-string breaks the `&'static str`-lifetime promise \
+             the paired From<FixSafety> for &'static str impl carries \
+             by construction"
+        );
+    }
+
+    #[test]
+    fn fix_safety_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<FixSafety> for &'static str` forward projection and
+        // the method-named [`super::FixSafety::as_str`] forward
+        // projection must resolve identically on *every* arm, not
+        // just the ones named in the primary byte-parity pin above.
+        // Sweeps every [`super::FixSafety::ALL`] arm and asserts the
+        // trait's `From::from` output byte-equals the method-named
+        // accessor's return-value on each, locking the two forward-
+        // projection paths together by construction so any future
+        // detour (a stray `From` special-case that lands on a
+        // divergent per-arm literal outside the paired `as_str`
+        // dispatch, a hypothetical rebrand touching one axis without
+        // the other) trips at caixa-lint test time.
+        //
+        // Peer of the sibling forward-projection partition pins
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_and_as_suffix_partition_the_emit_set`]
+        // (7fdfbf4),
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (070a6de),
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (f2ca7bc),
+        // `caixa_arch::report::tests::arch_verdict_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (d4559cb), and the paired sibling
+        // [`severity_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (5cc3b8b) — extends the round-trip discipline onto the
+        // second (and last) closed-set fieldless typed enum on the
+        // caixa-lint surface, closing the two-way `Self ↔ &'static str`
+        // round-trip on the trait-idiomatic pair (`From<Self> for
+        // &'static str` + `TryFrom<&str> for Self`) as well as the
+        // pre-existing method-named pair (`as_str` + `from_wire`).
+        for &variant in FixSafety::ALL {
+            let via_trait: &'static str = <&'static str as From<FixSafety>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<FixSafety> for &'static str and FixSafety::as_str \
+                 must resolve identically on FixSafety::{variant:?} — \
+                 divergence signals the two forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output
+        // re-parses through the paired trait-idiomatic reverse
+        // `TryFrom<&str>` back to the original variant. Closes the
+        // two-way `FixSafety ↔ &'static str` round-trip on the
+        // trait-idiomatic axis pair directly (no wire-vocab
+        // intermediate — the emit-side [`super::FixSafety::as_str`]
+        // and the parse-side [`super::FixSafety::from_wire`] dispatch
+        // on the same two inline canonical-lowercase byte-strings
+        // by construction, so round-tripping through the paired
+        // `From<Self> for &'static str` + `TryFrom<&str> for Self`
+        // trait impls composes to the identity on `FixSafety::ALL`).
+        for &variant in FixSafety::ALL {
+            let emitted: &'static str = <&'static str as From<FixSafety>>::from(variant);
+            let reparsed = <FixSafety as TryFrom<&str>>::try_from(emitted).unwrap_or_else(|()| {
+                panic!(
+                    "TryFrom<&str> for FixSafety must accept every \
+                     From<FixSafety> for &'static str output — got \
+                     Err(()) for FixSafety::{variant:?}'s emit \
+                     byte-string {emitted:?}"
+                )
+            });
+            assert_eq!(
+                reparsed, variant,
+                "trait-idiomatic FixSafety ↔ &'static str round-trip \
+                 must be the identity on FixSafety::{variant:?} — the \
+                 From<Self> for &'static str + TryFrom<&str> for Self \
+                 pair must compose to the identity on the closed \
+                 two-arm accept-set"
             );
         }
     }
