@@ -3393,6 +3393,96 @@ impl AsRef<str> for DepList {
     }
 }
 
+/// Trait-idiomatic *reverse* projection on the two-list dep-graph
+/// [`DepList`] closed-set typed enum — routes through the paired
+/// substrate-primitive [`DepList::from_wire`] `Option<Self>` accessor
+/// so `<DepList>::try_from(":deps")` reaches the same two-arm
+/// accept-set the sibling [`DepList::from_wire`] resolver dispatches
+/// through, rather than an open-coded per-arm
+/// `match s { ":deps" => Ok(Self::Prod), … }` cascade whose arm-set
+/// has no compile-time link back to the substrate primitive.
+///
+/// Corrects a completeness gap in the substrate-wide trait-idiomatic
+/// reverse-projection campaign (opened by [`crate::CaixaKind`] via
+/// 3c83606, closed onto 14 sibling closed-set fieldless typed enums
+/// across the caixa surface — 5b828ed, 6fdd0d9, 5472902, bf78400,
+/// e67e48a, e21a857, 0a4cc45, a7bf74c, df86c94, bd7da69, 42ab951 —
+/// which silently omitted [`DepList`] despite this enum being listed
+/// as a sibling closed-set fieldless typed enum in every peer's
+/// docstring). Every sibling closed-set fieldless typed enum on the
+/// caixa surface now carries both trait-idiomatic axes
+/// (`TryFrom<&str> for Self` + `From<Self> for &'static str`) paired
+/// against the substrate-primitive canonical projection accessors
+/// (`as_str`/`variant_slug` + `from_wire`) — the two-list dep-graph
+/// closed-set is the fifteenth and true-final peer.
+///
+/// `type Error = ()` matches the sibling [`DepList::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing:
+/// the caller picks the diagnostic form appropriate for its use site
+/// (a future `feira dep --list <deps|deps-dev>` arg-parse composes
+/// `unknown list: <arg> — accepted: {…}` enumerating [`DepList::ALL`];
+/// the M4 admission-webhook rejection body wraps `Err(())` with the
+/// accepted-set enumeration).
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_try_from_str_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`DepList::from_wire`] across the two-arm
+/// accept-set) and
+/// [`tests::dep_list_try_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl TryFrom<&str> for DepList {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_wire(s).ok_or(())
+    }
+}
+
+/// Trait-idiomatic *forward* projection on the two-list dep-graph
+/// [`DepList`] closed-set typed enum onto the `&'static str` axis —
+/// routes byte-for-byte through the paired substrate-primitive
+/// [`DepList::as_str`] `pub const fn` accessor so
+/// `<&'static str>::from(list)` / `list.into::<&'static str>()`
+/// reaches the same two-arm lifted
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] const the sibling
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`DepList::as_str`]
+/// surfaces already return.
+///
+/// Closes the substrate-wide trait-idiomatic forward-projection
+/// campaign for real — the campaign opened on [`crate::supervisor::RestartStrategy`]
+/// via 523157d and traced through the 13 sibling closed-set typed
+/// enums (9fb37d0, edb827b, c189a6f, afa3562, 56998ec, 7fdfbf4,
+/// 070a6de, f2ca7bc, d4559cb, 5cc3b8b, 2a56127, 07f36bb, 85d0443)
+/// silently omitted [`DepList`] on both trait-idiomatic axes despite
+/// every peer's docstring naming it as a sibling. Paired with the
+/// [`TryFrom<&str> for DepList`] impl immediately above, this closes
+/// the two-way `DepList ↔ &'static str` round-trip on the trait-
+/// idiomatic axis pair, mirroring the pre-existing method-named
+/// [`DepList::as_str`] + [`DepList::from_wire`] pair on the
+/// substrate-primitive axis pair.
+///
+/// The paired [`DepList::as_str`] returns `&'static str` by
+/// construction — each arm resolves to a
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str` with
+/// static lifetime — so the trait's return-type promise is upheld
+/// structurally.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`] across the two-arm
+/// emit-set, plus a `const`-context materialization witness for the
+/// `&'static str` lifetime promise) and
+/// [`tests::dep_list_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin + two-way round-trip through the paired
+/// [`TryFrom<&str>`] axis).
+impl From<DepList> for &'static str {
+    fn from(list: DepList) -> &'static str {
+        list.as_str()
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -17443,6 +17533,196 @@ mod tests {
             assert_eq!(via_as_ref, via_accessor);
             assert_eq!(via_display, via_accessor);
             assert_eq!(via_as_ref, via_display.as_str());
+        }
+    }
+
+    #[test]
+    fn dep_list_try_from_str_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&str> for DepList` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::DepList::from_wire`] `Option<Self>` accessor resolve
+        // to the same two-arm accept-set across every arm the
+        // exhaustive [`super::DepList::ALL`] slice enumerates. Peer of
+        // the sibling
+        // `restart_strategy_try_from_str_routes_through_from_wire_accessor`
+        // (5b828ed), `caixa_kind_try_from_str_routes_through_from_wire_accessor`,
+        // and the 12 other substrate-wide trait-idiomatic reverse-
+        // projection routes-through pins — closes the campaign's
+        // completeness gap on the two-list dep-graph closed-set enum.
+        for &list in super::DepList::ALL {
+            let wire = list.as_str();
+            assert_eq!(
+                <super::DepList as TryFrom<&str>>::try_from(wire),
+                Ok(list),
+                "TryFrom<&str> impl on DepList must round-trip \
+                 DepList::{list:?}.as_str() = {wire:?} back to \
+                 Ok(DepList::{list:?}) — divergence from \
+                 DepList::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <super::DepList as TryFrom<&str>>::try_from(wire).ok(),
+                super::DepList::from_wire(wire),
+                "TryFrom<&str> ok()-projection on {wire:?} must byte-equal \
+                 DepList::from_wire on the same input"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_try_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl TryFrom<&str> for DepList` —
+        // sweeps candidate byte-strings outside the two-arm accept-set
+        // the sibling [`super::DepList::as_str`] emits (`:deps` /
+        // `:deps-dev`) and asserts every one lands on `Err(())`, so a
+        // future accidental widening of the trait impl's accept-set (a
+        // stray case-fold path, a silent inclusion of a rebrand alias
+        // like `":packages"`, an English rebrand `":dev-deps"` in
+        // reverse arm-order that would silently swap the two arms) trips
+        // at caixa-core test time. Peer of the sibling
+        // `restart_strategy_try_from_str_rejects_unknown_byte_strings`
+        // (5b828ed) rejection witness.
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "\t",
+            "\n",
+            ":deps ",
+            " :deps",
+            ":DEPS",
+            ":Deps",
+            ":Deps-Dev",
+            ":deps_dev",
+            ":deps-development",
+            ":dev-deps",
+            ":packages",
+            ":packages-dev",
+            "deps",
+            "deps-dev",
+            "Prod",
+            "Dev",
+            "prod",
+            "dev",
+            "\":deps\"",
+            "\":deps-dev\"",
+            ":deps\n",
+            ":deps-dev\n",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <super::DepList as TryFrom<&str>>::try_from(input),
+                Err(()),
+                "TryFrom<&str> impl on DepList must reject unknown \
+                 byte-string {input:?} — divergence from \
+                 DepList::from_wire on the same input signals a silent \
+                 accept-set widening past the two lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* wire constants"
+            );
+            assert_eq!(
+                <super::DepList as TryFrom<&str>>::try_from(input).ok(),
+                super::DepList::from_wire(input),
+                "TryFrom<&str> ok()-projection on {input:?} must byte-equal \
+                 DepList::from_wire on the same input — divergence signals \
+                 the two reverse-projection paths have drifted onto \
+                 different accept-sets"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<DepList> for &'static str` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::DepList::as_str`] `pub const fn` accessor resolve to
+        // the same two-arm emit-set across every arm the exhaustive
+        // [`super::DepList::ALL`] slice enumerates. Materializes the
+        // `<&'static str as From<DepList>>::from` output in a
+        // `const`-shape binding to make the `'static` lifetime promise
+        // a build-time invariant — a future accidental downgrade of
+        // either arm to a non-`&'static str` (a `String::leak()`-
+        // produced return, a `Box::leak`-cast) trips at caixa-core
+        // build time rather than at a downstream `'static`-bound
+        // consumer. Peer of the sibling
+        // `restart_strategy_from_into_static_str_routes_through_as_str_accessor`
+        // (523157d) and the 13 other substrate-wide forward-projection
+        // routes-through pins.
+        const PROD: &str = super::DepList::Prod.as_str();
+        const DEV: &str = super::DepList::Dev.as_str();
+        for &list in super::DepList::ALL {
+            let via_trait: &'static str = <&'static str as From<super::DepList>>::from(list);
+            let via_method: &'static str = list.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<DepList> for &'static str impl must round-trip \
+                 DepList::{list:?} to the same lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* const \
+                 DepList::as_str returns — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            let via_into: &'static str = list.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on DepList::{list:?} must \
+                 byte-equal DepList::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [PROD, DEV],
+            [
+                crate::render::DEP_AUTHOR_KEY_DEPS,
+                crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+            ],
+            "const-context DepList::as_str must resolve to the two lifted \
+             DEP_AUTHOR_KEY_DEPS* consts — a future accidental downgrade \
+             of either arm to a non-const or non-static byte-string breaks \
+             the `&'static str`-lifetime promise the paired \
+             From<DepList> for &'static str impl carries by construction"
+        );
+    }
+
+    #[test]
+    fn dep_list_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<DepList> for &'static str` forward projection and the
+        // method-named [`super::DepList::as_str`] forward projection
+        // must resolve identically on every arm, locking the two paths
+        // together so any future detour trips at caixa-core test time.
+        // Then a round-trip witness: every arm's forward `From` output
+        // re-parses through the paired trait-idiomatic reverse
+        // `TryFrom<&str>` back to the original variant, closing the
+        // two-way `DepList ↔ &'static str` round-trip on the trait-
+        // idiomatic axis pair, mirroring the pre-existing method-named
+        // `as_str` + `from_wire` round-trip. Peer of the sibling
+        // `restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (523157d).
+        for &list in super::DepList::ALL {
+            let via_trait: &'static str = <&'static str as From<super::DepList>>::from(list);
+            let via_method: &'static str = list.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<DepList> for &'static str and DepList::as_str must \
+                 resolve identically on DepList::{list:?} — divergence \
+                 signals the two forward-projection paths have drifted \
+                 onto different emit-sets"
+            );
+        }
+        for &list in super::DepList::ALL {
+            let emitted: &'static str = list.into();
+            let re_parsed: Result<super::DepList, ()> =
+                <super::DepList as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(list),
+                "trait-idiomatic axis pair must round-trip \
+                 DepList::{list:?} through `.into::<&'static str>()` and \
+                 back through `TryFrom<&str>` — a break signals the \
+                 forward-emit and reverse-parse axes have drifted onto \
+                 different vocabularies"
+            );
         }
     }
 }
