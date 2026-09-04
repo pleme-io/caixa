@@ -430,6 +430,106 @@ impl TryFrom<&str> for RestartStrategy {
     }
 }
 
+/// Trait-idiomatic *forward* projection on the M2-OTP-shape sibling-restart
+/// [`RestartStrategy`] closed-set typed enum onto the `&'static str` axis —
+/// routes byte-for-byte through the paired substrate-primitive
+/// [`RestartStrategy::as_str`] `pub const fn` accessor so every future
+/// consumer that binds a [`RestartStrategy`] through the standard-library
+/// `.into()` / [`From<Self> for &'static str`] (equivalently
+/// [`Into<&'static str>`]) axis (a future
+/// `tracing::field::valuable::Value::Str(strategy.into())` structured-log
+/// recorder where the `Str` arm typing demands `&'static str` and the
+/// sibling [`AsRef<str>`] impl's borrowed `&str` return-type does not
+/// satisfy the bound, a future `Cow::Borrowed::<'static, str>(strategy.into())`
+/// composer on the future M4 admission-webhook rejection body where the
+/// `Cow<'static, str>` typing rules out the sibling [`AsRef<str>`] borrowed
+/// return, a generic `<T: Into<&'static str>>`-bound serializer on a
+/// per-strategy diagnostic column) reaches the same lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const the
+/// paired [`std::fmt::Display`], [`AsRef<str>`], and
+/// [`RestartStrategy::as_str`] surfaces already return, rather than an
+/// open-coded per-arm `match s { OneForOne => "OneForOne", … }` cascade
+/// whose arm-set has no compile-time link back to the substrate primitive.
+///
+/// Complements the pre-existing quadruple
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`RestartStrategy::as_str`],
+/// [`TryFrom<&str>`] via 5b828ed) with the paired trait-idiomatic
+/// forward-projection axis: Rust-side newtype/typed-enum convention pairs
+/// [`TryFrom<&str>`] (trait-idiomatic reverse) with [`From<Self> for
+/// &'static str`] (trait-idiomatic forward) on the same primitive so a
+/// caller who can project *in from* a `&str` via the trait axis can also
+/// project *out to* one — mirroring the `strum::IntoStaticStr` /
+/// `serde::Serialize`-shape idiom where both projection halves share one
+/// trait-driven vocabulary. Before this lift the substrate carried a
+/// `&str`-returning [`AsRef<str>`] but not the paired `&'static str`-
+/// returning [`From<Self> for &'static str`] axis every downstream
+/// generic that specifically needs `'static` byte-string bytes reaches for.
+///
+/// The paired [`RestartStrategy::as_str`] returns `&'static str` by
+/// construction (each `match` arm resolves to a
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_*`] `pub const &str` with static
+/// lifetime), so the trait's return-type promise is upheld structurally.
+/// Any future silent detour that routes the impl through a non-static
+/// projection (a per-arm inline `String::from("OneForOne")`-shaped
+/// re-inlining that would `.leak()`-cast for the `'static` bound, a
+/// hypothetical rebrand of one arm's [`crate::render::SUPERVISOR_ESTRATEGIA_*`]
+/// const to a non-`const &str`) is a caixa-core-build-time failure through
+/// the `pub const fn as_str` signature the trait routes through.
+///
+/// The paired impl reaches the same four-arm emit-set the
+/// [`RestartStrategy::as_str`] accessor dispatches through, so any future
+/// arm addition (an OTP-`rest_for_all` fifth arm the theory
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// might reach for once the four canonical OTP strategies stop covering
+/// the substrate's discovered load-shape) grows the trait-idiomatic
+/// forward axis by construction — one caixa-core edit on
+/// [`RestartStrategy::as_str`] extends every one of the five sibling
+/// forward-projection paths ([`std::fmt::Display`], [`AsRef<str>`],
+/// [`RestartStrategy::as_str`] itself, this [`From<Self> for &'static str`],
+/// and the un-`rename`d [`serde::Serialize`] derive that also emits
+/// [`Self::as_str`]'s bytes) without a coordinated rewrite across every
+/// future `Into<&'static str>`-bound consumer's arm-set.
+///
+/// Opens the substrate-wide trait-idiomatic *forward*-projection family on
+/// closed-set fieldless typed enums — the mirror of the recently-closed
+/// trait-idiomatic *reverse*-projection family ([`crate::CaixaKind`] via
+/// 3c83606, [`crate::CaixaDialeto`] via bf33136,
+/// [`crate::aplicacao::PlacementStrategy`] via 6fd00cd, this enum via
+/// 5b828ed, [`crate::supervisor::RestartPolicy`] via 6fdd0d9,
+/// [`crate::aplicacao::WitShape`] via 5472902,
+/// [`crate::aplicacao::RateLimitUnit`] via bf78400,
+/// [`crate::render::PathShapeViolation`] via e67e48a, and the four
+/// downstream-crate peers — [`caixa_arch::InvariantKind`] via e21a857,
+/// [`caixa_arch::ArchVerdict`] via 0a4cc45, [`caixa_lint::Severity`] via
+/// a7bf74c, [`caixa_lint::FixSafety`] via df86c94,
+/// [`caixa_theme::Semantic`] via bd7da69, and
+/// [`caixa_provedor::ferrite::FerriteRuntime`] via 42ab951). This lift
+/// picks [`RestartStrategy`] as the first-mover on the forward-projection
+/// family because its wire byte-string (`PascalCase`) and diagnostic
+/// byte-string ([`as_str`] return) coincide by construction — the sibling
+/// [`crate::CaixaKind`] two-axis split (lowercase Portuguese diagnostic
+/// vs `PascalCase` wire) would leave a first-mover peer arbitrarily
+/// picking one axis; on [`RestartStrategy`] the choice is unambiguous.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm emit-set, plus a `const`-context materialization witness for
+/// the `&'static str` lifetime promise) and
+/// [`tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as From<RestartStrategy>>::from`
+/// and [`RestartStrategy::as_str`] agree on every arm, so no future
+/// silent bifurcation of the two forward-projection paths can land
+/// silently).
+impl From<RestartStrategy> for &'static str {
+    fn from(strategy: RestartStrategy) -> &'static str {
+        strategy.as_str()
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -6816,6 +6916,131 @@ mod tests {
                 "TryFrom<&str> and from_wire must resolve identically on \
                  input {input:?} — divergence signals the two reverse-\
                  projection paths have drifted onto different accept-sets"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartStrategy> for &'static str` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`RestartStrategy::as_str`] `pub const fn` accessor resolve to
+        // the same four-arm emit-set across every arm the exhaustive
+        // [`RestartStrategy::ALL`] slice enumerates. Any future silent
+        // detour that routes the trait impl through a divergent
+        // projection (a per-arm inline `match strategy { OneForOne =>
+        // "OneForOne", … }` re-inlining that opens a compile-time link to
+        // the un-lifted arm-literal, an accidental swap onto the sibling
+        // kebab-case [`Self::discriminant`] dispatcher-catalog axis that
+        // would collide the two-axis wire/catalog split the sibling
+        // [`RestartStrategy::from_wire`] doc block makes load-bearing) trips
+        // at caixa-core test time under `assert_eq!` rather than at a
+        // downstream `impl Into<&'static str>`-bound consumer's silent
+        // split. Sweeps every one of the four arms
+        // [`RestartStrategy::ALL`] carries so no arm's projection is
+        // covered only by the sibling method-named `as_str` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] paths. Materializes the
+        // `<&'static str as From<RestartStrategy>>::from` output in a
+        // `const`-shape binding to make the `'static` lifetime promise a
+        // build-time invariant — a future accidental downgrade of any of
+        // the four arms' [`crate::render::SUPERVISOR_ESTRATEGIA_*`]
+        // constants to a non-`&'static str` (a `String::leak()`-produced
+        // return, a `Box::leak`-cast) trips at caixa-core build time
+        // rather than at a downstream `'static`-bound consumer.
+        const ONE_FOR_ONE: &str = RestartStrategy::OneForOne.as_str();
+        const ONE_FOR_ALL: &str = RestartStrategy::OneForAll.as_str();
+        const REST_FOR_ONE: &str = RestartStrategy::RestForOne.as_str();
+        const SIMPLE_ONE_FOR_ONE: &str = RestartStrategy::SimpleOneForOne.as_str();
+        for &variant in RestartStrategy::ALL {
+            let via_trait: &'static str = <&'static str as From<RestartStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<RestartStrategy> for &'static str impl must round-trip \
+                 RestartStrategy::{variant:?} to the same lifted \
+                 SUPERVISOR_ESTRATEGIA_* const RestartStrategy::as_str returns — \
+                 divergence signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on RestartStrategy::{variant:?} must \
+                 byte-equal RestartStrategy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same as_str \
+                 dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [ONE_FOR_ONE, ONE_FOR_ALL, REST_FOR_ONE, SIMPLE_ONE_FOR_ONE],
+            [
+                crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE,
+                crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL,
+                crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE,
+                crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE,
+            ],
+            "const-context RestartStrategy::as_str must resolve to the four \
+             lifted SUPERVISOR_ESTRATEGIA_* consts — a future accidental \
+             downgrade of any arm to a non-const or non-static byte-string \
+             breaks the `&'static str`-lifetime promise the paired \
+             From<RestartStrategy> for &'static str impl carries by \
+             construction"
+        );
+    }
+
+    #[test]
+    fn restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<RestartStrategy> for &'static str` forward projection and
+        // the method-named [`RestartStrategy::as_str`] forward projection
+        // must resolve identically on *every* arm, not just the ones
+        // named in the primary byte-parity pin above. Sweeps every
+        // [`RestartStrategy::ALL`] arm and asserts the trait's `From::from`
+        // output byte-equals the method-named accessor's return-value on
+        // each, locking the two forward-projection paths together by
+        // construction so any future detour (a stray `From` special-case
+        // that lands on a divergent per-arm literal outside the paired
+        // `as_str` dispatch, a hypothetical rebrand touching one axis
+        // without the other) trips at caixa-core test time. Peer of the
+        // sibling reverse-projection partition pin
+        // [`restart_strategy_try_from_str_and_from_wire_partition_the_accept_set`]
+        // — extends the round-trip discipline onto the trait-idiomatic
+        // *forward* axis, closing the two-way `Self ↔ &'static str`
+        // round-trip on the trait-idiomatic pair
+        // (`From<Self> for &'static str` + `TryFrom<&str> for Self`) as
+        // well as the pre-existing method-named pair
+        // (`as_str` + `from_wire`).
+        for &variant in RestartStrategy::ALL {
+            let via_trait: &'static str = <&'static str as From<RestartStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<RestartStrategy> for &'static str and \
+                 RestartStrategy::as_str must resolve identically on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 two forward-projection paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output re-parses
+        // through the paired trait-idiomatic reverse `TryFrom<&str>` back
+        // to the original variant. Closes the two-way `RestartStrategy ↔
+        // &'static str` round-trip on the trait-idiomatic axis pair,
+        // mirroring the pre-existing method-named `as_str` + `from_wire`
+        // round-trip on the substrate-primitive axis pair.
+        for &variant in RestartStrategy::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<RestartStrategy, ()> =
+                <RestartStrategy as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic axis pair must round-trip \
+                 RestartStrategy::{variant:?} through `.into::<&'static \
+                 str>()` and back through `TryFrom<&str>` — a break signals \
+                 the forward-emit and reverse-parse axes have drifted onto \
+                 different vocabularies"
             );
         }
     }
