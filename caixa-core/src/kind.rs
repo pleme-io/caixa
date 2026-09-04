@@ -635,6 +635,56 @@ impl From<CaixaKind> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on [`CaixaKind`] from a
+/// *borrowed* input onto the `&'static str` axis — the borrowed-input
+/// companion to the paired owned-input [`From<CaixaKind> for &'static
+/// str`] impl immediately above. Routes byte-for-byte through the same
+/// substrate-primitive [`CaixaKind::as_str`] `pub const fn` accessor so
+/// every consumer that binds a `&CaixaKind` through the standard-
+/// library `.into()` / [`From<&Self> for &'static str`] axis (a
+/// `CaixaKind::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer — whose iterator over
+/// `&'static [CaixaKind]` yields `&CaixaKind`, not `CaixaKind`, so the
+/// owned-input [`From<CaixaKind>`] axis alone forces every call site
+/// through an explicit `.copied()` / dereference / [`Copy`]-bound
+/// restatement rather than the direct trait-idiomatic projection; a
+/// future generic `<T: Copy + for<'a> Into<&'static str>>`-bound
+/// diagnostic column that walks the `iter().map(Into::into)` shape
+/// verbatim; the future M4 admission-webhook rejection body that
+/// composes the accepted-set enumeration from an iterated
+/// `CaixaKind::ALL.iter().map(|k| k.into())` pipe rather than a
+/// per-arm `match k { … }` cascade) reaches the same six-arm lifted
+/// [`crate::render::CAIXA_KIND_LABEL_*`] const the paired owned-input
+/// [`From<CaixaKind> for &'static str`], the sibling
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`CaixaKind::as_str`]
+/// surfaces already return.
+///
+/// Second peer on the substrate-wide trait-idiomatic *borrowed-input*
+/// forward-projection family opened on
+/// [`crate::dep::DepList`] (64aa742). Rust's `From` trait does not
+/// auto-derive the `From<&Self>` sibling from a `From<Self>` impl (the
+/// blanket `impl<T, U> From<&T> for U where T: Copy, U: From<T>` does
+/// not exist in `core`), so every closed-set typed enum that carries
+/// the owned-input axis but not the borrowed-input axis forces every
+/// borrowed-input call site through a `.copied()` /
+/// `<&'static str>::from(*kind)` / `kind.as_str()` detour whose type
+/// bounds have no compile-time link to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] across the six-arm
+/// emit-set via a borrowed input, plus a `const`-context materialization
+/// witness) and
+/// [`tests::caixa_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<CaixaKind> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over [`CaixaKind::ALL`]).
+impl From<&CaixaKind> for &'static str {
+    fn from(kind: &CaixaKind) -> &'static str {
+        kind.as_str()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1736,5 +1786,119 @@ mod tests {
                  silently merged onto one vocabulary"
             );
         }
+    }
+
+    #[test]
+    fn caixa_kind_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&CaixaKind> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`CaixaKind::as_str`] `pub const fn` accessor
+        // resolve to the same six-arm emit-set across every arm the
+        // exhaustive [`CaixaKind::ALL`] slice enumerates. Rust's `From`
+        // trait does not auto-derive the borrowed-input sibling from a
+        // paired owned-input impl (no `impl<T, U> From<&T> for U where
+        // T: Copy, U: From<T>` blanket in `core`), so the borrowed-
+        // input axis is a distinct trait-idiomatic surface that a
+        // `.iter().map(Into::into)` shape over [`CaixaKind::ALL`]
+        // (whose iterator yields `&CaixaKind`, not `CaixaKind`)
+        // reaches through this impl and no other — the paired owned-
+        // input [`From<CaixaKind>`] impl requires an explicit
+        // `.copied()` / dereference before the trait fires.
+        // Materializes the `<&'static str as From<&CaixaKind>>::from`
+        // output in a `const`-shape binding to make the `'static`
+        // lifetime promise a build-time invariant.
+        const BIBLIOTECA: &str = CaixaKind::Biblioteca.as_str();
+        const BINARIO: &str = CaixaKind::Binario.as_str();
+        const SERVICO: &str = CaixaKind::Servico.as_str();
+        const SUPERVISOR: &str = CaixaKind::Supervisor.as_str();
+        const APLICACAO: &str = CaixaKind::Aplicacao.as_str();
+        const ACAO: &str = CaixaKind::Acao.as_str();
+        for variant in CaixaKind::ALL {
+            let via_trait: &'static str = <&'static str as From<&CaixaKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&CaixaKind> for &'static str impl must round-trip \
+                 &CaixaKind::{variant:?} to the same lifted \
+                 CAIXA_KIND_LABEL_* const CaixaKind::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &CaixaKind::{variant:?} \
+                 must byte-equal CaixaKind::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [BIBLIOTECA, BINARIO, SERVICO, SUPERVISOR, APLICACAO, ACAO],
+            [
+                crate::render::CAIXA_KIND_LABEL_BIBLIOTECA,
+                crate::render::CAIXA_KIND_LABEL_BINARIO,
+                crate::render::CAIXA_KIND_LABEL_SERVICO,
+                crate::render::CAIXA_KIND_LABEL_SUPERVISOR,
+                crate::render::CAIXA_KIND_LABEL_APLICACAO,
+                crate::render::CAIXA_KIND_LABEL_ACAO,
+            ],
+            "const-context CaixaKind::as_str must resolve to the six \
+             lifted CAIXA_KIND_LABEL_* consts — the borrowed-input \
+             From<&CaixaKind> for &'static str impl inherits its \
+             `'static` lifetime promise from the same accessor the \
+             owned-input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn caixa_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<CaixaKind> for &'static str` (edbb27b
+        // campaign-shape) and borrowed-input `From<&CaixaKind> for
+        // &'static str` (this lift) forward projections must resolve
+        // identically on every arm, locking the two input-shape paths
+        // together so any future detour trips at caixa-core test time.
+        // Then a witness that a `.iter().map(Into::into)` pipe over
+        // [`CaixaKind::ALL`] (whose iterator yields `&CaixaKind`)
+        // materializes the six-arm accept-set through the borrowed-
+        // input axis alone — the exact shape a future M4 admission-
+        // webhook rejection body composer, a future substrate-wide
+        // per-arm diagnostic column, or a
+        // `HashMap::<&'static str, CaixaKind>::from_iter(
+        //     CaixaKind::ALL.iter().map(|k| (k.into(), *k)))`-style
+        // per-kind lookup reaches through — closing the two-way owned/
+        // borrowed input-shape symmetry on the forward-projection
+        // trait-idiomatic axis. Peer of the sibling
+        // [`crate::dep::tests::dep_list_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (64aa742) partition pin on the two-list dep-graph closed-set
+        // discriminator axis — extends the borrowed-input axis
+        // discipline onto the structurally most fundamental closed-set
+        // typed enum on the caixa surface.
+        for &variant in CaixaKind::ALL {
+            let owned: &'static str = <&'static str as From<CaixaKind>>::from(variant);
+            let borrowed: &'static str = <&'static str as From<&CaixaKind>>::from(&variant);
+            assert_eq!(
+                owned, borrowed,
+                "From<CaixaKind> and From<&CaixaKind> for &'static str \
+                 must resolve identically on CaixaKind::{variant:?} — \
+                 divergence signals the owned-input and borrowed-input \
+                 forward-projection paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> = CaixaKind::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> = CaixaKind::ALL.iter().map(|k| k.as_str()).collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over CaixaKind::ALL must byte-\
+             equal `.iter().map(|k| k.as_str())` on every arm — the \
+             borrowed-input `From<&CaixaKind> for &'static str` axis \
+             is what makes the `.iter().map(Into::into)` shape route \
+             through the substrate-primitive `CaixaKind::as_str` \
+             accessor rather than through a per-call-site `.copied()` \
+             / dereference detour"
+        );
     }
 }
