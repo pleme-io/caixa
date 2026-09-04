@@ -394,6 +394,97 @@ impl TryFrom<&str> for Semantic {
     }
 }
 
+/// Standard-library trait-idiomatic forward projection on the
+/// [`Semantic`] closed 16-arm caixa-theme semantic-style axis. Routes
+/// byte-for-byte through the paired substrate-primitive
+/// [`Semantic::as_str`] `pub const fn` accessor so
+/// `<&'static str>::from(sem)` / `sem.into::<&'static str>()` reaches
+/// the same 16-arm canonical-lowercase kebab emit-set the sibling
+/// method-named accessor dispatches through and the sibling
+/// [`std::fmt::Display for Semantic`] / [`AsRef<str> for Semantic`]
+/// impls also route through.
+///
+/// Extends the substrate-wide closed-set-enum trait-idiomatic
+/// forward-projection family
+/// ([`caixa_core::supervisor::RestartStrategy`] via 523157d,
+/// [`caixa_core::supervisor::RestartPolicy`] via 9fb37d0,
+/// [`caixa_core::CaixaKind`] via edb827b,
+/// [`caixa_core::CaixaDialeto`] via c189a6f,
+/// [`caixa_core::aplicacao::PlacementStrategy`] via afa3562,
+/// [`caixa_core::aplicacao::WitShape`] via 56998ec,
+/// [`caixa_core::aplicacao::RateLimitUnit`] via 7fdfbf4,
+/// [`caixa_core::render::PathShapeViolation`] via 070a6de,
+/// [`caixa_arch::invariants::InvariantKind`] via f2ca7bc,
+/// [`caixa_arch::report::ArchVerdict`] via d4559cb,
+/// `caixa_lint::diagnostic::Severity` via 5cc3b8b, and
+/// `caixa_lint::diagnostic::FixSafety` via 2a56127) onto the first
+/// closed-set fieldless typed enum on the caixa-theme surface — the
+/// semantic-style 16-arm accept-set every per-Semantic paint dispatch,
+/// every future `caixa-lsp` per-`SemanticTokenType` wire-up, every
+/// future `caixa.nvim` per-highlight-group re-loader, and every future
+/// `blackmatter-shell` per-arm `data-semantic="<kebab>"` DOM emission
+/// keys off. The thirteenth peer on the substrate surface, closing the
+/// caixa-theme closed-set fieldless typed-enum axis onto the trait-
+/// idiomatic forward-projection axis and matching the paired trait-
+/// idiomatic reverse-projection axis (already closed via bd7da69 on
+/// this enum), with only `caixa_provedor::FerriteRuntime` remaining as
+/// the last outside-caixa-core closed-set fieldless typed enum whose
+/// trait-idiomatic forward axis is still open.
+///
+/// Pairs with the sibling [`TryFrom<&str> for Semantic`] impl (bd7da69)
+/// to close the two-way `Self ↔ &'static str` round-trip on the
+/// trait-idiomatic axis pair, mirroring the pre-existing method-named
+/// [`Semantic::as_str`] + [`Semantic::from_wire`] pair on the
+/// substrate-primitive axis pair.
+///
+/// Return type is `&'static str` by construction — every
+/// [`Semantic::as_str`] arm resolves to an inline `"keyword"` /
+/// `"symbol"` / `"keyword-arg"` / `"string"` / `"number"` /
+/// `"literal"` / `"comment"` / `"accent"` / `"muted"` / `"error"` /
+/// `"warning"` / `"info"` / `"hint"` / `"added"` / `"removed"` /
+/// `"unchanged"` `&'static str` literal, so the trait's return-type
+/// promise is upheld structurally without a [`String::leak`] cast or a
+/// per-arm inline literal outside the paired [`Semantic::as_str`]
+/// dispatch.
+///
+/// The paired [`Semantic::as_str`] accessor's 16-arm emit-set is the
+/// single source of truth — every future arm addition (a `Namespace`
+/// tier between [`Self::Symbol`] and [`Self::KeywordArg`] for the M4
+/// tatara-lisp module system's qualified-name semantic-token dispatch,
+/// a `Deleted` tier for a hard-delete-mark distinct from
+/// [`Self::Removed`] the future 3-way diff surface grows — both
+/// trajectory items the sibling [`Semantic::ALL`] doc block already
+/// names) grows the trait-idiomatic forward axis by construction: one
+/// caixa-theme edit on [`Semantic::as_str`] extends every one of the
+/// sibling forward-projection paths ([`std::fmt::Display`],
+/// [`AsRef<str>`], [`Semantic::as_str`] itself, and this
+/// [`From<Self> for &'static str`]) without a coordinated rewrite
+/// across every future `Into<&'static str>`-bound consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Semantic::as_str`] across the 16-arm
+/// emit-set, plus a `const`-context materialization witness for the
+/// `&'static str` lifetime promise routed through the paired
+/// [`Semantic::as_str`] `pub const fn` accessor, plus a paired
+/// `.into()` shape assertion covering the blanket-derived
+/// `Into<&'static str>` shape) and
+/// [`tests::semantic_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as From<Semantic>>::from`
+/// and [`Semantic::as_str`] agree on every arm, plus a two-way direct
+/// round-trip witness through the paired trait-idiomatic
+/// [`TryFrom<&str>`] axis that closes the two-way
+/// `Self ↔ &'static str` round-trip on the trait-idiomatic axis pair
+/// — the emit-side [`Semantic::as_str`] and the parse-side
+/// [`Semantic::from_wire`] dispatch on the same 16 inline canonical-
+/// lowercase kebab byte-strings by construction, so round-tripping
+/// composes the two trait impls directly).
+impl From<Semantic> for &'static str {
+    fn from(sem: Semantic) -> &'static str {
+        sem.as_str()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1086,6 +1177,195 @@ mod tests {
                 Semantic::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Semantic> for &'static str` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::Semantic::as_str`] `pub const fn` accessor resolve to
+        // the same 16-arm canonical-lowercase kebab emit-set across every
+        // arm the exhaustive [`super::Semantic::ALL`] slice enumerates.
+        // Any future silent detour that routes the trait impl through a
+        // divergent projection (a per-arm inline `match sem { Keyword =>
+        // "keyword", … }` re-inlining that opens a compile-time link to
+        // the un-lifted arm-literal outside the paired
+        // [`super::Semantic::as_str`] dispatch, a swap onto a
+        // `format!("{:?}", …).to_lowercase()` round-trip through the
+        // `#[derive(Debug)]` output whose stability is *not* guaranteed
+        // and would silently reroute the semantic-style tag through a
+        // stale byte-string with no downstream signal until an operator
+        // scrolled the theme-paint terminal, a `#[serde(rename_all = "…")]`
+        // attribute drift that quietly forks one axis) trips at
+        // caixa-theme test time under `assert_eq!` rather than at a
+        // downstream `impl Into<&'static str>`-bound consumer's silent
+        // split. Sweeps every one of the 16 arms
+        // [`super::Semantic::ALL`] carries so no arm's projection is
+        // covered only by the sibling method-named `as_str` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] paths. Materializes
+        // three `<&'static str as From<Semantic>>::from` outputs in
+        // `const`-shape bindings against the paired
+        // [`super::Semantic::as_str`] `pub const fn` accessor to make
+        // the `'static` lifetime promise a build-time invariant — a
+        // future accidental downgrade of any arm's inline canonical-
+        // lowercase kebab byte-string to a non-`&'static str` (a
+        // `String::leak()`-produced return, a `Box::leak`-cast, an
+        // intermediate lifetime-erasing helper) trips at caixa-theme
+        // build time rather than at a downstream `'static`-bound
+        // consumer.
+        //
+        // Peer of the sibling
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_routes_through_as_str_accessor`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_routes_through_as_str_accessor`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_routes_through_as_str_accessor`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_routes_through_as_suffix_accessor`]
+        // (7fdfbf4),
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_routes_through_as_str_accessor`]
+        // (070a6de),
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_static_str_routes_through_as_str_accessor`
+        // (f2ca7bc),
+        // `caixa_arch::report::tests::arch_verdict_from_into_static_str_routes_through_as_str_accessor`
+        // (d4559cb),
+        // `caixa_lint::diagnostic::tests::severity_from_into_static_str_routes_through_as_str_accessor`
+        // (5cc3b8b), and
+        // `caixa_lint::diagnostic::tests::fix_safety_from_into_static_str_routes_through_as_str_accessor`
+        // (2a56127) pins on the sibling closed-set typed-enum forward-
+        // projection axes — extends the trait-idiomatic forward-
+        // projection axis onto the first closed-set fieldless typed
+        // enum on the caixa-theme surface (the semantic-style axis),
+        // leaving `caixa_provedor::FerriteRuntime` as the last outside-
+        // caixa-core closed-set fieldless typed enum whose trait-
+        // idiomatic forward axis is still open.
+        const KEYWORD: &str = Semantic::Keyword.as_str();
+        const KEYWORD_ARG: &str = Semantic::KeywordArg.as_str();
+        const UNCHANGED: &str = Semantic::Unchanged.as_str();
+        for &variant in Semantic::ALL {
+            let via_trait: &'static str = <&'static str as From<Semantic>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<Semantic> for &'static str impl must round-trip \
+                 Semantic::{variant:?} to the same canonical-lowercase \
+                 kebab byte-string Semantic::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on Semantic::{variant:?} must \
+                 byte-equal Semantic::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [KEYWORD, KEYWORD_ARG, UNCHANGED],
+            ["keyword", "keyword-arg", "unchanged"],
+            "const-context Semantic::as_str must resolve to the \
+             canonical-lowercase kebab byte-strings — a future \
+             accidental downgrade of any arm to a non-const or non-\
+             static byte-string breaks the `&'static str`-lifetime \
+             promise the paired From<Semantic> for &'static str impl \
+             carries by construction"
+        );
+    }
+
+    #[test]
+    fn semantic_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<Semantic> for &'static str` forward projection and the
+        // method-named [`super::Semantic::as_str`] forward projection
+        // must resolve identically on *every* arm, not just the ones
+        // named in the primary byte-parity pin above. Sweeps every
+        // [`super::Semantic::ALL`] arm and asserts the trait's
+        // `From::from` output byte-equals the method-named accessor's
+        // return-value on each, locking the two forward-projection paths
+        // together by construction so any future detour (a stray `From`
+        // special-case that lands on a divergent per-arm literal outside
+        // the paired `as_str` dispatch, a hypothetical rebrand touching
+        // one axis without the other) trips at caixa-theme test time.
+        //
+        // Peer of the sibling forward-projection partition pins
+        // [`caixa_core::supervisor::tests::restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d),
+        // [`caixa_core::supervisor::tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (9fb37d0),
+        // [`caixa_core::kind::tests::caixa_kind_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (edb827b),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (c189a6f),
+        // [`caixa_core::aplicacao::tests::placement_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (afa3562),
+        // [`caixa_core::aplicacao::tests::wit_shape_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (56998ec),
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_from_into_static_str_and_as_suffix_partition_the_emit_set`]
+        // (7fdfbf4),
+        // [`caixa_core::render::tests::path_shape_violation_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (070a6de),
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (f2ca7bc),
+        // `caixa_arch::report::tests::arch_verdict_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (d4559cb),
+        // `caixa_lint::diagnostic::tests::severity_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (5cc3b8b), and
+        // `caixa_lint::diagnostic::tests::fix_safety_from_into_static_str_and_as_str_partition_the_emit_set`
+        // (2a56127) — extends the round-trip discipline onto the first
+        // closed-set fieldless typed enum on the caixa-theme surface,
+        // closing the two-way `Self ↔ &'static str` round-trip on the
+        // trait-idiomatic pair (`From<Self> for &'static str` +
+        // `TryFrom<&str> for Self`) as well as the pre-existing method-
+        // named pair (`as_str` + `from_wire`).
+        for &variant in Semantic::ALL {
+            let via_trait: &'static str = <&'static str as From<Semantic>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<Semantic> for &'static str and Semantic::as_str \
+                 must resolve identically on Semantic::{variant:?} — \
+                 divergence signals the two forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output re-parses
+        // through the paired trait-idiomatic `TryFrom<&str>` back to the
+        // original variant. Closes the two-way `Semantic ↔ &'static str`
+        // round-trip on the trait-idiomatic axis pair directly (no wire-
+        // vocab intermediate — the emit-side [`super::Semantic::as_str`]
+        // and the parse-side [`super::Semantic::from_wire`] dispatch on
+        // the same 16 inline canonical-lowercase kebab byte-strings by
+        // construction, so round-tripping through the paired
+        // `From<Self> for &'static str` + `TryFrom<&str> for Self` trait
+        // impls composes to the identity on `Semantic::ALL`).
+        for &variant in Semantic::ALL {
+            let emitted: &'static str = <&'static str as From<Semantic>>::from(variant);
+            let reparsed = <Semantic as TryFrom<&str>>::try_from(emitted).unwrap_or_else(|()| {
+                panic!(
+                    "TryFrom<&str> for Semantic must accept every \
+                     From<Semantic> for &'static str output — got \
+                     Err(()) for Semantic::{variant:?}'s emit \
+                     byte-string {emitted:?}"
+                )
+            });
+            assert_eq!(
+                reparsed, variant,
+                "trait-idiomatic Semantic ↔ &'static str round-trip \
+                 must be the identity on Semantic::{variant:?} — the \
+                 From<Self> for &'static str + TryFrom<&str> for Self \
+                 pair must compose to the identity on the closed 16-arm \
+                 accept-set"
             );
         }
     }
