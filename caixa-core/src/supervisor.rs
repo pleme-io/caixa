@@ -958,6 +958,74 @@ impl TryFrom<&str> for RestartPolicy {
     }
 }
 
+/// Trait-idiomatic forward projection on the M2-OTP-shape per-child
+/// restart-policy [`RestartPolicy`] closed-set typed enum — routes
+/// byte-for-byte through the paired substrate-primitive
+/// [`RestartPolicy::as_str`] `pub const fn` accessor. Return type is
+/// `&'static str` by construction — every [`RestartPolicy::as_str`] arm
+/// resolves to a [`crate::render::SUPERVISOR_CHILD_RESTART_*`] `pub const
+/// &str` with `'static` lifetime, so the trait's return-type promise is
+/// upheld structurally without a [`String::leak`] cast or a per-arm inline
+/// literal.
+///
+/// Every future consumer that specifically needs `&'static str` lifetime
+/// bytes on the per-child restart-decision axis (a
+/// [`tracing::field::valuable::Value::Str`] recording where the `Str`
+/// arm's typing demands `&'static str`, a
+/// [`std::borrow::Cow::Borrowed`]`::<'static, str>(policy.into())` composer
+/// on the future M4 admission-webhook rejection body where the
+/// `Cow<'static, str>` typing rules out the sibling [`AsRef<str>`]
+/// borrowed return, a generic `<T: Into<&'static str>>`-bound serializer
+/// or error formatter that requires the `'static` bound) reaches the same
+/// lifted [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] substrate-
+/// primitive dispatch rather than an open-coded per-arm literal cascade
+/// whose arm-set has no compile-time link back to the substrate primitive.
+///
+/// Peer of the sibling M2-OTP-shape [`RestartStrategy`] forward-projection
+/// impl (523157d) on the per-supervisor sibling-restart-strategy axis —
+/// the second (and second-of-two-in-M2) closed-set typed enum on the
+/// caixa surface to converge onto the paired trait-idiomatic forward-
+/// projection axis. With this lift the paired per-child
+/// `:children :restart` closed-set typed enum carries the full sibling
+/// quintet ([`std::fmt::Display`], [`AsRef<str>`], [`Self::as_str`],
+/// [`TryFrom<&str>`] via 6fdd0d9, `From<Self> for &'static str` via this
+/// lift) plus the round-trip witness through both the trait-idiomatic
+/// (`From<Self> for &'static str` + `TryFrom<&str>`) and the method-named
+/// (`as_str` + `from_wire`) axis pairs — mirrors the sibling
+/// [`RestartStrategy`] surface arm-for-arm, so every future arm addition
+/// (an OTP-`intrinsic` fourth arm the theory
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// might reach for once the three canonical OTP restart policies stop
+/// covering the substrate's discovered load-shape) grows the trait-
+/// idiomatic forward axis by construction: one caixa-core edit on
+/// [`RestartPolicy::as_str`] extends every one of the five sibling
+/// forward-projection paths ([`std::fmt::Display`], [`AsRef<str>`],
+/// [`Self::as_str`] itself, this `From<Self> for &'static str`, and the
+/// un-`rename`d [`serde::Serialize`] derive that also emits `as_str`'s
+/// bytes) without a coordinated rewrite across every future
+/// `Into<&'static str>`-bound consumer's arm-set.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartPolicy::as_str`] across the
+/// three-arm emit-set, plus a `const`-context materialization witness for
+/// the `&'static str` lifetime promise) and
+/// [`tests::restart_policy_from_into_static_str_and_as_str_partition_the_emit_set`]
+/// (partition pin asserting `<&'static str as From<RestartPolicy>>::from`
+/// and [`RestartPolicy::as_str`] agree on every arm, plus a two-way
+/// round-trip witness through the paired trait-idiomatic reverse-
+/// projection axis [`TryFrom<&str>`] (6fdd0d9): every
+/// `policy.into::<&'static str>()` output re-parses back through
+/// [`RestartPolicy::try_from`] to the original variant, closing the two-
+/// way `Self ↔ &'static str` round-trip on the trait-idiomatic axis pair).
+impl From<RestartPolicy> for &'static str {
+    fn from(policy: RestartPolicy) -> &'static str {
+        policy.as_str()
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -7207,6 +7275,136 @@ mod tests {
                 "TryFrom<&str> and from_wire must resolve identically on \
                  input {input:?} — divergence signals the two reverse-\
                  projection paths have drifted onto different accept-sets"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartPolicy> for &'static str` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`RestartPolicy::as_str`] `pub const fn` accessor resolve to
+        // the same three-arm emit-set across every arm the exhaustive
+        // [`RestartPolicy::ALL`] slice enumerates. Any future silent
+        // detour that routes the trait impl through a divergent
+        // projection (a per-arm inline `match policy { Permanent =>
+        // "Permanent", … }` re-inlining that opens a compile-time link
+        // to the un-lifted arm-literal, an accidental swap onto the
+        // sibling kebab-case [`Self::discriminant`] dispatcher-catalog
+        // axis that would collide the two-axis wire/catalog split the
+        // sibling [`RestartPolicy::from_wire`] doc block makes
+        // load-bearing) trips at caixa-core test time under
+        // `assert_eq!` rather than at a downstream
+        // `impl Into<&'static str>`-bound consumer's silent split.
+        // Sweeps every one of the three arms [`RestartPolicy::ALL`]
+        // carries so no arm's projection is covered only by the sibling
+        // method-named `as_str` / [`std::fmt::Display`] / [`AsRef<str>`]
+        // paths. Materializes the `<&'static str as
+        // From<RestartPolicy>>::from` output in a `const`-shape binding
+        // to make the `'static` lifetime promise a build-time invariant
+        // — a future accidental downgrade of any of the three arms'
+        // [`crate::render::SUPERVISOR_CHILD_RESTART_*`] constants to a
+        // non-`&'static str` (a `String::leak()`-produced return, a
+        // `Box::leak`-cast) trips at caixa-core build time rather than
+        // at a downstream `'static`-bound consumer. Peer of the sibling
+        // [`restart_strategy_from_into_static_str_routes_through_as_str_accessor`]
+        // (523157d) — extends the trait-idiomatic forward-projection
+        // axis onto the second (and second-of-two-in-M2) closed-set
+        // typed enum on the caixa surface (the paired per-child
+        // restart-decision-policy sibling on the same M2 `:supervisor`
+        // slot).
+        const PERMANENT: &str = RestartPolicy::Permanent.as_str();
+        const TEMPORARY: &str = RestartPolicy::Temporary.as_str();
+        const TRANSIENT: &str = RestartPolicy::Transient.as_str();
+        for &variant in RestartPolicy::ALL {
+            let via_trait: &'static str = <&'static str as From<RestartPolicy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<RestartPolicy> for &'static str impl must round-trip \
+                 RestartPolicy::{variant:?} to the same lifted \
+                 SUPERVISOR_CHILD_RESTART_* const RestartPolicy::as_str returns — \
+                 divergence signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on RestartPolicy::{variant:?} must \
+                 byte-equal RestartPolicy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same as_str \
+                 dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [PERMANENT, TEMPORARY, TRANSIENT],
+            [
+                crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+                crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
+                crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+            ],
+            "const-context RestartPolicy::as_str must resolve to the three \
+             lifted SUPERVISOR_CHILD_RESTART_* consts — a future accidental \
+             downgrade of any arm to a non-const or non-static byte-string \
+             breaks the `&'static str`-lifetime promise the paired \
+             From<RestartPolicy> for &'static str impl carries by \
+             construction"
+        );
+    }
+
+    #[test]
+    fn restart_policy_from_into_static_str_and_as_str_partition_the_emit_set() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<RestartPolicy> for &'static str` forward projection and
+        // the method-named [`RestartPolicy::as_str`] forward projection
+        // must resolve identically on *every* arm, not just the ones
+        // named in the primary byte-parity pin above. Sweeps every
+        // [`RestartPolicy::ALL`] arm and asserts the trait's `From::from`
+        // output byte-equals the method-named accessor's return-value on
+        // each, locking the two forward-projection paths together by
+        // construction so any future detour (a stray `From` special-case
+        // that lands on a divergent per-arm literal outside the paired
+        // `as_str` dispatch, a hypothetical rebrand touching one axis
+        // without the other) trips at caixa-core test time. Peer of the
+        // sibling forward-projection partition pin
+        // [`restart_strategy_from_into_static_str_and_as_str_partition_the_emit_set`]
+        // (523157d) — extends the round-trip discipline onto the
+        // second-of-two M2-OTP-shape closed-set typed enum on the caixa
+        // surface, closing the two-way `Self ↔ &'static str` round-trip
+        // on the trait-idiomatic pair (`From<Self> for &'static str` +
+        // `TryFrom<&str> for Self`) as well as the pre-existing method-
+        // named pair (`as_str` + `from_wire`).
+        for &variant in RestartPolicy::ALL {
+            let via_trait: &'static str = <&'static str as From<RestartPolicy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<RestartPolicy> for &'static str and \
+                 RestartPolicy::as_str must resolve identically on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 two forward-projection paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        // Round-trip witness: every arm's forward `From` output re-parses
+        // through the paired trait-idiomatic reverse `TryFrom<&str>` back
+        // to the original variant. Closes the two-way `RestartPolicy ↔
+        // &'static str` round-trip on the trait-idiomatic axis pair,
+        // mirroring the pre-existing method-named `as_str` + `from_wire`
+        // round-trip on the substrate-primitive axis pair.
+        for &variant in RestartPolicy::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic axis pair must round-trip \
+                 RestartPolicy::{variant:?} through `.into::<&'static \
+                 str>()` and back through `TryFrom<&str>` — a break signals \
+                 the forward-emit and reverse-parse axes have drifted onto \
+                 different vocabularies"
             );
         }
     }
