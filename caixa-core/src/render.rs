@@ -7777,6 +7777,119 @@ impl From<&PathShapeViolation> for &'static str {
     }
 }
 
+/// Trait-idiomatic *owned-`String`* forward projection on the render-side
+/// path-shape-diagnostic closed-set typed enum
+/// [`PathShapeViolation`] — the owned-heap-string companion to the paired
+/// [`&'static str`]-returning [`From<PathShapeViolation> for &'static str`]
+/// / [`From<&PathShapeViolation> for &'static str`] impls immediately
+/// above, extending the owned-input owned-[`String`] arm of the
+/// substrate-wide `{Self, &Self} × {&'static str, String}` 2×2
+/// trait-idiomatic projection family onto the sandbox-escape three-arm
+/// accept-set every [`is_sandboxed_relative_path`] caller
+/// ([`crate::BehaviorSpec::validate`],
+/// [`crate::UpgradeInstruction::validate`], every future M3/M4 axis
+/// admitting a user-supplied path) match-and-wraps into its own typed
+/// per-slot `*Invalid { slot, path }` variant. Routes byte-for-byte
+/// through the substrate-primitive [`PathShapeViolation::as_str`]
+/// `pub const fn` accessor (via [`str::to_owned`]) so every consumer
+/// that binds a [`PathShapeViolation`] through the standard-library
+/// `.into()` / [`From<Self> for String`] (equivalently
+/// [`Into<String>`]) axis — a future
+/// `serde_json::Value::String(violation.into())` structured-payload
+/// composer where the `Value::String` arm typing demands an owned
+/// [`String`] and the sibling [`&'static str`]-returning axes force an
+/// explicit `.to_owned()` / `String::from` restatement at every call
+/// site, a future
+/// `HashMap::<String, PathShapeViolation>::from_iter(
+///   PathShapeViolation::ALL.iter().map(|v| (String::from(*v), *v)))`
+/// per-violation lookup where the map's key type is owned [`String`]
+/// rather than [`&'static str`], a future `Cow::<'static,
+/// str>::Owned(violation.into())` composer on a future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's admission-webhook
+/// rejection body's owned-arm, the future caixa-build pipeline's
+/// per-slot path-gate `serde_json::json!({ "violation": violation })`
+/// structured-log emit where the JSON serializer's [`Serialize`] impl
+/// on [`String`] owns the emit-path — reaches the same three-arm
+/// `"empty"` / `"absolute"` / `"parent-escape"` canonical-kebab
+/// emit-set the paired [`std::fmt::Display`], [`AsRef<str>`],
+/// [`PathShapeViolation::as_str`], and the two [`&'static str`]-returning
+/// forward-projection impls already return.
+///
+/// Ninth peer on the substrate-wide trait-idiomatic *owned-`String`*
+/// forward-projection family opened on
+/// [`crate::supervisor::RestartStrategy`] (7baa18a) and extended onto
+/// [`crate::supervisor::RestartPolicy`] (7851725),
+/// [`crate::CaixaKind`] (231a18c), [`crate::CaixaDialeto`] (88942cd),
+/// [`crate::dep::DepList`] (32b0ee8),
+/// [`crate::aplicacao::PlacementStrategy`] (1154c2f),
+/// [`crate::aplicacao::WitShape`] (79a8723), and
+/// [`crate::aplicacao::RateLimitUnit`] (c7d687d — the third and last M3
+/// mesh-primitive slot enum on the manifest-surface arm). Rust's
+/// standard library does not carry a blanket `impl<T: AsRef<str>>
+/// From<T> for String` (nor an `impl<T: fmt::Display> From<T> for
+/// String`), so every closed-set typed enum that carries the paired
+/// `AsRef<str>` / `Display` / `From<Self> for &'static str` /
+/// `From<&Self> for &'static str` quadruple but not the
+/// owned-[`String`] axis forces every owned-string call site through a
+/// `.to_string()` / `.as_str().to_owned()` /
+/// `String::from(violation.as_str())` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+/// [`PathShapeViolation`] is the *first* outside-manifest-surface
+/// (render-side, path-shape-diagnostic) closed-set typed enum to
+/// converge onto the owned-`String` arm of the campaign — the M2 / M3
+/// slot enums and the two-list dep-graph axis form the manifest-surface
+/// arm; this lift opens the render-side arm on the sandbox-escape
+/// three-arm accept-set on the same trajectory the paired borrowed-
+/// input `&'static str` axis lift (cdf4e95) already took.
+///
+/// Same three-path convergence discipline as the paired
+/// [`&'static str`]-returning impls (this owned-[`String`] axis, the
+/// paired [`From<PathShapeViolation> for &'static str`], the paired
+/// [`From<&PathShapeViolation> for &'static str`], and
+/// [`PathShapeViolation::as_str`] all route through the same three-arm
+/// inline canonical-kebab byte-strings), so a future variant addition
+/// (a `Symlink` arm the future symlink-escape gate would carry once
+/// [`std::path::Path::is_symlink`] becomes part of the sandbox contract,
+/// a `TrailingSpace` arm a future authoring-side whitespace-hygiene gate
+/// would raise for `"lib/init.lisp "` shapes — both trajectory items
+/// [`PathShapeViolation::ALL`] and [`PathShapeViolation::as_str`] doc
+/// blocks already name) reaches every one of the sibling forward-
+/// projection paths through exactly one caixa-core edit on the
+/// [`PathShapeViolation::as_str`] `pub const fn` accessor.
+///
+/// The [`PathShapeViolation::as_str`] emit and
+/// [`PathShapeViolation::from_wire`] parse share the same three inline
+/// canonical-kebab byte-strings by construction — so the owned-input
+/// owned-[`String`] forward axis and the reverse [`TryFrom<&str>`] axis
+/// compose directly (via the owned-[`String`]'s [`String::as_str`]
+/// borrow) without the intermediate wire-vocab hop the peer
+/// [`crate::CaixaKind`] axis pair requires. The round-trip witness pin
+/// below locks this direct composition on the render-side
+/// path-shape-diagnostic enum's owned-[`String`] axis pair.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_into_owned_string_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::as_str`] across the
+/// three-arm emit-set via the owned-[`String`] surface) and
+/// [`tests::path_shape_violation_from_into_owned_string_and_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`&'static str`]-returning [`From<PathShapeViolation> for &'static
+/// str`] impl and the sibling [`ToString::to_string`] surface routed
+/// through [`std::fmt::Display`], plus a
+/// `.iter().copied().map(String::from)` pipe witness over
+/// [`PathShapeViolation::ALL`], plus a direct round-trip witness through
+/// the paired trait-idiomatic reverse [`TryFrom<&str>`] axis on the
+/// owned-[`String`]'s [`String::as_str`] borrow that closes the
+/// two-way `Self → String → Self` round-trip on the render-side
+/// path-shape-diagnostic enum's owned-[`String`] axis pair without the
+/// wire-vocab intermediate the peer [`crate::CaixaKind`] axis pair
+/// requires).
+impl From<PathShapeViolation> for String {
+    fn from(violation: PathShapeViolation) -> String {
+        violation.as_str().to_owned()
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -41527,6 +41640,171 @@ mod tests {
                  and back through `TryFrom<&str>` — a break signals the \
                  borrowed-input forward-emit and reverse-parse axes have \
                  drifted onto different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_into_owned_string_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PathShapeViolation> for String` — asserts the
+        // owned-`String`-returning standard-library trait impl and the
+        // substrate-primitive [`super::PathShapeViolation::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm
+        // canonical-kebab emit-set across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for String` (nor an
+        // `impl<T: fmt::Display> From<T> for String`), so the
+        // owned-`String` forward-projection axis is a distinct
+        // trait-idiomatic surface that a
+        // `let key: String = violation.into();`-shaped call site reaches
+        // through this impl and no other — the paired sibling
+        // `From<PathShapeViolation> for &'static str` impl forces every
+        // owned-`String` call site through an explicit `.to_owned()` /
+        // `String::from` restatement.
+        //
+        // Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (7baa18a),
+        // [`crate::supervisor::tests::restart_policy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (7851725),
+        // [`crate::kind::tests::caixa_kind_from_into_owned_string_routes_through_as_str_accessor`]
+        // (231a18c),
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_owned_string_routes_through_as_str_accessor`]
+        // (88942cd),
+        // [`crate::dep::tests::dep_list_from_into_owned_string_routes_through_as_str_accessor`]
+        // (32b0ee8),
+        // [`crate::aplicacao::tests::placement_strategy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (1154c2f),
+        // [`crate::aplicacao::tests::wit_shape_from_into_owned_string_routes_through_as_str_accessor`]
+        // (79a8723), and
+        // [`crate::aplicacao::tests::rate_limit_unit_from_into_owned_string_routes_through_as_suffix_accessor`]
+        // (c7d687d) pins on the sibling closed-set typed-enum
+        // owned-input owned-`String` forward-projection axes — extends
+        // the owned-`String` arm onto the first render-side
+        // path-shape-diagnostic closed-set enum on the caixa surface
+        // (the sandbox-escape three-arm accept-set every
+        // [`super::is_sandboxed_relative_path`] caller
+        // match-and-wraps into its own typed per-slot
+        // `*Invalid { slot, path }` variant), opening the
+        // outside-manifest-surface arm of the substrate-wide
+        // owned-`String` campaign on the same trajectory the paired
+        // borrowed-input `&'static str` axis lift (cdf4e95) already
+        // took onto the same enum.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_trait: String = <String as From<super::PathShapeViolation>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<PathShapeViolation> for String impl must round-trip \
+                 PathShapeViolation::{variant:?} to the same \
+                 canonical-kebab byte-string PathShapeViolation::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: String = variant.into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on PathShapeViolation::{variant:?} \
+                 must byte-equal PathShapeViolation::as_str on the same \
+                 input — the blanket-derived Into shape must resolve to \
+                 the same as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_into_owned_string_and_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-`String` `From<PathShapeViolation> for String`
+        // (this lift) and owned-`&'static str`
+        // `From<PathShapeViolation> for &'static str` (070a6de) forward
+        // projections must resolve identically on every arm, locking
+        // the two return-type-shape paths together so any future detour
+        // trips at caixa-core test time. Also byte-parity witness
+        // against the sibling [`ToString::to_string`] surface routed
+        // through [`std::fmt::Display`] — the three owned-heap-string
+        // paths (`.into::<String>()`, `String::from`, `.to_string()`)
+        // must resolve identically on every arm so a future consumer
+        // that picks any of the three lands on the same three-arm
+        // canonical-kebab emit-set. Then a direct round-trip witness
+        // through the paired trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis on the owned-`String`'s [`String::as_str`] borrow that
+        // closes the two-way `Self → String → Self` round-trip on the
+        // trait-idiomatic owned-`String` forward + reverse axis pair —
+        // unlike the peer [`crate::CaixaKind`] axis pair (whose forward
+        // `From` emits lowercase Portuguese diagnostic bytes while the
+        // reverse `TryFrom` parses `PascalCase` wire bytes, forcing the
+        // round-trip through an intermediate wire-vocab hop), the
+        // [`super::PathShapeViolation::as_str`] emit and
+        // [`super::PathShapeViolation::from_wire`] parse share the same
+        // three inline canonical-kebab byte-strings by construction, so
+        // the owned-`String` forward axis and the reverse axis compose
+        // directly.
+        for &variant in super::PathShapeViolation::ALL {
+            let owned_string: String = <String as From<super::PathShapeViolation>>::from(variant);
+            let owned_static: &'static str =
+                <&'static str as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                owned_string.as_str(),
+                owned_static,
+                "From<PathShapeViolation> for String and \
+                 From<PathShapeViolation> for &'static str must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the owned-`String` and \
+                 owned-`&'static str` forward-projection \
+                 return-type-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                owned_string, via_to_string,
+                "From<PathShapeViolation> for String must byte-equal \
+                 PathShapeViolation::to_string on \
+                 PathShapeViolation::{variant:?} — divergence signals the \
+                 trait-idiomatic owned-`String` forward-projection axis \
+                 and the ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<String> = super::PathShapeViolation::ALL
+            .iter()
+            .copied()
+            .map(String::from)
+            .collect();
+        let via_method: Vec<String> = super::PathShapeViolation::ALL
+            .iter()
+            .map(|v| v.as_str().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(String::from)` over \
+             PathShapeViolation::ALL must byte-equal \
+             `.iter().map(|v| v.as_str().to_owned())` on every arm — the \
+             owned-`String` `From<PathShapeViolation> for String` axis is \
+             what makes the `String::from` composition route through the \
+             substrate-primitive `PathShapeViolation::as_str` accessor \
+             rather than through a per-call-site `.to_owned()` / \
+             `String::from(violation.as_str())` detour"
+        );
+        for &variant in super::PathShapeViolation::ALL {
+            let emitted: String = variant.into();
+            let re_parsed: Result<super::PathShapeViolation, ()> =
+                <super::PathShapeViolation as TryFrom<&str>>::try_from(emitted.as_str());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic owned-`String` forward-projection + \
+                 reverse-projection axis pair must round-trip \
+                 PathShapeViolation::{variant:?} through \
+                 `.into::<String>()` and back through `TryFrom<&str>` on \
+                 the owned-`String`'s String::as_str borrow — a break \
+                 signals the owned-`String` forward-emit and \
+                 reverse-parse axes have drifted onto different \
+                 vocabularies"
             );
         }
     }
