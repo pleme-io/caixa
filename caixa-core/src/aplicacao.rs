@@ -5705,6 +5705,149 @@ impl From<RateLimitUnit> for String {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, owned-`String` output* forward
+/// projection on the M3 mesh-primitive `:politicas :rate-limit`
+/// canonical-suffix [`RateLimitUnit`] closed-set typed enum — the fourth
+/// (and closing) corner of the `{Self, &Self} × {&'static str, String}`
+/// 2×2 trait-idiomatic projection family on this third (and last)
+/// M3-mesh-primitive-defining slot enum. Routes byte-for-byte through the
+/// substrate-primitive [`RateLimitUnit::as_suffix`] `pub const fn`
+/// accessor (via [`str::to_owned`]) so every consumer that holds a
+/// borrowed [`&RateLimitUnit`] and needs an owned [`String`] — a future
+/// `serde_json::Value::String(String::from(&unit))` structured-payload
+/// composer over a borrowed field, a future `Iterator::map` over
+/// `&[RateLimitUnit]` that projects to owned keys through
+/// `.iter().map(String::from)` (whose iterator yields `&RateLimitUnit`,
+/// not `RateLimitUnit`, so the owned-input [`From<RateLimitUnit> for
+/// String`] axis alone forces every call site through an explicit
+/// `.copied()` / spurious [`Copy`] deref restatement rather than the
+/// direct trait-idiomatic projection), a future
+/// `HashMap::<String, RateLimitUnit>::from_iter` that keys off a borrowed-
+/// iteration axis where dereferencing the unit would force an unnecessary
+/// [`Copy`] at every step, the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook rejection body
+/// composer that names the accepted-`:politicas :rate-limit`
+/// canonical-suffix enumeration through an iterated
+/// `RateLimitUnit::ALL.iter().map(String::from).collect()` pipe rather
+/// than a per-arm cascade, the future caixa-mesh renderer per-Aplicacao
+/// Envoy `local_rate_limit.token_bucket.fill_interval` overlay composer
+/// whose borrowed-iteration axis over declared units projects to owned
+/// keys by construction — reaches the same three-arm `"s"` / `"m"` /
+/// `"h"` canonical-suffix byte-string the paired
+/// [`std::fmt::Display`], [`AsRef<str>`], [`RateLimitUnit::as_suffix`],
+/// and the three other trait-idiomatic forward-projection impls
+/// ([`From<RateLimitUnit> for &'static str`],
+/// [`From<&RateLimitUnit> for &'static str`],
+/// [`From<RateLimitUnit> for String`]) already return.
+///
+/// Eighth peer on the substrate-wide trait-idiomatic *borrowed-input,
+/// owned-`String` output* forward-projection family opened on
+/// [`crate::supervisor::RestartStrategy`] (579385f), closed on the M2
+/// OTP-shape sibling axis pair by [`crate::supervisor::RestartPolicy`]
+/// (8465740), extended onto the two-list dep-graph peer by
+/// [`crate::dep::DepList`] (e0cb617), onto the top-level
+/// [`crate::CaixaKind`] peer by (e76436d), onto the
+/// dialect-classification peer by [`crate::CaixaDialeto`] (d3c0d1d),
+/// onto the first M3 mesh-slot peer by [`PlacementStrategy`] (d3dc000),
+/// and onto the second M3 mesh-slot peer by [`WitShape`] (d638fd3) —
+/// closes the `{Self, &Self} × {&'static str, String}` 2×2 projection
+/// corner across the whole M3 mesh-primitive triple, keeping the M3
+/// slot-enum sweep in lockstep with the M2 OTP-shape sibling pair's
+/// earlier closure. Third (and last) M3-mesh-primitive-defining
+/// closed-set typed enum to reach the 2×2-completion corner — the
+/// [`PlacementStrategy`] first-mover (d3dc000) closed the `:placement
+/// :estrategia` distribution-strategy axis, [`WitShape`] (d638fd3)
+/// closed the `:contratos :wit` census-label axis, and this lift closes
+/// the `:politicas :rate-limit` canonical-suffix axis the caixa-mesh
+/// renderer keys off end-to-end for per-Aplicacao Envoy
+/// `local_rate_limit.token_bucket.fill_interval` overlay emission.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<&T> for String` (nor an
+/// `impl<T: fmt::Display> From<&T> for String`), so every closed-set
+/// typed enum that carries the paired [`AsRef<str>`] /
+/// [`std::fmt::Display`] / [`From<Self> for &'static str`] /
+/// [`From<&Self> for &'static str`] / [`From<Self> for String`]
+/// quintuple but not the borrowed-input owned-[`String`] axis forces
+/// every borrowed-input owned-string call site through a
+/// `unit.as_suffix().to_owned()` / `String::from(*unit)` (with a
+/// spurious [`Copy`]) / `unit.to_string()` (through
+/// [`std::fmt::Display`]) detour whose type bounds have no compile-time
+/// link to the substrate primitive.
+///
+/// Same three-path convergence discipline as the paired owned-input
+/// impl (this borrowed-input axis, the paired owned-input
+/// [`From<RateLimitUnit> for String`], and [`RateLimitUnit::as_suffix`]
+/// all route through the same three-arm inline canonical-suffix
+/// byte-strings), so a future variant rename or per-arm serde-attribute
+/// drift reaches every one of the paired forward-projection paths
+/// through exactly one caixa-core edit.
+///
+/// Same as the peer [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`crate::dep::DepList`] /
+/// [`crate::CaixaDialeto`] / [`PlacementStrategy`] / [`WitShape`]
+/// borrowed-input owned-[`String`] axis pairs (whose forward emit and
+/// reverse parse share one vocabulary by construction) and unlike the
+/// peer [`crate::CaixaKind`] pair (whose forward emit lands on the
+/// lowercase Portuguese diagnostic vocabulary while the reverse parse
+/// lands on the `PascalCase` wire vocabulary, forcing the round-trip
+/// through an intermediate [`crate::CaixaKind::wire_name`] hop),
+/// [`RateLimitUnit`]'s [`RateLimitUnit::as_suffix`] emit and
+/// [`RateLimitUnit::from_suffix`] parse resolve through the same three
+/// inline canonical-suffix byte-strings by construction (there is no
+/// wire/diagnostic axis split on this M3 slot enum — both halves of the
+/// round-trip route through the same three `match`-arm-inline `&'static
+/// str` values `"s"` / `"m"` / `"h"`), so the borrowed-input
+/// owned-[`String`] projection this impl exposes composes directly with
+/// the paired trait-idiomatic reverse [`TryFrom<&str>`] axis on the
+/// owned-[`String`]'s [`String::as_str`] borrow — no intermediate
+/// wire-vocab hop required.
+///
+/// Deliberately routes through the canonical-suffix axis, not the
+/// second-magnitude [`RateLimitUnit::window`] axis — the borrowed-input
+/// owned-[`String`] `From` lands on the same author-surface-canonical
+/// byte-string the codec's parse and render arms both dispatch on, while
+/// the token-bucket-refill period stays reachable only through the
+/// explicit [`RateLimitUnit::window`] / [`RateLimitUnit::from_window`]
+/// paths, so the canonical-suffix / token-bucket-refill two-axis split
+/// the sibling axes already carry reaches the borrowed-input owned-
+/// [`String`] axis by construction.
+///
+/// The remaining six closed-set typed enums on the caixa substrate
+/// surface (`PathShapeViolation`, `InvariantKind`, `ArchVerdict`,
+/// `Severity`, `FixSafety`, `Semantic`, `FerriteRuntime`) are the
+/// future targets of this 2×2-completion campaign — each carries the
+/// same paired quintuple that this borrowed-input owned-[`String`] axis
+/// extends onto.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_into_borrowed_owned_string_routes_through_as_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::as_suffix`] across the
+/// three-arm emit-set through the borrowed-input surface) and
+/// [`tests::rate_limit_unit_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input owned-
+/// [`String`] [`From<RateLimitUnit> for String`] impl, the paired
+/// borrowed-input owned-[`&'static str`]
+/// [`From<&RateLimitUnit> for &'static str`] impl, the paired owned-
+/// input owned-[`&'static str`] [`From<RateLimitUnit> for &'static
+/// str`] impl, and the sibling [`ToString::to_string`] surface routed
+/// through [`std::fmt::Display`], plus a `.iter().map(String::from)`
+/// pipe witness over [`RateLimitUnit::ALL`] (whose iterator yields
+/// `&RateLimitUnit` by construction, so the borrowed-input owned-
+/// [`String`] axis is what routes the pipe through the substrate-
+/// primitive [`RateLimitUnit::as_suffix`] accessor without a spurious
+/// [`Copy`] deref), plus a direct round-trip witness through
+/// [`TryFrom<&str>`] on the owned-[`String`]'s [`String::as_str`]
+/// borrow that closes the two-way `&Self → String → Self` round-trip
+/// on the trait-idiomatic borrowed-input owned-[`String`] forward +
+/// reverse axis pair — no intermediate wire-vocab hop like the peer
+/// [`crate::CaixaKind`] axis pair requires).
+impl From<&RateLimitUnit> for String {
+    fn from(unit: &RateLimitUnit) -> String {
+        unit.as_suffix().to_owned()
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -25738,6 +25881,214 @@ mod tests {
                  reverse parse share the same three inline canonical-\
                  suffix byte-strings by construction, so the round-trip \
                  composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_into_borrowed_owned_string_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RateLimitUnit> for String` — asserts the
+        // borrowed-input owned-`String`-returning standard-library
+        // trait impl and the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] `pub const fn` accessor
+        // resolve to the same three-arm canonical-suffix emit-set across
+        // every arm the exhaustive [`super::RateLimitUnit::ALL`] slice
+        // enumerates. Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for String` (nor an
+        // `impl<T: fmt::Display> From<&T> for String`), so the
+        // borrowed-input owned-`String` forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: String = (&unit).into();`-shaped call site reaches
+        // through this impl and no other — the paired sibling
+        // `From<RateLimitUnit> for String` impl forces every borrowed-\
+        // input call site through an explicit `Copy` deref
+        // (`String::from(*unit)`) or an `.as_suffix().to_owned()` /
+        // `.to_string()` detour. Peer of the first-mover
+        // [`crate::supervisor::tests::restart_strategy_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (579385f), the second-peer
+        // [`crate::supervisor::tests::restart_policy_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (8465740), the third-peer
+        // [`crate::dep::tests::dep_list_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (e0cb617), the fourth-peer
+        // [`crate::kind::tests::caixa_kind_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (e76436d), the fifth-peer
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (d3c0d1d), the sixth-peer
+        // [`tests::placement_strategy_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (d3dc000), and the seventh-peer
+        // [`tests::wit_shape_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (d638fd3) — extends the trait-idiomatic borrowed-input owned-\
+        // `String` forward-projection axis onto the eighth closed-set
+        // fieldless typed enum on the caixa surface (the third — and
+        // last — M3-mesh-primitive-defining `:politicas :rate-limit`
+        // canonical-suffix axis).
+        for &unit in super::RateLimitUnit::ALL {
+            let via_trait: String = <String as From<&super::RateLimitUnit>>::from(&unit);
+            let via_method: &'static str = unit.as_suffix();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<&RateLimitUnit> for String impl must round-trip \
+                 &RateLimitUnit::{unit:?} to the same three-arm \
+                 canonical-suffix byte-string RateLimitUnit::as_suffix \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: String = (&unit).into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on &RateLimitUnit::{unit:?} must \
+                 byte-equal RateLimitUnit::as_suffix on the same input — \
+                 the blanket-derived Into shape must resolve to the same \
+                 as_suffix dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input owned-`String` `From<&RateLimitUnit> for String`
+        // (this lift), the paired owned-input owned-`String`
+        // `From<RateLimitUnit> for String` (c7d687d), the paired
+        // borrowed-input owned-`&'static str`
+        // `From<&RateLimitUnit> for &'static str` (f4b9e6b), and the
+        // paired owned-input owned-`&'static str`
+        // `From<RateLimitUnit> for &'static str` (7fdfbf4) — every
+        // corner of the `{Self, &Self} × {&'static str, String}` 2×2
+        // trait-idiomatic projection family — must resolve identically
+        // on every arm, locking the four return-shape × input-shape
+        // paths together so any future detour trips at caixa-core test
+        // time. Also byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] and a direct round-trip witness through
+        // the paired trait-idiomatic reverse [`TryFrom<&str>`] axis on
+        // the owned-`String`'s [`String::as_str`] borrow that closes the
+        // two-way `&Self → String → Self` round-trip on the trait-\
+        // idiomatic borrowed-input owned-`String` forward + reverse
+        // axis pair. Peer of the first-mover
+        // [`crate::supervisor::tests::restart_strategy_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (579385f), the second-peer
+        // [`crate::supervisor::tests::restart_policy_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (8465740), the third-peer
+        // [`crate::dep::tests::dep_list_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (e0cb617), the fourth-peer
+        // [`crate::kind::tests::caixa_kind_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (e76436d), the fifth-peer
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (d3c0d1d), the sixth-peer
+        // [`tests::placement_strategy_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (d3dc000), and the seventh-peer
+        // [`tests::wit_shape_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (d638fd3) — closes the whole
+        // `{Self, &Self} × {&'static str, String}` 2×2 projection
+        // corner across the whole M3 mesh-primitive triple on the
+        // eighth substrate-wide closed-set fieldless typed enum peer
+        // (the third — and last — M3-mesh-primitive-defining
+        // `:politicas :rate-limit` canonical-suffix axis).
+        //
+        // Unlike the peer [`crate::CaixaKind`] axis pair (whose forward
+        // `From` emit lands on the lowercase Portuguese `as_str`
+        // diagnostic vocabulary while the reverse `TryFrom<&str>`
+        // parses the `PascalCase` `wire_name` author-surface
+        // vocabulary, forcing the round-trip through an intermediate
+        // [`crate::CaixaKind::wire_name`] hop),
+        // [`super::RateLimitUnit`]'s [`super::RateLimitUnit::as_suffix`]
+        // emit and [`super::RateLimitUnit::from_suffix`] parse resolve
+        // through the same three inline canonical-suffix byte-strings
+        // by construction (there is no wire/diagnostic axis split on
+        // this M3 slot enum), so the borrowed-input owned-`String`
+        // forward axis and the reverse axis compose directly — matching
+        // the peer [`crate::supervisor::RestartStrategy`] /
+        // [`crate::supervisor::RestartPolicy`] / [`crate::dep::DepList`]
+        // / [`crate::CaixaDialeto`] / [`super::PlacementStrategy`] /
+        // [`super::WitShape`] borrowed-input owned-`String` axis pairs.
+        for &unit in super::RateLimitUnit::ALL {
+            let borrowed_string: String = <String as From<&super::RateLimitUnit>>::from(&unit);
+            let owned_string: String = <String as From<super::RateLimitUnit>>::from(unit);
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::RateLimitUnit>>::from(&unit);
+            let owned_static: &'static str =
+                <&'static str as From<super::RateLimitUnit>>::from(unit);
+            assert_eq!(
+                borrowed_string, owned_string,
+                "From<&RateLimitUnit> for String and From<RateLimitUnit> \
+                 for String must resolve identically on RateLimitUnit::\
+                 {unit:?} — divergence signals the borrowed-input and \
+                 owned-input owned-`String` forward-projection input-\
+                 shape paths have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_string.as_str(),
+                borrowed_static,
+                "From<&RateLimitUnit> for String and From<&RateLimitUnit> \
+                 for &'static str must resolve identically on \
+                 RateLimitUnit::{unit:?} — divergence signals the \
+                 borrowed-input `&'static str` and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            assert_eq!(
+                borrowed_string.as_str(),
+                owned_static,
+                "From<&RateLimitUnit> for String and From<RateLimitUnit> \
+                 for &'static str must resolve identically on \
+                 RateLimitUnit::{unit:?} — divergence signals a break \
+                 in the diagonal corner of the {{Self, &Self}} × \
+                 {{&'static str, String}} 2×2 trait-idiomatic \
+                 projection family"
+            );
+            let via_to_string: String = unit.to_string();
+            assert_eq!(
+                borrowed_string, via_to_string,
+                "From<&RateLimitUnit> for String must byte-equal \
+                 RateLimitUnit::to_string on RateLimitUnit::{unit:?} — \
+                 divergence signals the trait-idiomatic borrowed-input \
+                 owned-`String` forward-projection axis and the \
+                 ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<String> = super::RateLimitUnit::ALL.iter().map(String::from).collect();
+        let via_method: Vec<String> = super::RateLimitUnit::ALL
+            .iter()
+            .map(|u| u.as_suffix().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(String::from)` over RateLimitUnit::ALL — a \
+             call site whose iteration axis holds `&RateLimitUnit` by \
+             construction — must byte-equal `.iter().map(|u| \
+             u.as_suffix().to_owned())` on every arm — the borrowed-\
+             input owned-`String` `From<&RateLimitUnit> for String` \
+             axis is what makes the `String::from` composition route \
+             through the substrate-primitive RateLimitUnit::as_suffix \
+             accessor without a spurious `Copy` deref (which would \
+             only be reachable through the owned-input \
+             `From<RateLimitUnit> for String` axis by first calling \
+             `.copied()` on the iterator)"
+        );
+        for &unit in super::RateLimitUnit::ALL {
+            let emitted: String = (&unit).into();
+            let re_parsed: Result<super::RateLimitUnit, ()> =
+                <super::RateLimitUnit as TryFrom<&str>>::try_from(emitted.as_str());
+            assert_eq!(
+                re_parsed,
+                Ok(unit),
+                "trait-idiomatic borrowed-input owned-`String` \
+                 forward-projection + reverse-projection axis pair \
+                 must round-trip &RateLimitUnit::{unit:?} through \
+                 `.into::<String>()` on the borrowed-input surface and \
+                 back through `TryFrom<&str>` on the owned-`String`'s \
+                 String::as_str borrow — a break signals the \
+                 borrowed-input owned-`String` forward-emit and \
+                 reverse-parse axes have drifted onto different \
+                 vocabularies (unlike the peer CaixaKind axis pair, \
+                 RateLimitUnit's forward emit and reverse parse share \
+                 the same three inline canonical-suffix byte-strings \
+                 by construction, so the round-trip composes directly)"
             );
         }
     }
