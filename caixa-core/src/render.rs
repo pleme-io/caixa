@@ -7667,6 +7667,116 @@ impl From<PathShapeViolation> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on [`PathShapeViolation`] from a
+/// *borrowed* input onto the `&'static str` axis — the borrowed-input
+/// companion to the paired owned-input [`From<PathShapeViolation> for
+/// &'static str`] impl immediately above. Routes byte-for-byte through
+/// the same substrate-primitive [`PathShapeViolation::as_str`] `pub const
+/// fn` accessor so every consumer that binds a `&PathShapeViolation`
+/// through the standard-library `.into()` / [`From<&Self> for &'static
+/// str`] axis (a
+/// `PathShapeViolation::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer — whose iterator over
+/// `&'static [PathShapeViolation]` yields `&PathShapeViolation`, not
+/// `PathShapeViolation`, so the owned-input [`From<PathShapeViolation>`]
+/// axis alone forces every call site through an explicit `.copied()` /
+/// dereference / [`Copy`]-bound restatement rather than the direct
+/// trait-idiomatic projection; a future generic `<T: Copy + for<'a>
+/// Into<&'static str>>`-bound diagnostic column over the substrate-wide
+/// closed-set typed-enum family that walks the `iter().map(Into::into)`
+/// shape verbatim; the future `feira lint --explain-path-shape`
+/// per-axis listing that composes the accepted-tag enumeration from an
+/// iterated `PathShapeViolation::ALL.iter().map(|v| v.into())` pipe
+/// rather than a per-arm `match v { … }` cascade; a future
+/// `HashMap::<&'static str, PathShapeViolation>::from_iter(
+///   PathShapeViolation::ALL.iter().map(|v| (v.into(), *v)))`-style
+/// per-violation reverse-lookup table the sibling [`TryFrom<&str>`] impl
+/// cannot compose without this borrowed-input axis in place) reaches the
+/// same three-arm `"empty"` / `"absolute"` / `"parent-escape"` canonical-
+/// kebab emit-set the paired owned-input [`From<PathShapeViolation> for
+/// &'static str`], the sibling [`std::fmt::Display`], [`AsRef<str>`], and
+/// [`PathShapeViolation::as_str`] surfaces already return.
+///
+/// Ninth peer on the substrate-wide trait-idiomatic *borrowed-input*
+/// forward-projection family opened on [`crate::dep::DepList`] (64aa742)
+/// and extended onto [`crate::CaixaKind`] (5ab993a),
+/// [`crate::CaixaDialeto`] (807b0b5), the paired M2 OTP-shape
+/// [`crate::supervisor::RestartStrategy`] (e941836) and
+/// [`crate::supervisor::RestartPolicy`] (842c7f3), and the M3
+/// mesh-primitive slot enums [`crate::aplicacao::PlacementStrategy`]
+/// (4d941d8), [`crate::aplicacao::WitShape`] (3187bd0), and
+/// [`crate::aplicacao::RateLimitUnit`] (f4b9e6b — the third and last M3
+/// mesh-primitive slot enum, closing the M3 arm of the campaign). Rust's
+/// `From` trait does not auto-derive the `From<&Self>` sibling from a
+/// `From<Self>` impl (the blanket `impl<T, U> From<&T> for U where T:
+/// Copy, U: From<T>` does not exist in `core`), so every closed-set
+/// typed enum that carries the owned-input axis but not the borrowed-
+/// input axis forces every borrowed-input call site through a
+/// `.copied()` / `<&'static str>::from(*violation)` /
+/// `violation.as_str()` detour whose type bounds have no compile-time
+/// link to the substrate primitive. [`PathShapeViolation`] is the
+/// *first* outside-manifest-surface (render-side, path-shape-diagnostic)
+/// closed-set typed enum to converge onto the substrate-wide borrowed-
+/// input campaign — the M2 / M3 slot enums and the two-list dep-graph
+/// axis form the manifest-surface arm; this lift opens the render-side
+/// arm on the sandbox-escape three-arm accept-set every
+/// [`is_sandboxed_relative_path`] caller
+/// ([`crate::BehaviorSpec::validate`],
+/// [`crate::UpgradeInstruction::validate`], every future M3/M4 axis
+/// admitting a user-supplied path) match-and-wraps into its own typed
+/// per-slot `*Invalid { slot, path }` variant, on the same trajectory
+/// the paired owned-input axis lift (070a6de) already carried onto the
+/// same enum as the first-outside-manifest-surface peer on the owned
+/// axis.
+///
+/// Same three-path convergence discipline as the paired owned-input impl
+/// (this borrowed-input axis, the paired owned-input
+/// [`From<PathShapeViolation> for &'static str`], and
+/// [`PathShapeViolation::as_str`] all route through the same three-arm
+/// inline canonical-kebab byte-strings), so a future variant addition (a
+/// `Symlink` arm the future symlink-escape gate would carry once
+/// [`std::path::Path::is_symlink`] becomes part of the sandbox contract,
+/// a `TrailingSpace` arm a future authoring-side whitespace-hygiene gate
+/// would raise for `"lib/init.lisp "` shapes — both trajectory items
+/// [`PathShapeViolation::ALL`] and [`PathShapeViolation::as_str`] doc
+/// blocks already name) reaches every one of the six sibling forward-
+/// projection paths ([`std::fmt::Display`], [`AsRef<str>`],
+/// [`PathShapeViolation::as_str`], [`From<Self> for &'static str`], this
+/// [`From<&Self> for &'static str`], and the paired reverse
+/// [`TryFrom<&str>`] that dispatches on the same three inline canonical-
+/// kebab byte-strings by construction) through exactly one caixa-core
+/// edit on the [`PathShapeViolation::as_str`] `pub const fn` accessor.
+///
+/// The [`PathShapeViolation::as_str`] emit and
+/// [`PathShapeViolation::from_wire`] parse share the same three inline
+/// canonical-kebab byte-strings by construction — so the borrowed-input
+/// forward axis and the reverse [`TryFrom<&str>`] axis compose directly
+/// without the intermediate wire-vocab hop the peer [`crate::CaixaKind`]
+/// axis pair requires. The round-trip witness pin below locks this
+/// direct composition on the render-side path-shape-diagnostic enum's
+/// trait-idiomatic axis pair.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::as_str`] across the
+/// three-arm emit-set via a borrowed input, plus a `const`-context
+/// materialization witness for the `&'static str` lifetime promise, plus
+/// a blanket `.into()` shape) and
+/// [`tests::path_shape_violation_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<PathShapeViolation> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over
+/// [`PathShapeViolation::ALL`], plus a direct round-trip witness through
+/// [`TryFrom<&str>`] that closes the two-way `&Self → &'static str →
+/// Self` round-trip on the render-side path-shape-diagnostic enum's
+/// trait-idiomatic axis pair without the wire-vocab intermediate the
+/// peer [`crate::CaixaKind`] axis pair requires).
+impl From<&PathShapeViolation> for &'static str {
+    fn from(violation: &PathShapeViolation) -> &'static str {
+        violation.as_str()
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -41225,6 +41335,197 @@ mod tests {
                  PathShapeViolation::{variant:?} through `.into::<&'static \
                  str>()` and back through `TryFrom<&str>` — a break \
                  signals the forward-emit and reverse-parse axes have \
+                 drifted onto different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&PathShapeViolation> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::PathShapeViolation::as_str`] `pub const fn`
+        // accessor resolve to the same three-arm canonical-kebab emit-set
+        // across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Rust's
+        // `From` trait does not auto-derive the borrowed-input sibling
+        // from a paired owned-input impl (no `impl<T, U> From<&T> for U
+        // where T: Copy, U: From<T>` blanket in `core`), so the borrowed-
+        // input axis is a distinct trait-idiomatic surface that a
+        // `.iter().map(Into::into)` shape over
+        // [`super::PathShapeViolation::ALL`] (whose iterator yields
+        // `&PathShapeViolation`, not `PathShapeViolation`) reaches
+        // through this impl and no other — the paired owned-input
+        // [`From<PathShapeViolation>`] impl requires an explicit
+        // `.copied()` / dereference before the trait fires. Materializes
+        // the `<&'static str as From<&PathShapeViolation>>::from` output
+        // in three `const`-shape bindings against the paired
+        // [`super::PathShapeViolation::as_str`] `pub const fn` accessor
+        // to make the `'static` lifetime promise a build-time invariant —
+        // a future accidental downgrade of any of the three arms' inline
+        // canonical-kebab byte-strings to a non-`&'static str` (a
+        // `String::leak()`-produced return, a `Box::leak`-cast, an
+        // intermediate lifetime-erasing helper) trips at caixa-core
+        // build time rather than at a downstream `'static`-bound
+        // consumer.
+        //
+        // Peer of the sibling
+        // [`crate::dep::tests::dep_list_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (64aa742),
+        // [`crate::kind::tests::caixa_kind_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (5ab993a),
+        // [`crate::dialeto::tests::caixa_dialeto_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (807b0b5),
+        // [`crate::supervisor::tests::restart_strategy_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (e941836),
+        // [`crate::supervisor::tests::restart_policy_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (842c7f3),
+        // [`crate::aplicacao::tests::placement_strategy_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (4d941d8),
+        // [`crate::aplicacao::tests::wit_shape_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+        // (3187bd0), and
+        // [`crate::aplicacao::tests::rate_limit_unit_from_borrowed_into_static_str_routes_through_as_suffix_accessor`]
+        // (f4b9e6b) pins on the sibling closed-set typed-enum borrowed-
+        // input forward-projection axes — extends the borrowed-input
+        // axis onto the first render-side path-shape-diagnostic closed-
+        // set enum on the caixa surface (the sandbox-escape three-arm
+        // accept-set every [`super::is_sandboxed_relative_path`] caller
+        // match-and-wraps into its own typed per-slot `*Invalid { slot,
+        // path }` variant), opening the outside-manifest-surface arm of
+        // the substrate-wide borrowed-input campaign on the same
+        // trajectory the owned-input axis lift (070a6de) already took.
+        const EMPTY: &str = super::PathShapeViolation::Empty.as_str();
+        const ABSOLUTE: &str = super::PathShapeViolation::Absolute.as_str();
+        const PARENT_ESCAPE: &str = super::PathShapeViolation::ParentEscape.as_str();
+        for variant in super::PathShapeViolation::ALL {
+            let via_trait: &'static str =
+                <&'static str as From<&super::PathShapeViolation>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&PathShapeViolation> for &'static str impl must \
+                 round-trip &PathShapeViolation::{variant:?} to the same \
+                 canonical-kebab byte-string \
+                 PathShapeViolation::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &PathShapeViolation::{variant:?} \
+                 must byte-equal PathShapeViolation::as_str on the same \
+                 input — the blanket-derived Into shape must resolve to \
+                 the same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [EMPTY, ABSOLUTE, PARENT_ESCAPE],
+            ["empty", "absolute", "parent-escape"],
+            "const-context PathShapeViolation::as_str must resolve to the \
+             three canonical-kebab byte-strings — the borrowed-input \
+             From<&PathShapeViolation> for &'static str impl inherits its \
+             `'static` lifetime promise from the same accessor the \
+             owned-input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn path_shape_violation_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<PathShapeViolation> for &'static str` (070a6de)
+        // and borrowed-input `From<&PathShapeViolation> for &'static str`
+        // (this lift) forward projections must resolve identically on
+        // every arm, locking the two input-shape paths together so any
+        // future detour trips at caixa-core test time. Then a witness
+        // that a `.iter().map(Into::into)` pipe over
+        // [`super::PathShapeViolation::ALL`] (whose iterator yields
+        // `&PathShapeViolation`) materializes the three-arm accept-set
+        // through the borrowed-input axis alone — the exact shape a
+        // future `feira lint --explain-path-shape` per-axis listing, a
+        // future substrate-wide per-arm diagnostic column, or a
+        // `HashMap::<&'static str, PathShapeViolation>::from_iter(
+        // PathShapeViolation::ALL.iter().map(|v| (v.into(),
+        // *v)))`-style per-violation lookup reaches through — closing
+        // the two-way owned/borrowed input-shape symmetry on the
+        // render-side path-shape-diagnostic enum's forward-projection
+        // trait-idiomatic axis. Peer of the sibling
+        // [`crate::dep::tests::dep_list_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (64aa742),
+        // [`crate::kind::tests::caixa_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (5ab993a),
+        // [`crate::dialeto::tests::caixa_dialeto_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (807b0b5),
+        // [`crate::supervisor::tests::restart_strategy_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (e941836),
+        // [`crate::supervisor::tests::restart_policy_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (842c7f3),
+        // [`crate::aplicacao::tests::placement_strategy_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (4d941d8),
+        // [`crate::aplicacao::tests::wit_shape_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (3187bd0), and
+        // [`crate::aplicacao::tests::rate_limit_unit_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (f4b9e6b) partition pins on the sibling closed-set typed-enum
+        // discriminator axes — extends the borrowed-input axis
+        // discipline onto the first render-side path-shape-diagnostic
+        // closed-set enum on the caixa surface (the sandbox-escape
+        // three-arm accept-set). Also closes the direct two-way `&Self
+        // → &'static str → Self` round-trip via the paired
+        // [`TryFrom<&str>`] axis — unlike the peer [`crate::CaixaKind`]
+        // axis pair (whose forward `From` emits lowercase Portuguese
+        // diagnostic bytes while the reverse `TryFrom` parses
+        // `PascalCase` wire bytes, forcing the round-trip through an
+        // intermediate wire-vocab hop), the
+        // [`super::PathShapeViolation::as_str`] emit and
+        // [`super::PathShapeViolation::from_wire`] parse share the same
+        // three inline canonical-kebab byte-strings by construction, so
+        // the borrowed-input forward axis and the reverse axis compose
+        // directly.
+        for &variant in super::PathShapeViolation::ALL {
+            let owned: &'static str =
+                <&'static str as From<super::PathShapeViolation>>::from(variant);
+            let borrowed: &'static str =
+                <&'static str as From<&super::PathShapeViolation>>::from(&variant);
+            assert_eq!(
+                owned, borrowed,
+                "From<PathShapeViolation> and From<&PathShapeViolation> for \
+                 &'static str must resolve identically on \
+                 PathShapeViolation::{variant:?} — divergence signals the \
+                 owned-input and borrowed-input forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> = super::PathShapeViolation::ALL
+            .iter()
+            .map(Into::into)
+            .collect();
+        let via_method: Vec<&'static str> = super::PathShapeViolation::ALL
+            .iter()
+            .map(|v| v.as_str())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over PathShapeViolation::ALL must \
+             byte-equal `.iter().map(|v| v.as_str())` on every arm — \
+             the borrowed-input `From<&PathShapeViolation> for &'static \
+             str` axis is what makes the `.iter().map(Into::into)` shape \
+             route through the substrate-primitive \
+             PathShapeViolation::as_str accessor rather than through a \
+             per-call-site `.copied()` / dereference detour"
+        );
+        for variant in super::PathShapeViolation::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<super::PathShapeViolation, ()> =
+                <super::PathShapeViolation as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(*variant),
+                "trait-idiomatic borrowed-input forward-projection + \
+                 reverse-projection axis pair must round-trip \
+                 &PathShapeViolation::{variant:?} through \
+                 `.into::<&'static str>()` (via the borrowed-input axis) \
+                 and back through `TryFrom<&str>` — a break signals the \
+                 borrowed-input forward-emit and reverse-parse axes have \
                  drifted onto different vocabularies"
             );
         }
