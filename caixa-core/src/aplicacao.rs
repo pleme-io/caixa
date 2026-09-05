@@ -931,6 +931,91 @@ impl From<&WitShape> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on the M3 mesh-primitive
+/// `:contratos :wit` census-label [`WitShape`] closed-set typed enum from
+/// an *owned* input onto the owned-[`String`] axis — routes byte-for-byte
+/// through the substrate-primitive [`WitShape::as_str`] `pub const fn`
+/// accessor so every consumer that binds a [`WitShape`] through the
+/// standard-library `.into()` / [`From<Self> for String`] (equivalently
+/// [`Into<String>`]) axis reaches the same four-arm `"http"` / `"pubsub"`
+/// / `"store"` / `"capability"` census-label byte-string the paired
+/// owned-input [`From<WitShape> for &'static str`] (56998ec), the
+/// borrowed-input [`From<&WitShape> for &'static str`] (3187bd0), the
+/// sibling [`std::fmt::Display`], [`AsRef<str>`], and [`WitShape::as_str`]
+/// surfaces already return.
+///
+/// Extends the trait-idiomatic *owned-[`String`]* forward-projection
+/// family (opened on [`crate::supervisor::RestartStrategy`] — 7baa18a —
+/// the first-mover on the M2 OTP-shape sibling-restart-strategy axis,
+/// extended onto [`crate::supervisor::RestartPolicy`] — 7851725 — the
+/// second-of-two-in-M2 per-child restart-decision axis, then onto
+/// [`crate::CaixaKind`] — 231a18c — the structurally most fundamental
+/// closed-set fieldless typed enum on the caixa surface, then onto
+/// [`crate::CaixaDialeto`] — 88942cd — the dialect-classification axis,
+/// then onto [`crate::dep::DepList`] — 32b0ee8 — the two-list dep-graph
+/// axis, then onto [`PlacementStrategy`] — 1154c2f — the first M3
+/// mesh-primitive-defining slot enum on the caixa surface) onto the
+/// seventh peer: the M3 mesh-primitive `:contratos :wit` census-label
+/// axis [`WitShape`] carries. Second M3-mesh-primitive-defining closed-set
+/// typed enum to converge onto this owned-[`String`] forward-projection
+/// campaign — the caixa-mesh renderer's per-edge programs.yaml fan-out
+/// keys off this axis end-to-end, so every future consumer that promotes
+/// classification output onto an owned-heap-string carrier (the future M4
+/// admission-webhook rejection body's accepted-`:contratos :wit`
+/// enumeration, a future `HashMap::<String, WitShape>::from_iter(…)`
+/// owned-key per-shape lookup) now reaches the substrate-primitive
+/// accessor through one uniform trait dispatch.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for String` (nor an
+/// `impl<T: fmt::Display> From<T> for String`), so every closed-set typed
+/// enum that carries the paired [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`From<Self> for &'static str`] / [`From<&Self> for &'static str`]
+/// quadruple but not the owned-[`String`] axis forces every owned-string
+/// call site through a `.to_string()` / `.as_str().to_owned()` /
+/// `String::from(shape.as_str())` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// Same as the peer [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`crate::CaixaDialeto`] /
+/// [`crate::dep::DepList`] / [`PlacementStrategy`] owned-[`String`] axis
+/// pairs (whose forward emit and reverse parse share one vocabulary by
+/// construction), [`WitShape`]'s [`WitShape::as_str`] emit and
+/// [`WitShape::from_wire`] parse resolve through the same four inline
+/// census-label byte-strings by construction (there is no wire/diagnostic
+/// axis split on this enum), so the owned-[`String`] forward projection
+/// this impl exposes composes directly with the paired trait-idiomatic
+/// reverse [`TryFrom<&str>`] axis on the owned-[`String`]'s
+/// [`String::as_str`] borrow — no intermediate wire-vocab hop like the
+/// peer [`crate::CaixaKind`] axis pair requires.
+///
+/// The remaining eight closed-set typed enums on the caixa substrate
+/// surface (`RateLimitUnit`, `PathShapeViolation`, `InvariantKind`,
+/// `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`, `FerriteRuntime`)
+/// are the future targets of this campaign — each carries the same paired
+/// [`AsRef<str>`] / [`std::fmt::Display`] / [`From<Self> for &'static
+/// str`] / [`From<&Self> for &'static str`] quadruple that this
+/// owned-[`String`] axis extends onto.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_from_into_owned_string_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`WitShape::as_str`] across the four-arm
+/// [`WitShape::ALL`] emit-set plus a blanket `.into::<String>()` shape
+/// witness) and
+/// [`tests::wit_shape_from_into_owned_string_and_static_str_agree_on_every_arm`]
+/// (cross-axis partition against the sibling owned-`&'static str` axis
+/// and the [`ToString::to_string`] surface, a
+/// `.iter().copied().map(String::from)` pipe witness over
+/// [`WitShape::ALL`], plus a direct `Self → String → Self` round-trip via
+/// [`TryFrom<&str>`] on the owned-[`String`]'s [`String::as_str`] borrow
+/// — composes directly without the wire-vocab intermediate hop the peer
+/// [`crate::CaixaKind`] axis pair requires).
+impl From<WitShape> for String {
+    fn from(shape: WitShape) -> String {
+        shape.as_str().to_owned()
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -16263,6 +16348,168 @@ mod tests {
                  through `TryFrom<&str>` — a break signals the \
                  borrowed-input forward-emit and reverse-parse axes \
                  have drifted onto different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_into_owned_string_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<WitShape> for String` — asserts the owned-`String`-
+        // returning standard-library trait impl and the substrate-
+        // primitive [`WitShape::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm census-label emit-set across
+        // every arm the exhaustive [`WitShape::ALL`] slice enumerates.
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for String` (nor an
+        // `impl<T: fmt::Display> From<T> for String`), so the
+        // owned-`String` forward-projection axis is a distinct trait-
+        // idiomatic surface that a `let key: String = shape.into();`-
+        // shaped call site reaches through this impl and no other —
+        // the paired sibling `From<WitShape> for &'static str` impl
+        // forces every owned-`String` call site through an explicit
+        // `.to_owned()` / `String::from` restatement. Peer of the
+        // first-mover
+        // [`crate::supervisor::tests::restart_strategy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (7baa18a), the second-peer
+        // [`crate::supervisor::tests::restart_policy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (7851725), the third-peer
+        // [`crate::kind::tests::caixa_kind_from_into_owned_string_routes_through_as_str_accessor`]
+        // (231a18c), the fourth-peer
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_owned_string_routes_through_as_str_accessor`]
+        // (88942cd), the fifth-peer
+        // [`crate::dep::tests::dep_list_from_into_owned_string_routes_through_as_str_accessor`]
+        // (32b0ee8), and the sixth-peer
+        // [`tests::placement_strategy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (1154c2f) — extends the trait-idiomatic owned-`String`
+        // forward-projection axis onto the seventh closed-set fieldless
+        // typed enum on the caixa surface (the second
+        // M3-mesh-primitive-defining `:contratos :wit` census-label
+        // axis).
+        for &variant in WitShape::ALL {
+            let via_trait: String = <String as From<WitShape>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<WitShape> for String impl must round-trip \
+                 WitShape::{variant:?} to the same four-arm census-label \
+                 byte-string WitShape::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: String = variant.into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on WitShape::{variant:?} must \
+                 byte-equal WitShape::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_into_owned_string_and_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-`String` `From<WitShape> for String` (this lift) and
+        // owned-`&'static str` `From<WitShape> for &'static str`
+        // (56998ec) forward projections must resolve identically on
+        // every arm, locking the two return-type-shape paths together
+        // so any future detour trips at caixa-core test time. Also
+        // byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] — the three owned-heap-string paths
+        // (`.into::<String>()`, `String::from`, `.to_string()`) must
+        // resolve identically on every arm so a future consumer that
+        // picks any of the three lands on the same four-arm inline
+        // census-label accept-set. Then a
+        // `.iter().copied().map(String::from)` pipe witness over
+        // [`WitShape::ALL`] that materializes the four-arm accept-set
+        // through the owned-`String` axis alone — the exact shape a
+        // future M4 admission-webhook rejection body composer or a
+        // `HashMap::<String, WitShape>::from_iter(WitShape::ALL.iter()
+        //     .copied().map(|s| (s.into(), s)))`-style owned-key
+        // per-shape lookup reaches through — closing the owned-`String`
+        // forward-projection axis's iterator-pipe shape. Then a direct
+        // round-trip witness through the paired trait-idiomatic reverse
+        // [`TryFrom<&str>`] axis on the owned-`String`'s
+        // [`String::as_str`] borrow that closes the two-way `Self →
+        // String → Self` round-trip on the trait-idiomatic
+        // owned-`String` forward + reverse axis pair.
+        //
+        // Unlike the peer [`crate::CaixaKind`] axis pair (whose forward
+        // `From` emit lands on the lowercase Portuguese `as_str`
+        // diagnostic vocabulary while the reverse `TryFrom<&str>`
+        // parses the `PascalCase` `wire_name` author-surface
+        // vocabulary, forcing the round-trip through an intermediate
+        // [`crate::CaixaKind::wire_name`] hop), [`WitShape`]'s
+        // [`WitShape::as_str`] emit and [`WitShape::from_wire`] parse
+        // resolve through the same four inline census-label
+        // byte-strings by construction (there is no wire/diagnostic
+        // axis split on this enum), so the owned-`String` forward axis
+        // and the reverse axis compose directly — matching the peer
+        // [`crate::supervisor::RestartStrategy`] /
+        // [`crate::supervisor::RestartPolicy`] /
+        // [`crate::CaixaDialeto`] / [`crate::dep::DepList`] /
+        // [`PlacementStrategy`] owned-`String` axis pairs.
+        for &variant in WitShape::ALL {
+            let owned_string: String = <String as From<WitShape>>::from(variant);
+            let owned_static: &'static str = <&'static str as From<WitShape>>::from(variant);
+            assert_eq!(
+                owned_string.as_str(),
+                owned_static,
+                "From<WitShape> for String and From<WitShape> for \
+                 &'static str must resolve identically on \
+                 WitShape::{variant:?} — divergence signals the \
+                 owned-`String` and owned-`&'static str` forward-\
+                 projection return-type-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                owned_string, via_to_string,
+                "From<WitShape> for String must byte-equal \
+                 WitShape::to_string on WitShape::{variant:?} — \
+                 divergence signals the trait-idiomatic owned-`String` \
+                 forward-projection axis and the ToString-through-\
+                 Display axis have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<String> = WitShape::ALL.iter().copied().map(String::from).collect();
+        let via_method: Vec<String> = WitShape::ALL
+            .iter()
+            .map(|s| s.as_str().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(String::from)` over WitShape::ALL \
+             must byte-equal `.iter().map(|s| s.as_str().to_owned())` \
+             on every arm — the owned-`String` `From<WitShape> for \
+             String` axis is what makes the `String::from` composition \
+             route through the substrate-primitive `WitShape::as_str` \
+             accessor rather than through a per-call-site `.to_owned()` \
+             / `String::from(shape.as_str())` detour"
+        );
+        for &variant in WitShape::ALL {
+            let emitted: String = variant.into();
+            let re_parsed: Result<WitShape, ()> =
+                <WitShape as TryFrom<&str>>::try_from(emitted.as_str());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic owned-`String` forward-projection + \
+                 reverse-projection axis pair must round-trip \
+                 WitShape::{variant:?} through `.into::<String>()` and \
+                 back through `TryFrom<&str>` on the owned-`String`'s \
+                 String::as_str borrow — a break signals the \
+                 owned-`String` forward-emit and reverse-parse axes \
+                 have drifted onto different vocabularies (unlike the \
+                 peer CaixaKind axis pair, WitShape's forward emit and \
+                 reverse parse share the same four inline census-label \
+                 byte-strings by construction, so the round-trip \
+                 composes directly)"
             );
         }
     }
