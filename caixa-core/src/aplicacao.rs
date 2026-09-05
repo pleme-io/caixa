@@ -7436,6 +7436,93 @@ impl From<&PlacementStrategy> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on the M3 mesh-primitive
+/// `:placement :estrategia` distribution-strategy [`PlacementStrategy`]
+/// closed-set typed enum from an *owned* input onto the owned-[`String`]
+/// axis — routes byte-for-byte through the substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor so every consumer
+/// that binds a [`PlacementStrategy`] through the standard-library
+/// `.into()` / [`From<Self> for String`] (equivalently [`Into<String>`])
+/// axis reaches the same three-arm lifted
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] byte-string the
+/// paired owned-input [`From<PlacementStrategy> for &'static str`] (afa3562),
+/// the borrowed-input [`From<&PlacementStrategy> for &'static str`]
+/// (4d941d8), the sibling [`std::fmt::Display`], [`AsRef<str>`], and
+/// [`PlacementStrategy::as_str`] surfaces already return.
+///
+/// Extends the trait-idiomatic *owned-[`String`]* forward-projection
+/// family (opened on [`crate::supervisor::RestartStrategy`] — 7baa18a —
+/// the first-mover on the M2 OTP-shape sibling-restart-strategy axis,
+/// extended onto [`crate::supervisor::RestartPolicy`] — 7851725 — the
+/// second-of-two-in-M2 per-child restart-decision axis, then onto
+/// [`crate::CaixaKind`] — 231a18c — the structurally most fundamental
+/// closed-set fieldless typed enum on the caixa surface, then onto
+/// [`crate::CaixaDialeto`] — 88942cd — the dialect-classification axis,
+/// then onto [`crate::dep::DepList`] — 32b0ee8 — the two-list dep-graph
+/// axis) onto the sixth peer: the M3 mesh-primitive
+/// `:placement :estrategia` distribution-strategy axis
+/// [`PlacementStrategy`] carries. First M3-mesh-primitive-defining
+/// closed-set typed enum to converge onto this owned-[`String`]
+/// forward-projection campaign — first-mover on the M3 mesh-slot family
+/// the caixa-mesh renderer keys off end-to-end, ahead of the sibling
+/// [`WitShape`] `:contratos :wit` census-label axis and
+/// [`RateLimitUnit`] `:politicas :rate-limit` canonical-suffix axis whose
+/// owned-[`String`] axis closures remain future targets of this campaign.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for String` (nor an
+/// `impl<T: fmt::Display> From<T> for String`), so every closed-set typed
+/// enum that carries the paired [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`From<Self> for &'static str`] / [`From<&Self> for &'static str`]
+/// quadruple but not the owned-[`String`] axis forces every owned-string
+/// call site through a `.to_string()` / `.as_str().to_owned()` /
+/// `String::from(strategy.as_str())` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// Same as the peer [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`crate::CaixaDialeto`] /
+/// [`crate::dep::DepList`] owned-[`String`] axis pairs (whose forward
+/// emit and reverse parse share one vocabulary by construction),
+/// [`PlacementStrategy`]'s [`PlacementStrategy::as_str`] emit and
+/// [`PlacementStrategy::from_wire`] parse resolve through the same
+/// three lifted [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] consts by
+/// construction (there is no wire/diagnostic axis split on this enum —
+/// both halves of the round-trip route through the same three
+/// `pub const &str` values), so the owned-[`String`] forward projection
+/// this impl exposes composes directly with the paired trait-idiomatic
+/// reverse [`TryFrom<&str>`] axis on the owned-[`String`]'s
+/// [`String::as_str`] borrow — no intermediate wire-vocab hop like the
+/// peer [`crate::CaixaKind`] axis pair requires.
+///
+/// The remaining nine closed-set typed enums on the caixa substrate
+/// surface (`WitShape`, `RateLimitUnit`, `PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) are the future targets of this campaign — each
+/// carries the same paired [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`From<Self> for &'static str`] / [`From<&Self> for &'static str`]
+/// quadruple that this owned-[`String`] axis extends onto.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_owned_string_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm [`PlacementStrategy::ALL`] emit-set plus a blanket
+/// `.into::<String>()` shape witness) and
+/// [`tests::placement_strategy_from_into_owned_string_and_static_str_agree_on_every_arm`]
+/// (cross-axis partition against the sibling owned-`&'static str` axis
+/// and the [`ToString::to_string`] surface, a
+/// `.iter().copied().map(String::from)` pipe witness over
+/// [`PlacementStrategy::ALL`], plus a direct `Self → String → Self`
+/// round-trip via [`TryFrom<&str>`] on the owned-[`String`]'s
+/// [`String::as_str`] borrow — composes directly without the wire-vocab
+/// intermediate hop the peer [`crate::CaixaKind`] axis pair requires).
+impl From<PlacementStrategy> for String {
+    fn from(strategy: PlacementStrategy) -> String {
+        strategy.as_str().to_owned()
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -22448,6 +22535,176 @@ mod tests {
                  `TryFrom<&str>` — a break signals the borrowed-input \
                  forward-emit and reverse-parse axes have drifted onto \
                  different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_owned_string_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for String` — asserts the
+        // owned-`String`-returning standard-library trait impl and the
+        // substrate-primitive [`PlacementStrategy::as_str`] `pub const
+        // fn` accessor resolve to the same three-arm emit-set across
+        // every arm the exhaustive [`PlacementStrategy::ALL`] slice
+        // enumerates. Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for String` (nor an
+        // `impl<T: fmt::Display> From<T> for String`), so the
+        // owned-`String` forward-projection axis is a distinct trait-
+        // idiomatic surface that a `let key: String = strategy.into();`-
+        // shaped call site reaches through this impl and no other — the
+        // paired sibling `From<PlacementStrategy> for &'static str` impl
+        // forces every owned-`String` call site through an explicit
+        // `.to_owned()` / `String::from` restatement. Peer of the
+        // first-mover
+        // [`crate::supervisor::tests::restart_strategy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (7baa18a), the second-peer
+        // [`crate::supervisor::tests::restart_policy_from_into_owned_string_routes_through_as_str_accessor`]
+        // (7851725), the third-peer
+        // [`crate::kind::tests::caixa_kind_from_into_owned_string_routes_through_as_str_accessor`]
+        // (231a18c), the fourth-peer
+        // [`crate::dialeto::tests::caixa_dialeto_from_into_owned_string_routes_through_as_str_accessor`]
+        // (88942cd), and the fifth-peer
+        // [`crate::dep::tests::dep_list_from_into_owned_string_routes_through_as_str_accessor`]
+        // (32b0ee8) — extends the trait-idiomatic owned-`String`
+        // forward-projection axis onto the sixth closed-set fieldless
+        // typed enum on the caixa surface (the first
+        // M3-mesh-primitive-defining `:placement :estrategia`
+        // distribution-strategy axis).
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: String = <String as From<PlacementStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<PlacementStrategy> for String impl must round-trip \
+                 PlacementStrategy::{variant:?} to the same lifted \
+                 M3_PLACEMENT_ESTRATEGIA_* const PlacementStrategy::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: String = variant.into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on PlacementStrategy::{variant:?} must \
+                 byte-equal PlacementStrategy::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_owned_string_and_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-`String` `From<PlacementStrategy> for String` (this
+        // lift) and owned-`&'static str` `From<PlacementStrategy> for
+        // &'static str` (afa3562) forward projections must resolve
+        // identically on every arm, locking the two return-type-shape
+        // paths together so any future detour trips at caixa-core test
+        // time. Also byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] — the three owned-heap-string paths
+        // (`.into::<String>()`, `String::from`, `.to_string()`) must
+        // resolve identically on every arm so a future consumer that
+        // picks any of the three lands on the same three-arm lifted
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] accept-set. Then
+        // a `.iter().copied().map(String::from)` pipe witness over
+        // [`PlacementStrategy::ALL`] that materializes the three-arm
+        // accept-set through the owned-`String` axis alone — the exact
+        // shape a future M4 admission-webhook rejection body composer
+        // or a `HashMap::<String,
+        // PlacementStrategy>::from_iter(PlacementStrategy::ALL.iter()
+        //     .copied().map(|s| (s.into(), s)))`-style owned-key
+        // per-strategy lookup reaches through — closing the
+        // owned-`String` forward-projection axis's iterator-pipe shape.
+        // Then a direct round-trip witness through the paired trait-
+        // idiomatic reverse [`TryFrom<&str>`] axis on the
+        // owned-`String`'s [`String::as_str`] borrow that closes the
+        // two-way `Self → String → Self` round-trip on the trait-
+        // idiomatic owned-`String` forward + reverse axis pair.
+        //
+        // Unlike the peer [`crate::CaixaKind`] axis pair (whose forward
+        // `From` emit lands on the lowercase Portuguese `as_str`
+        // diagnostic vocabulary while the reverse `TryFrom<&str>`
+        // parses the `PascalCase` `wire_name` author-surface
+        // vocabulary, forcing the round-trip through an intermediate
+        // [`crate::CaixaKind::wire_name`] hop), [`PlacementStrategy`]'s
+        // [`PlacementStrategy::as_str`] emit and
+        // [`PlacementStrategy::from_wire`] parse resolve through the
+        // same three lifted
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] consts by
+        // construction (there is no wire/diagnostic axis split on this
+        // enum), so the owned-`String` forward axis and the reverse
+        // axis compose directly — matching the peer
+        // [`crate::supervisor::RestartStrategy`] /
+        // [`crate::supervisor::RestartPolicy`] /
+        // [`crate::CaixaDialeto`] / [`crate::dep::DepList`]
+        // owned-`String` axis pairs.
+        for &variant in PlacementStrategy::ALL {
+            let owned_string: String = <String as From<PlacementStrategy>>::from(variant);
+            let owned_static: &'static str =
+                <&'static str as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                owned_string.as_str(),
+                owned_static,
+                "From<PlacementStrategy> for String and \
+                 From<PlacementStrategy> for &'static str must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-`String` and \
+                 owned-`&'static str` forward-projection return-type-\
+                 shape paths have drifted onto different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                owned_string, via_to_string,
+                "From<PlacementStrategy> for String must byte-equal \
+                 PlacementStrategy::to_string on \
+                 PlacementStrategy::{variant:?} — divergence signals the \
+                 trait-idiomatic owned-`String` forward-projection axis \
+                 and the ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<String> = PlacementStrategy::ALL
+            .iter()
+            .copied()
+            .map(String::from)
+            .collect();
+        let via_method: Vec<String> = PlacementStrategy::ALL
+            .iter()
+            .map(|s| s.as_str().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(String::from)` over \
+             PlacementStrategy::ALL must byte-equal `.iter().map(|s| \
+             s.as_str().to_owned())` on every arm — the owned-`String` \
+             `From<PlacementStrategy> for String` axis is what makes the \
+             `String::from` composition route through the substrate-\
+             primitive `PlacementStrategy::as_str` accessor rather than \
+             through a per-call-site `.to_owned()` / \
+             `String::from(strategy.as_str())` detour"
+        );
+        for &variant in PlacementStrategy::ALL {
+            let emitted: String = variant.into();
+            let re_parsed: Result<PlacementStrategy, ()> =
+                <PlacementStrategy as TryFrom<&str>>::try_from(emitted.as_str());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic owned-`String` forward-projection + \
+                 reverse-projection axis pair must round-trip \
+                 PlacementStrategy::{variant:?} through `.into::<String>()` \
+                 and back through `TryFrom<&str>` on the owned-`String`'s \
+                 String::as_str borrow — a break signals the owned-\
+                 `String` forward-emit and reverse-parse axes have \
+                 drifted onto different vocabularies (unlike the peer \
+                 CaixaKind axis pair, PlacementStrategy's forward emit \
+                 and reverse parse share the same lifted \
+                 M3_PLACEMENT_ESTRATEGIA_* consts by construction, so \
+                 the round-trip composes directly)"
             );
         }
     }
