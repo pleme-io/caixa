@@ -405,6 +405,75 @@ impl From<InvariantKind> for &'static str {
     }
 }
 
+/// Trait-idiomatic *borrowed-input* forward projection on
+/// [`InvariantKind`] onto the `&'static str` axis — the borrowed-input
+/// companion to the paired owned-input [`From<InvariantKind> for
+/// &'static str`] impl immediately above. Routes byte-for-byte through
+/// the same substrate-primitive [`InvariantKind::as_str`] `pub const fn`
+/// accessor so every consumer that binds a `&InvariantKind` through the
+/// standard-library `.into()` / [`From<&Self> for &'static str`] axis (a
+/// `InvariantKind::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer — whose iterator over
+/// `&'static [InvariantKind]` yields `&InvariantKind`, not
+/// `InvariantKind`, so the owned-input [`From<InvariantKind>`] axis
+/// alone forces every call site through an explicit `.copied()` /
+/// dereference / [`Copy`]-bound restatement rather than the direct
+/// trait-idiomatic projection; a future `feira arch --list-severities`
+/// CLI enumeration composed via
+/// `InvariantKind::ALL.iter().map(Into::into)`; a future M4 admission-
+/// webhook rejection body whose accepted-set enumeration walks the
+/// same iterator shape; a future `HashMap::<&'static str, usize>::
+/// from_iter(violations.iter().map(|v| (<&'static str>::from(&v.kind), 0)))`
+/// per-severity histogram seed on the operator's audit path — whose
+/// borrowed access off `&Violation.kind` avoids a `.copied()` /
+/// [`Copy`]-bound dereference on the arch-severity field) reaches the
+/// same three-arm `"safety"` / `"compliance"` / `"hint"` canonical-
+/// lowercase emit-set the paired owned-input [`From<InvariantKind> for
+/// &'static str`], the sibling [`std::fmt::Display`], [`AsRef<str>`],
+/// and [`InvariantKind::as_str`] surfaces already return.
+///
+/// First outside-`caixa-core` peer on the substrate-wide trait-idiomatic
+/// *borrowed-input* `&'static str`-returning forward-projection family
+/// opened on [`caixa_core::dep::DepList`] (64aa742) and extended onto
+/// [`caixa_core::CaixaKind`], [`caixa_core::CaixaDialeto`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::aplicacao::WitShape`],
+/// [`caixa_core::aplicacao::RateLimitUnit`], and
+/// [`caixa_core::render::PathShapeViolation`] (cdf4e95, first render-
+/// side arm). Rust's `From` trait does not auto-derive the `From<&Self>`
+/// sibling from a `From<Self>` impl (the blanket
+/// `impl<T, U> From<&T> for U where T: Copy, U: From<T>` does not exist
+/// in `core`), so every closed-set typed enum that carries the owned-
+/// input axis but not the borrowed-input axis forces every borrowed-
+/// input call site through a `.copied()` / `<&'static str>::from(*kind)`
+/// / `kind.as_str()` detour whose type bounds have no compile-time link
+/// to the substrate primitive. Lifting the borrowed-input axis on the
+/// first outside-`caixa-core` closed-set fieldless typed enum on the
+/// caixa surface (the caixa-arch invariant-severity axis) closes that
+/// gap on the same trajectory the paired owned-input axis
+/// ([`impl From<InvariantKind> for &'static str`] immediately above)
+/// already opened.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the three-
+/// arm emit-set via a borrowed input, plus a `const`-context
+/// materialization witness for the `&'static str` lifetime promise) and
+/// [`tests::invariant_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<InvariantKind> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over [`InvariantKind::ALL`]
+/// whose iterator yields `&InvariantKind` by construction so this
+/// borrowed-input axis is what routes the pipe through the substrate-
+/// primitive accessor without a spurious `Copy` deref).
+impl From<&InvariantKind> for &'static str {
+    fn from(kind: &InvariantKind) -> &'static str {
+        kind.as_str()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -1303,5 +1372,128 @@ mod tests {
                  drifted onto different vocabularies"
             );
         }
+    }
+
+    #[test]
+    fn invariant_kind_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&InvariantKind> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::InvariantKind::as_str`] `pub const fn`
+        // accessor resolve to the same three-arm canonical-lowercase
+        // emit-set across every arm the exhaustive
+        // [`super::InvariantKind::ALL`] slice enumerates. Rust's `From`
+        // trait does not auto-derive the borrowed-input sibling from a
+        // paired owned-input impl (no `impl<T, U> From<&T> for U where
+        // T: Copy, U: From<T>` blanket in `core`), so the borrowed-
+        // input axis is a distinct trait-idiomatic surface that a
+        // `.iter().map(Into::into)` shape over
+        // [`super::InvariantKind::ALL`] (whose iterator yields
+        // `&InvariantKind`, not `InvariantKind`) reaches through this
+        // impl and no other — the paired owned-input
+        // [`From<InvariantKind>`] impl requires an explicit `.copied()`
+        // / dereference before the trait fires. Materializes the
+        // `<&'static str as From<&InvariantKind>>::from` output in a
+        // `const`-shape binding against the paired
+        // [`super::InvariantKind::as_str`] `pub const fn` accessor to
+        // make the `'static` lifetime promise a build-time invariant —
+        // a future accidental downgrade of any of the three arms'
+        // inline canonical-lowercase byte-strings to a
+        // non-`&'static str` (a `String::leak()`-produced return, a
+        // `Box::leak`-cast, an intermediate lifetime-erasing helper)
+        // trips at caixa-arch build time rather than at a downstream
+        // `'static`-bound consumer.
+        const SAFETY: &str = super::InvariantKind::Safety.as_str();
+        const COMPLIANCE: &str = super::InvariantKind::Compliance.as_str();
+        const HINT: &str = super::InvariantKind::Hint.as_str();
+        for variant in super::InvariantKind::ALL {
+            let via_trait: &'static str =
+                <&'static str as From<&super::InvariantKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&InvariantKind> for &'static str impl must \
+                 round-trip &InvariantKind::{variant:?} to the same \
+                 canonical-lowercase byte-string InvariantKind::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &InvariantKind::{variant:?} \
+                 must byte-equal InvariantKind::as_str on the same \
+                 input — the blanket-derived Into shape must resolve to \
+                 the same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [SAFETY, COMPLIANCE, HINT],
+            ["safety", "compliance", "hint"],
+            "const-context InvariantKind::as_str must resolve to the \
+             three canonical-lowercase byte-strings — the borrowed-\
+             input From<&InvariantKind> for &'static str impl inherits \
+             its `'static` lifetime promise from the same accessor the \
+             owned-input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn invariant_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<InvariantKind> for &'static str` and
+        // borrowed-input `From<&InvariantKind> for &'static str` (this
+        // lift) forward projections must resolve identically on every
+        // arm, locking the two input-shape paths together so any future
+        // detour (a stray borrowed-input special-case that lands on a
+        // divergent per-arm literal outside the paired `as_str`
+        // dispatch, a hypothetical rebrand touching one axis without
+        // the other) trips at caixa-arch test time. Then a witness
+        // that a `.iter().map(Into::into)` pipe over
+        // [`super::InvariantKind::ALL`] (whose iterator yields
+        // `&InvariantKind`) materializes the three-arm accept-set
+        // through the borrowed-input axis alone — the exact shape a
+        // future M4 admission-webhook rejection body composer, a future
+        // substrate-wide per-arm diagnostic column, or a
+        // `HashMap::<&'static str, super::InvariantKind>::from_iter(
+        //     super::InvariantKind::ALL.iter().map(|k| (k.into(), *k)))`-
+        // style per-severity lookup reaches through — closing the two-
+        // way owned/borrowed input-shape symmetry on the forward-
+        // projection trait-idiomatic axis. Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (edbb27b campaign-shape) partition pin on the structurally
+        // most fundamental closed-set typed enum on the caixa surface —
+        // extends the borrowed-input axis discipline onto the first
+        // outside-`caixa-core` closed-set fieldless typed enum on the
+        // caixa surface, the caixa-arch invariant-severity axis.
+        for &variant in super::InvariantKind::ALL {
+            let owned: &'static str = <&'static str as From<super::InvariantKind>>::from(variant);
+            let borrowed: &'static str =
+                <&'static str as From<&super::InvariantKind>>::from(&variant);
+            assert_eq!(
+                owned, borrowed,
+                "From<InvariantKind> and From<&InvariantKind> for \
+                 &'static str must resolve identically on \
+                 InvariantKind::{variant:?} — divergence signals the \
+                 owned-input and borrowed-input forward-projection \
+                 paths have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> =
+            super::InvariantKind::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> = super::InvariantKind::ALL
+            .iter()
+            .map(|k| k.as_str())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over InvariantKind::ALL must \
+             byte-equal `.iter().map(|k| k.as_str())` on every arm — \
+             the borrowed-input `From<&InvariantKind> for &'static str` \
+             axis is what makes the `.iter().map(Into::into)` shape \
+             route through the substrate-primitive \
+             `InvariantKind::as_str` accessor rather than through a \
+             per-call-site `.copied()` / dereference detour"
+        );
     }
 }
