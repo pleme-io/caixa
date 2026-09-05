@@ -1111,6 +1111,102 @@ impl From<RestartPolicy> for &'static str {
     }
 }
 
+/// Trait-idiomatic *forward* projection on [`RestartPolicy`] from a
+/// *borrowed* input onto the `&'static str` axis — the borrowed-input
+/// companion to the paired owned-input [`From<RestartPolicy> for
+/// &'static str`] impl immediately above. Routes byte-for-byte through
+/// the same substrate-primitive [`RestartPolicy::as_str`] `pub const
+/// fn` accessor so every consumer that binds a `&RestartPolicy`
+/// through the standard-library `.into()` / [`From<&Self> for &'static
+/// str`] axis (a `RestartPolicy::ALL.iter().map(<&'static
+/// str>::from).collect::<Vec<_>>()` per-arm accept-set materializer —
+/// whose iterator over `&'static [RestartPolicy]` yields
+/// `&RestartPolicy`, not `RestartPolicy`, so the owned-input
+/// [`From<RestartPolicy>`] axis alone forces every call site through
+/// an explicit `.copied()` / dereference / [`Copy`]-bound restatement
+/// rather than the direct trait-idiomatic projection; a future generic
+/// `<T: Copy + for<'a> Into<&'static str>>`-bound diagnostic column
+/// that walks the `iter().map(Into::into)` shape verbatim across every
+/// substrate-wide closed-set typed enum; the future wasm-operator's
+/// per-child post-exit restart-decision diagnostic line that composes
+/// the accepted-set enumeration from an iterated
+/// `RestartPolicy::ALL.iter().map(|p| p.into())` pipe rather than a
+/// per-arm `match p { … }` cascade; a future
+/// `HashMap::<&'static str, RestartPolicy>::from_iter(
+///     RestartPolicy::ALL.iter().map(|p| (p.into(), *p)))`-style
+/// per-policy reverse-lookup table the sibling [`TryFrom<&str>`] impl
+/// cannot compose without this borrowed-input axis in place) reaches
+/// the same three-arm lifted
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] const the
+/// paired owned-input [`From<RestartPolicy> for &'static str`], the
+/// sibling [`std::fmt::Display`], [`AsRef<str>`], and
+/// [`RestartPolicy::as_str`] surfaces already return.
+///
+/// Fifth peer on the substrate-wide trait-idiomatic *borrowed-input*
+/// forward-projection family opened on [`crate::dep::DepList`]
+/// (64aa742) and extended onto [`crate::CaixaKind`] (5ab993a),
+/// [`crate::CaixaDialeto`] (807b0b5), and the paired
+/// per-supervisor sibling-restart-strategy [`RestartStrategy`]
+/// (e941836). Rust's `From` trait does not auto-derive the
+/// `From<&Self>` sibling from a `From<Self>` impl (the blanket
+/// `impl<T, U> From<&T> for U where T: Copy, U: From<T>` does not
+/// exist in `core`), so every closed-set typed enum that carries the
+/// owned-input axis but not the borrowed-input axis forces every
+/// borrowed-input call site through a `.copied()` /
+/// `<&'static str>::from(*policy)` / `policy.as_str()` detour whose
+/// type bounds have no compile-time link to the substrate primitive.
+/// [`RestartPolicy`] is the second (and second-of-two-in-M2)
+/// OTP-shape peer to converge onto this campaign — sibling of the
+/// paired per-supervisor [`RestartStrategy`] borrowed-input axis, so
+/// with this lift both closed-set typed enums on the M2 `:supervisor`
+/// slot now carry the full sibling quintet ([`std::fmt::Display`],
+/// [`AsRef<str>`], [`Self::as_str`], `From<Self> for &'static str`,
+/// `From<&Self> for &'static str`) plus the paired trait-idiomatic
+/// reverse projection [`TryFrom<&str>`], closing the borrowed-input
+/// forward-projection axis on the M2 OTP-shape slot as a unit.
+///
+/// Same three-path convergence discipline as the paired owned-input
+/// impl (this borrowed-input axis, the paired owned-input
+/// [`From<RestartPolicy> for &'static str`], and
+/// [`RestartPolicy::as_str`] all route through the same lifted
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_*`] const), so a future
+/// variant rename or per-arm serde-attribute drift reaches every one
+/// of the six sibling forward-projection paths
+/// ([`std::fmt::Display`], [`AsRef<str>`], [`Self::as_str`],
+/// [`From<Self> for &'static str`], this [`From<&Self> for &'static
+/// str`], and the un-`rename`d [`serde::Serialize`] derive that also
+/// emits [`Self::as_str`]'s bytes) through exactly one caixa-core
+/// edit.
+///
+/// The [`RestartPolicy::as_str`] emit and [`RestartPolicy::from_wire`]
+/// parse share the same `PascalCase` vocabulary by construction, so
+/// the borrowed-input forward axis and the reverse axis compose
+/// directly — the round-trip witness pin below locks this direct
+/// composition without the intermediate wire-vocab hop the peer
+/// [`crate::CaixaKind`] axis pair requires.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartPolicy::as_str`] across the
+/// three-arm emit-set via a borrowed input, plus a `const`-context
+/// materialization witness for the `&'static str` lifetime promise,
+/// plus a blanket `.into()` shape) and
+/// [`tests::restart_policy_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<RestartPolicy> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over
+/// [`RestartPolicy::ALL`], plus a direct round-trip witness through
+/// [`TryFrom<&str>`] that closes the two-way `&Self → &'static str →
+/// Self` round-trip without the wire-vocab intermediate the peer
+/// [`crate::CaixaKind`] axis pair requires).
+impl From<&RestartPolicy> for &'static str {
+    fn from(policy: &RestartPolicy) -> &'static str {
+        policy.as_str()
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -7633,6 +7729,148 @@ mod tests {
                  RestartPolicy::{variant:?} through `.into::<&'static \
                  str>()` and back through `TryFrom<&str>` — a break signals \
                  the forward-emit and reverse-parse axes have drifted onto \
+                 different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartPolicy> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`RestartPolicy::as_str`] `pub const fn` accessor
+        // resolve to the same three-arm emit-set across every arm the
+        // exhaustive [`RestartPolicy::ALL`] slice enumerates. Rust's
+        // `From` trait does not auto-derive the borrowed-input sibling
+        // from a paired owned-input impl (no `impl<T, U> From<&T> for U
+        // where T: Copy, U: From<T>` blanket in `core`), so the
+        // borrowed-input axis is a distinct trait-idiomatic surface
+        // that a `.iter().map(Into::into)` shape over
+        // [`RestartPolicy::ALL`] (whose iterator yields
+        // `&RestartPolicy`, not `RestartPolicy`) reaches through this
+        // impl and no other — the paired owned-input
+        // [`From<RestartPolicy>`] impl requires an explicit `.copied()`
+        // / dereference before the trait fires. Materializes the
+        // `<&'static str as From<&RestartPolicy>>::from` output in a
+        // `const`-shape binding to make the `'static` lifetime promise
+        // a build-time invariant.
+        const PERMANENT: &str = RestartPolicy::Permanent.as_str();
+        const TEMPORARY: &str = RestartPolicy::Temporary.as_str();
+        const TRANSIENT: &str = RestartPolicy::Transient.as_str();
+        for variant in RestartPolicy::ALL {
+            let via_trait: &'static str = <&'static str as From<&RestartPolicy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&RestartPolicy> for &'static str impl must round-trip \
+                 &RestartPolicy::{variant:?} to the same lifted \
+                 SUPERVISOR_CHILD_RESTART_* const RestartPolicy::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &RestartPolicy::{variant:?} \
+                 must byte-equal RestartPolicy::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [PERMANENT, TEMPORARY, TRANSIENT],
+            [
+                crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+                crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
+                crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+            ],
+            "const-context RestartPolicy::as_str must resolve to the three \
+             lifted SUPERVISOR_CHILD_RESTART_* consts — the borrowed-input \
+             From<&RestartPolicy> for &'static str impl inherits its \
+             `'static` lifetime promise from the same accessor the \
+             owned-input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn restart_policy_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<RestartPolicy> for &'static str` (9fb37d0
+        // campaign-shape) and borrowed-input `From<&RestartPolicy> for
+        // &'static str` (this lift) forward projections must resolve
+        // identically on every arm, locking the two input-shape paths
+        // together so any future detour trips at caixa-core test time.
+        // Then a witness that a `.iter().map(Into::into)` pipe over
+        // [`RestartPolicy::ALL`] (whose iterator yields
+        // `&RestartPolicy`) materializes the three-arm accept-set
+        // through the borrowed-input axis alone — the exact shape a
+        // future wasm-operator per-child post-exit restart-decision
+        // diagnostic line, a future substrate-wide per-arm diagnostic
+        // column, or a
+        // `HashMap::<&'static str, RestartPolicy>::from_iter(
+        //     RestartPolicy::ALL.iter().map(|p| (p.into(), *p)))`-style
+        // per-policy lookup reaches through — closing the two-way
+        // owned/borrowed input-shape symmetry on the forward-projection
+        // trait-idiomatic axis. Peer of the sibling
+        // [`crate::dep::tests::dep_list_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (64aa742) /
+        // [`crate::kind::tests::caixa_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (5ab993a) /
+        // [`crate::dialeto::tests::caixa_dialeto_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (807b0b5) /
+        // [`restart_strategy_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // (e941836) partition pins on the sibling closed-set typed-enum
+        // discriminator axes — extends the borrowed-input axis
+        // discipline onto the second-of-two M2 OTP-shape closed-set
+        // typed enum on the caixa surface (per-child restart-decision
+        // policy). Also closes the direct two-way `&Self → &'static
+        // str → Self` round-trip via the paired [`TryFrom<&str>`] axis
+        // — unlike the peer [`crate::CaixaKind`] axis pair (whose
+        // forward `From` emits lowercase Portuguese diagnostic bytes
+        // while the reverse `TryFrom` parses `PascalCase` wire bytes,
+        // forcing the round-trip through an intermediate wire-vocab
+        // hop), the [`RestartPolicy::as_str`] emit and
+        // [`RestartPolicy::from_wire`] parse share the same
+        // `PascalCase` vocabulary by construction, so the borrowed-
+        // input forward axis and the reverse axis compose directly.
+        for &variant in RestartPolicy::ALL {
+            let owned: &'static str = <&'static str as From<RestartPolicy>>::from(variant);
+            let borrowed: &'static str = <&'static str as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                owned, borrowed,
+                "From<RestartPolicy> and From<&RestartPolicy> for \
+                 &'static str must resolve identically on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 owned-input and borrowed-input forward-projection paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> = RestartPolicy::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> = RestartPolicy::ALL.iter().map(|p| p.as_str()).collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over RestartPolicy::ALL must \
+             byte-equal `.iter().map(|p| p.as_str())` on every arm — the \
+             borrowed-input `From<&RestartPolicy> for &'static str` axis \
+             is what makes the `.iter().map(Into::into)` shape route \
+             through the substrate-primitive `RestartPolicy::as_str` \
+             accessor rather than through a per-call-site `.copied()` / \
+             dereference detour"
+        );
+        for variant in RestartPolicy::ALL {
+            let emitted: &'static str = variant.into();
+            let re_parsed: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<&str>>::try_from(emitted);
+            assert_eq!(
+                re_parsed,
+                Ok(*variant),
+                "trait-idiomatic borrowed-input forward-projection + \
+                 reverse-projection axis pair must round-trip \
+                 &RestartPolicy::{variant:?} through `.into::<&'static \
+                 str>()` (via the borrowed-input axis) and back through \
+                 `TryFrom<&str>` — a break signals the borrowed-input \
+                 forward-emit and reverse-parse axes have drifted onto \
                  different vocabularies"
             );
         }
