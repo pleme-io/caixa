@@ -778,6 +778,116 @@ impl From<CaixaKind> for String {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, owned-`String` output* forward
+/// projection on the structurally most fundamental closed-set typed
+/// enum on the caixa surface ([`CaixaKind`]) — the fourth (and
+/// closing) corner of the `{Self, &Self} × {&'static str, String}`
+/// 2×2 trait-idiomatic projection family on this enum, mirror of the
+/// peer M2 OTP-shape [`From<&crate::supervisor::RestartStrategy> for
+/// String`] (579385f) / [`From<&crate::supervisor::RestartPolicy> for
+/// String`] (8465740) and the sibling two-list dep-graph
+/// [`From<&crate::dep::DepList> for String`] (e0cb617) that opened
+/// the corner off the M2 OTP-shape sibling axis pair onto the first
+/// non-M2 closed-set fieldless typed enum peer. Routes byte-for-byte
+/// through the substrate-primitive [`CaixaKind::as_str`] `pub const fn`
+/// accessor (via [`str::to_owned`]) so every consumer that holds a
+/// borrowed [`&CaixaKind`] and needs an owned [`String`] — a future
+/// `serde_json::Value::String(String::from(&kind))` structured-payload
+/// composer over a borrowed field, a future `Iterator::map` over
+/// `&[CaixaKind]` that projects to owned keys through
+/// `.iter().map(String::from)` (whose iterator yields `&CaixaKind`,
+/// not `CaixaKind`, so the owned-input [`From<CaixaKind> for String`]
+/// axis alone forces every call site through an explicit `.copied()` /
+/// spurious [`Copy`] deref restatement rather than the direct trait-
+/// idiomatic projection), a future
+/// `HashMap::<String, CaixaKind>::from_iter` that keys off a borrowed-
+/// iteration axis where dereferencing the kind would force an
+/// unnecessary [`Copy`] at every step, the future wasm-operator's
+/// per-manifest `kind_axes.iter().map(String::from).collect()`
+/// per-kind author-surface-tag diagnostic emit whose iteration axis
+/// is borrowed by construction — reaches the same six-arm lifted
+/// [`crate::render::CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`crate::render::CAIXA_KIND_LABEL_BINARIO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SERVICO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SUPERVISOR`] /
+/// [`crate::render::CAIXA_KIND_LABEL_APLICACAO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_ACAO`] const the paired
+/// [`std::fmt::Display`], [`AsRef<str>`], [`CaixaKind::as_str`], and
+/// the three other trait-idiomatic forward-projection impls
+/// ([`From<CaixaKind> for &'static str`],
+/// [`From<&CaixaKind> for &'static str`],
+/// [`From<CaixaKind> for String`]) already return.
+///
+/// Fourth peer on the substrate-wide trait-idiomatic *borrowed-input,
+/// owned-`String` output* forward-projection family opened on
+/// [`crate::supervisor::RestartStrategy`] (579385f), closed on the M2
+/// OTP-shape sibling axis pair by [`crate::supervisor::RestartPolicy`]
+/// (8465740), and extended onto the first non-M2 peer by
+/// [`crate::dep::DepList`] (e0cb617) — extends the
+/// `{Self, &Self} × {&'static str, String}` 2×2 projection corner off
+/// the two-list dep-graph axis onto the structurally most fundamental
+/// closed-set fieldless typed enum peer on the caixa surface (every
+/// caixa carries a `:kind`). Rust's standard library does not carry a
+/// blanket `impl<T: AsRef<str>> From<&T> for String` (nor an
+/// `impl<T: fmt::Display> From<&T> for String`), so every closed-set
+/// typed enum that carries the paired `AsRef<str>` / `Display` /
+/// `From<Self> for &'static str` / `From<&Self> for &'static str` /
+/// `From<Self> for String` quintuple but not the borrowed-input
+/// owned-[`String`] axis forces every borrowed-input owned-string call
+/// site through a `kind.as_str().to_owned()` / `String::from(*kind)`
+/// (with a spurious [`Copy`]) / `kind.to_string()` (through
+/// [`std::fmt::Display`]) detour whose type bounds have no compile-
+/// time link to the substrate primitive.
+///
+/// Unlike the peer M2 OTP-shape axis pair
+/// ([`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] whose forward `From` emit and
+/// reverse [`TryFrom<&str>`] parse share one `PascalCase` vocabulary
+/// by construction, so the borrowed-input owned-[`String`] forward +
+/// reverse round-trip composes directly through the owned-[`String`]'s
+/// [`String::as_str`] borrow) and unlike the two-list dep-graph peer
+/// ([`crate::dep::DepList`] whose [`crate::dep::DepList::as_str`] emit
+/// and [`crate::dep::DepList::from_wire`] parse resolve through the
+/// same lifted [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] consts by construction),
+/// the [`CaixaKind`] forward borrowed-input owned-[`String`] axis
+/// emits lowercase Portuguese diagnostic bytes (`"biblioteca"`) while
+/// the paired trait-idiomatic reverse [`TryFrom<&str>`] axis (via
+/// [`CaixaKind::from_wire`]) parses `PascalCase` wire bytes
+/// (`"Biblioteca"`) — the two-axis split the sibling
+/// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+/// pin makes load-bearing is preserved here by construction, so the
+/// round-trip witness crosses through [`CaixaKind::wire_name`] as the
+/// reverse-axis vocabulary rather than composing the borrowed-input
+/// owned-[`String`] emit directly.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] across the six-arm
+/// emit-set through the borrowed-input surface) and
+/// [`tests::caixa_kind_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input owned-
+/// [`String`] [`From<CaixaKind> for String`] impl, the paired
+/// borrowed-input owned-[`&'static str`]
+/// [`From<&CaixaKind> for &'static str`] impl, the paired owned-input
+/// owned-[`&'static str`] [`From<CaixaKind> for &'static str`] impl,
+/// and the sibling [`ToString::to_string`] surface routed through
+/// [`std::fmt::Display`], plus a `.iter().map(String::from)` pipe
+/// witness over [`CaixaKind::ALL`] (whose iterator yields
+/// `&CaixaKind` by construction, so the borrowed-input owned-
+/// [`String`] axis is what routes the pipe through the substrate-
+/// primitive [`CaixaKind::as_str`] accessor without a spurious
+/// [`Copy`] deref), plus a round-trip witness through
+/// [`CaixaKind::wire_name`] + [`TryFrom<&str>`] that closes the
+/// two-way `&Self → String → wire → Self` round-trip via the wire
+/// vocabulary rather than the emit vocabulary — the two-axis split
+/// by design).
+impl From<&CaixaKind> for String {
+    fn from(kind: &CaixaKind) -> String {
+        kind.as_str().to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2137,6 +2247,193 @@ mod tests {
                  the lowercase Portuguese diagnostic vocabulary by \
                  design, so the round-trip crosses through wire_name \
                  rather than composing the owned-`String` emit directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_into_borrowed_owned_string_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&CaixaKind> for String` — asserts the borrowed-
+        // input owned-`String`-returning standard-library trait impl
+        // and the substrate-primitive [`super::CaixaKind::as_str`]
+        // `pub const fn` accessor resolve to the same six-arm emit-set
+        // across every arm the exhaustive [`super::CaixaKind::ALL`]
+        // slice enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<&T> for String` (nor an
+        // `impl<T: fmt::Display> From<&T> for String`), so the
+        // borrowed-input owned-`String` forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: String = (&kind).into();`-shaped call site reaches
+        // through this impl and no other — the paired sibling
+        // `From<CaixaKind> for String` impl forces every borrowed-
+        // input call site through an explicit `Copy` deref
+        // (`String::from(*kind)`) or an `.as_str().to_owned()` /
+        // `.to_string()` detour. Peer of the first-mover
+        // [`crate::supervisor::tests::restart_strategy_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (579385f), the second-peer
+        // [`crate::supervisor::tests::restart_policy_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (8465740), and the third-peer
+        // [`crate::dep::tests::dep_list_from_into_borrowed_owned_string_routes_through_as_str_accessor`]
+        // (e0cb617) — extends the trait-idiomatic borrowed-input
+        // owned-`String` forward-projection axis off the two-list
+        // dep-graph axis onto the structurally most fundamental
+        // closed-set fieldless typed enum peer on the caixa surface
+        // (every caixa carries a `:kind`).
+        for &variant in CaixaKind::ALL {
+            let via_trait: String = <String as From<&CaixaKind>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<&CaixaKind> for String impl must round-trip \
+                 &CaixaKind::{variant:?} to the same lifted \
+                 CAIXA_KIND_LABEL_* const CaixaKind::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: String = (&variant).into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on &CaixaKind::{variant:?} must \
+                 byte-equal CaixaKind::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input owned-`String` `From<&CaixaKind> for String`
+        // (this lift), the paired owned-input owned-`String`
+        // `From<CaixaKind> for String` (231a18c), the paired
+        // borrowed-input owned-`&'static str` `From<&CaixaKind> for
+        // &'static str` (5ab993a), and the paired owned-input
+        // owned-`&'static str` `From<CaixaKind> for &'static str`
+        // (edbb27b) — every corner of the `{Self, &Self} × {&'static
+        // str, String}` 2×2 trait-idiomatic projection family — must
+        // resolve identically on every arm, locking the four return-
+        // shape × input-shape paths together so any future detour
+        // trips at caixa-core test time. Also byte-parity witness
+        // against the sibling [`ToString::to_string`] surface routed
+        // through [`std::fmt::Display`] and a round-trip witness
+        // through the paired trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis on the wire-vocab [`super::CaixaKind::wire_name`]
+        // emission (not the owned-`String`'s [`String::as_str`]
+        // borrow, which lands on the lowercase Portuguese diagnostic
+        // vocabulary the reverse axis does not accept — the two-axis
+        // split by design) that closes the two-way `&Self → String →
+        // wire → Self` round-trip on the trait-idiomatic borrowed-
+        // input owned-`String` forward + reverse axis pair via the
+        // wire vocabulary rather than the emit vocabulary. Peer of
+        // the first-mover
+        // [`crate::supervisor::tests::restart_strategy_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (579385f), the second-peer
+        // [`crate::supervisor::tests::restart_policy_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (8465740), and the third-peer
+        // [`crate::dep::tests::dep_list_from_into_borrowed_owned_string_agrees_with_paired_axes_on_every_arm`]
+        // (e0cb617) — closes the whole `{Self, &Self} × {&'static
+        // str, String}` 2×2 projection corner on the fourth
+        // substrate-wide closed-set fieldless typed enum peer (the
+        // structurally most fundamental peer on the caixa surface).
+        //
+        // Unlike the peer M2 OTP-shape and dep-graph axis pairs
+        // (whose forward `From` emit and reverse `TryFrom` parse
+        // share one vocabulary by construction, so the borrowed-input
+        // owned-`String` forward + reverse round-trip composes
+        // directly through the owned-`String`'s [`String::as_str`]
+        // borrow), the [`super::CaixaKind::as_str`] emit and
+        // [`super::CaixaKind::from_wire`] parse land on disjoint
+        // vocabularies by design — the two-axis split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin makes load-bearing — so the round-trip crosses through
+        // [`super::CaixaKind::wire_name`] as the reverse-axis
+        // vocabulary rather than composing the borrowed-input
+        // owned-`String` emit directly.
+        for &kind in CaixaKind::ALL {
+            let borrowed_string: String = <String as From<&CaixaKind>>::from(&kind);
+            let owned_string: String = <String as From<CaixaKind>>::from(kind);
+            let borrowed_static: &'static str = <&'static str as From<&CaixaKind>>::from(&kind);
+            let owned_static: &'static str = <&'static str as From<CaixaKind>>::from(kind);
+            assert_eq!(
+                borrowed_string, owned_string,
+                "From<&CaixaKind> for String and From<CaixaKind> for \
+                 String must resolve identically on \
+                 CaixaKind::{kind:?} — divergence signals the \
+                 borrowed-input and owned-input owned-`String` \
+                 forward-projection input-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_string.as_str(),
+                borrowed_static,
+                "From<&CaixaKind> for String and From<&CaixaKind> for \
+                 &'static str must resolve identically on \
+                 CaixaKind::{kind:?} — divergence signals the \
+                 borrowed-input `&'static str` and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            assert_eq!(
+                borrowed_string.as_str(),
+                owned_static,
+                "From<&CaixaKind> for String and From<CaixaKind> for \
+                 &'static str must resolve identically on \
+                 CaixaKind::{kind:?} — divergence signals a break in \
+                 the diagonal corner of the {{Self, &Self}} × \
+                 {{&'static str, String}} 2×2 trait-idiomatic \
+                 projection family"
+            );
+            let via_to_string: String = kind.to_string();
+            assert_eq!(
+                borrowed_string, via_to_string,
+                "From<&CaixaKind> for String must byte-equal \
+                 CaixaKind::to_string on CaixaKind::{kind:?} — \
+                 divergence signals the trait-idiomatic borrowed-\
+                 input owned-`String` forward-projection axis and the \
+                 ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<String> = CaixaKind::ALL.iter().map(String::from).collect();
+        let via_method: Vec<String> = CaixaKind::ALL
+            .iter()
+            .map(|k| k.as_str().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(String::from)` over CaixaKind::ALL — a call \
+             site whose iteration axis holds `&CaixaKind` by \
+             construction — must byte-equal `.iter().map(|k| \
+             k.as_str().to_owned())` on every arm — the borrowed-\
+             input owned-`String` `From<&CaixaKind> for String` axis \
+             is what makes the `String::from` composition route \
+             through the substrate-primitive `CaixaKind::as_str` \
+             accessor without a spurious `Copy` deref (which would \
+             only be reachable through the owned-input `From<\
+             CaixaKind> for String` axis by first calling `.copied()` \
+             on the iterator)"
+        );
+        for &variant in CaixaKind::ALL {
+            let wire: &'static str = variant.wire_name();
+            let re_parsed: Result<CaixaKind, ()> = <CaixaKind as TryFrom<&str>>::try_from(wire);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic borrowed-input owned-`String` \
+                 forward-projection + reverse-projection axis pair \
+                 must round-trip CaixaKind::{variant:?} through \
+                 wire_name and back through TryFrom<&str> — a break \
+                 signals the wire-emit and reverse-parse axes have \
+                 drifted onto different vocabularies (the borrowed-\
+                 input owned-`String` forward emit lands on the \
+                 lowercase Portuguese diagnostic vocabulary by \
+                 design, so the round-trip crosses through wire_name \
+                 rather than composing the borrowed-input \
+                 owned-`String` emit directly)"
             );
         }
     }
