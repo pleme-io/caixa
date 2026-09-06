@@ -787,6 +787,83 @@ impl From<&RestartStrategy> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the M2 OTP-shape sibling-restart
+/// [`RestartStrategy`] closed-set typed enum — extends the substrate-
+/// wide [`std::borrow::Cow<'static, str>`] forward-projection family
+/// opened on [`crate::CaixaKind`] (99c1735) onto the first M2 OTP-
+/// shape closed-set fieldless typed enum peer on the caixa surface
+/// (`:supervisor :estrategia`). Routes byte-for-byte through the
+/// substrate-primitive [`RestartStrategy::as_str`] `pub const fn`
+/// accessor (via [`std::borrow::Cow::Borrowed`]) so every consumer
+/// that binds a [`RestartStrategy`] through the trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] axis — a future
+/// `axum::response::IntoResponse` composer whose per-strategy
+/// diagnostic-body typing rules out the sibling [`AsRef<str>`]
+/// borrowed return, a future M4 admission-webhook rejection body
+/// that composes the accepted-strategy enumeration through the same
+/// `RestartStrategy::ALL.iter().map(Cow::from)` shape [`CaixaKind`]
+/// already routes through, a generic `<T: for<'a>
+/// Into<std::borrow::Cow<'static, str>>>`-bound structured-log
+/// emitter on a per-supervisor diagnostic column — reaches the same
+/// four-arm lifted [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`]
+/// / [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const
+/// the paired [`std::fmt::Display`], [`AsRef<str>`],
+/// [`RestartStrategy::as_str`], and the four
+/// `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// forward-projection corners already return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`RestartStrategy::as_str`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves
+/// to a [`crate::render::SUPERVISOR_ESTRATEGIA_*`] `pub const &str`
+/// with static lifetime), so the zero-alloc borrowed arm is the
+/// type-correct projection with no runtime allocation.
+///
+/// Rust's standard library carries no blanket `impl<T: AsRef<str>>
+/// From<T> for Cow<'static, str>` (nor an `impl<T: fmt::Display>
+/// From<T> for Cow<'static, str>`), so the paired sibling
+/// [`From<RestartStrategy> for &'static str`],
+/// [`From<RestartStrategy> for String`], [`AsRef<str>`], and
+/// [`std::fmt::Display`] surfaces do not implicitly extend to a
+/// [`Cow<'static, str>`]-bound call site — every such site is forced
+/// through a `Cow::Borrowed(strategy.as_str())` /
+/// `Cow::Owned(strategy.to_string())` open-code whose type bounds
+/// have no compile-time link back to the substrate primitive until
+/// this lift.
+///
+/// First peer to extend the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection axis off the
+/// top-level [`crate::CaixaKind`] enum (99c1735 owned-input,
+/// d45c409 borrowed-input) onto the wider substrate — the remaining
+/// twelve peers (`RestartPolicy`, `PlacementStrategy`, `RateLimitUnit`,
+/// `DepList`, `CaixaDialeto`, and the outside-`caixa-core` peers
+/// `WitShape`, `PathShapeViolation`, `InvariantKind`, `ArchVerdict`,
+/// `Severity`, `FixSafety`, `Semantic`, `FerriteRuntime`) are the
+/// future targets of this campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity + zero-alloc [`std::borrow::Cow::Borrowed`]-arm pin
+/// against [`RestartStrategy::as_str`] across the four-arm
+/// [`RestartStrategy::ALL`]) and
+/// [`tests::restart_strategy_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired [`From<RestartStrategy>
+/// for &'static str`], [`From<RestartStrategy> for String`], and
+/// [`ToString`]-through-[`std::fmt::Display`] axes, plus a
+/// `.iter().copied().map(Cow::from)` pipe witness over
+/// [`RestartStrategy::ALL`] that materializes the four-arm accept-set
+/// through the [`Cow<'static, str>`] axis alone and pins the
+/// zero-alloc discipline on every element).
+impl From<RestartStrategy> for std::borrow::Cow<'static, str> {
+    fn from(strategy: RestartStrategy) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(strategy.as_str())
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -8048,6 +8125,201 @@ mod tests {
                  borrowed-input owned-`String` forward-emit and \
                  reverse-parse axes have drifted onto different \
                  vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartStrategy> for std::borrow::Cow<'static, str>` —
+        // asserts the standard-library trait impl and the substrate-
+        // primitive [`super::RestartStrategy::as_str`] `pub const fn`
+        // accessor resolve to the same four-arm emit-set across every
+        // arm the exhaustive [`super::RestartStrategy::ALL`] slice
+        // enumerates. Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for Cow<'static, str>` (nor an
+        // `impl<T: fmt::Display> From<T> for Cow<'static, str>`), so
+        // the `Cow<'static, str>` forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: Cow<'static, str> = strategy.into();`-shaped call
+        // site reaches through this impl and no other — the paired
+        // sibling `From<RestartStrategy> for &'static str` and
+        // `From<RestartStrategy> for String` impls force every
+        // `Cow<'static, str>`-parameterized call site through a
+        // `Cow::Borrowed(strategy.as_str())` /
+        // `Cow::Owned(strategy.to_string())` composition whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::RestartStrategy::as_str`] accessor's `&'static str`
+        // return lifetime by construction makes the borrowed arm the
+        // type-correct projection with no runtime allocation. Any
+        // future silent detour that routes the impl through the owned
+        // arm (an accidental `Cow::Owned(strategy.to_string())` rewrite
+        // that would allocate on every call site where the
+        // `&'static str` return of [`super::RestartStrategy::as_str`]
+        // makes the zero-alloc borrowed projection type-correct) trips
+        // at caixa-core test time under the
+        // [`std::borrow::Cow::Borrowed`] discriminator witness rather
+        // than at a downstream `Cow<'static, str>`-bound consumer's
+        // silent allocation.
+        //
+        // First peer on the substrate-wide trait-idiomatic
+        // [`std::borrow::Cow<'static, str>`] forward-projection family
+        // to extend the axis off the top-level [`super::CaixaKind`]
+        // enum (99c1735 owned-input, d45c409 borrowed-input) onto the
+        // first M2 OTP-shape closed-set fieldless typed enum on the
+        // caixa surface.
+        for &variant in RestartStrategy::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RestartStrategy> for Cow<'static, str> impl must \
+                 round-trip RestartStrategy::{variant:?} to the same \
+                 lifted SUPERVISOR_ESTRATEGIA_* const \
+                 RestartStrategy::as_str returns — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<RestartStrategy> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 RestartStrategy::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive RestartStrategy::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 RestartStrategy::{variant:?} must byte-equal \
+                 RestartStrategy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 RestartStrategy::{variant:?} must land on the \
+                 zero-alloc Cow::Borrowed arm — the blanket-derived \
+                 Into shape must resolve to the same Cow::Borrowed \
+                 dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<RestartStrategy> for std::borrow::Cow<'static, str>`
+        // (this lift), the paired owned-input `From<RestartStrategy>
+        // for &'static str` (523157d), and the paired owned-input
+        // `From<RestartStrategy> for String` (7baa18a) forward
+        // projections must resolve identically on every arm, locking
+        // the three return-shape paths together by construction so any
+        // future detour trips at caixa-core test time. Also byte-parity
+        // witness against the sibling [`ToString::to_string`] surface
+        // routed through [`std::fmt::Display`] — every owned-heap-
+        // string path (the `Cow::Owned` promotion of this axis's
+        // `.into_owned()`, `From<RestartStrategy> for String`, and
+        // `.to_string()`) resolves to the same lifted
+        // [`crate::render::SUPERVISOR_ESTRATEGIA_*`] const per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::RestartStrategy::ALL`] that
+        // materializes the four-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future `axum::response::IntoResponse` per-strategy
+        // rejection-body composer, a future M4 admission-webhook
+        // per-strategy rejection-reason emitter whose typing rules out
+        // the sibling [`AsRef<str>`] borrowed return, or a future
+        // substrate-wide per-strategy diagnostic surface that binds
+        // through a [`Cow<'static, str>`] boundary reaches through.
+        // The pipe witness also pins the zero-alloc discipline: every
+        // element in the collected vector satisfies the
+        // [`std::borrow::Cow::Borrowed`] arm predicate, so a future
+        // accidental silent-allocation regression on the pipe's
+        // iteration axis is a caixa-core-test-time failure.
+        for &variant in RestartStrategy::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartStrategy>>::from(variant);
+            let via_static: &'static str = <&'static str as From<RestartStrategy>>::from(variant);
+            let via_string: String = <String as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<RestartStrategy> for Cow<'static, str> and \
+                 From<RestartStrategy> for &'static str must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the Cow<'static, str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<RestartStrategy> for Cow<'static, str> and \
+                 From<RestartStrategy> for String must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the Cow<'static, str> and String \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<RestartStrategy> for Cow<'static, str> must \
+                 byte-equal RestartStrategy::to_string on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 trait-idiomatic Cow<'static, str> forward-projection \
+                 axis and the ToString-through-Display axis have \
+                 drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = RestartStrategy::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = RestartStrategy::ALL
+            .iter()
+            .map(|s| std::borrow::Cow::Borrowed(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over \
+             RestartStrategy::ALL must byte-equal `.iter().map(|s| \
+             Cow::Borrowed(s.as_str()))` on every arm — the \
+             trait-idiomatic `From<RestartStrategy> for Cow<'static, \
+             str>` axis is what makes the `Cow::from` composition \
+             route through the substrate-primitive \
+             `RestartStrategy::as_str` accessor with the zero-alloc \
+             Cow::Borrowed arm by construction, rather than a \
+             per-call-site `Cow::Owned(strategy.to_string())` \
+             allocation"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the \
+                 .iter().copied().map(Cow::from) pipe over \
+                 RestartStrategy::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm — a Cow::Owned outcome on any arm \
+                 signals the pipe's iteration axis has silently \
+                 allocated where the substrate-primitive \
+                 RestartStrategy::as_str `&'static str` return makes \
+                 the borrowed arm the type-correct projection"
             );
         }
     }
