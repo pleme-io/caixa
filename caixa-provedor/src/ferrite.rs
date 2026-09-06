@@ -626,6 +626,144 @@ impl From<FerriteRuntime> for String {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, owned-`String` output* forward
+/// projection on [`FerriteRuntime`] — the borrowed-input companion to
+/// the paired owned-input [`From<FerriteRuntime> for String`]
+/// (1e14fde), the paired borrowed-input
+/// [`From<&FerriteRuntime> for &'static str`] (676d693), and the
+/// paired owned-input [`From<FerriteRuntime> for &'static str`]
+/// siblings above. Routes byte-for-byte through the substrate-
+/// primitive [`FerriteRuntime::variant_slug`] `pub const fn` accessor
+/// via [`str::to_owned`] so every consumer that binds a
+/// [`FerriteRuntime`] through the standard-library `.into()` /
+/// [`From<&Self> for String`] axis reaches the same two-arm
+/// `"ferrite-safe"` / `"ferrite-arena"` canonical-lowercase kebab
+/// emit-set the paired [`std::fmt::Display`], [`AsRef<str>`],
+/// [`FerriteRuntime::variant_slug`], and the three other trait-
+/// idiomatic forward-projection impls already return — no
+/// `runtime.variant_slug().to_owned()` / `String::from(*runtime)`
+/// (with a spurious [`Copy`] deref) / `runtime.to_string()` (through
+/// [`std::fmt::Display`]) detour whose type bounds have no compile-
+/// time link to the substrate primitive.
+///
+/// Fills the *last* remaining corner of the substrate-wide
+/// `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// projection family on the sole closed-set fieldless typed enum on
+/// the caixa-provedor surface. Rust's standard library carries no
+/// blanket `impl<T: AsRef<str>> From<&T> for String` (nor an
+/// `impl<T: fmt::Display> From<&T> for String`), so every borrowed-
+/// input owned-string call site — a future
+/// `serde_json::Value::String(String::from(&provider.runtime))`
+/// structured-payload composer over a borrowed provider-registry
+/// field where the [`serde_json::Value::String`] arm typing demands
+/// an owned [`String`] and the sibling `&'static str`-returning axes
+/// force an explicit `.to_owned()` / [`String::from`] restatement, a
+/// future `.iter().map(|p| String::from(&p.runtime)).collect()`
+/// per-provider fan-out over `&[Provider]` in an M4 admission-webhook
+/// rejection-body composer whose borrowed access off `&p.runtime`
+/// avoids a spurious `.copied()` / [`Copy`]-bound dereference on the
+/// runtime-tier field, a future
+/// `HashMap::<String, usize>::from_iter(providers.iter().map(|p| (String::from(&p.runtime), 0)))`
+/// per-runtime-tier histogram seed on a future
+/// `feira publish-provider` audit-report path whose borrowed-
+/// iteration axis over `&p.runtime` avoids a spurious [`Copy`] on
+/// the runtime-tier field, a future
+/// `FerriteRuntime::ALL.iter().map(String::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer on a future
+/// `feira publish-provider --list-runtimes` CLI enumeration whose
+/// iterator yields `&FerriteRuntime` by construction — otherwise
+/// resolves through the detour above.
+///
+/// Fifteenth peer on the substrate-wide trait-idiomatic *borrowed-
+/// input, owned-`String` output* forward-projection family opened on
+/// [`caixa_core::supervisor::RestartStrategy`] (579385f), closed on
+/// the M2 OTP-shape sibling axis pair by
+/// [`caixa_core::supervisor::RestartPolicy`] (8465740), extended onto
+/// the two-list dep-graph peer by [`caixa_core::dep::DepList`]
+/// (e0cb617), onto the top-level [`caixa_core::CaixaKind`] peer
+/// (e76436d), the dialect-classification peer
+/// [`caixa_core::CaixaDialeto`] (d3c0d1d), the M3 mesh-primitive
+/// [`caixa_core::aplicacao::PlacementStrategy`] (d3dc000),
+/// [`caixa_core::aplicacao::WitShape`] (d638fd3),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (6424e45 — closing the
+/// whole M3 triple's 2×2 corner),
+/// [`caixa_core::render::PathShapeViolation`] (b90e193 — first
+/// outside-manifest-surface arm on this axis),
+/// [`caixa_arch::invariants::InvariantKind`] (3c3f66f — first
+/// outside-`caixa-core` arm),
+/// [`caixa_arch::report::ArchVerdict`] (3cfb3b5 — second outside-
+/// `caixa-core` arm, closing the 2×2 corner on the verdict-outcome
+/// two-arm sibling caixa-arch enum), the paired sibling
+/// `caixa_lint::diagnostic::Severity` (9518ab9 — third outside-
+/// `caixa-core` arm, closing the 2×2 corner on the diagnostic-
+/// severity four-arm axis on the caixa-lint surface), and
+/// `caixa_lint::diagnostic::FixSafety` (807f67d — fourth outside-
+/// `caixa-core` arm, closing the 2×2 corner on the fix-safety-tier
+/// two-arm axis on the same caixa-lint surface). *Fifth outside-
+/// `caixa-core` peer* on this axis, and the corner that closes the
+/// whole 2×2 trait-idiomatic projection family on this enum — the
+/// caixa-provedor ferrite-runtime two-arm axis every
+/// `feira publish-provider` per-runtime dispatch runs through — on
+/// the same trajectory the paired owned-input owned-[`String`] axis
+/// lift (1e14fde), the paired borrowed-input owned-[`&'static str`]
+/// axis lift (676d693), and the paired owned-input owned-
+/// [`&'static str`] axis lift already took onto the same enum. Only
+/// the caixa-theme `Semantic` axis remains as the final target of
+/// this substrate-wide 2×2-completion campaign.
+///
+/// Same three-path convergence discipline as the paired owned-input
+/// impl (this borrowed-input axis, the paired owned-input
+/// [`From<FerriteRuntime> for String`], and
+/// [`FerriteRuntime::variant_slug`] all route through the same two-
+/// arm inline canonical-lowercase kebab byte-strings), so a future
+/// variant addition (a `Region` tier between [`FerriteRuntime::Safe`]
+/// and [`FerriteRuntime::Arena`] for the intermediate
+/// `ferrite/rt/region` checked-arena flavor the ferrite roadmap
+/// grows — the trajectory item the sibling [`FerriteRuntime::ALL`]
+/// doc block already names) reaches every one of the paired forward-
+/// projection paths through exactly one caixa-provedor edit on the
+/// [`FerriteRuntime::variant_slug`] `pub const fn` accessor.
+///
+/// The [`FerriteRuntime::variant_slug`] emit and
+/// [`FerriteRuntime::from_wire`] parse share the same two inline
+/// canonical-lowercase kebab byte-strings by construction — so the
+/// borrowed-input owned-[`String`] forward axis and the reverse
+/// [`TryFrom<&str>`] axis compose directly (via the owned-
+/// [`String`]'s [`String::as_str`] borrow) without the intermediate
+/// wire-vocab hop the peer [`caixa_core::CaixaKind`] axis pair
+/// requires. The round-trip witness pin below locks this direct
+/// composition on the caixa-provedor ferrite-runtime enum's
+/// borrowed-input owned-[`String`] axis pair.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_from_borrowed_into_owned_string_routes_through_variant_slug_accessor`]
+/// (byte-parity pin against [`FerriteRuntime::variant_slug`] across
+/// the two-arm emit-set through the borrowed-input surface) and
+/// [`tests::ferrite_runtime_from_borrowed_into_owned_string_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against every one of the four 2×2
+/// corners — the paired owned-input owned-[`String`]
+/// [`From<FerriteRuntime> for String`] impl (1e14fde), the paired
+/// borrowed-input owned-[`&'static str`]
+/// [`From<&FerriteRuntime> for &'static str`] impl (676d693), and
+/// the paired owned-input owned-[`&'static str`]
+/// [`From<FerriteRuntime> for &'static str`] impl — plus a
+/// [`ToString::to_string`]-through-[`std::fmt::Display`] byte-parity
+/// witness, plus a `.iter().map(String::from)` pipe witness over
+/// [`FerriteRuntime::ALL`] (whose iterator yields `&FerriteRuntime`
+/// by construction, so the borrowed-input owned-[`String`] axis is
+/// what routes the pipe through the substrate-primitive
+/// [`FerriteRuntime::variant_slug`] accessor without a spurious
+/// [`Copy`] deref), plus a direct round-trip witness through
+/// [`TryFrom<&str>`] on the owned-[`String`]'s [`String::as_str`]
+/// borrow that closes the two-way `&Self → String → Self` round-trip
+/// on the trait-idiomatic borrowed-input owned-[`String`] forward +
+/// reverse axis pair).
+impl From<&FerriteRuntime> for String {
+    fn from(runtime: &FerriteRuntime) -> String {
+        runtime.variant_slug().to_owned()
+    }
+}
+
 /// Free-function wrapper preserved for the crate-level `pub use`
 /// re-export in [`crate`]; routes through the substrate-primitive
 /// method [`FerriteRuntime::rt_import`].
@@ -1743,6 +1881,191 @@ mod tests {
                  forward-emit owned-`String` axis and the reverse-\
                  parse `TryFrom<&str>` axis have drifted onto \
                  different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_borrowed_into_owned_string_routes_through_variant_slug_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&FerriteRuntime> for String` — asserts the
+        // borrowed-input owned-`String`-returning standard-library
+        // trait impl and the substrate-primitive
+        // [`super::FerriteRuntime::variant_slug`] `pub const fn`
+        // accessor resolve to the same two-arm canonical-lowercase
+        // kebab emit-set across every arm the exhaustive
+        // [`super::FerriteRuntime::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for String` (nor an
+        // `impl<T: fmt::Display> From<&T> for String`), so the
+        // borrowed-input owned-`String` forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: String = (&runtime).into();`-shaped call site
+        // reaches through this impl and no other — the paired sibling
+        // `From<FerriteRuntime> for String` impl (1e14fde) forces
+        // every borrowed-input call site through an explicit `Copy`
+        // deref (`String::from(*runtime)`) or a
+        // `.variant_slug().to_owned()` / `.to_string()` detour whose
+        // type bounds have no compile-time link to the substrate
+        // primitive.
+        //
+        // Peer of the sibling
+        // `caixa_lint::diagnostic::tests::fix_safety_from_borrowed_into_owned_string_routes_through_as_str_accessor`
+        // (807f67d — fourth outside-`caixa-core` arm on this axis,
+        // the paired fix-safety-tier two-arm axis on the caixa-lint
+        // surface),
+        // `caixa_lint::diagnostic::tests::severity_from_borrowed_into_owned_string_routes_through_as_str_accessor`
+        // (9518ab9 — third outside-`caixa-core` arm on this axis,
+        // the paired diagnostic-severity four-arm axis on the same
+        // caixa-lint surface),
+        // `caixa_arch::report::tests::arch_verdict_from_into_borrowed_owned_string_routes_through_as_str_accessor`
+        // (3cfb3b5 — second outside-`caixa-core` arm on this axis,
+        // the verdict-outcome axis on the sibling caixa-arch closed-
+        // set enum), and
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_borrowed_owned_string_routes_through_as_str_accessor`
+        // (3c3f66f — first outside-`caixa-core` arm on this axis) —
+        // closes the whole `{Self, &Self} × {&'static str, String}`
+        // 2×2 trait-idiomatic projection corner on the fifth outside-
+        // `caixa-core` closed-set fieldless typed enum on the caixa
+        // surface (the caixa-provedor ferrite-runtime two-arm axis
+        // every `feira publish-provider` per-runtime dispatch runs
+        // through), on the same trajectory the paired owned-input
+        // owned-`String` axis lift (1e14fde) and the paired borrowed-
+        // input owned-`&'static str` axis lift (676d693) already took
+        // onto the same enum. Only the caixa-theme `Semantic` axis
+        // remains as the final target of this substrate-wide 2×2-
+        // completion campaign.
+        for &variant in FerriteRuntime::ALL {
+            let via_trait: String = <String as From<&FerriteRuntime>>::from(&variant);
+            let via_method: &'static str = variant.variant_slug();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<&FerriteRuntime> for String impl must round-\
+                 trip &FerriteRuntime::{variant:?} to the same \
+                 canonical-lowercase kebab byte-string \
+                 FerriteRuntime::variant_slug returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: String = (&variant).into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on &FerriteRuntime::{variant:?} \
+                 must byte-equal FerriteRuntime::variant_slug on the \
+                 same input — the blanket-derived Into shape must \
+                 resolve to the same variant_slug dispatch as the \
+                 explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_borrowed_into_owned_string_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input owned-`String`
+        // `From<&FerriteRuntime> for String` (this lift), the paired
+        // owned-input owned-`String`
+        // `From<FerriteRuntime> for String` (1e14fde), the paired
+        // borrowed-input owned-`&'static str`
+        // `From<&FerriteRuntime> for &'static str` (676d693), and the
+        // paired owned-input owned-`&'static str`
+        // `From<FerriteRuntime> for &'static str` — every corner of
+        // the `{Self, &Self} × {&'static str, String}` 2×2 trait-
+        // idiomatic projection family — must resolve identically on
+        // every arm, locking the four return-shape × input-shape
+        // paths together so any future detour trips at caixa-provedor
+        // test time. Also byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] and a direct round-trip witness
+        // through the paired trait-idiomatic reverse
+        // [`TryFrom<&str>`] axis on the owned-`String`'s
+        // [`String::as_str`] borrow that closes the two-way
+        // `&Self → String → Self` round-trip on the trait-idiomatic
+        // borrowed-input owned-`String` forward + reverse axis pair.
+        //
+        // Peer of the sibling
+        // `caixa_lint::diagnostic::tests::fix_safety_from_borrowed_into_owned_string_agrees_with_paired_axes_on_every_arm`
+        // (807f67d) partition pin on the fourth outside-`caixa-core`
+        // arm of this campaign.
+        for &variant in FerriteRuntime::ALL {
+            let borrowed_string: String = <String as From<&FerriteRuntime>>::from(&variant);
+            let owned_string: String = <String as From<FerriteRuntime>>::from(variant);
+            let borrowed_static: &'static str =
+                <&'static str as From<&FerriteRuntime>>::from(&variant);
+            let owned_static: &'static str = <&'static str as From<FerriteRuntime>>::from(variant);
+            assert_eq!(
+                borrowed_string, owned_string,
+                "From<&FerriteRuntime> for String and \
+                 From<FerriteRuntime> for String must resolve \
+                 identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the owned-`String` axis pair's \
+                 borrowed-input and owned-input arms have drifted \
+                 onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_string.as_str(),
+                borrowed_static,
+                "From<&FerriteRuntime> for String and \
+                 From<&FerriteRuntime> for &'static str must resolve \
+                 identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the borrowed-input axis pair's \
+                 owned-`String`-returning and `&'static str`-\
+                 returning arms have drifted onto different emit-\
+                 sets"
+            );
+            assert_eq!(
+                borrowed_string.as_str(),
+                owned_static,
+                "From<&FerriteRuntime> for String and \
+                 From<FerriteRuntime> for &'static str must resolve \
+                 identically on FerriteRuntime::{variant:?} — the \
+                 cross-diagonal corner of the 2×2 must agree, or the \
+                 four projections have split into two vocabularies"
+            );
+            let via_display: String = variant.to_string();
+            assert_eq!(
+                borrowed_string, via_display,
+                "From<&FerriteRuntime> for String and ToString::\
+                 to_string via Display must resolve identically on \
+                 FerriteRuntime::{variant:?} — divergence signals \
+                 the trait-idiomatic borrowed-input owned-`String` \
+                 axis and the Display-routed ToString axis have \
+                 drifted onto different vocabularies"
+            );
+        }
+        let via_iter: Vec<String> = FerriteRuntime::ALL.iter().map(String::from).collect();
+        let via_method: Vec<String> = FerriteRuntime::ALL
+            .iter()
+            .map(|rt| rt.variant_slug().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(String::from)` over FerriteRuntime::ALL \
+             must byte-equal `.iter().map(|rt| \
+             rt.variant_slug().to_owned())` on every arm — the \
+             borrowed-input owned-`String` `From<&FerriteRuntime> \
+             for String` axis is what makes the `.map(String::from)` \
+             shape route through the substrate-primitive \
+             `FerriteRuntime::variant_slug` accessor without a \
+             spurious `.copied()` / `Copy` deref"
+        );
+        for &variant in FerriteRuntime::ALL {
+            let emitted: String = (&variant).into();
+            let re_parsed: Option<FerriteRuntime> =
+                <FerriteRuntime as TryFrom<&str>>::try_from(emitted.as_str()).ok();
+            assert_eq!(
+                re_parsed,
+                Some(variant),
+                "trait-idiomatic borrowed-input owned-`String` axis \
+                 pair must round-trip FerriteRuntime::{variant:?} \
+                 through `(&variant).into::<String>()` and back \
+                 through `TryFrom<&str>` on the owned-`String`'s \
+                 `String::as_str` borrow — a break signals the \
+                 borrowed-input forward-emit owned-`String` axis and \
+                 the reverse-parse `TryFrom<&str>` axis have drifted \
+                 onto different vocabularies"
             );
         }
     }
