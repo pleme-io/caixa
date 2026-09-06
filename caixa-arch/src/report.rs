@@ -498,6 +498,77 @@ impl From<&ArchVerdict> for &'static str {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`String` output* forward
+/// projection on [`ArchVerdict`] onto the owned-`String` axis — the
+/// owned-`String` companion to the paired [`From<ArchVerdict> for
+/// &'static str`] and [`From<&ArchVerdict> for &'static str`]
+/// siblings immediately above. Routes byte-for-byte through the
+/// substrate-primitive [`ArchVerdict::as_str`] `pub const fn` accessor
+/// via [`str::to_owned`] so every consumer that binds an
+/// [`ArchVerdict`] through the standard-library `.into()` /
+/// [`From<Self> for String`] axis (a `let key: String =
+/// verdict.into();`-shaped downstream call site; a future
+/// `serde_json::Value::String(verdict.into())` structured-payload
+/// composer where the `Value::String` arm typing demands an owned
+/// [`String`] and the sibling `&'static str`-returning axes force an
+/// explicit `.to_owned()` / [`String::from`] restatement at every call
+/// site; a future `HashMap::<String, ArchVerdict>::from_iter` per-
+/// verdict lookup on the operator's audit path where the map's key
+/// type is owned [`String`] rather than `&'static str`; a future
+/// [`std::borrow::Cow::<'static, str>::Owned(verdict.into())`]
+/// composer on a future M4 admission-webhook rejection body's owned-
+/// arm; a future caixa-arch pipeline's per-verdict structured-log
+/// emit where the JSON serializer's [`Serialize`] impl on [`String`]
+/// owns the emit-path) reaches the same two-arm `"proven"` /
+/// `"rejected"` canonical-lowercase emit-set the paired
+/// `&'static str`-returning axes, the sibling [`std::fmt::Display`],
+/// [`AsRef<str>`], and [`ArchVerdict::as_str`] surfaces already return
+/// — no `.to_owned()` / `String::from(verdict.as_str())` detour whose
+/// type bounds have no compile-time link to the substrate primitive.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for String` (nor an
+/// `impl<T: fmt::Display> From<T> for String`), so every closed-set
+/// typed enum that carries the paired [`AsRef<str>`] /
+/// [`std::fmt::Display`] / [`From<Self> for &'static str`] /
+/// [`From<&Self> for &'static str`] quadruple but not the owned-
+/// `String` axis forces every owned-string call site through the
+/// detour above. This lift closes that axis on the second outside-
+/// `caixa-core` closed-set fieldless typed enum on the caixa surface
+/// (the caixa-arch verdict-outcome two-arm axis), matching the
+/// trajectory each of the ten prior peer enums —
+/// [`caixa_core::supervisor::RestartStrategy`] (7baa18a, first-mover
+/// on this axis), [`caixa_core::supervisor::RestartPolicy`] (7851725),
+/// [`caixa_core::CaixaKind`] (231a18c),
+/// [`caixa_core::CaixaDialeto`] (88942cd),
+/// [`caixa_core::dep::DepList`] (32b0ee8),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (1154c2f),
+/// [`caixa_core::aplicacao::WitShape`] (79a8723),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (c7d687d),
+/// [`caixa_core::render::PathShapeViolation`] (6e0479a, first render-
+/// side arm), and [`crate::invariants::InvariantKind`] (1afd8d5,
+/// first outside-`caixa-core` arm — the paired severity-classification
+/// axis on the sibling `caixa-arch` invariant-kind closed-set enum) —
+/// followed on the same 2×2-completion campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_from_into_owned_string_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`ArchVerdict::as_str`] across the two-
+/// arm emit-set via the owned-`String` surface) and
+/// [`tests::arch_verdict_from_into_owned_string_and_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// `&'static str`-returning [`From<ArchVerdict> for &'static str`]
+/// impl and the [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(String::from)` pipe witness
+/// over [`ArchVerdict::ALL`], plus a direct `Self → String → Self`
+/// round-trip witness through the paired [`TryFrom<&str>`] axis on
+/// the owned-[`String`]'s [`String::as_str`] borrow).
+impl From<ArchVerdict> for String {
+    fn from(verdict: ArchVerdict) -> String {
+        verdict.as_str().to_owned()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchReport {
     pub verdict: ArchVerdict,
@@ -1289,5 +1360,149 @@ mod tests {
              `ArchVerdict::as_str` accessor rather than through a \
              per-call-site `.copied()` / dereference detour"
         );
+    }
+
+    #[test]
+    fn arch_verdict_from_into_owned_string_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<ArchVerdict> for String` — asserts the owned-
+        // `String`-returning standard-library trait impl and the
+        // substrate-primitive [`super::ArchVerdict::as_str`] `pub const
+        // fn` accessor resolve to the same two-arm canonical-lowercase
+        // emit-set across every arm the exhaustive
+        // [`super::ArchVerdict::ALL`] slice enumerates. Rust's standard
+        // library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for String`, so the owned-
+        // `String` axis is a distinct trait-idiomatic surface that a
+        // `let key: String = verdict.into();`-shaped downstream call
+        // site reaches through this impl and no other — the sibling
+        // `&'static str`-returning axes force an explicit
+        // `.to_owned()` / [`String::from`] restatement whose type
+        // bounds have no compile-time link to the substrate primitive.
+        // Sweeps every one of the two arms
+        // [`super::ArchVerdict::ALL`] carries so no arm's projection is
+        // covered only by the sibling method-named `as_str` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] / owned-input
+        // `&'static str`-returning paths.
+        //
+        // Peer of the sibling
+        // [`crate::invariants::tests::invariant_kind_from_into_owned_string_routes_through_as_str_accessor`]
+        // (1afd8d5 — first outside-`caixa-core` arm on the owned-
+        // `String` axis, the paired severity-classification axis on
+        // the sibling caixa-arch closed-set enum) — extends the trait-
+        // idiomatic owned-`String`-returning forward-projection family
+        // onto the second outside-`caixa-core` closed-set fieldless
+        // typed enum on the caixa surface, the caixa-arch verdict-
+        // outcome two-arm axis.
+        for &variant in ArchVerdict::ALL {
+            let via_trait: String = <String as From<ArchVerdict>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<ArchVerdict> for String impl must round-trip \
+                 ArchVerdict::{variant:?} to the same canonical-\
+                 lowercase byte-string ArchVerdict::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: String = variant.into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on ArchVerdict::{variant:?} must \
+                 byte-equal ArchVerdict::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_from_into_owned_string_and_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic owned-
+        // input `&'static str`-returning `From<ArchVerdict> for
+        // &'static str` and owned-`String`-returning
+        // `From<ArchVerdict> for String` (this lift) forward
+        // projections must resolve identically on every arm, locking
+        // the two output-shape paths together so any future detour (a
+        // stray owned-`String` special-case that lands on a divergent
+        // per-arm literal outside the paired `as_str` dispatch, a
+        // hypothetical rebrand touching one axis without the other)
+        // trips at caixa-arch test time. Then a witness that the
+        // `ToString::to_string`-through-[`std::fmt::Display`] surface
+        // (`variant.to_string()`) byte-equals the trait-idiomatic
+        // owned-`String` axis (`String::from(variant)`) on every arm,
+        // so a future consumer that reaches for `.to_string()` and
+        // one that reaches for `.into::<String>()` land on the same
+        // substrate-primitive vocabulary. Plus a
+        // `.iter().copied().map(String::from)` pipe witness over
+        // [`super::ArchVerdict::ALL`] — the exact shape a future per-
+        // verdict histogram key materializer or admission-webhook
+        // rejection body composer reaches through — materializes the
+        // two-arm accept-set through the owned-`String` axis alone.
+        // Plus a direct `Self → String → Self` round-trip witness
+        // through the paired [`TryFrom<&str>`] axis on the owned-
+        // `String`'s [`String::as_str`] borrow, closing the two-way
+        // round-trip on the owned-`String` axis directly (no wire-
+        // vocab intermediate — [`super::ArchVerdict::as_str`] and
+        // [`super::ArchVerdict::from_wire`] dispatch on the same two
+        // inline canonical-lowercase byte-strings by construction).
+        for &variant in ArchVerdict::ALL {
+            let owned_string: String = <String as From<ArchVerdict>>::from(variant);
+            let owned_static: &'static str = <&'static str as From<ArchVerdict>>::from(variant);
+            assert_eq!(
+                owned_string.as_str(),
+                owned_static,
+                "From<ArchVerdict> for String and From<ArchVerdict> \
+                 for &'static str must resolve identically on \
+                 ArchVerdict::{variant:?} — divergence signals the \
+                 two output-shape forward-projection paths have \
+                 drifted onto different emit-sets"
+            );
+            let via_display: String = variant.to_string();
+            assert_eq!(
+                owned_string, via_display,
+                "From<ArchVerdict> for String and ToString::to_string \
+                 via Display must resolve identically on \
+                 ArchVerdict::{variant:?} — divergence signals the \
+                 trait-idiomatic owned-`String` axis and the Display-\
+                 routed ToString axis have drifted onto different \
+                 vocabularies"
+            );
+        }
+        let via_iter: Vec<String> = ArchVerdict::ALL.iter().copied().map(String::from).collect();
+        let via_method: Vec<String> = ArchVerdict::ALL
+            .iter()
+            .map(|v| v.as_str().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(String::from)` over \
+             ArchVerdict::ALL must byte-equal \
+             `.iter().map(|v| v.as_str().to_owned())` on every arm — \
+             the owned-`String` `From<ArchVerdict> for String` axis \
+             is what makes the `.map(String::from)` shape route \
+             through the substrate-primitive `ArchVerdict::as_str` \
+             accessor rather than through a per-call-site `.to_owned()` \
+             / `String::from(verdict.as_str())` detour"
+        );
+        for &variant in ArchVerdict::ALL {
+            let emitted: String = variant.into();
+            let re_parsed: Result<ArchVerdict, ()> =
+                <ArchVerdict as TryFrom<&str>>::try_from(emitted.as_str());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic owned-`String` axis pair must round-\
+                 trip ArchVerdict::{variant:?} through \
+                 `.into::<String>()` and back through \
+                 `TryFrom<&str>` on the owned-`String`'s \
+                 `String::as_str` borrow — a break signals the \
+                 forward-emit owned-`String` axis and the reverse-\
+                 parse `TryFrom<&str>` axis have drifted onto \
+                 different vocabularies"
+            );
+        }
     }
 }
