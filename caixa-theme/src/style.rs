@@ -485,6 +485,91 @@ impl From<Semantic> for &'static str {
     }
 }
 
+/// Trait-idiomatic *borrowed-input* forward projection on the
+/// [`Semantic`] closed 16-arm caixa-theme semantic-style axis onto the
+/// `&'static str` axis — the borrowed-input companion to the paired
+/// owned-input [`From<Semantic> for &'static str`] impl immediately
+/// above. Routes byte-for-byte through the same substrate-primitive
+/// [`Semantic::as_str`] `pub const fn` accessor so every consumer that
+/// binds a `&Semantic` through the standard-library `.into()` /
+/// [`From<&Self> for &'static str`] axis (a
+/// `Semantic::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer — whose iterator over
+/// `&'static [Semantic]` yields `&Semantic`, not `Semantic`, so the
+/// owned-input [`From<Semantic>`] axis alone forces every call site
+/// through an explicit `.copied()` / dereference / [`Copy`]-bound
+/// restatement rather than the direct trait-idiomatic projection; a
+/// future `feira lint --list-styles` operator-facing enumeration verb
+/// composed via `Semantic::ALL.iter().map(Into::into)`; a future
+/// `caixa-lsp` per-`SemanticTokenType` registration walk that borrows
+/// `&Semantic` off a stored per-style row; a future `caixa.nvim` per-
+/// highlight-group re-loader that borrows `&Semantic` off the loaded
+/// theme-overlay table; a future
+/// `HashMap::<&'static str, _>::from_iter(Semantic::ALL.iter().map(
+///     |sem| (<&'static str>::from(sem), 0)))` per-Semantic-paint
+/// histogram seed a future `blackmatter-shell` per-arm
+/// `data-semantic="<kebab>"` DOM-attribute emit path composes) reaches
+/// the same 16-arm `"keyword"` / `"symbol"` / `"keyword-arg"` /
+/// `"string"` / `"number"` / `"literal"` / `"comment"` / `"accent"` /
+/// `"muted"` / `"error"` / `"warning"` / `"info"` / `"hint"` /
+/// `"added"` / `"removed"` / `"unchanged"` canonical-lowercase kebab
+/// emit-set the paired owned-input [`From<Semantic> for &'static str`],
+/// the sibling [`std::fmt::Display`], [`AsRef<str>`], and
+/// [`Semantic::as_str`] surfaces already return.
+///
+/// Fifteenth and final peer on the substrate-wide trait-idiomatic
+/// *borrowed-input* `&'static str`-returning forward-projection family
+/// already carried by [`caixa_core::dep::DepList`] (64aa742,
+/// first-mover), [`caixa_core::CaixaKind`],
+/// [`caixa_core::CaixaDialeto`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::aplicacao::WitShape`],
+/// [`caixa_core::aplicacao::RateLimitUnit`],
+/// [`caixa_core::render::PathShapeViolation`] (cdf4e95, first render-
+/// side arm), [`caixa_arch::invariants::InvariantKind`] (238d886,
+/// first outside-`caixa-core` arm), [`caixa_arch::report::ArchVerdict`]
+/// (73bda50), `caixa_lint::diagnostic::Severity` (2b9003f),
+/// `caixa_lint::diagnostic::FixSafety` (d8769ab), and
+/// `caixa_provedor::FerriteRuntime` (676d693). Rust's `From` trait does
+/// not auto-derive the `From<&Self>` sibling from a `From<Self>` impl
+/// (the blanket `impl<T, U> From<&T> for U where T: Copy, U: From<T>`
+/// does not exist in `core`), so every closed-set typed enum that
+/// carries the owned-input axis but not the borrowed-input axis forces
+/// every borrowed-input call site through a `.copied()` /
+/// `<&'static str>::from(*sem)` / `sem.as_str()` detour whose type
+/// bounds have no compile-time link to the substrate primitive.
+/// Lifting the borrowed-input axis on the caixa-theme semantic-style
+/// 16-arm closed-set fieldless typed enum closes that gap on the same
+/// trajectory the paired owned-input axis
+/// ([`impl From<Semantic> for &'static str`] immediately above) already
+/// opened, and closes the trait-idiomatic *borrowed-input*
+/// `&'static str`-returning axis on the last remaining substrate-wide
+/// closed-set fieldless typed enum whose borrowed-input axis was still
+/// open — the substrate-wide 2×2-completion campaign now covers every
+/// closed-set fieldless typed enum on the caixa surface on the
+/// borrowed-input `&'static str`-returning axis.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Semantic::as_str`] across the 16-arm
+/// emit-set via a borrowed input, plus a `const`-context
+/// materialization witness for the `&'static str` lifetime promise)
+/// and
+/// [`tests::semantic_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<Semantic> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over [`Semantic::ALL`] whose
+/// iterator yields `&Semantic` by construction so this borrowed-input
+/// axis is what routes the pipe through the substrate-primitive
+/// accessor without a spurious `Copy` deref).
+impl From<&Semantic> for &'static str {
+    fn from(sem: &Semantic) -> &'static str {
+        sem.as_str()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1368,5 +1453,130 @@ mod tests {
                  accept-set"
             );
         }
+    }
+
+    #[test]
+    fn semantic_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&Semantic> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::Semantic::as_str`] `pub const fn` accessor
+        // resolve to the same 16-arm canonical-lowercase kebab emit-set
+        // across every arm the exhaustive [`super::Semantic::ALL`]
+        // slice enumerates. Rust's `From` trait does not auto-derive
+        // the borrowed-input sibling from a paired owned-input impl
+        // (no `impl<T, U> From<&T> for U where T: Copy, U: From<T>`
+        // blanket in `core`), so the borrowed-input axis is a distinct
+        // trait-idiomatic surface that a `.iter().map(Into::into)`
+        // shape over [`super::Semantic::ALL`] (whose iterator yields
+        // `&Semantic`, not `Semantic`) reaches through this impl and
+        // no other — the paired owned-input [`From<Semantic>`] impl
+        // requires an explicit `.copied()` / dereference before the
+        // trait fires. Materializes three
+        // `<&'static str as From<&Semantic>>::from` outputs in
+        // `const`-shape bindings against the paired
+        // [`super::Semantic::as_str`] `pub const fn` accessor to make
+        // the `'static` lifetime promise a build-time invariant — a
+        // future accidental downgrade of any arm's inline canonical-
+        // lowercase kebab byte-string to a non-`&'static str` (a
+        // `String::leak()`-produced return, a `Box::leak`-cast, an
+        // intermediate lifetime-erasing helper) trips at caixa-theme
+        // build time rather than at a downstream `'static`-bound
+        // consumer.
+        //
+        // Peer of the sibling
+        // `caixa_provedor::ferrite::tests::ferrite_runtime_from_borrowed_into_static_str_routes_through_variant_slug_accessor`
+        // (676d693) pin on the outside-`caixa-core` closed-set-enum
+        // borrowed-input axis — extends the trait-idiomatic borrowed-
+        // input forward-projection axis onto the last remaining
+        // closed-set fieldless typed enum on the substrate surface
+        // (the caixa-theme semantic-style 16-arm axis), closing the
+        // substrate-wide 2×2-completion campaign's borrowed-input
+        // `&'static str`-returning corner.
+        const KEYWORD: &str = Semantic::Keyword.as_str();
+        const KEYWORD_ARG: &str = Semantic::KeywordArg.as_str();
+        const UNCHANGED: &str = Semantic::Unchanged.as_str();
+        for variant in Semantic::ALL {
+            let via_trait: &'static str = <&'static str as From<&Semantic>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&Semantic> for &'static str impl must round-trip \
+                 &Semantic::{variant:?} to the same canonical-lowercase \
+                 kebab byte-string Semantic::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &Semantic::{variant:?} must \
+                 byte-equal Semantic::as_str on the same input — the \
+                 blanket-derived Into shape on the borrowed-input axis \
+                 must resolve to the same as_str dispatch as the \
+                 explicit From impl"
+            );
+        }
+        assert_eq!(
+            [KEYWORD, KEYWORD_ARG, UNCHANGED],
+            ["keyword", "keyword-arg", "unchanged"],
+            "const-context Semantic::as_str must resolve to the \
+             canonical-lowercase kebab byte-strings — a future \
+             accidental downgrade of any arm to a non-const or non-\
+             static byte-string breaks the `&'static str`-lifetime \
+             promise the paired From<&Semantic> for &'static str impl \
+             carries by construction"
+        );
+    }
+
+    #[test]
+    fn semantic_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // `From<Semantic> for &'static str` owned-input forward
+        // projection and the newly lifted
+        // `From<&Semantic> for &'static str` borrowed-input forward
+        // projection must resolve identically on *every* arm the
+        // exhaustive [`super::Semantic::ALL`] slice enumerates. Locks
+        // the two trait-idiomatic forward-projection paths together by
+        // construction so any future detour (a stray borrowed-input
+        // `From` special-case that lands on a divergent per-arm literal
+        // outside the paired `as_str` dispatch, a hypothetical rebrand
+        // touching one axis without the other) trips at caixa-theme
+        // test time under `assert_eq!` rather than at a downstream
+        // consumer split. Witnesses the borrowed-input axis with a
+        // `.iter().map(Into::into)` pipe over `Semantic::ALL` (whose
+        // iterator yields `&Semantic`, not `Semantic`, so the pipe
+        // fires through the borrowed-input axis alone).
+        //
+        // Peer of the sibling
+        // `caixa_provedor::ferrite::tests::ferrite_runtime_from_owned_and_borrowed_into_static_str_agree_on_every_arm`
+        // (676d693) — extends the owned/borrowed-cross-axis partition
+        // discipline onto the last remaining substrate-wide closed-set
+        // fieldless typed enum whose borrowed-input axis was still
+        // open.
+        for &variant in Semantic::ALL {
+            let via_owned: &'static str = <&'static str as From<Semantic>>::from(variant);
+            let via_borrowed: &'static str = <&'static str as From<&Semantic>>::from(&variant);
+            assert_eq!(
+                via_owned, via_borrowed,
+                "From<Semantic> for &'static str and From<&Semantic> \
+                 for &'static str must agree on Semantic::{variant:?} \
+                 — divergence signals the owned-input and borrowed-\
+                 input forward-projection paths have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_pipe: Vec<&'static str> = Semantic::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> = Semantic::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            via_pipe, via_method,
+            "Semantic::ALL.iter().map(Into::into) must resolve to the \
+             same per-arm canonical-lowercase kebab byte-string \
+             sequence Semantic::as_str returns across every arm — the \
+             iterator yields &Semantic, so this pipe fires through the \
+             borrowed-input From<&Semantic> for &'static str axis and \
+             witnesses the newly lifted impl's arm-set matches the \
+             substrate-primitive accessor without a spurious Copy deref"
+        );
     }
 }
