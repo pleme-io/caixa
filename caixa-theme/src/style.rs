@@ -570,6 +570,96 @@ impl From<&Semantic> for &'static str {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`String` output* forward
+/// projection on the [`Semantic`] closed 16-arm caixa-theme
+/// semantic-style axis — the owned-`String` companion to the paired
+/// [`From<Semantic> for &'static str`] and
+/// [`From<&Semantic> for &'static str`] siblings immediately above.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`Semantic::as_str`] `pub const fn` accessor via
+/// [`str::to_owned`] so every consumer that binds a [`Semantic`]
+/// through the standard-library `.into()` / [`From<Self> for String`]
+/// axis (a `let key: String = sem.into();`-shaped downstream call
+/// site; a future `serde_json::Value::String(sem.into())` structured-
+/// payload composer where the `Value::String` arm typing demands an
+/// owned [`String`] and the sibling `&'static str`-returning axes
+/// force an explicit `.to_owned()` / [`String::from`] restatement at
+/// every call site; a future
+/// `HashMap::<String, Semantic>::from_iter` per-semantic lookup on
+/// a future `caixa-lsp` per-`SemanticTokenType` registration path
+/// where the map's key type is owned [`String`] rather than
+/// `&'static str`; a future
+/// [`std::borrow::Cow::<'static, str>::Owned(sem.into())`] composer
+/// on a future `feira lint --list-styles` operator-facing enumeration
+/// verb's per-arm row where an owned [`Cow`] arm typing rules;
+/// a future `caixa.nvim` per-highlight-group re-loader that stores
+/// the per-Semantic kebab identifier as an owned [`String`] on the
+/// theme-overlay table; a future `blackmatter-shell` per-arm
+/// `data-semantic="<kebab>"` DOM emission whose serializer's
+/// [`Serialize`] impl on [`String`] owns the emit-path) reaches the
+/// same 16-arm `"keyword"` / `"symbol"` / `"keyword-arg"` /
+/// `"string"` / `"number"` / `"literal"` / `"comment"` / `"accent"` /
+/// `"muted"` / `"error"` / `"warning"` / `"info"` / `"hint"` /
+/// `"added"` / `"removed"` / `"unchanged"` canonical-lowercase kebab
+/// emit-set the paired `&'static str`-returning axes, the sibling
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`Semantic::as_str`]
+/// surfaces already return — no `.to_owned()` /
+/// `String::from(sem.as_str())` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for String` (nor an
+/// `impl<T: fmt::Display> From<T> for String`), so every closed-set
+/// typed enum that carries the paired [`AsRef<str>`] /
+/// [`std::fmt::Display`] / [`From<Self> for &'static str`] /
+/// [`From<&Self> for &'static str`] quadruple but not the owned-
+/// `String` axis forces every owned-string call site through the
+/// detour above. This lift closes that axis on the sole closed-set
+/// fieldless typed enum on the caixa-theme surface (the semantic-
+/// style 16-arm axis), extending the substrate-wide
+/// `{Self, &Self} × {&'static str, String}` 2×2-completion campaign
+/// onto the sixth outside-`caixa-core` closed-set fieldless typed
+/// enum on the caixa surface — matching the trajectory each of the
+/// twelve prior peer enums —
+/// [`caixa_core::supervisor::RestartStrategy`] (7baa18a, first-mover
+/// on this axis), [`caixa_core::supervisor::RestartPolicy`] (7851725),
+/// [`caixa_core::CaixaKind`] (231a18c),
+/// [`caixa_core::CaixaDialeto`] (88942cd),
+/// [`caixa_core::dep::DepList`] (32b0ee8),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (1154c2f),
+/// [`caixa_core::aplicacao::WitShape`] (79a8723),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (c7d687d),
+/// [`caixa_core::render::PathShapeViolation`] (6e0479a, first render-
+/// side arm), [`caixa_arch::invariants::InvariantKind`] (1afd8d5,
+/// first outside-`caixa-core` arm — the paired severity-classification
+/// axis on the caixa-arch invariant-kind closed-set enum),
+/// [`caixa_arch::report::ArchVerdict`] (cc80a53, the paired verdict-
+/// outcome axis on the sibling caixa-arch closed-set enum),
+/// `caixa_lint::diagnostic::Severity` (4635d4e),
+/// `caixa_lint::diagnostic::FixSafety` (e4d73c6), and
+/// `caixa_provedor::FerriteRuntime` (1e14fde, the paired ferrite-
+/// runtime axis on the sole caixa-provedor closed-set enum) —
+/// followed on the same 2×2-completion campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_into_owned_string_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Semantic::as_str`] across the 16-arm
+/// emit-set via the owned-`String` surface, plus a blanket-derived
+/// `Into<String>` shape witness) and
+/// [`tests::semantic_from_into_owned_string_and_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// `&'static str`-returning [`From<Semantic> for &'static str`] impl
+/// and the [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(String::from)` pipe witness
+/// over [`Semantic::ALL`], plus a direct `Self → String → Self`
+/// round-trip witness through the paired [`TryFrom<&str>`] axis on
+/// the owned-[`String`]'s [`String::as_str`] borrow).
+impl From<Semantic> for String {
+    fn from(sem: Semantic) -> String {
+        sem.as_str().to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1578,5 +1668,160 @@ mod tests {
              witnesses the newly lifted impl's arm-set matches the \
              substrate-primitive accessor without a spurious Copy deref"
         );
+    }
+
+    #[test]
+    fn semantic_from_into_owned_string_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Semantic> for String` — asserts the owned-
+        // `String`-returning standard-library trait impl and the
+        // substrate-primitive [`super::Semantic::as_str`] `pub const
+        // fn` accessor resolve to the same 16-arm canonical-lowercase
+        // kebab emit-set across every arm the exhaustive
+        // [`super::Semantic::ALL`] slice enumerates. Rust's standard
+        // library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for String`, so the owned-
+        // `String` axis is a distinct trait-idiomatic surface that a
+        // `let key: String = sem.into();`-shaped downstream call site
+        // reaches through this impl and no other — the sibling
+        // `&'static str`-returning axes force an explicit
+        // `.to_owned()` / [`String::from`] restatement whose type
+        // bounds have no compile-time link to the substrate primitive.
+        // Sweeps every one of the 16 arms
+        // [`super::Semantic::ALL`] carries so no arm's projection is
+        // covered only by the sibling method-named `as_str` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] / owned-input
+        // `&'static str`-returning paths.
+        //
+        // Peer of the sibling
+        // `caixa_provedor::ferrite::tests::ferrite_runtime_from_into_owned_string_routes_through_variant_slug_accessor`
+        // (1e14fde) and
+        // `caixa_arch::report::tests::arch_verdict_from_into_owned_string_routes_through_as_str_accessor`
+        // (cc80a53) pins on the peer outside-`caixa-core` closed-set-
+        // enum owned-`String`-returning axes — extends the trait-
+        // idiomatic owned-`String`-returning forward-projection family
+        // onto the sole closed-set fieldless typed enum on the caixa-
+        // theme surface (the semantic-style 16-arm axis), extending
+        // the substrate-wide 2×2-completion campaign onto the sixth
+        // outside-`caixa-core` closed-set fieldless typed enum on the
+        // caixa surface.
+        for &variant in Semantic::ALL {
+            let via_trait: String = <String as From<Semantic>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<Semantic> for String impl must round-trip \
+                 Semantic::{variant:?} to the same canonical-lowercase \
+                 kebab byte-string Semantic::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: String = variant.into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on Semantic::{variant:?} must \
+                 byte-equal Semantic::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_into_owned_string_and_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `&'static str`-returning
+        // `From<Semantic> for &'static str` and owned-`String`-
+        // returning `From<Semantic> for String` (this lift) forward
+        // projections must resolve identically on every arm, locking
+        // the two output-shape paths together so any future detour (a
+        // stray owned-`String` special-case that lands on a divergent
+        // per-arm literal outside the paired `as_str` dispatch, a
+        // hypothetical rebrand touching one axis without the other, a
+        // silent swap onto a hand-rolled per-arm literal that shadows
+        // the paired [`super::Semantic::as_str`] dispatch) trips at
+        // caixa-theme test time. Then a witness that the
+        // `ToString::to_string`-through-[`std::fmt::Display`] surface
+        // (`variant.to_string()`) byte-equals the trait-idiomatic
+        // owned-`String` axis (`String::from(variant)`) on every arm,
+        // so a future consumer that reaches for `.to_string()` and
+        // one that reaches for `.into::<String>()` land on the same
+        // substrate-primitive vocabulary. Plus a
+        // `.iter().copied().map(String::from)` pipe witness over
+        // [`super::Semantic::ALL`] — the exact shape a future per-
+        // Semantic histogram key materializer or `caixa-lsp` per-
+        // `SemanticTokenType` registration walk reaches through —
+        // materializes the 16-arm accept-set through the owned-
+        // `String` axis alone. Plus a direct `Self → String → Self`
+        // round-trip witness through the paired [`TryFrom<&str>`]
+        // axis on the owned-`String`'s [`String::as_str`] borrow,
+        // closing the two-way round-trip on the owned-`String` axis
+        // directly (no wire-vocab intermediate — the emit-side
+        // [`super::Semantic::as_str`] and the parse-side
+        // [`super::Semantic::from_wire`] dispatch on the same 16
+        // inline canonical-lowercase kebab byte-strings by
+        // construction).
+        //
+        // Peer of the sibling
+        // `caixa_provedor::ferrite::tests::ferrite_runtime_from_into_owned_string_and_static_str_agree_on_every_arm`
+        // (1e14fde) partition pin on the peer outside-`caixa-core`
+        // closed-set-enum owned-`String`-returning axis.
+        for &variant in Semantic::ALL {
+            let owned_string: String = <String as From<Semantic>>::from(variant);
+            let owned_static: &'static str = <&'static str as From<Semantic>>::from(variant);
+            assert_eq!(
+                owned_string.as_str(),
+                owned_static,
+                "From<Semantic> for String and From<Semantic> for \
+                 &'static str must resolve identically on \
+                 Semantic::{variant:?} — divergence signals the two \
+                 output-shape forward-projection paths have drifted \
+                 onto different emit-sets"
+            );
+            let via_display: String = variant.to_string();
+            assert_eq!(
+                owned_string, via_display,
+                "From<Semantic> for String and ToString::to_string \
+                 via Display must resolve identically on \
+                 Semantic::{variant:?} — divergence signals the \
+                 trait-idiomatic owned-`String` axis and the Display-\
+                 routed ToString axis have drifted onto different \
+                 vocabularies"
+            );
+        }
+        let via_iter: Vec<String> = Semantic::ALL.iter().copied().map(String::from).collect();
+        let via_method: Vec<String> = Semantic::ALL
+            .iter()
+            .map(|s| s.as_str().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(String::from)` over Semantic::ALL \
+             must byte-equal `.iter().map(|s| s.as_str().to_owned())` \
+             on every arm — the owned-`String` `From<Semantic> for \
+             String` axis is what makes the `.map(String::from)` \
+             shape route through the substrate-primitive \
+             Semantic::as_str accessor rather than through a per-\
+             call-site `.to_owned()` / `String::from(sem.as_str())` \
+             detour"
+        );
+        for &variant in Semantic::ALL {
+            let emitted: String = variant.into();
+            let re_parsed: Result<Semantic, ()> =
+                <Semantic as TryFrom<&str>>::try_from(emitted.as_str());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic owned-`String` axis pair must round-\
+                 trip Semantic::{variant:?} through \
+                 `.into::<String>()` and back through `TryFrom<&str>` \
+                 on the owned-`String`'s `String::as_str` borrow — a \
+                 break signals the forward-emit owned-`String` axis \
+                 and the reverse-parse `TryFrom<&str>` axis have \
+                 drifted onto different vocabularies"
+            );
+        }
     }
 }
