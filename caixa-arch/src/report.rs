@@ -426,6 +426,78 @@ impl From<ArchVerdict> for &'static str {
     }
 }
 
+/// Trait-idiomatic *borrowed-input* forward projection on
+/// [`ArchVerdict`] onto the `&'static str` axis — the borrowed-input
+/// companion to the paired owned-input [`From<ArchVerdict> for
+/// &'static str`] impl immediately above. Routes byte-for-byte through
+/// the same substrate-primitive [`ArchVerdict::as_str`] `pub const fn`
+/// accessor so every consumer that binds a `&ArchVerdict` through the
+/// standard-library `.into()` / [`From<&Self> for &'static str`] axis (a
+/// `ArchVerdict::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer — whose iterator over
+/// `&'static [ArchVerdict]` yields `&ArchVerdict`, not `ArchVerdict`,
+/// so the owned-input [`From<ArchVerdict>`] axis alone forces every
+/// call site through an explicit `.copied()` / dereference /
+/// [`Copy`]-bound restatement rather than the direct trait-idiomatic
+/// projection; a future `feira arch --list-verdicts` CLI enumeration
+/// composed via `ArchVerdict::ALL.iter().map(Into::into)`; a future M4
+/// admission-webhook rejection body whose accepted-set enumeration
+/// walks the same iterator shape; a future
+/// `HashMap::<&'static str, usize>::from_iter(reports.iter().map(|r|
+/// (<&'static str>::from(&r.verdict), 0)))` per-verdict histogram seed
+/// on the operator's audit path — whose borrowed access off
+/// `&ArchReport.verdict` avoids a `.copied()` / [`Copy`]-bound
+/// dereference on the arch-verdict field) reaches the same two-arm
+/// `"proven"` / `"rejected"` canonical-lowercase emit-set the paired
+/// owned-input [`From<ArchVerdict> for &'static str`], the sibling
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`ArchVerdict::as_str`]
+/// surfaces already return.
+///
+/// Second outside-`caixa-core` peer (and first on the caixa-arch
+/// verdict-outcome axis) on the substrate-wide trait-idiomatic
+/// *borrowed-input* `&'static str`-returning forward-projection family
+/// already carried by [`caixa_core::dep::DepList`] (64aa742, first-
+/// mover), [`caixa_core::CaixaKind`], [`caixa_core::CaixaDialeto`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::aplicacao::WitShape`],
+/// [`caixa_core::aplicacao::RateLimitUnit`],
+/// [`caixa_core::render::PathShapeViolation`] (cdf4e95, first render-
+/// side arm), and [`crate::invariants::InvariantKind`] (238d886, first
+/// outside-`caixa-core` arm — the paired severity-classification axis
+/// on the sibling `caixa-arch` invariant-kind closed-set enum). Rust's
+/// `From` trait does not auto-derive the `From<&Self>` sibling from a
+/// `From<Self>` impl (the blanket `impl<T, U> From<&T> for U where
+/// T: Copy, U: From<T>` does not exist in `core`), so every closed-set
+/// typed enum that carries the owned-input axis but not the borrowed-
+/// input axis forces every borrowed-input call site through a
+/// `.copied()` / `<&'static str>::from(*verdict)` / `verdict.as_str()`
+/// detour whose type bounds have no compile-time link to the substrate
+/// primitive. Lifting the borrowed-input axis on the caixa-arch
+/// verdict-outcome closed-set fieldless typed enum closes that gap on
+/// the same trajectory the paired owned-input axis
+/// ([`impl From<ArchVerdict> for &'static str`] immediately above)
+/// already opened.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`ArchVerdict::as_str`] across the two-arm
+/// emit-set via a borrowed input, plus a `const`-context materialization
+/// witness for the `&'static str` lifetime promise) and
+/// [`tests::arch_verdict_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<ArchVerdict> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over [`ArchVerdict::ALL`]
+/// whose iterator yields `&ArchVerdict` by construction so this
+/// borrowed-input axis is what routes the pipe through the substrate-
+/// primitive accessor without a spurious `Copy` deref).
+impl From<&ArchVerdict> for &'static str {
+    fn from(verdict: &ArchVerdict) -> &'static str {
+        verdict.as_str()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchReport {
     pub verdict: ArchVerdict,
@@ -1101,5 +1173,121 @@ mod tests {
                  drifted onto different vocabularies"
             );
         }
+    }
+
+    #[test]
+    fn arch_verdict_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&ArchVerdict> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::ArchVerdict::as_str`] `pub const fn`
+        // accessor resolve to the same two-arm canonical-lowercase
+        // emit-set across every arm the exhaustive
+        // [`super::ArchVerdict::ALL`] slice enumerates. Rust's `From`
+        // trait does not auto-derive the borrowed-input sibling from a
+        // paired owned-input impl (no `impl<T, U> From<&T> for U where
+        // T: Copy, U: From<T>` blanket in `core`), so the borrowed-
+        // input axis is a distinct trait-idiomatic surface that a
+        // `.iter().map(Into::into)` shape over
+        // [`super::ArchVerdict::ALL`] (whose iterator yields
+        // `&ArchVerdict`, not `ArchVerdict`) reaches through this impl
+        // and no other — the paired owned-input
+        // [`From<ArchVerdict>`] impl requires an explicit `.copied()`
+        // / dereference before the trait fires. Materializes the
+        // `<&'static str as From<&ArchVerdict>>::from` output in two
+        // `const`-shape bindings against the paired
+        // [`super::ArchVerdict::as_str`] `pub const fn` accessor to
+        // make the `'static` lifetime promise a build-time invariant
+        // — a future accidental downgrade of either arm's inline
+        // canonical-lowercase byte-string to a non-`&'static str` (a
+        // `String::leak()`-produced return, a `Box::leak`-cast, an
+        // intermediate lifetime-erasing helper) trips at caixa-arch
+        // build time rather than at a downstream `'static`-bound
+        // consumer.
+        const PROVEN: &str = ArchVerdict::Proven.as_str();
+        const REJECTED: &str = ArchVerdict::Rejected.as_str();
+        for variant in ArchVerdict::ALL {
+            let via_trait: &'static str = <&'static str as From<&ArchVerdict>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&ArchVerdict> for &'static str impl must \
+                 round-trip &ArchVerdict::{variant:?} to the same \
+                 canonical-lowercase byte-string ArchVerdict::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &ArchVerdict::{variant:?} \
+                 must byte-equal ArchVerdict::as_str on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [PROVEN, REJECTED],
+            ["proven", "rejected"],
+            "const-context ArchVerdict::as_str must resolve to the \
+             two canonical-lowercase byte-strings — the borrowed-\
+             input From<&ArchVerdict> for &'static str impl inherits \
+             its `'static` lifetime promise from the same accessor \
+             the owned-input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn arch_verdict_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<ArchVerdict> for &'static str` and
+        // borrowed-input `From<&ArchVerdict> for &'static str` (this
+        // lift) forward projections must resolve identically on every
+        // arm, locking the two input-shape paths together so any
+        // future detour (a stray borrowed-input special-case that
+        // lands on a divergent per-arm literal outside the paired
+        // `as_str` dispatch, a hypothetical rebrand touching one axis
+        // without the other) trips at caixa-arch test time. Then a
+        // witness that a `.iter().map(Into::into)` pipe over
+        // [`super::ArchVerdict::ALL`] (whose iterator yields
+        // `&ArchVerdict`) materializes the two-arm accept-set through
+        // the borrowed-input axis alone — the exact shape a future M4
+        // admission-webhook rejection body composer, a future
+        // substrate-wide per-arm diagnostic column, or a
+        // `HashMap::<&'static str, super::ArchVerdict>::from_iter(
+        //     super::ArchVerdict::ALL.iter().map(|v| (v.into(), *v)))`-
+        // style per-verdict lookup reaches through — closing the
+        // two-way owned/borrowed input-shape symmetry on the forward-
+        // projection trait-idiomatic axis. Peer of the sibling
+        // [`crate::invariants::tests::invariant_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+        // partition pin on the paired severity-classification axis on
+        // the sibling `caixa-arch` closed-set enum — extends the
+        // borrowed-input axis discipline onto the second closed-set
+        // fieldless typed enum on the caixa-arch surface, the
+        // verdict-outcome axis.
+        for &variant in ArchVerdict::ALL {
+            let owned: &'static str = <&'static str as From<ArchVerdict>>::from(variant);
+            let borrowed: &'static str = <&'static str as From<&ArchVerdict>>::from(&variant);
+            assert_eq!(
+                owned, borrowed,
+                "From<ArchVerdict> and From<&ArchVerdict> for \
+                 &'static str must resolve identically on \
+                 ArchVerdict::{variant:?} — divergence signals the \
+                 owned-input and borrowed-input forward-projection \
+                 paths have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<&'static str> = ArchVerdict::ALL.iter().map(Into::into).collect();
+        let via_method: Vec<&'static str> = ArchVerdict::ALL.iter().map(|v| v.as_str()).collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Into::into)` over ArchVerdict::ALL must \
+             byte-equal `.iter().map(|v| v.as_str())` on every arm — \
+             the borrowed-input `From<&ArchVerdict> for &'static str` \
+             axis is what makes the `.iter().map(Into::into)` shape \
+             route through the substrate-primitive \
+             `ArchVerdict::as_str` accessor rather than through a \
+             per-call-site `.copied()` / dereference detour"
+        );
     }
 }
