@@ -410,6 +410,82 @@ impl From<Severity> for &'static str {
     }
 }
 
+/// Trait-idiomatic *borrowed-input* forward projection on [`Severity`]
+/// onto the `&'static str` axis — the borrowed-input companion to the
+/// paired owned-input [`From<Severity> for &'static str`] impl
+/// immediately above. Routes byte-for-byte through the same substrate-
+/// primitive [`Severity::as_str`] `pub const fn` accessor so every
+/// consumer that binds a `&Severity` through the standard-library
+/// `.into()` / [`From<&Self> for &'static str`] axis (a
+/// `Severity::ALL.iter().map(<&'static str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer — whose iterator over
+/// `&'static [Severity]` yields `&Severity`, not `Severity`, so the
+/// owned-input [`From<Severity>`] axis alone forces every call site
+/// through an explicit `.copied()` / dereference / [`Copy`]-bound
+/// restatement rather than the direct trait-idiomatic projection; a
+/// future `feira lint --list-severities` CLI enumeration composed via
+/// `Severity::ALL.iter().map(Into::into)`; a future M4 admission-
+/// webhook rejection body whose accepted-set enumeration walks the
+/// same iterator shape; a future
+/// `HashMap::<&'static str, usize>::from_iter(diagnostics.iter().map(
+///     |d| (<&'static str>::from(&d.severity), 0)))` per-severity
+/// histogram seed on a future `feira lint` audit-report path — whose
+/// borrowed access off `&Diagnostic.severity` avoids a `.copied()` /
+/// [`Copy`]-bound dereference on the diagnostic-severity field)
+/// reaches the same four-arm `"error"` / `"warning"` / `"info"` /
+/// `"hint"` canonical-lowercase emit-set the paired owned-input
+/// [`From<Severity> for &'static str`], the sibling
+/// [`std::fmt::Display`], [`AsRef<str>`], and [`Severity::as_str`]
+/// surfaces already return.
+///
+/// Third outside-`caixa-core` peer (and first on the caixa-lint
+/// diagnostic-severity axis) on the substrate-wide trait-idiomatic
+/// *borrowed-input* `&'static str`-returning forward-projection family
+/// already carried by [`caixa_core::dep::DepList`] (64aa742, first-
+/// mover), [`caixa_core::CaixaKind`], [`caixa_core::CaixaDialeto`],
+/// [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::aplicacao::PlacementStrategy`],
+/// [`caixa_core::aplicacao::WitShape`],
+/// [`caixa_core::aplicacao::RateLimitUnit`],
+/// [`caixa_core::render::PathShapeViolation`] (cdf4e95, first render-
+/// side arm), [`caixa_arch::invariants::InvariantKind`] (238d886,
+/// first outside-`caixa-core` arm — the paired severity-classification
+/// axis on the sibling `caixa-arch` invariant-kind closed-set enum),
+/// and [`caixa_arch::report::ArchVerdict`] (73bda50, second outside-
+/// `caixa-core` arm — the verdict-outcome axis on the sibling
+/// `caixa-arch` closed-set enum). Rust's `From` trait does not auto-
+/// derive the `From<&Self>` sibling from a `From<Self>` impl (the
+/// blanket `impl<T, U> From<&T> for U where T: Copy, U: From<T>` does
+/// not exist in `core`), so every closed-set typed enum that carries
+/// the owned-input axis but not the borrowed-input axis forces every
+/// borrowed-input call site through a `.copied()` /
+/// `<&'static str>::from(*severity)` / `severity.as_str()` detour
+/// whose type bounds have no compile-time link to the substrate
+/// primitive. Lifting the borrowed-input axis on the caixa-lint
+/// diagnostic-severity closed-set fieldless typed enum closes that gap
+/// on the same trajectory the paired owned-input axis
+/// ([`impl From<Severity> for &'static str`] immediately above)
+/// already opened.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_borrowed_into_static_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Severity::as_str`] across the four-arm
+/// emit-set via a borrowed input, plus a `const`-context materialization
+/// witness for the `&'static str` lifetime promise) and
+/// [`tests::severity_from_owned_and_borrowed_into_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<Severity> for &'static str`] impl, plus a
+/// `.iter().map(Into::into)` pipe witness over [`Severity::ALL`]
+/// whose iterator yields `&Severity` by construction so this
+/// borrowed-input axis is what routes the pipe through the substrate-
+/// primitive accessor without a spurious `Copy` deref).
+impl From<&Severity> for &'static str {
+    fn from(severity: &Severity) -> &'static str {
+        severity.as_str()
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -1879,6 +1955,138 @@ mod tests {
                  four-arm accept-set"
             );
         }
+    }
+
+    #[test]
+    fn severity_from_borrowed_into_static_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&Severity> for &'static str` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::Severity::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`super::Severity::ALL`]
+        // slice enumerates. Rust's `From` trait does not auto-derive
+        // the borrowed-input sibling from a paired owned-input impl
+        // (no `impl<T, U> From<&T> for U where T: Copy, U: From<T>`
+        // blanket in `core`), so the borrowed-input axis is a distinct
+        // trait-idiomatic surface that a `.iter().map(Into::into)`
+        // shape over [`super::Severity::ALL`] (whose iterator yields
+        // `&Severity`, not `Severity`) reaches through this impl and
+        // no other — the paired owned-input [`From<Severity>`] impl
+        // requires an explicit `.copied()` / dereference before the
+        // trait fires. Materializes the `<&'static str as
+        // From<&Severity>>::from` output in four `const`-shape bindings
+        // against the paired [`super::Severity::as_str`] `pub const fn`
+        // accessor to make the `'static` lifetime promise a build-time
+        // invariant — a future accidental downgrade of any arm's
+        // inline canonical-lowercase byte-string to a non-`&'static
+        // str` (a `String::leak()`-produced return, a `Box::leak`-cast,
+        // an intermediate lifetime-erasing helper) trips at caixa-lint
+        // build time rather than at a downstream `'static`-bound
+        // consumer.
+        //
+        // Peer of the sibling
+        // `caixa_arch::report::tests::arch_verdict_from_borrowed_into_static_str_routes_through_as_str_accessor`
+        // (73bda50) and
+        // `caixa_arch::invariants::tests::invariant_kind_from_borrowed_into_static_str_routes_through_as_str_accessor`
+        // (238d886) pins on the peer caixa-arch closed-set-enum
+        // borrowed-input `&'static str`-returning axes, and of the
+        // sibling caixa-core borrowed-input axis pins already carried
+        // on the peer closed-set enums.
+        const ERROR: &str = Severity::Error.as_str();
+        const WARNING: &str = Severity::Warning.as_str();
+        const INFO: &str = Severity::Info.as_str();
+        const HINT: &str = Severity::Hint.as_str();
+        for variant in Severity::ALL {
+            let via_trait: &'static str = <&'static str as From<&Severity>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait, via_method,
+                "From<&Severity> for &'static str impl must round-trip \
+                 &Severity::{variant:?} to the same canonical-lowercase \
+                 byte-string Severity::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: &'static str = variant.into();
+            assert_eq!(
+                via_into, via_method,
+                "Into<&'static str>::into on &Severity::{variant:?} \
+                 must byte-equal Severity::as_str on the same input \
+                 — the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+        }
+        assert_eq!(
+            [ERROR, WARNING, INFO, HINT],
+            ["error", "warning", "info", "hint"],
+            "const-context Severity::as_str must resolve to the four \
+             canonical-lowercase byte-strings — the borrowed-input \
+             From<&Severity> for &'static str impl inherits its \
+             `'static` lifetime promise from the same accessor the \
+             owned-input sibling routes through"
+        );
+    }
+
+    #[test]
+    fn severity_from_owned_and_borrowed_into_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `From<Severity> for &'static str` and
+        // borrowed-input `From<&Severity> for &'static str` (this
+        // lift) forward projections must resolve identically on every
+        // arm, locking the two input-shape paths together so any
+        // future detour (a stray borrowed-input special-case that
+        // lands on a divergent per-arm literal outside the paired
+        // `as_str` dispatch, a hypothetical rebrand touching one axis
+        // without the other) trips at caixa-lint test time. Then a
+        // witness that a `.iter().map(Into::into)` pipe over
+        // [`super::Severity::ALL`] (whose iterator yields `&Severity`)
+        // materializes the four-arm accept-set through the borrowed-
+        // input axis alone — the exact shape a future M4 admission-
+        // webhook rejection body composer, a future `feira lint
+        // --list-severities` CLI enumeration verb, or a future
+        // `HashMap::<&'static str, super::Severity>::from_iter(
+        //     super::Severity::ALL.iter().map(|s| (s.into(), *s)))`-
+        // style per-severity lookup reaches through — closing the
+        // two-way owned/borrowed input-shape symmetry on the forward-
+        // projection trait-idiomatic axis.
+        //
+        // Peer of the sibling
+        // `caixa_arch::report::tests::arch_verdict_from_owned_and_borrowed_into_static_str_agree_on_every_arm`
+        // (73bda50) and
+        // `caixa_arch::invariants::tests::invariant_kind_from_owned_and_borrowed_into_static_str_agree_on_every_arm`
+        // (238d886) partition pins on the peer caixa-arch closed-set-
+        // enum borrowed-input `&'static str`-returning axes.
+        for &variant in Severity::ALL {
+            let via_owned: &'static str = <&'static str as From<Severity>>::from(variant);
+            let via_borrowed: &'static str = <&'static str as From<&Severity>>::from(&variant);
+            assert_eq!(
+                via_owned, via_borrowed,
+                "owned-input From<Severity> for &'static str and \
+                 borrowed-input From<&Severity> for &'static str must \
+                 resolve identically on Severity::{variant:?} — \
+                 divergence signals the two input-shape paths have \
+                 drifted onto different emit-sets"
+            );
+        }
+        // `.iter().map(Into::into)` pipe witness: the standard-library
+        // iterator over `&'static [Severity]` yields `&Severity`, so
+        // this pipe fires through the borrowed-input axis alone. Any
+        // future accidental removal or shadowing of the borrowed-input
+        // impl would break the pipe at compile time rather than
+        // silently re-route through the paired owned-input axis after
+        // a `.copied()` / [`Copy`]-bound dereference restatement.
+        let via_pipe: Vec<&'static str> = Severity::ALL.iter().map(Into::into).collect();
+        let via_as_str: Vec<&'static str> = Severity::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            via_pipe, via_as_str,
+            "`.iter().map(Into::into)` pipe over Severity::ALL must \
+             byte-equal `.iter().map(Severity::as_str)` on the four-\
+             arm accept-set — the borrowed-input From<&Severity> for \
+             &'static str axis is what routes the pipe through the \
+             substrate-primitive accessor without a spurious Copy \
+             deref"
+        );
     }
 
     #[test]
