@@ -1804,6 +1804,102 @@ impl From<RestartPolicy> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the M2 OTP-shape per-child-restart
+/// [`RestartPolicy`] closed-set typed enum — the borrowed-input
+/// companion to the paired owned-input
+/// [`From<RestartPolicy> for std::borrow::Cow<'static, str>`] impl
+/// immediately above (0612398). Routes byte-for-byte through the same
+/// substrate-primitive [`RestartPolicy::as_str`] `pub const fn`
+/// accessor (via [`std::borrow::Cow::Borrowed`]) so every consumer
+/// that holds a `&RestartPolicy` and needs a
+/// [`std::borrow::Cow<'static, str>`] — a
+/// `RestartPolicy::ALL.iter().map(std::borrow::Cow::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer (whose iterator over
+/// `&'static [RestartPolicy]` yields `&RestartPolicy`, not
+/// `RestartPolicy`, so the paired owned-input
+/// [`From<RestartPolicy> for std::borrow::Cow<'static, str>`] axis
+/// alone forces every call site through an explicit `.copied()` /
+/// dereference / [`Copy`]-bound restatement rather than the direct
+/// trait-idiomatic projection), a future generic
+/// `<T: for<'a> Into<std::borrow::Cow<'static, str>>>`-bound emitter
+/// on a per-child-policy diagnostic column that walks the
+/// `iter().map(Into::into)` shape verbatim, the future M4 admission-
+/// webhook rejection body that composes the accepted-policy
+/// enumeration from an iterated
+/// `RestartPolicy::ALL.iter().map(|p| p.into())` pipe rather than a
+/// per-arm `match p { … }` cascade — reaches the same three-arm
+/// lifted [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] const the
+/// paired [`std::fmt::Display`], [`AsRef<str>`],
+/// [`RestartPolicy::as_str`], the four
+/// `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// forward-projection corners, and the paired owned-input
+/// [`From<RestartPolicy> for std::borrow::Cow<'static, str>`] impl
+/// already return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`RestartPolicy::as_str`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves
+/// to a [`crate::render::SUPERVISOR_CHILD_RESTART_*`] `pub const &str`
+/// with static lifetime), so the zero-alloc borrowed arm is the
+/// type-correct projection with no runtime allocation.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the M2 OTP-shape
+/// per-child-restart [`std::borrow::Cow<'static, str>`] axis opened
+/// one commit prior (0612398) on the paired owned-input
+/// [`From<RestartPolicy> for std::borrow::Cow<'static, str>`] impl —
+/// second-of-two-in-M2 closed-set fieldless typed enum peer on the
+/// caixa surface (paired with the sibling-restart [`RestartStrategy`]
+/// which carries both {Self, &Self} × Cow<'static, str> corners since
+/// 7dd28b3 owned-input, 9b3e4b3 borrowed-input), exactly as d45c409
+/// closed it on the top-level [`crate::CaixaKind`] one commit after
+/// the owning half (99c1735) landed. This lift closes the whole M2
+/// OTP-shape tier of the substrate-wide [`Cow<'static, str>`]
+/// forward-projection campaign on both input-shape corners
+/// ({Self, &Self}) of both M2 OTP-shape sibling peers
+/// ([`RestartStrategy`] and [`RestartPolicy`]), so the remaining
+/// eleven substrate-wide peers (`PlacementStrategy`, `RateLimitUnit`,
+/// `DepList`, `CaixaDialeto`, `WitShape`, `PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) become the future targets of the campaign. Rust's
+/// standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<&T> for Cow<'static, str>` (nor an
+/// `impl<T: fmt::Display> From<&T> for Cow<'static, str>`), so every
+/// closed-set fieldless typed enum peer on the substrate that carries
+/// the paired owned-input [`Cow<'static, str>`] axis but not the
+/// borrowed-input axis forces every borrowed-input
+/// [`Cow<'static, str>`]-parameterized call site through a spurious
+/// [`Copy`] deref (`std::borrow::Cow::from(*policy)`) or a
+/// `std::borrow::Cow::Borrowed(policy.as_str())` open-code whose type
+/// bounds have no compile-time link to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_borrowed_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity + zero-alloc [`std::borrow::Cow::Borrowed`]-arm pin
+/// against [`RestartPolicy::as_str`] across the three-arm
+/// [`RestartPolicy::ALL`] through the borrowed-input surface) and
+/// [`tests::restart_policy_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<RestartPolicy> for std::borrow::Cow<'static, str>`], the
+/// paired borrowed-input owned-`&'static str`
+/// [`From<&RestartPolicy> for &'static str`], and the paired
+/// borrowed-input owned-`String` [`From<&RestartPolicy> for String`]
+/// impls, plus a `.iter().map(std::borrow::Cow::from)` pipe witness
+/// over [`RestartPolicy::ALL`] — whose iterator yields
+/// `&RestartPolicy` by construction, so the borrowed-input
+/// [`Cow<'static, str>`] axis is what routes the pipe through the
+/// substrate-primitive [`RestartPolicy::as_str`] accessor with the
+/// zero-alloc [`Cow::Borrowed`] arm by construction and without a
+/// spurious [`Copy`] deref).
+impl From<&RestartPolicy> for std::borrow::Cow<'static, str> {
+    fn from(policy: &RestartPolicy) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(policy.as_str())
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -9649,6 +9745,221 @@ mod tests {
                  Cow::Borrowed arm — a Cow::Owned outcome on any arm \
                  signals the pipe's iteration axis has silently \
                  allocated where the substrate-primitive \
+                 RestartPolicy::as_str `&'static str` return makes \
+                 the borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_borrowed_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartPolicy> for std::borrow::Cow<'static, str>` —
+        // asserts the borrowed-input standard-library trait impl and
+        // the substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for Cow<'static, str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `Cow<'static, str>` forward-projection
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: Cow<'static, str> = (&policy).into();`-shaped
+        // call site or a
+        // `RestartPolicy::ALL.iter().map(Cow::from)`-shaped pipe
+        // reaches through this impl and no other — the paired owned-
+        // input `From<RestartPolicy> for Cow<'static, str>` impl
+        // (0612398) forces every borrowed-input call site through an
+        // explicit `Copy` deref (`Cow::from(*policy)`) or a
+        // `Cow::Borrowed(policy.as_str())` open-code whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::RestartPolicy::as_str`] accessor's `&'static str`
+        // return lifetime by construction makes the borrowed arm the
+        // type-correct projection with no runtime allocation on the
+        // borrowed-input surface just as on the paired owned-input
+        // surface.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the M2
+        // OTP-shape per-child-restart [`Cow<'static, str>`] axis on
+        // the second-of-two-in-M2 closed-set fieldless typed enum peer
+        // on the caixa surface (`:supervisor :children :restart`),
+        // exactly as d45c409 closed it on the top-level
+        // [`super::CaixaKind`] one commit after the owning half
+        // (99c1735) landed and as 9b3e4b3 closed it on the sibling
+        // M2 OTP-shape [`super::RestartStrategy`] one commit after
+        // (7dd28b3) landed. This lift closes the whole M2 OTP-shape
+        // tier of the substrate-wide Cow<'static, str> forward-
+        // projection campaign on both input-shape corners
+        // ({Self, &Self}) of both M2 OTP-shape sibling peers.
+        for &variant in RestartPolicy::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&RestartPolicy>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RestartPolicy> for Cow<'static, str> impl must \
+                 round-trip &RestartPolicy::{variant:?} to the same \
+                 lifted SUPERVISOR_CHILD_RESTART_* const \
+                 RestartPolicy::as_str returns — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<&RestartPolicy> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 &RestartPolicy::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive RestartPolicy::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 &RestartPolicy::{variant:?} must byte-equal \
+                 RestartPolicy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 &RestartPolicy::{variant:?} must land on the \
+                 zero-alloc Cow::Borrowed arm — the blanket-derived \
+                 Into shape must resolve to the same Cow::Borrowed \
+                 dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input `From<&RestartPolicy> for
+        // std::borrow::Cow<'static, str>` (this lift), the paired
+        // owned-input `From<RestartPolicy> for
+        // std::borrow::Cow<'static, str>` (0612398), the paired
+        // borrowed-input owned-`&'static str` `From<&RestartPolicy>
+        // for &'static str`, and the paired borrowed-input owned-
+        // `String` `From<&RestartPolicy> for String` must resolve
+        // identically on every arm, locking the four
+        // return-shape × input-shape paths together by construction so
+        // any future detour trips at caixa-core test time. Also byte-
+        // parity witness against the sibling [`ToString::to_string`]
+        // surface routed through [`std::fmt::Display`] — every owned-
+        // heap-string path (this axis's `.into_owned()` promotion, the
+        // paired [`From<&RestartPolicy> for String`], and
+        // `.to_string()`) resolves to the same lifted
+        // [`crate::render::SUPERVISOR_CHILD_RESTART_*`] const per arm.
+        //
+        // Then a `.iter().map(std::borrow::Cow::from)` pipe witness
+        // over [`super::RestartPolicy::ALL`] — whose iterator yields
+        // `&RestartPolicy` by construction, so the borrowed-input
+        // [`Cow<'static, str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::RestartPolicy::as_str`]
+        // accessor without a spurious [`Copy`] deref (which would only
+        // be reachable through the owned-input
+        // [`From<RestartPolicy> for Cow<'static, str>`] axis by first
+        // calling `.copied()` on the iterator). The pipe witness also
+        // pins the zero-alloc discipline: every element in the
+        // collected vector satisfies the [`std::borrow::Cow::Borrowed`]
+        // arm predicate, so a future accidental silent-allocation
+        // regression on the pipe's iteration axis is a caixa-core-
+        // test-time failure. Peer of the sibling
+        // [`restart_strategy_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+        // (9b3e4b3) on the M2 OTP-shape sibling-restart axis — closes
+        // the whole borrowed-input `Cow<'static, str>` +
+        // paired `{&'static str, String}` cross-axis-parity corner on
+        // both M2 OTP-shape sibling peers.
+        for &policy in RestartPolicy::ALL {
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&RestartPolicy>>::from(&policy);
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartPolicy>>::from(policy);
+            let borrowed_static: &'static str =
+                <&'static str as From<&RestartPolicy>>::from(&policy);
+            let borrowed_string: String = <String as From<&RestartPolicy>>::from(&policy);
+            assert_eq!(
+                borrowed_cow, owned_cow,
+                "From<&RestartPolicy> for Cow<'static, str> and \
+                 From<RestartPolicy> for Cow<'static, str> must \
+                 resolve identically on RestartPolicy::{policy:?} — \
+                 divergence signals the borrowed-input and owned-input \
+                 Cow<'static, str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                borrowed_static,
+                "From<&RestartPolicy> for Cow<'static, str> and \
+                 From<&RestartPolicy> for &'static str must resolve \
+                 identically on RestartPolicy::{policy:?} — \
+                 divergence signals the borrowed-input Cow<'static, \
+                 str> and &'static str return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RestartPolicy> for Cow<'static, str> and \
+                 From<&RestartPolicy> for String must resolve \
+                 identically on RestartPolicy::{policy:?} — \
+                 divergence signals the borrowed-input Cow<'static, \
+                 str> and owned-`String` return-shape paths have \
+                 drifted onto different emit-sets"
+            );
+            let via_to_string: String = policy.to_string();
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<&RestartPolicy> for Cow<'static, str> must \
+                 byte-equal RestartPolicy::to_string on \
+                 RestartPolicy::{policy:?} — divergence signals \
+                 the trait-idiomatic borrowed-input Cow<'static, str> \
+                 forward-projection axis and the ToString-through-\
+                 Display axis have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = RestartPolicy::ALL
+            .iter()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = RestartPolicy::ALL
+            .iter()
+            .map(|p| std::borrow::Cow::Borrowed(p.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Cow::from)` over RestartPolicy::ALL — a \
+             call site whose iteration axis holds `&RestartPolicy` \
+             by construction — must byte-equal `.iter().map(|p| \
+             Cow::Borrowed(p.as_str()))` on every arm — the borrowed-\
+             input Cow<'static, str> `From<&RestartPolicy> for \
+             Cow<'static, str>` axis is what makes the `Cow::from` \
+             composition route through the substrate-primitive \
+             `RestartPolicy::as_str` accessor with the zero-alloc \
+             Cow::Borrowed arm by construction and without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<RestartPolicy> for Cow<'static, str>` \
+             axis by first calling `.copied()` on the iterator)"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the .iter().map(Cow::from) pipe \
+                 over RestartPolicy::ALL must land on the zero-\
+                 alloc Cow::Borrowed arm — a Cow::Owned outcome on \
+                 any arm signals the pipe's iteration axis has \
+                 silently allocated where the substrate-primitive \
                  RestartPolicy::as_str `&'static str` return makes \
                  the borrowed arm the type-correct projection"
             );
