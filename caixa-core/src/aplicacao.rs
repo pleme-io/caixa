@@ -1148,6 +1148,102 @@ impl From<&WitShape> for String {
     }
 }
 
+/// Trait-idiomatic *forward* projection on the M3 mesh-primitive
+/// `:contratos :wit` census-label [`WitShape`] closed-set typed enum
+/// from an *owned* input onto the [`std::borrow::Cow<'static, str>`]
+/// axis — routes byte-for-byte through the substrate-primitive
+/// [`WitShape::as_str`] `pub const fn` accessor (via
+/// [`std::borrow::Cow::Borrowed`]) so every consumer that binds a
+/// [`WitShape`] through the standard-library `.into()` /
+/// [`From<Self> for std::borrow::Cow<'static, str>`] (equivalently
+/// [`Into<std::borrow::Cow<'static, str>>`]) axis reaches the same
+/// four-arm `"http"` / `"pubsub"` / `"store"` / `"capability"`
+/// census-label byte-string the paired
+/// [`From<WitShape> for &'static str`],
+/// [`From<&WitShape> for &'static str`],
+/// [`From<WitShape> for String`], and
+/// [`From<&WitShape> for String`] 2×2 trait-idiomatic
+/// forward-projection corners, the sibling [`std::fmt::Display`],
+/// [`AsRef<str>`], and [`WitShape::as_str`] surfaces already return,
+/// rather than an open-coded per-call-site
+/// `std::borrow::Cow::Borrowed(shape.as_str())` /
+/// `std::borrow::Cow::Owned(shape.to_string())` composition whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`WitShape::as_str`] accessor's return carries the `&'static str`
+/// lifetime by construction (each `match` arm resolves to an inline
+/// `"http"` / `"pubsub"` / `"store"` / `"capability"` census-label
+/// byte-string literal with static lifetime), so the zero-alloc
+/// borrowed arm is the type-correct projection with no runtime
+/// allocation. The paired [`std::borrow::Cow::Owned`] arm stays
+/// reachable at the call site through the existing
+/// [`From<WitShape> for String`] axis composed with
+/// [`std::borrow::Cow::from`] on the resulting owned [`String`] —
+/// a caller who chose to mutate the projection lands on the owned
+/// arm by their own composition, not by the substrate-primitive
+/// projection silently allocating on their behalf.
+///
+/// Rust's standard library carries no blanket `impl<T: AsRef<str>>
+/// From<T> for Cow<'static, str>` (nor an `impl<T: fmt::Display>
+/// From<T> for Cow<'static, str>`), so the paired sibling
+/// [`From<WitShape> for &'static str`],
+/// [`From<WitShape> for String`], [`AsRef<str>`], and
+/// [`std::fmt::Display`] surfaces do not implicitly extend to a
+/// [`Cow<'static, str>`]-bound call site — every such site is forced
+/// through a `Cow::Borrowed(shape.as_str())` /
+/// `Cow::Owned(shape.to_string())` open-code whose type bounds have
+/// no compile-time link back to the substrate primitive until this
+/// lift.
+///
+/// First-mover on the *M3 mesh-shape tier* of the substrate-wide
+/// trait-idiomatic [`std::borrow::Cow<'static, str>`] forward-
+/// projection campaign — the [`crate::CaixaKind`] first-mover (99c1735 owned-
+/// input + d45c409 borrowed-input) opened the axis on the
+/// structurally most fundamental closed-set fieldless typed enum;
+/// the paired M2 OTP-shape [`crate::supervisor::RestartStrategy`]
+/// (7dd28b3 owned-input + 9b3e4b3 borrowed-input) and
+/// [`crate::supervisor::RestartPolicy`] (0612398 owned-input +
+/// ee577fd borrowed-input) extended it onto the two M2 OTP-shape
+/// sibling peers, closing the whole M2 OTP-shape tier. [`WitShape`]
+/// is the *first* M3-mesh-primitive-defining closed-set fieldless
+/// typed enum to converge onto this campaign — the caixa-mesh
+/// renderer's per-edge programs.yaml fan-out and the
+/// [`WitContract`] shape-dispatch surface both key off this axis
+/// end-to-end, so every future consumer that binds through a
+/// [`Cow<'static, str>`] boundary and holds a [`WitShape`] by value
+/// reaches the substrate-primitive accessor through one uniform
+/// trait dispatch. The remaining ten peers (`RestartStrategy` and
+/// `RestartPolicy` closed on the M2 tier;
+/// [`PlacementStrategy`], [`RateLimitUnit`],
+/// [`crate::dep::DepList`], [`crate::CaixaDialeto`],
+/// [`crate::render::PathShapeViolation`], and the outside-`caixa-core`
+/// peers `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`,
+/// `Semantic`, `FerriteRuntime`) are the remaining future targets
+/// of this campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity + zero-alloc [`std::borrow::Cow::Borrowed`]-arm pin
+/// against [`WitShape::as_str`] across the four-arm
+/// [`WitShape::ALL`]) and
+/// [`tests::wit_shape_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired
+/// [`From<WitShape> for &'static str`],
+/// [`From<WitShape> for String`], and
+/// [`ToString`]-through-[`std::fmt::Display`] axes, plus a
+/// `.iter().copied().map(Cow::from)` pipe witness over
+/// [`WitShape::ALL`] that materializes the four-arm accept-set
+/// through the [`Cow<'static, str>`] axis alone and pins the
+/// zero-alloc discipline on every element).
+impl From<WitShape> for std::borrow::Cow<'static, str> {
+    fn from(shape: WitShape) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(shape.as_str())
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -17220,6 +17316,206 @@ mod tests {
                  and reverse parse share the same four inline census-\
                  label byte-strings by construction, so the round-trip \
                  composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<WitShape> for std::borrow::Cow<'static, str>` —
+        // asserts the standard-library trait impl and the substrate-
+        // primitive [`super::WitShape::as_str`] `pub const fn`
+        // accessor resolve to the same four-arm emit-set across every
+        // arm the exhaustive [`super::WitShape::ALL`] slice
+        // enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<T> for Cow<'static, str>`
+        // (nor an `impl<T: fmt::Display> From<T> for
+        // Cow<'static, str>`), so the `Cow<'static, str>` forward-
+        // projection axis is a distinct trait-idiomatic surface that
+        // a `let key: Cow<'static, str> = shape.into();`-shaped call
+        // site reaches through this impl and no other — the paired
+        // sibling `From<WitShape> for &'static str` and
+        // `From<WitShape> for String` impls force every
+        // `Cow<'static, str>`-parameterized call site through a
+        // `Cow::Borrowed(shape.as_str())` /
+        // `Cow::Owned(shape.to_string())` composition whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::WitShape::as_str`] accessor's `&'static str`
+        // return lifetime by construction (inline `"http"` /
+        // `"pubsub"` / `"store"` / `"capability"` byte-string
+        // literals) makes the borrowed arm the type-correct
+        // projection with no runtime allocation. Any future silent
+        // detour that routes the impl through the owned arm (an
+        // accidental `Cow::Owned(shape.to_string())` rewrite that
+        // would allocate on every call site where the `&'static str`
+        // return of [`super::WitShape::as_str`] makes the zero-alloc
+        // borrowed projection type-correct) trips at caixa-core test
+        // time under the [`std::borrow::Cow::Borrowed`] discriminator
+        // witness rather than at a downstream
+        // `Cow<'static, str>`-bound consumer's silent allocation.
+        //
+        // First-mover on the M3 mesh-shape tier of the substrate-wide
+        // trait-idiomatic [`std::borrow::Cow<'static, str>`] forward-
+        // projection campaign — extends the axis off the M2 OTP-shape
+        // tier (whose whole peer set — CaixaKind first-mover 99c1735
+        // + d45c409, RestartStrategy 7dd28b3 + 9b3e4b3, RestartPolicy
+        // 0612398 + ee577fd — closed on the {Self, &Self} corner)
+        // onto the first M3-mesh-primitive-defining slot enum. Every
+        // remaining M3 slot enum peer ([`PlacementStrategy`],
+        // [`RateLimitUnit`]) and the outside-M3 substrate-wide peers
+        // are future targets.
+        for &variant in WitShape::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<WitShape>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<WitShape> for Cow<'static, str> impl must \
+                 round-trip WitShape::{variant:?} to the same inline \
+                 census-label byte-string WitShape::as_str returns — \
+                 divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<WitShape> for Cow<'static, str> impl must land \
+                 on the zero-alloc Cow::Borrowed arm on WitShape::\
+                 {variant:?} — a Cow::Owned outcome signals the \
+                 projection has silently allocated where the \
+                 substrate-primitive WitShape::as_str `&'static str` \
+                 return makes the borrowed arm the type-correct \
+                 projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on WitShape::\
+                 {variant:?} must byte-equal WitShape::as_str on the \
+                 same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on WitShape::\
+                 {variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm — the blanket-derived Into shape \
+                 must resolve to the same Cow::Borrowed dispatch as \
+                 the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<WitShape> for std::borrow::Cow<'static, str>` (this
+        // lift), the paired owned-input `From<WitShape> for &'static
+        // str`, and the paired owned-input `From<WitShape> for
+        // String` forward projections must resolve identically on
+        // every arm, locking the three return-shape paths together by
+        // construction so any future detour trips at caixa-core test
+        // time. Also byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] — every owned-heap-string path (the
+        // `Cow::Owned` promotion of this axis's `.into_owned()`,
+        // `From<WitShape> for String`, and `.to_string()`) resolves
+        // to the same four-arm inline census-label byte-string per
+        // arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::WitShape::ALL`] that materializes the
+        // four-arm accept-set through the [`std::borrow::Cow<'static,
+        // str>`] axis alone — the exact shape a future M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook
+        // rejection body's accepted-`:contratos :wit` census-label
+        // enumeration, a future substrate-wide per-arm diagnostic
+        // surface whose typing rules out the sibling [`AsRef<str>`]
+        // borrowed return, or a future per-arm WIT-shape emitter that
+        // binds through a [`Cow<'static, str>`] boundary reaches
+        // through — closing the composable-projection axis on the
+        // first M3 mesh-primitive-defining closed-set fieldless typed
+        // enum peer on the caixa surface. The pipe witness also pins
+        // the zero-alloc discipline: every element in the collected
+        // vector satisfies the [`std::borrow::Cow::Borrowed`] arm
+        // predicate, so a future accidental silent-allocation
+        // regression on the pipe's iteration axis is a caixa-core-
+        // test-time failure.
+        for &variant in WitShape::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<WitShape>>::from(variant);
+            let via_static: &'static str = <&'static str as From<WitShape>>::from(variant);
+            let via_string: String = <String as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<WitShape> for Cow<'static, str> and \
+                 From<WitShape> for &'static str must resolve \
+                 identically on WitShape::{variant:?} — divergence \
+                 signals the Cow<'static, str> and &'static str \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<WitShape> for Cow<'static, str> and \
+                 From<WitShape> for String must resolve identically \
+                 on WitShape::{variant:?} — divergence signals the \
+                 Cow<'static, str> and String return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<WitShape> for Cow<'static, str> must byte-\
+                 equal WitShape::to_string on WitShape::{variant:?} \
+                 — divergence signals the trait-idiomatic \
+                 Cow<'static, str> forward-projection axis and the \
+                 ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = WitShape::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = WitShape::ALL
+            .iter()
+            .map(|s| std::borrow::Cow::Borrowed(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over WitShape::ALL \
+             must byte-equal `.iter().map(|s| \
+             Cow::Borrowed(s.as_str()))` on every arm — the trait-\
+             idiomatic `From<WitShape> for Cow<'static, str>` axis \
+             is what makes the `Cow::from` composition route through \
+             the substrate-primitive `WitShape::as_str` accessor \
+             with the zero-alloc Cow::Borrowed arm by construction, \
+             rather than a per-call-site \
+             `Cow::Owned(shape.to_string())` allocation"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the .iter().copied().map(Cow::from) \
+                 pipe over WitShape::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm — a Cow::Owned outcome on any arm \
+                 signals the pipe's iteration axis has silently \
+                 allocated where the substrate-primitive \
+                 WitShape::as_str `&'static str` return makes the \
+                 borrowed arm the type-correct projection"
             );
         }
     }
