@@ -1000,6 +1000,90 @@ impl From<CaixaKind> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the structurally most fundamental
+/// closed-set typed enum on the caixa surface ([`CaixaKind`]) — the
+/// borrowed-input companion to the paired owned-input
+/// [`From<CaixaKind> for std::borrow::Cow<'static, str>`] impl
+/// immediately above. Routes byte-for-byte through the same
+/// substrate-primitive [`CaixaKind::as_str`] `pub const fn` accessor
+/// (via [`std::borrow::Cow::Borrowed`]) so every consumer that holds a
+/// borrowed [`&CaixaKind`] and needs a [`std::borrow::Cow<'static, str>`]
+/// — a `CaixaKind::ALL.iter().map(std::borrow::Cow::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer (whose iterator over
+/// `&'static [CaixaKind]` yields `&CaixaKind`, not `CaixaKind`, so the
+/// owned-input [`From<CaixaKind> for std::borrow::Cow<'static, str>`]
+/// axis alone forces every call site through an explicit `.copied()` /
+/// dereference / [`Copy`]-bound restatement rather than the direct
+/// trait-idiomatic projection), a future generic
+/// `<T: for<'a> Into<std::borrow::Cow<'static, str>>>`-bound emitter on
+/// a per-kind diagnostic column that walks the `iter().map(Into::into)`
+/// shape verbatim, the future M4 admission-webhook rejection body that
+/// composes the accepted-set enumeration from an iterated
+/// `CaixaKind::ALL.iter().map(|k| k.into())` pipe rather than a per-arm
+/// `match k { … }` cascade — reaches the same six-arm lifted
+/// [`crate::render::CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`crate::render::CAIXA_KIND_LABEL_BINARIO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SERVICO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SUPERVISOR`] /
+/// [`crate::render::CAIXA_KIND_LABEL_APLICACAO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_ACAO`] const the paired
+/// [`std::fmt::Display`], [`AsRef<str>`], [`CaixaKind::as_str`], the
+/// four `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// forward-projection corners, and the paired owned-input
+/// [`From<CaixaKind> for std::borrow::Cow<'static, str>`] impl already
+/// return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`CaixaKind::as_str`] accessor's return carries the `&'static str`
+/// lifetime by construction (each `match` arm resolves to a
+/// [`crate::render::CAIXA_KIND_LABEL_*`] `pub const &str` with static
+/// lifetime), so the zero-alloc borrowed arm is the type-correct
+/// projection with no runtime allocation.
+///
+/// Second peer on the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection family opened
+/// on the paired owned-input [`From<CaixaKind> for std::borrow::Cow<'static, str>`]
+/// impl one commit prior (99c1735) — closes the `{Self, &Self}` input-
+/// shape corner of the [`Cow<'static, str>`] axis on the structurally
+/// most fundamental closed-set fieldless typed enum peer on the caixa
+/// surface. Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<&T> for Cow<'static, str>` (nor an
+/// `impl<T: fmt::Display> From<&T> for Cow<'static, str>`), so every
+/// closed-set fieldless typed enum peer on the substrate that carries
+/// the paired owned-input [`Cow<'static, str>`] axis but not the
+/// borrowed-input axis forces every borrowed-input
+/// [`Cow<'static, str>`]-parameterized call site through a spurious
+/// [`Copy`] deref (`std::borrow::Cow::from(*kind)`) or a
+/// `std::borrow::Cow::Borrowed(kind.as_str())` open-code whose type
+/// bounds have no compile-time link to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_borrowed_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] across the six-arm
+/// emit-set through the borrowed-input surface, plus a
+/// [`std::borrow::Cow::Borrowed`] discriminator witness that the
+/// projection lands on the zero-alloc arm) and
+/// [`tests::caixa_kind_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<CaixaKind> for std::borrow::Cow<'static, str>`], the paired
+/// borrowed-input owned-`&'static str`
+/// [`From<&CaixaKind> for &'static str`], and the paired borrowed-
+/// input owned-`String` [`From<&CaixaKind> for String`] impls, plus a
+/// `.iter().map(std::borrow::Cow::from)` pipe witness over
+/// [`CaixaKind::ALL`] — whose iterator yields `&CaixaKind` by
+/// construction, so the borrowed-input [`Cow<'static, str>`] axis is
+/// what routes the pipe through the substrate-primitive
+/// [`CaixaKind::as_str`] accessor with the zero-alloc
+/// [`Cow::Borrowed`] arm by construction and without a spurious
+/// [`Copy`] deref).
+impl From<&CaixaKind> for std::borrow::Cow<'static, str> {
+    fn from(kind: &CaixaKind) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(kind.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2735,6 +2819,204 @@ mod tests {
                 matches!(cow, std::borrow::Cow::Borrowed(_)),
                 "every element of the .iter().copied().map(Cow::from) \
                  pipe over CaixaKind::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm — a Cow::Owned outcome on any arm \
+                 signals the pipe's iteration axis has silently \
+                 allocated where the substrate-primitive \
+                 CaixaKind::as_str `&'static str` return makes the \
+                 borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_borrowed_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&CaixaKind> for std::borrow::Cow<'static, str>` —
+        // asserts the borrowed-input standard-library trait impl and
+        // the substrate-primitive [`super::CaixaKind::as_str`] `pub
+        // const fn` accessor resolve to the same six-arm emit-set
+        // across every arm the exhaustive [`super::CaixaKind::ALL`]
+        // slice enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<&T> for Cow<'static, str>`
+        // (nor a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for
+        // U`), so the borrowed-input `Cow<'static, str>` forward-
+        // projection axis is a distinct trait-idiomatic surface that a
+        // `let key: Cow<'static, str> = (&kind).into();`-shaped call
+        // site or a `CaixaKind::ALL.iter().map(Cow::from)`-shaped pipe
+        // reaches through this impl and no other — the paired owned-
+        // input `From<CaixaKind> for Cow<'static, str>` impl forces
+        // every borrowed-input call site through an explicit `Copy`
+        // deref (`Cow::from(*kind)`) or a `Cow::Borrowed(kind.as_str())`
+        // open-code whose type bounds have no compile-time link back
+        // to the substrate primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::CaixaKind::as_str`] accessor's `&'static str`
+        // return lifetime by construction makes the borrowed arm the
+        // type-correct projection with no runtime allocation on the
+        // borrowed-input surface just as on the paired owned-input
+        // surface.
+        //
+        // Second peer on the substrate-wide trait-idiomatic
+        // [`std::borrow::Cow<'static, str>`] forward-projection family
+        // opened on the paired owned-input `From<CaixaKind> for
+        // Cow<'static, str>` (99c1735) — closes the `{Self, &Self}`
+        // input-shape corner of the [`Cow<'static, str>`] axis on the
+        // structurally most fundamental closed-set fieldless typed
+        // enum peer on the caixa surface (every caixa carries a
+        // `:kind`). Every future closed-set fieldless typed enum peer
+        // on the substrate is a future target of the campaign.
+        for &variant in CaixaKind::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&CaixaKind>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&CaixaKind> for Cow<'static, str> impl must \
+                 round-trip &CaixaKind::{variant:?} to the same lifted \
+                 CAIXA_KIND_LABEL_* const CaixaKind::as_str returns — \
+                 divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<&CaixaKind> for Cow<'static, str> impl must land \
+                 on the zero-alloc Cow::Borrowed arm on \
+                 CaixaKind::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive CaixaKind::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on &CaixaKind::{variant:?} \
+                 must byte-equal CaixaKind::as_str on the same input \
+                 — the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on &CaixaKind::{variant:?} \
+                 must land on the zero-alloc Cow::Borrowed arm — the \
+                 blanket-derived Into shape must resolve to the same \
+                 Cow::Borrowed dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input `From<&CaixaKind> for std::borrow::Cow<'static, str>`
+        // (this lift), the paired owned-input `From<CaixaKind> for
+        // std::borrow::Cow<'static, str>` (99c1735), the paired
+        // borrowed-input owned-`&'static str` `From<&CaixaKind> for
+        // &'static str` (5ab993a), and the paired borrowed-input
+        // owned-`String` `From<&CaixaKind> for String` must resolve
+        // identically on every arm, locking the four
+        // return-shape × input-shape paths together by construction so
+        // any future detour trips at caixa-core test time. Also byte-
+        // parity witness against the sibling [`ToString::to_string`]
+        // surface routed through [`std::fmt::Display`] — every owned-
+        // heap-string path (this axis's `.into_owned()` promotion, the
+        // paired [`From<&CaixaKind> for String`], and `.to_string()`)
+        // resolves to the same lifted
+        // [`crate::render::CAIXA_KIND_LABEL_*`] const per arm.
+        //
+        // Then a `.iter().map(std::borrow::Cow::from)` pipe witness
+        // over [`super::CaixaKind::ALL`] — whose iterator yields
+        // `&CaixaKind` by construction, so the borrowed-input
+        // [`Cow<'static, str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::CaixaKind::as_str`]
+        // accessor without a spurious [`Copy`] deref (which would only
+        // be reachable through the owned-input
+        // [`From<CaixaKind> for Cow<'static, str>`] axis by first
+        // calling `.copied()` on the iterator). The pipe witness also
+        // pins the zero-alloc discipline: every element in the
+        // collected vector satisfies the [`std::borrow::Cow::Borrowed`]
+        // arm predicate, so a future accidental silent-allocation
+        // regression on the pipe's iteration axis is a caixa-core-
+        // test-time failure.
+        for &kind in CaixaKind::ALL {
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&CaixaKind>>::from(&kind);
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaKind>>::from(kind);
+            let borrowed_static: &'static str = <&'static str as From<&CaixaKind>>::from(&kind);
+            let borrowed_string: String = <String as From<&CaixaKind>>::from(&kind);
+            assert_eq!(
+                borrowed_cow, owned_cow,
+                "From<&CaixaKind> for Cow<'static, str> and \
+                 From<CaixaKind> for Cow<'static, str> must resolve \
+                 identically on CaixaKind::{kind:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 Cow<'static, str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                borrowed_static,
+                "From<&CaixaKind> for Cow<'static, str> and \
+                 From<&CaixaKind> for &'static str must resolve \
+                 identically on CaixaKind::{kind:?} — divergence \
+                 signals the borrowed-input Cow<'static, str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                borrowed_string.as_str(),
+                "From<&CaixaKind> for Cow<'static, str> and \
+                 From<&CaixaKind> for String must resolve identically \
+                 on CaixaKind::{kind:?} — divergence signals the \
+                 borrowed-input Cow<'static, str> and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let via_to_string: String = kind.to_string();
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<&CaixaKind> for Cow<'static, str> must byte-\
+                 equal CaixaKind::to_string on CaixaKind::{kind:?} — \
+                 divergence signals the trait-idiomatic borrowed-\
+                 input Cow<'static, str> forward-projection axis and \
+                 the ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> =
+            CaixaKind::ALL.iter().map(std::borrow::Cow::from).collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = CaixaKind::ALL
+            .iter()
+            .map(|k| std::borrow::Cow::Borrowed(k.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Cow::from)` over CaixaKind::ALL — a call \
+             site whose iteration axis holds `&CaixaKind` by \
+             construction — must byte-equal `.iter().map(|k| \
+             Cow::Borrowed(k.as_str()))` on every arm — the \
+             borrowed-input Cow<'static, str> `From<&CaixaKind> for \
+             Cow<'static, str>` axis is what makes the `Cow::from` \
+             composition route through the substrate-primitive \
+             `CaixaKind::as_str` accessor with the zero-alloc \
+             Cow::Borrowed arm by construction and without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<CaixaKind> for Cow<'static, str>` axis \
+             by first calling `.copied()` on the iterator)"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the .iter().map(Cow::from) pipe \
+                 over CaixaKind::ALL must land on the zero-alloc \
                  Cow::Borrowed arm — a Cow::Owned outcome on any arm \
                  signals the pipe's iteration axis has silently \
                  allocated where the substrate-primitive \
