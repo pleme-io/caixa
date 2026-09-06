@@ -486,6 +486,80 @@ impl From<&Severity> for &'static str {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`String` output* forward
+/// projection on [`Severity`] onto the owned-`String` axis — the
+/// owned-`String` companion to the paired [`From<Severity> for
+/// &'static str`] and [`From<&Severity> for &'static str`] siblings
+/// immediately above. Routes byte-for-byte through the substrate-
+/// primitive [`Severity::as_str`] `pub const fn` accessor via
+/// [`str::to_owned`] so every consumer that binds a [`Severity`]
+/// through the standard-library `.into()` / [`From<Self> for String`]
+/// axis (a `let key: String = severity.into();`-shaped downstream
+/// call site; a future `serde_json::Value::String(severity.into())`
+/// structured-payload composer where the `Value::String` arm typing
+/// demands an owned [`String`] and the sibling `&'static str`-
+/// returning axes force an explicit `.to_owned()` / [`String::from`]
+/// restatement at every call site; a future
+/// `HashMap::<String, super::Severity>::from_iter` per-severity
+/// lookup on the runner's per-report audit path where the map's key
+/// type is owned [`String`] rather than `&'static str`; a future
+/// [`std::borrow::Cow::<'static, str>::Owned(severity.into())`]
+/// composer on a future M4 admission-webhook rejection body's owned-
+/// arm; a future `feira lint` per-diagnostic structured-log emit
+/// where the JSON serializer's [`Serialize`] impl on [`String`] owns
+/// the emit-path) reaches the same four-arm `"error"` / `"warning"` /
+/// `"info"` / `"hint"` canonical-lowercase emit-set the paired
+/// `&'static str`-returning axes, the sibling [`std::fmt::Display`],
+/// [`AsRef<str>`], and [`Severity::as_str`] surfaces already return
+/// — no `.to_owned()` / `String::from(severity.as_str())` /
+/// `severity.to_string()` detour whose type bounds have no compile-
+/// time link to the substrate primitive.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for String` (nor an
+/// `impl<T: fmt::Display> From<T> for String`), so every closed-set
+/// typed enum that carries the paired [`AsRef<str>`] /
+/// [`std::fmt::Display`] / [`From<Self> for &'static str`] /
+/// [`From<&Self> for &'static str`] quadruple but not the owned-
+/// `String` axis forces every owned-string call site through the
+/// detour above. This lift closes that axis on the fourth outside-
+/// `caixa-core` closed-set fieldless typed enum on the caixa surface
+/// (the caixa-lint diagnostic-severity four-arm axis), matching the
+/// trajectory each of the prior peer enums —
+/// [`caixa_core::supervisor::RestartStrategy`] (7baa18a, first-mover
+/// on this axis), [`caixa_core::supervisor::RestartPolicy`] (7851725),
+/// [`caixa_core::CaixaKind`] (231a18c),
+/// [`caixa_core::CaixaDialeto`] (88942cd),
+/// [`caixa_core::dep::DepList`] (32b0ee8),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (1154c2f),
+/// [`caixa_core::aplicacao::WitShape`] (79a8723),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (c7d687d),
+/// [`caixa_core::render::PathShapeViolation`] (6e0479a, first render-
+/// side arm), [`caixa_arch::invariants::InvariantKind`] (1afd8d5,
+/// first outside-`caixa-core` arm), and
+/// [`caixa_arch::report::ArchVerdict`] (cc80a53, second outside-
+/// `caixa-core` arm — the verdict-outcome axis on the sibling
+/// `caixa-arch` closed-set enum) — followed on the same
+/// 2×2-completion campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_into_owned_string_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Severity::as_str`] across the four-arm
+/// emit-set via the owned-`String` surface) and
+/// [`tests::severity_from_into_owned_string_and_static_str_agree_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// `&'static str`-returning [`From<Severity> for &'static str`] impl
+/// and the [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(String::from)` pipe witness
+/// over [`Severity::ALL`], plus a direct `Self → String → Self`
+/// round-trip witness through the paired [`TryFrom<&str>`] axis on
+/// the owned-[`String`]'s [`String::as_str`] borrow).
+impl From<Severity> for String {
+    fn from(severity: Severity) -> String {
+        severity.as_str().to_owned()
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -2087,6 +2161,156 @@ mod tests {
              substrate-primitive accessor without a spurious Copy \
              deref"
         );
+    }
+
+    #[test]
+    fn severity_from_into_owned_string_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Severity> for String` — asserts the owned-
+        // `String`-returning standard-library trait impl and the
+        // substrate-primitive [`super::Severity::as_str`] `pub const
+        // fn` accessor resolve to the same four-arm canonical-
+        // lowercase emit-set across every arm the exhaustive
+        // [`super::Severity::ALL`] slice enumerates. Rust's standard
+        // library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for String`, so the owned-
+        // `String` axis is a distinct trait-idiomatic surface that a
+        // `let key: String = severity.into();`-shaped downstream call
+        // site reaches through this impl and no other — the sibling
+        // `&'static str`-returning axes force an explicit
+        // `.to_owned()` / [`String::from`] restatement whose type
+        // bounds have no compile-time link to the substrate primitive.
+        // Sweeps every one of the four arms
+        // [`super::Severity::ALL`] carries so no arm's projection is
+        // covered only by the sibling method-named `as_str` /
+        // [`std::fmt::Display`] / [`AsRef<str>`] / owned-input
+        // `&'static str`-returning paths.
+        //
+        // Peer of the sibling
+        // [`caixa_arch::report::tests::arch_verdict_from_into_owned_string_routes_through_as_str_accessor`]
+        // (cc80a53 — second outside-`caixa-core` arm on the owned-
+        // `String` axis, the verdict-outcome axis on the sibling
+        // caixa-arch closed-set enum) and
+        // `caixa_arch::invariants::tests::invariant_kind_from_into_owned_string_routes_through_as_str_accessor`
+        // (1afd8d5 — first outside-`caixa-core` arm on the owned-
+        // `String` axis, the paired severity-classification axis on
+        // the sibling caixa-arch closed-set enum) — extends the
+        // trait-idiomatic owned-`String`-returning forward-projection
+        // family onto the fourth outside-`caixa-core` closed-set
+        // fieldless typed enum on the caixa surface (the first on the
+        // caixa-lint diagnostic-severity axis).
+        for &variant in Severity::ALL {
+            let via_trait: String = <String as From<Severity>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_str(),
+                via_method,
+                "From<Severity> for String impl must round-trip \
+                 Severity::{variant:?} to the same canonical-\
+                 lowercase byte-string Severity::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: String = variant.into();
+            assert_eq!(
+                via_into.as_str(),
+                via_method,
+                "Into<String>::into on Severity::{variant:?} must \
+                 byte-equal Severity::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_into_owned_string_and_static_str_agree_on_every_arm() {
+        // Cross-axis partition pin: the paired trait-idiomatic
+        // owned-input `&'static str`-returning `From<Severity> for
+        // &'static str` and owned-`String`-returning
+        // `From<Severity> for String` (this lift) forward projections
+        // must resolve identically on every arm, locking the two
+        // output-shape paths together so any future detour (a stray
+        // owned-`String` special-case that lands on a divergent per-
+        // arm literal outside the paired `as_str` dispatch, a
+        // hypothetical rebrand touching one axis without the other)
+        // trips at caixa-lint test time. Then a witness that the
+        // `ToString::to_string`-through-[`std::fmt::Display`] surface
+        // (`variant.to_string()`) byte-equals the trait-idiomatic
+        // owned-`String` axis (`String::from(variant)`) on every arm,
+        // so a future consumer that reaches for `.to_string()` and
+        // one that reaches for `.into::<String>()` land on the same
+        // substrate-primitive vocabulary. Plus a
+        // `.iter().copied().map(String::from)` pipe witness over
+        // [`super::Severity::ALL`] — the exact shape a future per-
+        // severity histogram key materializer or admission-webhook
+        // rejection body composer reaches through — materializes the
+        // four-arm accept-set through the owned-`String` axis alone.
+        // Plus a direct `Self → String → Self` round-trip witness
+        // through the paired [`TryFrom<&str>`] axis on the owned-
+        // `String`'s [`String::as_str`] borrow, closing the two-way
+        // round-trip on the owned-`String` axis directly (no wire-
+        // vocab intermediate — [`super::Severity::as_str`] and
+        // [`super::Severity::from_wire`] dispatch on the same four
+        // inline canonical-lowercase byte-strings by construction).
+        for &variant in Severity::ALL {
+            let owned_string: String = <String as From<Severity>>::from(variant);
+            let owned_static: &'static str = <&'static str as From<Severity>>::from(variant);
+            assert_eq!(
+                owned_string.as_str(),
+                owned_static,
+                "From<Severity> for String and From<Severity> for \
+                 &'static str must resolve identically on \
+                 Severity::{variant:?} — divergence signals the two \
+                 output-shape forward-projection paths have drifted \
+                 onto different emit-sets"
+            );
+            let via_display: String = variant.to_string();
+            assert_eq!(
+                owned_string, via_display,
+                "From<Severity> for String and ToString::to_string \
+                 via Display must resolve identically on \
+                 Severity::{variant:?} — divergence signals the \
+                 trait-idiomatic owned-`String` axis and the Display-\
+                 routed ToString axis have drifted onto different \
+                 vocabularies"
+            );
+        }
+        let via_iter: Vec<String> = Severity::ALL.iter().copied().map(String::from).collect();
+        let via_method: Vec<String> = Severity::ALL
+            .iter()
+            .map(|s| s.as_str().to_owned())
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(String::from)` over Severity::ALL \
+             must byte-equal `.iter().map(|s| s.as_str().to_owned())` \
+             on every arm — the owned-`String` `From<Severity> for \
+             String` axis is what makes the `.map(String::from)` \
+             shape route through the substrate-primitive \
+             `Severity::as_str` accessor rather than through a per-\
+             call-site `.to_owned()` / `String::from(severity.as_str())` \
+             detour"
+        );
+        for &variant in Severity::ALL {
+            let emitted: String = variant.into();
+            let re_parsed: Result<Severity, ()> =
+                <Severity as TryFrom<&str>>::try_from(emitted.as_str());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic owned-`String` axis pair must round-\
+                 trip Severity::{variant:?} through \
+                 `.into::<String>()` and back through `TryFrom<&str>` \
+                 on the owned-`String`'s `String::as_str` borrow — \
+                 divergence signals the emit-side owned-`String` axis \
+                 and the parse-side `TryFrom<&str>` axis have drifted \
+                 onto different vocabularies (the substrate-primitive \
+                 `Severity::as_str` and `Severity::from_wire` \
+                 dispatch on the same four inline canonical-lowercase \
+                 byte-strings by construction)"
+            );
+        }
     }
 
     #[test]
