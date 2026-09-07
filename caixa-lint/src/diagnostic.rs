@@ -1672,6 +1672,129 @@ impl From<&FixSafety> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input* forward projection on the two-arm
+/// fix-safety-tier [`FixSafety`] closed-set fieldless typed enum onto
+/// the [`std::borrow::Cow<'static, str>`] axis — the
+/// [`std::borrow::Cow<'static, str>`] companion to the paired owned-
+/// input [`From<FixSafety> for &'static str`] (d8769ab) and paired
+/// owned-input [`From<FixSafety> for String`] (e4d73c6) forward-
+/// projection corners already lifted above. Routes through the
+/// substrate-primitive [`FixSafety::as_str`] `pub const fn` accessor
+/// via [`std::borrow::Cow::Borrowed`] so every consumer that binds a
+/// [`FixSafety`] through the substrate's
+/// [`std::borrow::Cow<'static, str>`] axis (a `let key:
+/// std::borrow::Cow<'static, str> = safety.into();`-shaped downstream
+/// call site; a future `feira lint --fix` per-fix safety-column
+/// projection where the audit-report row typing binds through a
+/// [`std::borrow::Cow<'static, str>`] boundary the sibling
+/// `&'static str`-returning and owned-[`String`]-returning axes force
+/// through a `std::borrow::Cow::Borrowed(safety.as_str())` /
+/// `std::borrow::Cow::Owned(safety.to_string())` /
+/// `String::from(safety).into()` composition; a future
+/// `caixa-lsp`-side per-fix safety-tag emit where the LSP wire
+/// schema binds the tag as [`std::borrow::Cow<'static, str>`] so
+/// static fix-safety strings avoid the runtime allocation the owned-
+/// [`String`] axis would force; a future M4
+/// `mesh.pleme.io/v1alpha1/LintReport` CR materializer's admission-
+/// webhook per-fix rejection-reason emitter whose typing rules out
+/// the sibling [`AsRef<str>`] borrowed return; a future
+/// `HashMap::<std::borrow::Cow<'static, str>, usize>::from_iter(fixes.iter().map(
+///     |f| (f.safety.into(), 0)))` per-safety histogram seed on a
+/// future `feira lint` audit-report path whose key type is
+/// [`std::borrow::Cow<'static, str>`] rather than `&'static str` or
+/// owned [`String`]) reaches the same two-arm `"safe"` / `"unsafe"`
+/// canonical-lowercase emit-set the paired [`std::fmt::Display`],
+/// [`AsRef<str>`], [`FixSafety::as_str`], and the four
+/// `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// forward-projection corners already return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`FixSafety::as_str`] accessor's return carries the `&'static str`
+/// lifetime by construction (each `match` arm resolves to an inline
+/// `&'static str` literal), so the zero-alloc borrowed arm is the
+/// type-correct projection with no runtime allocation. Any future
+/// silent detour that routes the impl through the
+/// [`std::borrow::Cow::Owned`] arm (an accidental
+/// `std::borrow::Cow::Owned(safety.to_string())` rewrite that would
+/// allocate on every call site where the `&'static str` return of
+/// [`FixSafety::as_str`] makes the zero-alloc borrowed projection
+/// type-correct) trips at caixa-lint test time under the
+/// [`std::borrow::Cow::Borrowed`] discriminator witness rather than
+/// at a downstream [`std::borrow::Cow<'static, str>`]-bound
+/// consumer's silent allocation.
+///
+/// *Fourth outside-`caixa-core` peer* (and *second on the caixa-lint
+/// surface*, immediately after [`Severity`], 700a95e / 1819087) on
+/// the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection family —
+/// extends the outside-`caixa-core` tier of the campaign off the
+/// paired diagnostic-severity axis on the sibling four-arm
+/// caixa-lint closed-set enum ([`Severity`], 700a95e / 1819087 —
+/// third outside-`caixa-core` peer, closed the 2×3 corner) onto the
+/// fix-safety-tier two-arm axis every `feira lint --fix` per-fix
+/// gate, every `caixa-lsp`-side `CodeActionKind::QuickFix` policy
+/// dispatch, every runner-side per-safety threshold check, and every
+/// future M4 admission-webhook / audit-report re-loader dispatches
+/// through. Thirteenth peer on the axis; leaves the remaining
+/// outside-`caixa-core` peers ([`caixa_theme::Semantic`],
+/// `caixa_provedor::FerriteRuntime`) as the future targets. The
+/// paired `{Self, &Self}` borrowed-input closer on `&FixSafety` is
+/// the next commit on this axis, matching the closure discipline
+/// every prior peer landed one commit after its opener.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>`
+/// (nor an `impl<T: fmt::Display> From<T> for
+/// std::borrow::Cow<'static, str>`), so every closed-set fieldless
+/// typed enum peer on the substrate that carries the paired
+/// [`AsRef<str>`] / [`std::fmt::Display`] / [`From<Self> for &'static
+/// str`] / [`From<&Self> for &'static str`] / [`From<Self> for
+/// String`] / [`From<&Self> for String`] sextet but not the
+/// [`std::borrow::Cow<'static, str>`] axis forces every
+/// [`std::borrow::Cow<'static, str>`]-parameterized call site
+/// through a `std::borrow::Cow::Borrowed(safety.as_str())` /
+/// `std::borrow::Cow::Owned(safety.to_string())` /
+/// `String::from(safety).into()` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// The [`FixSafety::as_str`] emit and [`FixSafety::from_wire`] parse
+/// share the same two inline canonical-lowercase byte-strings
+/// (`"safe"` / `"unsafe"`) by construction — so the
+/// [`std::borrow::Cow<'static, str>`] projection this impl exposes
+/// composes directly with the paired trait-idiomatic reverse
+/// [`TryFrom<&str>`] axis on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow, no intermediate wire-vocab
+/// hop required (matching the sibling [`Severity`] pair whose four
+/// canonical-lowercase byte-strings are round-trip-stable, unlike
+/// the peer [`caixa_core::CaixaKind`] pair whose forward emit and
+/// reverse parse land on distinct vocabularies).
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`FixSafety::as_str`] across the two-arm
+/// emit-set through the [`std::borrow::Cow<'static, str>`] surface,
+/// plus a [`std::borrow::Cow::Borrowed`] discriminator witness that
+/// the projection lands on the zero-alloc arm rather than silently
+/// allocating through [`std::borrow::Cow::Owned`], plus a blanket-
+/// derived [`Into<std::borrow::Cow<'static, str>>`] shape witness
+/// that also lands on [`std::borrow::Cow::Borrowed`]) and
+/// [`tests::fix_safety_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<FixSafety> for &'static str`] and
+/// [`From<FixSafety> for String`] forward-projection corners plus
+/// the sibling [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(std::borrow::Cow::from)`
+/// pipe witness over [`FixSafety::ALL`] with zero-alloc
+/// [`std::borrow::Cow::Borrowed`] discriminator on every element,
+/// plus a direct round-trip witness through [`TryFrom<&str>`] on
+/// the projection's [`std::borrow::Cow::as_ref`] borrow).
+impl From<FixSafety> for std::borrow::Cow<'static, str> {
+    fn from(safety: FixSafety) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(safety.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: &'static str,
@@ -4694,6 +4817,243 @@ mod tests {
                  `FixSafety::as_str` and `FixSafety::from_wire` \
                  dispatch on the same four inline canonical-lowercase \
                  byte-strings by construction)"
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<FixSafety> for std::borrow::Cow<'static, str>` —
+        // asserts the standard-library trait impl and the substrate-
+        // primitive [`super::FixSafety::as_str`] `pub const fn`
+        // accessor resolve to the same two-arm canonical-lowercase
+        // emit-set (`"safe"` / `"unsafe"`) across every arm the
+        // exhaustive [`super::FixSafety::ALL`] slice enumerates.
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>`
+        // (nor an `impl<T: fmt::Display> From<T> for std::borrow::Cow<'static, str>`),
+        // so the [`std::borrow::Cow<'static, str>`] forward-projection
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: std::borrow::Cow<'static, str> = safety.into();`-
+        // shaped call site reaches through this impl and no other —
+        // the paired sibling `From<FixSafety> for &'static str` and
+        // `From<FixSafety> for String` impls force every
+        // [`std::borrow::Cow<'static, str>`]-parameterized call site
+        // through a `std::borrow::Cow::Borrowed(safety.as_str())` /
+        // `std::borrow::Cow::Owned(safety.to_string())` /
+        // `String::from(safety).into()` composition whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::FixSafety::as_str`] accessor's `&'static str`
+        // return lifetime by construction makes the borrowed arm the
+        // type-correct projection with no runtime allocation. Any
+        // future silent detour that routes the impl through the
+        // owned arm (an accidental
+        // `std::borrow::Cow::Owned(safety.to_string())` rewrite that
+        // would allocate on every call site where the `&'static str`
+        // return of [`super::FixSafety::as_str`] makes the zero-alloc
+        // borrowed projection type-correct) trips at caixa-lint test
+        // time under the [`std::borrow::Cow::Borrowed`] discriminator
+        // witness rather than at a downstream
+        // [`std::borrow::Cow<'static, str>`]-bound consumer's silent
+        // allocation.
+        //
+        // Fourth outside-`caixa-core` peer (and second on the caixa-
+        // lint surface) on the substrate-wide trait-idiomatic
+        // [`std::borrow::Cow<'static, str>`] forward-projection
+        // family — extends the axis off the paired diagnostic-
+        // severity axis on the sibling four-arm caixa-lint closed-
+        // set enum ([`super::Severity`], 700a95e / 1819087 — third
+        // outside-`caixa-core` peer, closed the 2×3 corner) onto the
+        // fix-safety-tier two-arm axis, continuing the outside-
+        // `caixa-core` tier of the campaign.
+        for &variant in FixSafety::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FixSafety>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<FixSafety> for Cow<'static, str> impl must round-\
+                 trip FixSafety::{variant:?} to the same canonical-\
+                 lowercase byte-string FixSafety::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<FixSafety> for Cow<'static, str> impl must land \
+                 on the zero-alloc Cow::Borrowed arm on \
+                 FixSafety::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive FixSafety::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 FixSafety::{variant:?} must byte-equal \
+                 FixSafety::as_str on the same input — the blanket-\
+                 derived Into shape must resolve to the same as_str \
+                 dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 FixSafety::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm — the blanket-derived Into shape \
+                 must resolve to the same Cow::Borrowed dispatch as \
+                 the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<FixSafety> for std::borrow::Cow<'static, str>` (this
+        // lift), the paired owned-input
+        // `From<FixSafety> for &'static str` (d8769ab), and the
+        // paired owned-input `From<FixSafety> for String` (e4d73c6)
+        // forward projections must resolve identically on every arm,
+        // locking the three return-shape paths together by
+        // construction so any future detour trips at caixa-lint test
+        // time. Also byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] — every owned-heap-string path (the
+        // [`std::borrow::Cow::Owned`] promotion of this axis's
+        // `.into_owned()`, `From<FixSafety> for String`, and
+        // `.to_string()`) resolves to the same canonical-lowercase
+        // byte-string per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::FixSafety::ALL`] that materializes
+        // the two-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future `feira lint --list-fix-safeties` CLI
+        // enumeration, a future M4 admission-webhook rejection body
+        // whose accepted-set enumeration binds through a
+        // [`std::borrow::Cow<'static, str>`] boundary, or a future
+        // `caixa-lsp`-side per-safety policy table whose typing
+        // rules out the sibling [`AsRef<str>`] borrowed return
+        // reaches through — closing the composable-projection axis
+        // on the caixa-lint fix-safety-tier two-arm closed-set
+        // fieldless typed enum peer. The pipe witness also pins the
+        // zero-alloc discipline: every element in the collected
+        // vector satisfies the [`std::borrow::Cow::Borrowed`] arm
+        // predicate, so a future accidental silent-allocation
+        // regression on the pipe's iteration axis is a caixa-lint-
+        // test-time failure.
+        //
+        // Then a direct round-trip witness through [`TryFrom<&str>`]
+        // on the projection's [`std::borrow::Cow::as_ref`] borrow —
+        // like the sibling [`super::Severity`] pair (whose four
+        // canonical-lowercase byte-strings are round-trip-stable),
+        // and unlike the peer [`caixa_core::CaixaKind`] pair (whose
+        // forward emit lands on the lowercase Portuguese diagnostic
+        // vocabulary while the reverse parse lands on the
+        // `PascalCase` wire vocabulary), [`super::FixSafety`]'s
+        // forward emit and reverse parse share the same two inline
+        // canonical-lowercase byte-strings by construction, so the
+        // [`std::borrow::Cow<'static, str>`] projection composes
+        // directly with the trait-idiomatic reverse
+        // [`TryFrom<&str>`] axis without the wire-vocab
+        // intermediate hop.
+        for &variant in FixSafety::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FixSafety>>::from(variant);
+            let via_static: &'static str = <&'static str as From<FixSafety>>::from(variant);
+            let via_string: String = <String as From<FixSafety>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<FixSafety> for Cow<'static, str> and \
+                 From<FixSafety> for &'static str must resolve \
+                 identically on FixSafety::{variant:?} — divergence \
+                 signals the Cow<'static, str> and &'static str \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<FixSafety> for Cow<'static, str> and \
+                 From<FixSafety> for String must resolve identically \
+                 on FixSafety::{variant:?} — divergence signals the \
+                 Cow<'static, str> and String return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<FixSafety> for Cow<'static, str> must byte-\
+                 equal FixSafety::to_string on FixSafety::{variant:?} \
+                 — divergence signals the trait-idiomatic \
+                 Cow<'static, str> forward-projection axis and the \
+                 ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = FixSafety::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = FixSafety::ALL
+            .iter()
+            .map(|s| std::borrow::Cow::Borrowed(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over FixSafety::ALL \
+             must byte-equal `.iter().map(|s| \
+             Cow::Borrowed(s.as_str()))` on every arm — the trait-\
+             idiomatic `From<FixSafety> for Cow<'static, str>` axis \
+             is what makes the `Cow::from` composition route through \
+             the substrate-primitive FixSafety::as_str accessor \
+             rather than a per-call-site open-code"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().copied().map(Cow::from)` over \
+                 FixSafety::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm on every element — a Cow::Owned \
+                 outcome signals the pipe has silently allocated \
+                 where the substrate-primitive FixSafety::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+        }
+        for &variant in FixSafety::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FixSafety>>::from(variant);
+            let re_parsed: Result<FixSafety, ()> =
+                <FixSafety as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic Cow<'static, str> forward-projection \
+                 + reverse-projection axis pair must round-trip \
+                 FixSafety::{variant:?} through \
+                 `.into::<Cow<'static, str>>()` on the owned-input \
+                 surface and back through `TryFrom<&str>` on the \
+                 projection's Cow::as_ref borrow — a break signals \
+                 the Cow<'static, str> forward-emit and reverse-\
+                 parse axes have drifted onto different vocabularies \
+                 (like the sibling Severity pair, FixSafety's \
+                 forward emit and reverse parse share the same two \
+                 inline canonical-lowercase byte-strings by \
+                 construction, so the round-trip composes directly)"
             );
         }
     }
