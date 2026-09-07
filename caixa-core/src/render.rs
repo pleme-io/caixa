@@ -8154,6 +8154,128 @@ impl From<PathShapeViolation> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the render-side sandbox-escape three-arm
+/// path-shape-diagnostic [`PathShapeViolation`] closed-set typed enum —
+/// the borrowed-input companion to the paired owned-input
+/// [`From<PathShapeViolation> for std::borrow::Cow<'static, str>`] impl
+/// immediately above (7342c32). Routes byte-for-byte through the same
+/// substrate-primitive [`PathShapeViolation::as_str`] `pub const fn`
+/// accessor (via [`std::borrow::Cow::Borrowed`]) so every consumer that
+/// holds a [`&PathShapeViolation`] and needs a
+/// [`std::borrow::Cow<'static, str>`] — a
+/// `PathShapeViolation::ALL.iter().map(std::borrow::Cow::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer whose iterator over
+/// `&'static [PathShapeViolation]` yields `&PathShapeViolation` (not
+/// [`PathShapeViolation`], so the paired owned-input
+/// [`From<PathShapeViolation> for std::borrow::Cow<'static, str>`] axis
+/// alone forces every call site through an explicit `.copied()` /
+/// dereference / [`Copy`]-bound restatement rather than the direct
+/// trait-idiomatic projection), a future generic
+/// `<T: for<'a> Into<std::borrow::Cow<'static, str>>>`-bound emitter on
+/// a per-violation diagnostic column that walks the
+/// `iter().map(Into::into)` shape verbatim, a future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's admission-webhook
+/// per-arm rejection-reason emitter that composes the accepted-path-
+/// shape-violation enumeration from an iterated
+/// `PathShapeViolation::ALL.iter().map(|v| v.into())` pipe rather than
+/// a per-arm `match v { … }` cascade — reaches the same three
+/// `"empty"` / `"absolute"` / `"parent-escape"` lowercase-kebab byte-
+/// strings the paired [`std::fmt::Display`], [`AsRef<str>`],
+/// [`PathShapeViolation::as_str`], the four `{Self, &Self} ×
+/// {&'static str, String}` 2×2 trait-idiomatic forward-projection
+/// corners, and the paired owned-input
+/// [`From<PathShapeViolation> for std::borrow::Cow<'static, str>`] impl
+/// already return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`PathShapeViolation::as_str`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves
+/// to an inline `&'static str` literal), so the zero-alloc borrowed arm
+/// is the type-correct projection with no runtime allocation on the
+/// borrowed-input surface just as on the paired owned-input surface.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the third
+/// outside-M3 caixa-core peer (and the first outside-manifest-surface /
+/// render-side peer) of the substrate-wide
+/// [`std::borrow::Cow<'static, str>`] forward-projection campaign,
+/// opened one commit prior (7342c32) on the paired owned-input impl.
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<&T> for std::borrow::Cow<'static, str>`
+/// (nor an `impl<T: fmt::Display> From<&T> for
+/// std::borrow::Cow<'static, str>`, nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer on the substrate that carries the paired
+/// owned-input [`Cow<'static, str>`] axis but not the borrowed-input
+/// axis forces every borrowed-input [`Cow<'static, str>`]-parameterized
+/// call site through a spurious [`Copy`] deref
+/// (`std::borrow::Cow::from(*violation)`) or a
+/// `std::borrow::Cow::Borrowed(violation.as_str())` open-code whose
+/// type bounds have no compile-time link to the substrate primitive.
+///
+/// Matches the closure discipline ebeb9e0 landed on the outside-M3
+/// [`crate::CaixaDialeto`] axis one commit after 8322511, 702cdf4 on
+/// the two-list dep-graph [`crate::dep::DepList`] axis one commit after
+/// 6858bac, afdf0f4 on the M3-mesh-shape
+/// [`crate::aplicacao::PlacementStrategy`] one commit after eee504d,
+/// 25690ef on [`crate::aplicacao::WitShape`] one commit after 8634dec,
+/// 53346fb on [`crate::aplicacao::RateLimitUnit`] one commit after
+/// 1d59925 (closing the whole M3 mesh-shape tier), d45c409 on the
+/// top-level [`crate::CaixaKind`] one commit after 99c1735, and 9b3e4b3
+/// / ee577fd on the M2 OTP-shape [`crate::supervisor::RestartStrategy`]
+/// / [`crate::supervisor::RestartPolicy`] sibling peers one commit
+/// after 7dd28b3 / 0612398. The remaining outside-`caixa-core` peers
+/// (`InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`,
+/// `Semantic`, `FerriteRuntime`) are the remaining future targets on
+/// the axis.
+///
+/// Unlike the peer [`crate::CaixaKind`] pair (whose forward emit lands
+/// on the lowercase Portuguese diagnostic vocabulary while the reverse
+/// parse lands on the `PascalCase` wire vocabulary, forcing the
+/// round-trip through an intermediate [`crate::CaixaKind::wire_name`]
+/// hop), [`PathShapeViolation`] is a render-side diagnostic axis with
+/// no wire/diagnostic vocabulary split — the
+/// [`PathShapeViolation::as_str`] emit and
+/// [`PathShapeViolation::from_wire`] parse share the same three inline
+/// canonical-kebab byte-strings by construction, so the borrowed-input
+/// [`std::borrow::Cow<'static, str>`] projection this impl exposes
+/// composes directly with the paired trait-idiomatic reverse
+/// [`TryFrom<&str>`] axis on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow — no intermediate wire-vocab hop
+/// required.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_borrowed_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity + zero-alloc [`std::borrow::Cow::Borrowed`]-arm pin
+/// against [`PathShapeViolation::as_str`] across the three-arm
+/// [`PathShapeViolation::ALL`] through the borrowed-input surface, plus
+/// a blanket-derived [`Into<std::borrow::Cow<'static, str>>`] shape
+/// witness that also lands on [`std::borrow::Cow::Borrowed`]) and
+/// [`tests::path_shape_violation_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<PathShapeViolation> for std::borrow::Cow<'static, str>`], the
+/// paired borrowed-input owned-`&'static str`
+/// [`From<&PathShapeViolation> for &'static str`], and the paired
+/// borrowed-input owned-`String` [`From<&PathShapeViolation> for
+/// String`] impls plus [`ToString::to_string`]-through-
+/// [`std::fmt::Display`], a `.iter().map(std::borrow::Cow::from)` pipe
+/// witness over [`PathShapeViolation::ALL`] — whose iterator yields
+/// `&PathShapeViolation` by construction, so the borrowed-input axis is
+/// what routes the pipe without a spurious [`Copy`] deref and every
+/// collected element satisfies the zero-alloc
+/// [`std::borrow::Cow::Borrowed`]-arm predicate — plus a direct round-
+/// trip witness through [`TryFrom<&str>`] on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow that closes the two-way
+/// `&Self → Cow<'static, str> → Self` round-trip on the borrowed-input
+/// axis without the wire-vocab intermediate hop the peer
+/// [`crate::CaixaKind`] axis pair requires).
+impl From<&PathShapeViolation> for std::borrow::Cow<'static, str> {
+    fn from(violation: &PathShapeViolation) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(violation.as_str())
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -42550,6 +42672,291 @@ mod tests {
                  projection's Cow::as_ref borrow — a break signals \
                  the Cow<'static, str> forward-emit and reverse-\
                  parse axes have drifted onto different vocabularies \
+                 (unlike the peer CaixaKind axis pair, \
+                 PathShapeViolation's forward emit and reverse parse \
+                 share the same three inline canonical-kebab \
+                 byte-strings by construction, so the round-trip \
+                 composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_borrowed_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&PathShapeViolation> for std::borrow::Cow<'static,
+        // str>` — asserts the borrowed-input standard-library trait
+        // impl and the substrate-primitive
+        // [`super::PathShapeViolation::as_str`] `pub const fn` accessor
+        // resolve to the same three-arm lowercase-kebab emit-set across
+        // every arm the exhaustive [`super::PathShapeViolation::ALL`]
+        // slice enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<&T> for Cow<'static, str>`
+        // (nor a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for
+        // U`), so the borrowed-input `Cow<'static, str>` forward-
+        // projection axis is a distinct trait-idiomatic surface that a
+        // `let key: Cow<'static, str> = (&violation).into();`-shaped
+        // call site or a
+        // `PathShapeViolation::ALL.iter().map(Cow::from)`-shaped pipe
+        // reaches through this impl and no other — the paired owned-
+        // input `From<PathShapeViolation> for Cow<'static, str>` impl
+        // (7342c32) forces every borrowed-input call site through an
+        // explicit `Copy` deref (`Cow::from(*violation)`) or a
+        // `Cow::Borrowed(violation.as_str())` open-code whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::PathShapeViolation::as_str`] accessor's
+        // `&'static str` return lifetime by construction makes the
+        // borrowed arm the type-correct projection with no runtime
+        // allocation on the borrowed-input surface just as on the
+        // paired owned-input surface.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the
+        // outside-M3 caixa-core render-side path-shape-diagnostic
+        // [`Cow<'static, str>`] axis on the third (and first
+        // outside-manifest-surface / render-side) outside-M3 caixa-core
+        // closed-set fieldless typed enum peer on the caixa surface,
+        // exactly as ebeb9e0 closed it on the second outside-M3
+        // caixa-core peer ([`crate::CaixaDialeto`]) one commit after
+        // the owning half (8322511) landed, as 702cdf4 closed it on
+        // the first outside-M3 caixa-core peer ([`crate::dep::DepList`])
+        // one commit after (6858bac) landed, as 53346fb closed it on
+        // the third M3-mesh-primitive peer
+        // ([`crate::aplicacao::RateLimitUnit`]) one commit after
+        // (1d59925) landed, as afdf0f4 closed it on the second
+        // M3-mesh-primitive peer
+        // ([`crate::aplicacao::PlacementStrategy`]) one commit after
+        // (eee504d) landed, as 25690ef closed it on the first
+        // M3-mesh-primitive peer ([`crate::aplicacao::WitShape`]) one
+        // commit after (8634dec) landed, as d45c409 closed it on the
+        // top-level [`crate::CaixaKind`] one commit after (99c1735)
+        // landed, and as 9b3e4b3 / ee577fd closed it on the M2
+        // OTP-shape [`crate::supervisor::RestartStrategy`] /
+        // [`crate::supervisor::RestartPolicy`] sibling peers one commit
+        // after (7dd28b3 / 0612398) landed.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::PathShapeViolation>>::from(
+                    &variant,
+                );
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&PathShapeViolation> for Cow<'static, str> impl \
+                 must round-trip &PathShapeViolation::{variant:?} to \
+                 the same lowercase-kebab byte-string \
+                 PathShapeViolation::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<&PathShapeViolation> for Cow<'static, str> impl \
+                 must land on the zero-alloc Cow::Borrowed arm on \
+                 &PathShapeViolation::{variant:?} — a Cow::Owned \
+                 outcome signals the projection has silently \
+                 allocated where the substrate-primitive \
+                 PathShapeViolation::as_str `&'static str` return \
+                 makes the borrowed arm the type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 &PathShapeViolation::{variant:?} must byte-equal \
+                 PathShapeViolation::as_str on the same input — the \
+                 blanket-derived Into shape on the borrowed-input \
+                 surface must resolve to the same as_str dispatch as \
+                 the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 &PathShapeViolation::{variant:?} must land on the \
+                 zero-alloc Cow::Borrowed arm — the blanket-derived \
+                 Into shape on the borrowed-input surface must \
+                 resolve to the same Cow::Borrowed dispatch as the \
+                 explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds four return-shape paths \
+                  (borrowed-input Cow<'static, str>, owned-input Cow<'static, str>, \
+                  borrowed-input &'static str, borrowed-input String) plus the \
+                  ToString-through-Display witness plus a `.iter().map(Cow::from)` \
+                  pipe witness with zero-alloc discriminator plus a direct \
+                  round-trip witness through TryFrom<&str> over three typed \
+                  variants; the linear per-axis repetition is exactly what the \
+                  fold is pinning — a helper would hide the shape it locks"
+    )]
+    fn path_shape_violation_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm()
+    {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input `From<&PathShapeViolation> for
+        // std::borrow::Cow<'static, str>` (this lift), the paired
+        // owned-input `From<PathShapeViolation> for
+        // std::borrow::Cow<'static, str>` (7342c32), the paired
+        // borrowed-input `From<&PathShapeViolation> for &'static str`
+        // (cdf4e95), and the paired borrowed-input
+        // `From<&PathShapeViolation> for String` forward projections
+        // must resolve identically on every arm, locking the four
+        // return-shape paths together by construction so any future
+        // detour trips at caixa-core test time. Also byte-parity
+        // witness against the sibling [`ToString::to_string`] surface
+        // routed through [`std::fmt::Display`].
+        //
+        // Then a `.iter().map(std::borrow::Cow::from)` pipe witness
+        // over [`super::PathShapeViolation::ALL`] — whose iterator
+        // yields `&PathShapeViolation` by construction, so the
+        // borrowed-input [`std::borrow::Cow<'static, str>`] axis is
+        // what routes the pipe through the substrate-primitive
+        // [`super::PathShapeViolation::as_str`] accessor with the
+        // zero-alloc [`std::borrow::Cow::Borrowed`] arm and without a
+        // spurious [`Copy`] deref. Every collected element satisfies
+        // the [`std::borrow::Cow::Borrowed`]-arm predicate so a future
+        // accidental silent-allocation regression on the pipe's
+        // iteration axis is a caixa-core-test-time failure.
+        //
+        // Then a direct round-trip witness through [`TryFrom<&str>`]
+        // on the projection's [`std::borrow::Cow::as_ref`] borrow —
+        // unlike the peer [`crate::CaixaKind`] axis pair (whose
+        // forward emit lands on the lowercase Portuguese diagnostic
+        // vocabulary while the reverse parse lands on the
+        // `PascalCase` wire vocabulary, forcing the round-trip
+        // through an intermediate [`crate::CaixaKind::wire_name`]
+        // hop), [`super::PathShapeViolation`]'s forward emit and
+        // reverse parse share the same three inline canonical-kebab
+        // byte-strings by construction, so the borrowed-input
+        // [`std::borrow::Cow<'static, str>`] projection composes
+        // directly with the trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis without the wire-vocab intermediate hop.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::PathShapeViolation>>::from(
+                    &variant,
+                );
+            let via_owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::PathShapeViolation>>::from(variant);
+            let via_borrowed_static: &'static str =
+                <&'static str as From<&super::PathShapeViolation>>::from(&variant);
+            let via_borrowed_string: String =
+                <String as From<&super::PathShapeViolation>>::from(&variant);
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_owned_cow.as_ref(),
+                "From<&PathShapeViolation> for Cow<'static, str> and \
+                 From<PathShapeViolation> for Cow<'static, str> must \
+                 resolve identically on PathShapeViolation::{variant:?} \
+                 — divergence signals the borrowed-input and owned-input \
+                 Cow<'static, str> forward-projection input-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_borrowed_static,
+                "From<&PathShapeViolation> for Cow<'static, str> and \
+                 From<&PathShapeViolation> for &'static str must \
+                 resolve identically on PathShapeViolation::{variant:?} \
+                 — divergence signals the borrowed-input Cow<'static, \
+                 str> and borrowed-input `&'static str` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_borrowed_string.as_str(),
+                "From<&PathShapeViolation> for Cow<'static, str> and \
+                 From<&PathShapeViolation> for String must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the borrowed-input Cow<'static, \
+                 str> and borrowed-input owned-`String` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<&PathShapeViolation> for Cow<'static, str> must \
+                 byte-equal PathShapeViolation::to_string on \
+                 PathShapeViolation::{variant:?} — divergence signals \
+                 the trait-idiomatic borrowed-input Cow<'static, str> \
+                 forward-projection axis and the ToString-through-\
+                 Display axis have drifted onto different emit-sets"
+            );
+            assert!(
+                matches!(via_borrowed_cow, std::borrow::Cow::Borrowed(_)),
+                "From<&PathShapeViolation> for Cow<'static, str> must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 &PathShapeViolation::{variant:?} — a Cow::Owned \
+                 outcome signals the borrowed-input surface has \
+                 silently allocated where the substrate-primitive \
+                 PathShapeViolation::as_str `&'static str` return \
+                 makes the borrowed arm the type-correct projection"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = super::PathShapeViolation::ALL
+            .iter()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = super::PathShapeViolation::ALL
+            .iter()
+            .map(|v| std::borrow::Cow::Borrowed(v.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Cow::from)` over PathShapeViolation::ALL — \
+             a call site whose iteration axis holds \
+             `&PathShapeViolation` by construction — must byte-equal \
+             `.iter().map(|v| Cow::Borrowed(v.as_str()))` on every \
+             arm — the borrowed-input `From<&PathShapeViolation> for \
+             Cow<'static, str>` axis is what makes the `Cow::from` \
+             composition route through the substrate-primitive \
+             `PathShapeViolation::as_str` accessor without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<PathShapeViolation> for Cow<'static, \
+             str>` axis by first calling `.copied()` on the iterator)"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().map(Cow::from)` over \
+                 PathShapeViolation::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm on every element — a Cow::Owned \
+                 outcome signals the pipe has silently allocated \
+                 through the borrowed-input axis where the substrate-\
+                 primitive PathShapeViolation::as_str `&'static str` \
+                 return makes the borrowed arm the type-correct \
+                 projection"
+            );
+        }
+        for &variant in super::PathShapeViolation::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::PathShapeViolation>>::from(
+                    &variant,
+                );
+            let re_parsed: Result<super::PathShapeViolation, ()> =
+                <super::PathShapeViolation as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic borrowed-input Cow<'static, str> \
+                 forward-projection + reverse-projection axis pair \
+                 must round-trip &PathShapeViolation::{variant:?} \
+                 through `(&variant).into::<Cow<'static, str>>()` on \
+                 the borrowed-input surface and back through \
+                 `TryFrom<&str>` on the projection's Cow::as_ref \
+                 borrow — a break signals the borrowed-input \
+                 Cow<'static, str> forward-emit and reverse-parse \
+                 axes have drifted onto different vocabularies \
                  (unlike the peer CaixaKind axis pair, \
                  PathShapeViolation's forward emit and reverse parse \
                  share the same three inline canonical-kebab \
