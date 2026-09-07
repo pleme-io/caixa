@@ -952,6 +952,53 @@ impl From<&RestartStrategy> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward
+/// projection on the M2 OTP-shape sibling-restart [`RestartStrategy`]
+/// closed-set fieldless typed enum — opens a fresh
+/// substrate-wide `Box<str>` forward-projection campaign tier on the
+/// first M2 OTP-shape closed-set fieldless typed enum peer on the
+/// caixa surface, immediately after the paired `Cow<'static, str>`
+/// axis (7dd28b3 / ee577fd) closed the
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` 2×3
+/// corner on this enum. Routes byte-for-byte through the
+/// substrate-primitive [`RestartStrategy::as_str`] `pub const fn`
+/// accessor via [`Box::<str>::from`] on the returned `&'static str`,
+/// so every consumer that binds a
+/// `let key: Box<str> = strategy.into();`-shaped call site — a
+/// per-supervisor metric-key materializer that stashes the strategy
+/// discriminator in a `Box<str>`-typed heap-owned scalar for cheap
+/// clone (a shared-nothing per-strategy accept-set the
+/// `caixa-operator` reconciliation scheduler carries), a future
+/// admission-webhook rejection body whose per-arm `Box<str>` field
+/// composes from an owned `RestartStrategy` handle — reaches the
+/// same four-arm lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const
+/// the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns. Rust's standard
+/// library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `RestartStrategy → Box<str>` `.into()` reaches through this impl
+/// and no other — without a
+/// `Box::from(strategy.as_str())` open-code whose type bounds have
+/// no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm [`RestartStrategy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness).
+impl From<RestartStrategy> for Box<str> {
+    fn from(strategy: RestartStrategy) -> Box<str> {
+        Box::<str>::from(strategy.as_str())
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -8799,6 +8846,54 @@ mod tests {
                  silently allocated where the substrate-primitive \
                  RestartStrategy::as_str `&'static str` return makes \
                  the borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartStrategy> for Box<str>` — asserts the
+        // owned-input standard-library trait impl and the
+        // substrate-primitive [`super::RestartStrategy::as_str`]
+        // `pub const fn` accessor resolve to the same four-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartStrategy::ALL`] slice enumerates. Opens the
+        // substrate-wide `Box<str>` forward-projection campaign tier
+        // on the first M2 OTP-shape closed-set fieldless typed enum
+        // peer on the caixa surface (`:supervisor :estrategia`),
+        // immediately after the paired `Cow<'static, str>` axis
+        // (7dd28b3 / ee577fd) closed the
+        // `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+        // 2×3 corner on this enum. Rust's standard library carries
+        // `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is
+        // a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = strategy.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(strategy.as_str())` open-code has no compile-
+        // time link back to the substrate primitive.
+        for &variant in RestartStrategy::ALL {
+            let via_trait: Box<str> = <Box<str> as From<RestartStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RestartStrategy> for Box<str> impl must round-\
+                 trip RestartStrategy::{variant:?} to the same lifted \
+                 SUPERVISOR_ESTRATEGIA_* const RestartStrategy::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on RestartStrategy::{variant:?} \
+                 must byte-equal RestartStrategy::as_str on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_str dispatch as the explicit From impl"
             );
         }
     }
