@@ -894,6 +894,153 @@ impl From<&CaixaDialeto> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the dialect-classification
+/// [`CaixaDialeto`] closed-set typed enum — routes byte-for-byte
+/// through the substrate-primitive [`CaixaDialeto::as_str`]
+/// `pub const fn` accessor (via [`std::borrow::Cow::Borrowed`]) so
+/// every consumer that binds a [`CaixaDialeto`] through the
+/// standard-library `.into()` /
+/// [`From<Self> for std::borrow::Cow<'static, str>`] (equivalently
+/// [`Into<std::borrow::Cow<'static, str>>`]) axis — a future
+/// `axum::response::IntoResponse` body composer whose typing folds a
+/// per-arm rejection line into a [`std::borrow::Cow<'static, str>`]
+/// boundary, a future M4 `mesh.pleme.io/v1alpha1/Manifesto` CR
+/// materializer's admission-webhook rejection body composer whose
+/// typing rules out the sibling [`AsRef<str>`] borrowed return and
+/// the sibling [`From<Self> for &'static str`] axis's non-
+/// [`std::borrow::Cow`]-parameterized shape, a future substrate-wide
+/// per-arm diagnostic surface that folds either the zero-alloc
+/// [`std::borrow::Cow::Borrowed`] arm (for the closed-set arms whose
+/// byte-string is build-time-lifted) or the [`std::borrow::Cow::Owned`]
+/// arm (for a caller that mutates the projection) through one uniform
+/// trait dispatch, a future generic
+/// `<T: Into<std::borrow::Cow<'static, str>>>`-bound emitter on a
+/// per-dialect structured-log or admission-webhook rejection body —
+/// reaches the same four `"Pacote"` / `"Molde"` / `"MoldePosicional"` /
+/// `"Desconhecido"` byte-strings the paired [`std::fmt::Display`],
+/// [`AsRef<str>`], [`CaixaDialeto::as_str`], and the four
+/// `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// forward-projection corners
+/// ([`From<CaixaDialeto> for &'static str`],
+/// [`From<&CaixaDialeto> for &'static str`],
+/// [`From<CaixaDialeto> for String`],
+/// [`From<&CaixaDialeto> for String`]) already return, rather than an
+/// open-coded per-call-site
+/// `std::borrow::Cow::Borrowed(dialeto.as_str())` /
+/// `std::borrow::Cow::Owned(dialeto.to_string())` /
+/// `String::from(dialeto).into()` composition whose type bounds have
+/// no compile-time link back to the substrate primitive.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`CaixaDialeto::as_str`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves
+/// to a `pub const &'static str` literal with static lifetime), so the
+/// zero-alloc borrowed arm is the type-correct projection with no
+/// runtime allocation. The paired [`std::borrow::Cow::Owned`] arm
+/// stays reachable at the call site through the existing
+/// [`From<CaixaDialeto> for String`] axis composed with
+/// [`std::borrow::Cow::from`] on the resulting owned [`String`] — a
+/// caller who chose to mutate the projection lands on the owned arm
+/// by their own composition, not by the substrate-primitive
+/// projection silently allocating on their behalf.
+///
+/// Same as the sibling [`crate::CaixaKind`] /
+/// [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] /
+/// [`crate::aplicacao::WitShape`] /
+/// [`crate::aplicacao::PlacementStrategy`] /
+/// [`crate::aplicacao::RateLimitUnit`] /
+/// [`crate::dep::DepList`] peers on the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection campaign,
+/// unlike the peer [`crate::CaixaKind`] pair (whose forward emit
+/// lands on the lowercase Portuguese diagnostic vocabulary while the
+/// reverse parse lands on the `PascalCase` wire vocabulary, forcing
+/// the round-trip through an intermediate
+/// [`crate::CaixaKind::wire_name`] hop), [`CaixaDialeto`] is an
+/// internal classification with no wire surface — the
+/// [`CaixaDialeto::as_str`] emit and [`CaixaDialeto::from_wire`]
+/// parse share the same `PascalCase` vocabulary by construction (no
+/// wire/diagnostic axis split on this enum), so the
+/// [`std::borrow::Cow<'static, str>`] projection this impl exposes
+/// composes directly with the paired trait-idiomatic reverse
+/// [`TryFrom<&str>`] axis on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow — no intermediate wire-vocab
+/// hop required.
+///
+/// Eighth peer on the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection family
+/// opened on the top-level [`crate::CaixaKind`] by 99c1735 (extended
+/// off the closed `{Self, &Self} × {&'static str, String}` 2×2
+/// corner closed on the last outside-caixa-core enum peer by
+/// 29f8af3), closed on the `{Self, &Self}` input-shape corner on
+/// [`crate::CaixaKind`] by d45c409, extended onto the M2 OTP-shape
+/// tier by 7dd28b3 / 9b3e4b3 (opens/closes on
+/// [`crate::supervisor::RestartStrategy`]) and 0612398 / ee577fd
+/// (opens/closes on [`crate::supervisor::RestartPolicy`], closing the
+/// M2 OTP-shape tier), extended onto the M3 mesh-shape tier by
+/// 8634dec / 25690ef (opens/closes on [`crate::aplicacao::WitShape`])
+/// and eee504d / afdf0f4 (opens/closes on
+/// [`crate::aplicacao::PlacementStrategy`]) and 1d59925 (closes M3
+/// mesh-shape tier on [`crate::aplicacao::RateLimitUnit`]), extended
+/// onto the outside-M3 caixa-core tier by 6858bac / 702cdf4
+/// (opens/closes on [`crate::dep::DepList`]) — extends the axis onto
+/// the dialect-classification [`CaixaDialeto`] closed-set fieldless
+/// typed enum (the second outside-M3 caixa-core peer, and the sole
+/// remaining internal-classification enum on the caixa-core surface).
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>`
+/// (nor an `impl<T: fmt::Display> From<T> for
+/// std::borrow::Cow<'static, str>`), so every closed-set fieldless
+/// typed enum peer on the substrate that carries the paired
+/// [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`From<Self> for &'static str`] / [`From<&Self> for &'static str`]
+/// / [`From<Self> for String`] / [`From<&Self> for String`] sextet but
+/// not the [`std::borrow::Cow<'static, str>`] axis forces every
+/// [`std::borrow::Cow<'static, str>`]-parameterized call site through
+/// a `std::borrow::Cow::Borrowed(dialeto.as_str())` /
+/// `std::borrow::Cow::Owned(dialeto.to_string())` /
+/// `String::from(dialeto).into()` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// The remaining outside-`caixa-core` closed-set fieldless typed
+/// enum peers on the substrate surface (`PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`,
+/// `Semantic`, `FerriteRuntime`) are the future targets of this
+/// campaign — each carries the same paired sextet that this axis
+/// extends onto.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`] across the
+/// four-arm emit-set through the [`std::borrow::Cow<'static, str>`]
+/// surface, plus a [`std::borrow::Cow::Borrowed`] discriminator
+/// witness that the projection lands on the zero-alloc arm rather
+/// than silently allocating through [`std::borrow::Cow::Owned`],
+/// plus a blanket-derived [`Into<std::borrow::Cow<'static, str>>`]
+/// shape witness that also lands on [`std::borrow::Cow::Borrowed`])
+/// and
+/// [`tests::caixa_dialeto_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<CaixaDialeto> for &'static str`] and
+/// [`From<CaixaDialeto> for String`] forward-projection corners plus
+/// the sibling [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(std::borrow::Cow::from)`
+/// pipe witness over [`CaixaDialeto::ALL`] whose zero-alloc
+/// [`std::borrow::Cow::Borrowed`] outcome is load-bearing on every
+/// arm, plus a direct round-trip witness through [`TryFrom<&str>`]
+/// on the projection's [`std::borrow::Cow::as_ref`] borrow that
+/// closes the two-way `Self → Cow<'static, str> → Self` round-trip
+/// on the trait-idiomatic [`std::borrow::Cow<'static, str>`]
+/// forward + reverse axis pair without the wire-vocab intermediate
+/// hop the peer [`crate::CaixaKind`] axis pair requires).
+impl From<CaixaDialeto> for std::borrow::Cow<'static, str> {
+    fn from(dialeto: CaixaDialeto) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(dialeto.as_str())
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -2914,6 +3061,248 @@ mod tests {
                  CaixaDialeto's forward emit and reverse parse share \
                  one PascalCase vocabulary by construction, so the \
                  round-trip composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<CaixaDialeto> for std::borrow::Cow<'static, str>`
+        // — asserts the standard-library trait impl and the
+        // substrate-primitive [`super::CaixaDialeto::as_str`]
+        // `pub const fn` accessor resolve to the same four-arm
+        // emit-set across every arm the exhaustive
+        // [`super::CaixaDialeto::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static,
+        // str>` (nor an `impl<T: fmt::Display> From<T> for
+        // std::borrow::Cow<'static, str>`), so the
+        // [`std::borrow::Cow<'static, str>`] forward-projection axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: std::borrow::Cow<'static, str> = dialeto.into();`-
+        // shaped call site reaches through this impl and no other —
+        // the paired sibling `From<CaixaDialeto> for &'static str`
+        // and `From<CaixaDialeto> for String` impls force every
+        // [`std::borrow::Cow<'static, str>`]-parameterized call site
+        // through a `std::borrow::Cow::Borrowed(dialeto.as_str())` /
+        // `std::borrow::Cow::Owned(dialeto.to_string())` /
+        // `String::from(dialeto).into()` composition whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::CaixaDialeto::as_str`] accessor's `&'static str`
+        // return lifetime by construction makes the borrowed arm the
+        // type-correct projection with no runtime allocation. Any
+        // future silent detour that routes the impl through the
+        // owned arm (an accidental
+        // `std::borrow::Cow::Owned(dialeto.to_string())` rewrite that
+        // would allocate on every call site where the `&'static str`
+        // return of [`super::CaixaDialeto::as_str`] makes the
+        // zero-alloc borrowed projection type-correct) trips at
+        // caixa-core test time under the
+        // [`std::borrow::Cow::Borrowed`] discriminator witness rather
+        // than at a downstream
+        // [`std::borrow::Cow<'static, str>`]-bound consumer's silent
+        // allocation.
+        //
+        // Second peer on the outside-M3 caixa-core tier of the
+        // substrate-wide trait-idiomatic
+        // [`std::borrow::Cow<'static, str>`] forward-projection
+        // family — extends the axis off the two-list dep-graph
+        // [`crate::dep::DepList`] pair (6858bac / 702cdf4) that
+        // opened + closed the tier onto the dialect-classification
+        // [`super::CaixaDialeto`] enum (the sole remaining
+        // internal-classification peer on the caixa-core surface).
+        // Every future closed-set fieldless typed enum peer on the
+        // substrate is a future target of the campaign.
+        for &variant in CaixaDialeto::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaDialeto>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<CaixaDialeto> for Cow<'static, str> impl must \
+                 round-trip CaixaDialeto::{variant:?} to the same \
+                 PascalCase byte-string CaixaDialeto::as_str returns \
+                 — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<CaixaDialeto> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 CaixaDialeto::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive CaixaDialeto::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 CaixaDialeto::{variant:?} must byte-equal \
+                 CaixaDialeto::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 CaixaDialeto::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm — the blanket-derived Into shape \
+                 must resolve to the same Cow::Borrowed dispatch as \
+                 the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<CaixaDialeto> for std::borrow::Cow<'static, str>`
+        // (this lift), the paired owned-input
+        // `From<CaixaDialeto> for &'static str`, and the paired
+        // owned-input `From<CaixaDialeto> for String` forward
+        // projections must resolve identically on every arm, locking
+        // the three return-shape paths together by construction so
+        // any future detour trips at caixa-core test time. Also
+        // byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] — every owned-heap-string path (the
+        // [`std::borrow::Cow::Owned`] promotion of this axis's
+        // `.into_owned()`, `From<CaixaDialeto> for String`, and
+        // `.to_string()`) resolves to the same PascalCase byte-string
+        // per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::CaixaDialeto::ALL`] that materializes
+        // the four-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future `axum::response::IntoResponse` per-arm
+        // rejection-body composer, a future M4
+        // `mesh.pleme.io/v1alpha1/Manifesto` CR materializer's
+        // admission-webhook per-arm rejection-reason emitter whose
+        // typing rules out the sibling [`AsRef<str>`] borrowed
+        // return, or a future substrate-wide per-arm diagnostic
+        // surface that binds through a
+        // [`std::borrow::Cow<'static, str>`] boundary reaches through
+        // — closing the composable-projection axis on the dialect-
+        // classification closed-set fieldless typed enum peer. The
+        // pipe witness also pins the zero-alloc discipline: every
+        // element in the collected vector satisfies the
+        // [`std::borrow::Cow::Borrowed`] arm predicate, so a future
+        // accidental silent-allocation regression on the pipe's
+        // iteration axis is a caixa-core-test-time failure.
+        //
+        // Then a direct round-trip witness through
+        // [`TryFrom<&str>`] on the projection's
+        // [`std::borrow::Cow::as_ref`] borrow — unlike the peer
+        // [`crate::CaixaKind`] axis pair (whose forward emit lands
+        // on the lowercase Portuguese diagnostic vocabulary while
+        // the reverse parse lands on the `PascalCase` wire
+        // vocabulary, forcing the round-trip through an intermediate
+        // [`crate::CaixaKind::wire_name`] hop),
+        // [`super::CaixaDialeto`]'s forward emit and reverse parse
+        // share one `PascalCase` vocabulary by construction, so the
+        // [`std::borrow::Cow<'static, str>`] projection composes
+        // directly with the trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis without the wire-vocab intermediate hop.
+        for &variant in CaixaDialeto::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaDialeto>>::from(variant);
+            let via_static: &'static str = <&'static str as From<CaixaDialeto>>::from(variant);
+            let via_string: String = <String as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<CaixaDialeto> for Cow<'static, str> and \
+                 From<CaixaDialeto> for &'static str must resolve \
+                 identically on CaixaDialeto::{variant:?} — \
+                 divergence signals the Cow<'static, str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<CaixaDialeto> for Cow<'static, str> and \
+                 From<CaixaDialeto> for String must resolve \
+                 identically on CaixaDialeto::{variant:?} — \
+                 divergence signals the Cow<'static, str> and String \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<CaixaDialeto> for Cow<'static, str> must \
+                 byte-equal CaixaDialeto::to_string on \
+                 CaixaDialeto::{variant:?} — divergence signals the \
+                 trait-idiomatic Cow<'static, str> forward-projection \
+                 axis and the ToString-through-Display axis have \
+                 drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = CaixaDialeto::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = CaixaDialeto::ALL
+            .iter()
+            .map(|d| std::borrow::Cow::Borrowed(d.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over \
+             CaixaDialeto::ALL must byte-equal `.iter().map(|d| \
+             Cow::Borrowed(d.as_str()))` on every arm — the \
+             trait-idiomatic `From<CaixaDialeto> for Cow<'static, \
+             str>` axis is what makes the `Cow::from` composition \
+             route through the substrate-primitive \
+             CaixaDialeto::as_str accessor rather than a per-call-\
+             site open-code"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().copied().map(Cow::from)` over \
+                 CaixaDialeto::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm on every element — a Cow::Owned \
+                 outcome signals the pipe has silently allocated \
+                 where the substrate-primitive \
+                 CaixaDialeto::as_str `&'static str` return makes \
+                 the borrowed arm the type-correct projection"
+            );
+        }
+        for &variant in CaixaDialeto::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaDialeto>>::from(variant);
+            let re_parsed: Result<CaixaDialeto, ()> =
+                <CaixaDialeto as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic Cow<'static, str> forward-projection \
+                 + reverse-projection axis pair must round-trip \
+                 CaixaDialeto::{variant:?} through `.into::<Cow<\
+                 'static, str>>()` on the owned-input surface and \
+                 back through `TryFrom<&str>` on the projection's \
+                 Cow::as_ref borrow — a break signals the \
+                 Cow<'static, str> forward-emit and reverse-parse \
+                 axes have drifted onto different vocabularies \
+                 (unlike the peer CaixaKind axis pair, CaixaDialeto's \
+                 forward emit and reverse parse share one PascalCase \
+                 vocabulary by construction, so the round-trip \
+                 composes directly)"
             );
         }
     }
