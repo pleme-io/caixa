@@ -764,6 +764,91 @@ impl From<&FerriteRuntime> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input* forward projection on the two-arm
+/// caixa-provedor ferrite-runtime closed-set fieldless typed enum
+/// [`FerriteRuntime`] onto the [`std::borrow::Cow<'static, str>`] axis
+/// — the owned-input companion to the paired
+/// [`From<FerriteRuntime> for &'static str`],
+/// [`From<&FerriteRuntime> for &'static str`],
+/// [`From<FerriteRuntime> for String`], and
+/// [`From<&FerriteRuntime> for String`] siblings above, and the axis
+/// that opens the substrate-wide `{Self, &Self} × {&'static str,
+/// String, Cow<'static, str>}` 2×3 trait-idiomatic forward-projection
+/// family on the sole closed-set fieldless typed enum on the caixa-
+/// provedor surface. Routes byte-for-byte through the substrate-
+/// primitive [`FerriteRuntime::variant_slug`] `pub const fn` accessor
+/// via [`std::borrow::Cow::Borrowed`] so every consumer that binds a
+/// [`FerriteRuntime`] through the standard-library `.into()` /
+/// [`From<Self> for std::borrow::Cow<'static, str>`] axis — a
+/// `let key: std::borrow::Cow<'static, str> = runtime.into();`-
+/// shaped downstream call site, a future `feira publish-provider
+/// --list-runtimes` CLI enumeration table whose key type is
+/// `Cow<'static, str>` so a static two-arm accept-set can share the
+/// row with a per-invocation override, a future admission-webhook
+/// rejection body whose accepted-runtime-set enumeration binds a
+/// `Cow<'static, str>` field, a future
+/// `serde_json::Value::String(runtime.into())`-shaped structured-
+/// payload composer that would otherwise materialize a fresh
+/// [`String`] where the borrowed arm suffices — reaches the same
+/// two-arm `"ferrite-safe"` / `"ferrite-arena"` canonical-lowercase
+/// kebab emit-set the paired `&'static str`-returning and owned-
+/// [`String`]-returning axes, the sibling [`std::fmt::Display`],
+/// [`AsRef<str>`], and [`FerriteRuntime::variant_slug`] surfaces
+/// already return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`FerriteRuntime::variant_slug`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves
+/// to an inline `"ferrite-safe"` / `"ferrite-arena"` `&'static str`
+/// literal), so the zero-alloc borrowed arm is the type-correct
+/// projection with no runtime allocation.
+///
+/// Opens the sixth outside-`caixa-core` peer (and sole peer on the
+/// caixa-provedor surface) of the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection campaign,
+/// after the paired caixa-theme semantic-style sixteen-arm axis
+/// (0253688 / eef39f3, fifth outside-`caixa-core` peer, closed the
+/// 2×3 corner) and the four prior outside-`caixa-core` peers on the
+/// caixa-lint / caixa-arch surfaces (fix-safety-tier, diagnostic-
+/// severity, verdict-outcome, invariant-severity). Rust's standard
+/// library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>`
+/// (nor an
+/// `impl<T: fmt::Display> From<T> for std::borrow::Cow<'static, str>`),
+/// so the paired [`AsRef<str>`], [`std::fmt::Display`],
+/// [`From<FerriteRuntime> for &'static str`], and
+/// [`From<FerriteRuntime> for String`] impls do not implicitly extend
+/// to the [`std::borrow::Cow<'static, str>`] axis; every
+/// [`std::borrow::Cow<'static, str>`]-parameterized owned-input call
+/// site on the ferrite-runtime enum otherwise routes through a
+/// `std::borrow::Cow::Borrowed(runtime.variant_slug())` /
+/// `std::borrow::Cow::Owned(runtime.to_string())` /
+/// `String::from(runtime).into()` open-code whose type bounds have
+/// no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_from_into_static_cow_str_routes_through_variant_slug_accessor`]
+/// (byte-parity + zero-alloc [`std::borrow::Cow::Borrowed`]
+/// discriminator witness on the two-arm [`FerriteRuntime::ALL`]
+/// emit-set, plus a blanket-derived [`Into`] shape witness on the
+/// owned-input surface) and
+/// [`tests::ferrite_runtime_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// `&'static str`-returning and owned-[`String`]-returning
+/// forward-projection corners plus the sibling
+/// [`ToString::to_string`]-through-[`std::fmt::Display`] surface,
+/// plus a `.iter().copied().map(std::borrow::Cow::from)` pipe witness
+/// over [`FerriteRuntime::ALL`] with the zero-alloc
+/// [`std::borrow::Cow::Borrowed`] discriminator preserved per element,
+/// plus a direct round-trip witness through [`TryFrom<&str>`] on the
+/// projection's [`std::borrow::Cow::as_ref`] borrow).
+impl From<FerriteRuntime> for std::borrow::Cow<'static, str> {
+    fn from(runtime: FerriteRuntime) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(runtime.variant_slug())
+    }
+}
+
 /// Free-function wrapper preserved for the crate-level `pub use`
 /// re-export in [`crate`]; routes through the substrate-primitive
 /// method [`FerriteRuntime::rt_import`].
@@ -2066,6 +2151,246 @@ mod tests {
                  borrowed-input forward-emit owned-`String` axis and \
                  the reverse-parse `TryFrom<&str>` axis have drifted \
                  onto different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_into_static_cow_str_routes_through_variant_slug_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<FerriteRuntime> for std::borrow::Cow<'static, str>`
+        // — asserts the standard-library trait impl and the substrate-
+        // primitive [`super::FerriteRuntime::variant_slug`] `pub const
+        // fn` accessor resolve to the same two-arm canonical-lowercase
+        // kebab emit-set (`"ferrite-safe"` / `"ferrite-arena"`) across
+        // every arm the exhaustive [`super::FerriteRuntime::ALL`] slice
+        // enumerates.
+        //
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>`
+        // (nor an `impl<T: fmt::Display> From<T> for
+        // std::borrow::Cow<'static, str>`), so the
+        // [`std::borrow::Cow<'static, str>`] forward-projection axis is
+        // a distinct trait-idiomatic surface that a `let key:
+        // std::borrow::Cow<'static, str> = runtime.into();`-shaped call
+        // site reaches through this impl and no other — the paired
+        // sibling `From<FerriteRuntime> for &'static str` and
+        // `From<FerriteRuntime> for String` impls force every
+        // [`std::borrow::Cow<'static, str>`]-parameterized call site
+        // through a `std::borrow::Cow::Borrowed(runtime.variant_slug())`
+        // / `std::borrow::Cow::Owned(runtime.to_string())` /
+        // `String::from(runtime).into()` composition whose type bounds
+        // have no compile-time link back to the substrate primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not
+        // [`std::borrow::Cow::Owned`]) — the substrate-primitive
+        // [`super::FerriteRuntime::variant_slug`] accessor's
+        // `&'static str` return lifetime by construction makes the
+        // borrowed arm the type-correct projection with no runtime
+        // allocation. Any future silent detour that routes the impl
+        // through the owned arm (an accidental
+        // `std::borrow::Cow::Owned(runtime.to_string())` rewrite that
+        // would allocate on every call site) trips at caixa-provedor
+        // test time under the [`std::borrow::Cow::Borrowed`]
+        // discriminator witness rather than at a downstream
+        // [`std::borrow::Cow<'static, str>`]-bound consumer's silent
+        // allocation.
+        //
+        // Sixth outside-`caixa-core` peer (and sole peer on the caixa-
+        // provedor surface) on the substrate-wide trait-idiomatic
+        // [`std::borrow::Cow<'static, str>`] forward-projection family —
+        // extends the axis off the paired caixa-theme semantic-style
+        // sixteen-arm axis on the caixa-theme surface
+        // (0253688 / eef39f3, fifth outside-`caixa-core` peer, closed
+        // the 2×3 corner) onto the caixa-provedor ferrite-runtime two-
+        // arm axis, opening the outside-`caixa-core` tier of the
+        // campaign on this crate.
+        for &variant in FerriteRuntime::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FerriteRuntime>>::from(variant);
+            let via_method: &'static str = variant.variant_slug();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<FerriteRuntime> for Cow<'static, str> impl must \
+                 round-trip FerriteRuntime::{variant:?} to the same \
+                 canonical-lowercase kebab byte-string \
+                 FerriteRuntime::variant_slug returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<FerriteRuntime> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 FerriteRuntime::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive FerriteRuntime::variant_slug \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 FerriteRuntime::{variant:?} must byte-equal \
+                 FerriteRuntime::variant_slug on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 variant_slug dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 FerriteRuntime::{variant:?} must land on the zero-\
+                 alloc Cow::Borrowed arm — the blanket-derived Into \
+                 shape must resolve to the same Cow::Borrowed dispatch \
+                 as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<FerriteRuntime> for std::borrow::Cow<'static, str>`
+        // (this lift), the paired owned-input
+        // `From<FerriteRuntime> for &'static str`, and the paired
+        // owned-input `From<FerriteRuntime> for String` forward
+        // projections must resolve identically on every arm, locking
+        // the three return-shape paths together by construction so any
+        // future detour trips at caixa-provedor test time. Also byte-
+        // parity witness against the sibling [`ToString::to_string`]
+        // surface routed through [`std::fmt::Display`] — every owned-
+        // heap-string path (the [`std::borrow::Cow::Owned`] promotion
+        // of this axis's `.into_owned()`,
+        // `From<FerriteRuntime> for String`, and `.to_string()`)
+        // resolves to the same canonical-lowercase kebab byte-string
+        // per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::FerriteRuntime::ALL`] that materializes
+        // the two-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future `feira publish-provider --list-runtimes`
+        // operator-facing enumeration, a future admission-webhook
+        // rejection-body composer whose typing rules out the sibling
+        // [`AsRef<str>`] borrowed return, or a future
+        // `HashMap::<Cow<'static, str>, _>::from_iter` per-runtime-tier
+        // lookup on a provider-registry path reaches through — closing
+        // the composable-projection axis on the caixa-provedor ferrite-
+        // runtime two-arm closed-set fieldless typed enum peer. The
+        // pipe witness also pins the zero-alloc discipline: every
+        // element in the collected vector satisfies the
+        // [`std::borrow::Cow::Borrowed`] arm predicate, so a future
+        // accidental silent-allocation regression on the pipe's
+        // iteration axis is a caixa-provedor-test-time failure.
+        //
+        // Then a direct round-trip witness through [`TryFrom<&str>`]
+        // on the projection's [`std::borrow::Cow::as_ref`] borrow —
+        // like the sibling caixa-lint [`FixSafety`] / [`Severity`]
+        // pairs and the paired caixa-theme [`Semantic`] pair (whose
+        // canonical-lowercase byte-strings are round-trip-stable), and
+        // unlike the peer [`caixa_core::CaixaKind`] pair (whose forward
+        // emit lands on the lowercase Portuguese diagnostic vocabulary
+        // while the reverse parse lands on the `PascalCase` wire
+        // vocabulary), [`super::FerriteRuntime`]'s forward emit and
+        // reverse parse share the same two inline canonical-lowercase
+        // kebab byte-strings by construction, so the
+        // [`std::borrow::Cow<'static, str>`] projection composes
+        // directly with the trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis without the wire-vocab intermediate hop.
+        for &variant in FerriteRuntime::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FerriteRuntime>>::from(variant);
+            let via_static: &'static str = <&'static str as From<FerriteRuntime>>::from(variant);
+            let via_string: String = <String as From<FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<FerriteRuntime> for Cow<'static, str> and \
+                 From<FerriteRuntime> for &'static str must resolve \
+                 identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the Cow<'static, str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<FerriteRuntime> for Cow<'static, str> and \
+                 From<FerriteRuntime> for String must resolve \
+                 identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the Cow<'static, str> and String \
+                 return-shape paths have drifted onto different emit-\
+                 sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<FerriteRuntime> for Cow<'static, str> must byte-\
+                 equal FerriteRuntime::to_string on \
+                 FerriteRuntime::{variant:?} — divergence signals the \
+                 trait-idiomatic Cow<'static, str> forward-projection \
+                 axis and the ToString-through-Display axis have \
+                 drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = FerriteRuntime::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = FerriteRuntime::ALL
+            .iter()
+            .map(|rt| std::borrow::Cow::Borrowed(rt.variant_slug()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over \
+             FerriteRuntime::ALL must byte-equal `.iter().map(|rt| \
+             Cow::Borrowed(rt.variant_slug()))` on every arm — the \
+             trait-idiomatic `From<FerriteRuntime> for Cow<'static, \
+             str>` axis is what makes the `Cow::from` composition \
+             route through the substrate-primitive \
+             FerriteRuntime::variant_slug accessor rather than a per-\
+             call-site open-code"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().copied().map(Cow::from)` over \
+                 FerriteRuntime::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm on every element — a Cow::Owned \
+                 outcome signals the pipe has silently allocated where \
+                 the substrate-primitive FerriteRuntime::variant_slug \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+        }
+        for &variant in FerriteRuntime::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FerriteRuntime>>::from(variant);
+            let re_parsed: Result<FerriteRuntime, _> =
+                <FerriteRuntime as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed.ok(),
+                Some(variant),
+                "trait-idiomatic Cow<'static, str> forward-projection \
+                 + reverse-projection axis pair must round-trip \
+                 FerriteRuntime::{variant:?} through \
+                 `.into::<Cow<'static, str>>()` on the owned-input \
+                 surface and back through `TryFrom<&str>` on the \
+                 projection's Cow::as_ref borrow — a break signals \
+                 the Cow<'static, str> forward-emit and reverse-parse \
+                 axes have drifted onto different vocabularies (like \
+                 the sibling FixSafety / Severity / Semantic pairs, \
+                 FerriteRuntime's forward emit and reverse parse \
+                 share the same two inline canonical-lowercase kebab \
+                 byte-strings by construction, so the round-trip \
+                 composes directly)"
             );
         }
     }
