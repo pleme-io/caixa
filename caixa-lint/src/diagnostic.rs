@@ -687,6 +687,129 @@ impl From<&Severity> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input* forward projection on [`Severity`]
+/// onto the [`std::borrow::Cow<'static, str>`] axis — the owned-
+/// [`std::borrow::Cow<'static, str>`] companion to the paired owned-
+/// input [`From<Severity> for &'static str`], borrowed-input
+/// [`From<&Severity> for &'static str`], owned-input
+/// [`From<Severity> for String`], and borrowed-input
+/// [`From<&Severity> for String`] siblings immediately above. Routes
+/// byte-for-byte through the substrate-primitive [`Severity::as_str`]
+/// `pub const fn` accessor via [`std::borrow::Cow::Borrowed`] so every
+/// consumer that binds a [`Severity`] through the standard-library
+/// `.into()` / [`From<Self> for std::borrow::Cow<'static, str>`] axis
+/// (a `let key: std::borrow::Cow<'static, str> = severity.into();`-
+/// shaped downstream call site; a future `feira lint` per-diagnostic
+/// severity-column projection where the audit-report row typing binds
+/// through a [`std::borrow::Cow<'static, str>`] boundary the sibling
+/// `&'static str`-returning and owned-[`String`]-returning axes force
+/// through a `std::borrow::Cow::Borrowed(severity.as_str())` /
+/// `std::borrow::Cow::Owned(severity.to_string())` /
+/// `String::from(severity).into()` composition; a future
+/// `caixa-lsp`-side per-diagnostic severity-tag emit where the LSP
+/// wire schema binds the tag as [`std::borrow::Cow<'static, str>`] so
+/// static severity strings avoid the runtime allocation the owned-
+/// [`String`] axis would force; a future M4
+/// `mesh.pleme.io/v1alpha1/LintReport` CR materializer's admission-
+/// webhook per-severity rejection-reason emitter whose typing rules
+/// out the sibling [`AsRef<str>`] borrowed return; a future
+/// `HashMap::<std::borrow::Cow<'static, str>, usize>::from_iter(diagnostics.iter().map(
+///     |d| (d.severity.into(), 0)))` per-severity histogram seed on a
+/// future `feira lint` audit-report path whose key type is
+/// [`std::borrow::Cow<'static, str>`] rather than `&'static str` or
+/// owned [`String`]) reaches the same four-arm `"error"` /
+/// `"warning"` / `"info"` / `"hint"` canonical-lowercase emit-set the
+/// paired [`std::fmt::Display`], [`AsRef<str>`], [`Severity::as_str`],
+/// and the four `{Self, &Self} × {&'static str, String}` 2×2 trait-
+/// idiomatic forward-projection corners already return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`Severity::as_str`] accessor's return carries the `&'static str`
+/// lifetime by construction (each `match` arm resolves to an inline
+/// `&'static str` literal), so the zero-alloc borrowed arm is the
+/// type-correct projection with no runtime allocation. Any future
+/// silent detour that routes the impl through the
+/// [`std::borrow::Cow::Owned`] arm (an accidental
+/// `std::borrow::Cow::Owned(severity.to_string())` rewrite that would
+/// allocate on every call site where the `&'static str` return of
+/// [`Severity::as_str`] makes the zero-alloc borrowed projection
+/// type-correct) trips at caixa-lint test time under the
+/// [`std::borrow::Cow::Borrowed`] discriminator witness rather than at
+/// a downstream [`std::borrow::Cow<'static, str>`]-bound consumer's
+/// silent allocation.
+///
+/// *Third outside-`caixa-core` peer* (and *first on the caixa-lint
+/// surface*) on the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection family — this
+/// lift extends the outside-`caixa-core` tier of the campaign off the
+/// paired verdict-outcome axis on the sibling caixa-arch closed-set
+/// enum ([`caixa_arch::report::ArchVerdict`], b492d5f / 1adb287 —
+/// second outside-`caixa-core` peer, closed the whole 2×3 corner) and
+/// the paired severity-classification axis on the sibling caixa-arch
+/// invariant-kind closed-set enum
+/// ([`caixa_arch::invariants::InvariantKind`], 9361e96 / d7f3039 —
+/// first outside-`caixa-core` peer) onto the third peer (the caixa-
+/// lint diagnostic-severity four-arm axis every `feira lint` per-
+/// diagnostic render site, every `caixa-lsp`-side `DiagnosticSeverity`
+/// mapping, every runner-side error-count gate, and every future M4
+/// admission-webhook / audit-report re-loader dispatches through).
+/// Twelfth peer on the axis; leaves the remaining outside-`caixa-core`
+/// peers ([`FixSafety`], [`caixa_theme::Semantic`],
+/// `caixa_provedor::FerriteRuntime`) as the future targets. The
+/// paired `{Self, &Self}` borrowed-input closer on `&Severity` is the
+/// next commit on this axis, matching the closure discipline every
+/// prior peer landed one commit after its opener.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>`
+/// (nor an `impl<T: fmt::Display> From<T> for
+/// std::borrow::Cow<'static, str>`), so every closed-set fieldless
+/// typed enum peer on the substrate that carries the paired
+/// [`AsRef<str>`] / [`std::fmt::Display`] / [`From<Self> for &'static
+/// str`] / [`From<&Self> for &'static str`] / [`From<Self> for
+/// String`] / [`From<&Self> for String`] sextet but not the
+/// [`std::borrow::Cow<'static, str>`] axis forces every
+/// [`std::borrow::Cow<'static, str>`]-parameterized call site through
+/// a `std::borrow::Cow::Borrowed(severity.as_str())` /
+/// `std::borrow::Cow::Owned(severity.to_string())` /
+/// `String::from(severity).into()` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// The [`Severity::as_str`] emit and [`Severity::from_wire`] parse
+/// share the same four inline canonical-lowercase byte-strings by
+/// construction — so the [`std::borrow::Cow<'static, str>`] projection
+/// this impl exposes composes directly with the paired trait-
+/// idiomatic reverse [`TryFrom<&str>`] axis on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow, no intermediate wire-vocab
+/// hop required (unlike the peer [`caixa_core::CaixaKind`] pair whose
+/// forward emit and reverse parse land on distinct vocabularies).
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Severity::as_str`] across the four-arm
+/// emit-set through the [`std::borrow::Cow<'static, str>`] surface,
+/// plus a [`std::borrow::Cow::Borrowed`] discriminator witness that
+/// the projection lands on the zero-alloc arm rather than silently
+/// allocating through [`std::borrow::Cow::Owned`], plus a blanket-
+/// derived [`Into<std::borrow::Cow<'static, str>>`] shape witness
+/// that also lands on [`std::borrow::Cow::Borrowed`]) and
+/// [`tests::severity_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<Severity> for &'static str`] and
+/// [`From<Severity> for String`] forward-projection corners plus the
+/// sibling [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(std::borrow::Cow::from)`
+/// pipe witness over [`Severity::ALL`] with zero-alloc
+/// [`std::borrow::Cow::Borrowed`] discriminator on every element,
+/// plus a direct round-trip witness through [`TryFrom<&str>`] on the
+/// projection's [`std::borrow::Cow::as_ref`] borrow).
+impl From<Severity> for std::borrow::Cow<'static, str> {
+    fn from(severity: Severity) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(severity.as_str())
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -2925,6 +3048,246 @@ mod tests {
                  `Severity::as_str` and `Severity::from_wire` \
                  dispatch on the same four inline canonical-lowercase \
                  byte-strings by construction)"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Severity> for std::borrow::Cow<'static, str>` —
+        // asserts the standard-library trait impl and the substrate-
+        // primitive [`super::Severity::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`super::Severity::ALL`]
+        // slice enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>`
+        // (nor an `impl<T: fmt::Display> From<T> for std::borrow::Cow<'static, str>`),
+        // so the [`std::borrow::Cow<'static, str>`] forward-projection
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: std::borrow::Cow<'static, str> = severity.into();`-
+        // shaped call site reaches through this impl and no other —
+        // the paired sibling `From<Severity> for &'static str` and
+        // `From<Severity> for String` impls force every
+        // [`std::borrow::Cow<'static, str>`]-parameterized call site
+        // through a `std::borrow::Cow::Borrowed(severity.as_str())` /
+        // `std::borrow::Cow::Owned(severity.to_string())` /
+        // `String::from(severity).into()` composition whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::Severity::as_str`] accessor's `&'static str` return
+        // lifetime by construction makes the borrowed arm the type-
+        // correct projection with no runtime allocation. Any future
+        // silent detour that routes the impl through the owned arm
+        // (an accidental
+        // `std::borrow::Cow::Owned(severity.to_string())` rewrite that
+        // would allocate on every call site where the `&'static str`
+        // return of [`super::Severity::as_str`] makes the zero-alloc
+        // borrowed projection type-correct) trips at caixa-lint test
+        // time under the [`std::borrow::Cow::Borrowed`] discriminator
+        // witness rather than at a downstream
+        // [`std::borrow::Cow<'static, str>`]-bound consumer's silent
+        // allocation.
+        //
+        // Third outside-`caixa-core` peer (and first on the caixa-
+        // lint surface) on the substrate-wide trait-idiomatic
+        // [`std::borrow::Cow<'static, str>`] forward-projection
+        // family — extends the axis off the paired verdict-outcome
+        // axis on the sibling caixa-arch closed-set enum
+        // ([`caixa_arch::report::ArchVerdict`], b492d5f / 1adb287 —
+        // second outside-`caixa-core` peer, closed the 2×3 corner)
+        // and the paired severity-classification axis on the sibling
+        // caixa-arch invariant-kind closed-set enum
+        // ([`caixa_arch::invariants::InvariantKind`], 9361e96 /
+        // d7f3039 — first outside-`caixa-core` peer, opened the
+        // outside-`caixa-core` tier) onto the diagnostic-severity
+        // four-arm axis, continuing the outside-`caixa-core` tier of
+        // the campaign.
+        for &variant in Severity::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<Severity>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<Severity> for Cow<'static, str> impl must round-\
+                 trip Severity::{variant:?} to the same canonical-\
+                 lowercase byte-string Severity::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<Severity> for Cow<'static, str> impl must land \
+                 on the zero-alloc Cow::Borrowed arm on \
+                 Severity::{variant:?} — a Cow::Owned outcome signals \
+                 the projection has silently allocated where the \
+                 substrate-primitive Severity::as_str `&'static str` \
+                 return makes the borrowed arm the type-correct \
+                 projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 Severity::{variant:?} must byte-equal \
+                 Severity::as_str on the same input — the blanket-\
+                 derived Into shape must resolve to the same as_str \
+                 dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 Severity::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm — the blanket-derived Into shape \
+                 must resolve to the same Cow::Borrowed dispatch as \
+                 the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<Severity> for std::borrow::Cow<'static, str>` (this
+        // lift), the paired owned-input
+        // `From<Severity> for &'static str`, and the paired owned-
+        // input `From<Severity> for String` forward projections must
+        // resolve identically on every arm, locking the three return-
+        // shape paths together by construction so any future detour
+        // trips at caixa-lint test time. Also byte-parity witness
+        // against the sibling [`ToString::to_string`] surface routed
+        // through [`std::fmt::Display`] — every owned-heap-string
+        // path (the [`std::borrow::Cow::Owned`] promotion of this
+        // axis's `.into_owned()`, `From<Severity> for String`, and
+        // `.to_string()`) resolves to the same canonical-lowercase
+        // byte-string per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::Severity::ALL`] that materializes the
+        // four-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future `feira lint --list-severities` CLI
+        // enumeration, a future M4 admission-webhook rejection body
+        // whose accepted-set enumeration binds through a
+        // [`std::borrow::Cow<'static, str>`] boundary, or a future
+        // `caixa-lsp`-side per-severity policy table whose typing
+        // rules out the sibling [`AsRef<str>`] borrowed return
+        // reaches through — closing the composable-projection axis
+        // on the caixa-lint diagnostic-severity four-arm closed-set
+        // fieldless typed enum peer. The pipe witness also pins the
+        // zero-alloc discipline: every element in the collected
+        // vector satisfies the [`std::borrow::Cow::Borrowed`] arm
+        // predicate, so a future accidental silent-allocation
+        // regression on the pipe's iteration axis is a caixa-lint-
+        // test-time failure.
+        //
+        // Then a direct round-trip witness through [`TryFrom<&str>`]
+        // on the projection's [`std::borrow::Cow::as_ref`] borrow —
+        // unlike the peer [`caixa_core::CaixaKind`] axis pair (whose
+        // forward emit lands on the lowercase Portuguese diagnostic
+        // vocabulary while the reverse parse lands on the
+        // `PascalCase` wire vocabulary, forcing the round-trip
+        // through an intermediate
+        // [`caixa_core::CaixaKind::wire_name`] hop),
+        // [`super::Severity`]'s forward emit and reverse parse share
+        // the same four inline canonical-lowercase byte-strings by
+        // construction, so the [`std::borrow::Cow<'static, str>`]
+        // projection composes directly with the trait-idiomatic
+        // reverse [`TryFrom<&str>`] axis without the wire-vocab
+        // intermediate hop.
+        for &variant in Severity::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<Severity>>::from(variant);
+            let via_static: &'static str = <&'static str as From<Severity>>::from(variant);
+            let via_string: String = <String as From<Severity>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<Severity> for Cow<'static, str> and \
+                 From<Severity> for &'static str must resolve \
+                 identically on Severity::{variant:?} — divergence \
+                 signals the Cow<'static, str> and &'static str \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<Severity> for Cow<'static, str> and \
+                 From<Severity> for String must resolve identically \
+                 on Severity::{variant:?} — divergence signals the \
+                 Cow<'static, str> and String return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<Severity> for Cow<'static, str> must byte-\
+                 equal Severity::to_string on Severity::{variant:?} \
+                 — divergence signals the trait-idiomatic \
+                 Cow<'static, str> forward-projection axis and the \
+                 ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = Severity::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = Severity::ALL
+            .iter()
+            .map(|s| std::borrow::Cow::Borrowed(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over Severity::ALL \
+             must byte-equal `.iter().map(|s| \
+             Cow::Borrowed(s.as_str()))` on every arm — the trait-\
+             idiomatic `From<Severity> for Cow<'static, str>` axis \
+             is what makes the `Cow::from` composition route through \
+             the substrate-primitive Severity::as_str accessor \
+             rather than a per-call-site open-code"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().copied().map(Cow::from)` over \
+                 Severity::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm on every element — a Cow::Owned \
+                 outcome signals the pipe has silently allocated \
+                 where the substrate-primitive Severity::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+        }
+        for &variant in Severity::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<Severity>>::from(variant);
+            let re_parsed: Result<Severity, ()> =
+                <Severity as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic Cow<'static, str> forward-projection \
+                 + reverse-projection axis pair must round-trip \
+                 Severity::{variant:?} through \
+                 `.into::<Cow<'static, str>>()` on the owned-input \
+                 surface and back through `TryFrom<&str>` on the \
+                 projection's Cow::as_ref borrow — a break signals \
+                 the Cow<'static, str> forward-emit and reverse-\
+                 parse axes have drifted onto different vocabularies \
+                 (unlike the peer CaixaKind axis pair, Severity's \
+                 forward emit and reverse parse share the same four \
+                 inline canonical-lowercase byte-strings by \
+                 construction, so the round-trip composes directly)"
             );
         }
     }
