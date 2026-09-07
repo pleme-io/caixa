@@ -8313,6 +8313,110 @@ impl From<&PlacementStrategy> for String {
     }
 }
 
+/// Trait-idiomatic *forward* projection on the M3 mesh-primitive
+/// `:placement :estrategia` distribution-strategy [`PlacementStrategy`]
+/// closed-set typed enum from an *owned* input onto the
+/// [`std::borrow::Cow<'static, str>`] axis — routes byte-for-byte
+/// through the substrate-primitive [`PlacementStrategy::as_str`]
+/// `pub const fn` accessor (via [`std::borrow::Cow::Borrowed`]) so
+/// every consumer that binds a [`PlacementStrategy`] through the
+/// standard-library `.into()` / [`From<Self> for
+/// std::borrow::Cow<'static, str>`] (equivalently
+/// [`Into<std::borrow::Cow<'static, str>>`]) axis reaches the same
+/// three-arm lifted
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] byte-string the
+/// paired [`From<PlacementStrategy> for &'static str`],
+/// [`From<&PlacementStrategy> for &'static str`],
+/// [`From<PlacementStrategy> for String`], and
+/// [`From<&PlacementStrategy> for String`] 2×2 trait-idiomatic
+/// forward-projection corners, the sibling [`std::fmt::Display`],
+/// [`AsRef<str>`], and [`PlacementStrategy::as_str`] surfaces already
+/// return, rather than an open-coded per-call-site
+/// `std::borrow::Cow::Borrowed(strategy.as_str())` /
+/// `std::borrow::Cow::Owned(strategy.to_string())` composition whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`PlacementStrategy::as_str`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves
+/// to one of the three lifted
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] `pub const &str`
+/// byte-strings with static lifetime), so the zero-alloc borrowed arm
+/// is the type-correct projection with no runtime allocation. The
+/// paired [`std::borrow::Cow::Owned`] arm stays reachable at the call
+/// site through the existing [`From<PlacementStrategy> for String`]
+/// axis composed with [`std::borrow::Cow::from`] on the resulting
+/// owned [`String`] — a caller who chose to mutate the projection
+/// lands on the owned arm by their own composition, not by the
+/// substrate-primitive projection silently allocating on their
+/// behalf.
+///
+/// Rust's standard library carries no blanket `impl<T: AsRef<str>>
+/// From<T> for Cow<'static, str>` (nor an `impl<T: fmt::Display>
+/// From<T> for Cow<'static, str>`), so the paired sibling
+/// [`From<PlacementStrategy> for &'static str`],
+/// [`From<PlacementStrategy> for String`], [`AsRef<str>`], and
+/// [`std::fmt::Display`] surfaces do not implicitly extend to a
+/// [`Cow<'static, str>`]-bound call site — every such site is forced
+/// through a `Cow::Borrowed(strategy.as_str())` /
+/// `Cow::Owned(strategy.to_string())` open-code whose type bounds
+/// have no compile-time link back to the substrate primitive until
+/// this lift.
+///
+/// Second M3-mesh-primitive-defining peer on the substrate-wide
+/// trait-idiomatic [`std::borrow::Cow<'static, str>`] forward-
+/// projection campaign — extends the axis off the M3 mesh-shape tier
+/// opened one commit prior by the paired [`WitShape`] `:contratos
+/// :wit` census-label first-mover (8634dec owned-input + 25690ef
+/// borrowed-input) onto the second M3-mesh-primitive-defining slot
+/// enum. The [`CaixaKind`](crate::CaixaKind) top-level first-mover
+/// (99c1735 owned-input + d45c409 borrowed-input) opened the axis
+/// on the structurally most fundamental closed-set fieldless typed
+/// enum; the paired M2 OTP-shape
+/// [`crate::supervisor::RestartStrategy`] (7dd28b3 + 9b3e4b3) and
+/// [`crate::supervisor::RestartPolicy`] (0612398 + ee577fd) closed
+/// the M2 OTP-shape tier. The remaining M3-mesh-primitive-defining
+/// peer ([`RateLimitUnit`]) and the outside-M3 substrate-wide peers
+/// ([`crate::dep::DepList`], [`crate::CaixaDialeto`],
+/// [`crate::render::PathShapeViolation`], and the outside-`caixa-core`
+/// peers `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`,
+/// `Semantic`, `FerriteRuntime`) are the remaining future targets of
+/// this campaign.
+///
+/// Same three-path convergence discipline as the paired sibling
+/// [`From<PlacementStrategy> for &'static str`] /
+/// [`From<PlacementStrategy> for String`] / [`std::fmt::Display`] /
+/// [`AsRef<str>`] surfaces (this [`Cow<'static, str>`] axis, the
+/// paired sibling surfaces, and [`PlacementStrategy::as_str`] all
+/// route through the same lifted
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] const), so a future
+/// variant rename or per-arm serde-attribute drift reaches every
+/// forward-projection path through exactly one caixa-core edit.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity + zero-alloc [`std::borrow::Cow::Borrowed`]-arm pin
+/// against [`PlacementStrategy::as_str`] across the three-arm
+/// [`PlacementStrategy::ALL`]) and
+/// [`tests::placement_strategy_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired
+/// [`From<PlacementStrategy> for &'static str`],
+/// [`From<PlacementStrategy> for String`], and
+/// [`ToString`]-through-[`std::fmt::Display`] axes, plus a
+/// `.iter().copied().map(Cow::from)` pipe witness over
+/// [`PlacementStrategy::ALL`] that materializes the three-arm
+/// accept-set through the [`Cow<'static, str>`] axis alone and pins
+/// the zero-alloc discipline on every element).
+impl From<PlacementStrategy> for std::borrow::Cow<'static, str> {
+    fn from(strategy: PlacementStrategy) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(strategy.as_str())
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -24469,6 +24573,206 @@ mod tests {
                  reverse parse share the same lifted \
                  M3_PLACEMENT_ESTRATEGIA_* consts by construction, so \
                  the round-trip composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for
+        // std::borrow::Cow<'static, str>` — asserts the standard-
+        // library trait impl and the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] `pub const fn`
+        // accessor resolve to the same three-arm emit-set across
+        // every arm the exhaustive [`super::PlacementStrategy::ALL`]
+        // slice enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<T> for Cow<'static, str>`
+        // (nor an `impl<T: fmt::Display> From<T> for
+        // Cow<'static, str>`), so the `Cow<'static, str>` forward-
+        // projection axis is a distinct trait-idiomatic surface that
+        // a `let key: Cow<'static, str> = strategy.into();`-shaped
+        // call site reaches through this impl and no other — the
+        // paired sibling `From<PlacementStrategy> for &'static str`
+        // and `From<PlacementStrategy> for String` impls force every
+        // `Cow<'static, str>`-parameterized call site through a
+        // `Cow::Borrowed(strategy.as_str())` /
+        // `Cow::Owned(strategy.to_string())` composition whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] accessor's
+        // `&'static str` return lifetime by construction (each match
+        // arm resolves to one of the three lifted
+        // [`super::render::M3_PLACEMENT_ESTRATEGIA_*`] `pub const
+        // &str` values) makes the borrowed arm the type-correct
+        // projection with no runtime allocation. Any future silent
+        // detour that routes the impl through the owned arm trips at
+        // caixa-core test time under the
+        // [`std::borrow::Cow::Borrowed`] discriminator witness
+        // rather than at a downstream `Cow<'static, str>`-bound
+        // consumer's silent allocation.
+        //
+        // Second M3-mesh-primitive-defining peer on the substrate-
+        // wide trait-idiomatic [`std::borrow::Cow<'static, str>`]
+        // forward-projection campaign — extends the axis off the
+        // first M3-mesh-primitive peer (the [`super::WitShape`]
+        // `:contratos :wit` census-label axis: 8634dec owned-input +
+        // 25690ef borrowed-input) onto the second M3-slot-enum peer,
+        // ahead of the sibling [`super::RateLimitUnit`] whose
+        // Cow<'static, str> axis remains a future target.
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<PlacementStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<PlacementStrategy> for Cow<'static, str> impl \
+                 must round-trip PlacementStrategy::{variant:?} to \
+                 the same lifted M3_PLACEMENT_ESTRATEGIA_* const \
+                 PlacementStrategy::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<PlacementStrategy> for Cow<'static, str> impl \
+                 must land on the zero-alloc Cow::Borrowed arm on \
+                 PlacementStrategy::{variant:?} — a Cow::Owned \
+                 outcome signals the projection has silently \
+                 allocated where the substrate-primitive \
+                 PlacementStrategy::as_str `&'static str` return \
+                 makes the borrowed arm the type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 PlacementStrategy::{variant:?} must byte-equal \
+                 PlacementStrategy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 PlacementStrategy::{variant:?} must land on the \
+                 zero-alloc Cow::Borrowed arm — the blanket-derived \
+                 Into shape must resolve to the same Cow::Borrowed \
+                 dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<PlacementStrategy> for std::borrow::Cow<'static, str>`
+        // (this lift), the paired owned-input `From<PlacementStrategy>
+        // for &'static str`, and the paired owned-input
+        // `From<PlacementStrategy> for String` forward projections
+        // must resolve identically on every arm, locking the three
+        // return-shape paths together by construction so any future
+        // detour trips at caixa-core test time. Also byte-parity
+        // witness against the sibling [`ToString::to_string`] surface
+        // routed through [`std::fmt::Display`] — every owned-heap-
+        // string path (the `Cow::Owned` promotion of this axis's
+        // `.into_owned()`, `From<PlacementStrategy> for String`, and
+        // `.to_string()`) resolves to the same three-arm lifted
+        // M3_PLACEMENT_ESTRATEGIA_* byte-string per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::PlacementStrategy::ALL`] that
+        // materializes the three-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+        // admission-webhook rejection body's accepted-`:placement
+        // :estrategia` enumeration, a future substrate-wide per-arm
+        // diagnostic surface whose typing rules out the sibling
+        // [`AsRef<str>`] borrowed return, or a future per-arm
+        // placement-strategy emitter that binds through a
+        // [`Cow<'static, str>`] boundary reaches through — closing
+        // the composable-projection axis on the second
+        // M3-mesh-primitive-defining closed-set fieldless typed enum
+        // peer on the caixa surface. The pipe witness also pins the
+        // zero-alloc discipline: every element in the collected
+        // vector satisfies the [`std::borrow::Cow::Borrowed`] arm
+        // predicate, so a future accidental silent-allocation
+        // regression on the pipe's iteration axis is a caixa-core-
+        // test-time failure.
+        for &variant in PlacementStrategy::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<PlacementStrategy>>::from(variant);
+            let via_static: &'static str = <&'static str as From<PlacementStrategy>>::from(variant);
+            let via_string: String = <String as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<PlacementStrategy> for Cow<'static, str> and \
+                 From<PlacementStrategy> for &'static str must \
+                 resolve identically on PlacementStrategy::\
+                 {variant:?} — divergence signals the \
+                 Cow<'static, str> and &'static str return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<PlacementStrategy> for Cow<'static, str> and \
+                 From<PlacementStrategy> for String must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the Cow<'static, str> and String \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<PlacementStrategy> for Cow<'static, str> must \
+                 byte-equal PlacementStrategy::to_string on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the trait-idiomatic Cow<'static, str> forward-\
+                 projection axis and the ToString-through-Display \
+                 axis have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = PlacementStrategy::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = PlacementStrategy::ALL
+            .iter()
+            .map(|s| std::borrow::Cow::Borrowed(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over \
+             PlacementStrategy::ALL must byte-equal \
+             `.iter().map(|s| Cow::Borrowed(s.as_str()))` on every \
+             arm — the trait-idiomatic `From<PlacementStrategy> for \
+             Cow<'static, str>` axis is what makes the `Cow::from` \
+             composition route through the substrate-primitive \
+             `PlacementStrategy::as_str` accessor with the zero-alloc \
+             Cow::Borrowed arm by construction, rather than a per-\
+             call-site `Cow::Owned(strategy.to_string())` allocation"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the .iter().copied().map(Cow::from) \
+                 pipe over PlacementStrategy::ALL must land on the \
+                 zero-alloc Cow::Borrowed arm — a Cow::Owned outcome \
+                 on any arm signals the pipe's iteration axis has \
+                 silently allocated where the substrate-primitive \
+                 PlacementStrategy::as_str `&'static str` return \
+                 makes the borrowed arm the type-correct projection"
             );
         }
     }
