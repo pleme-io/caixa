@@ -944,6 +944,152 @@ impl From<Semantic> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input* forward projection on the sixteen-
+/// arm semantic-style [`Semantic`] closed-set fieldless typed enum onto
+/// the [`std::borrow::Cow<'static, str>`] axis — the borrowed-input
+/// companion to the paired owned-input
+/// [`From<Semantic> for std::borrow::Cow<'static, str>`] impl (0253688)
+/// immediately above, and the corner that closes the whole substrate-
+/// wide `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// 2×3 trait-idiomatic forward-projection family on the caixa-theme
+/// semantic-style sixteen-arm closed-set fieldless typed enum. Routes
+/// byte-for-byte through the substrate-primitive [`Semantic::as_str`]
+/// `pub const fn` accessor via [`std::borrow::Cow::Borrowed`] so every
+/// consumer that binds a `&Semantic` through the standard-library
+/// `.into()` / [`From<&Self> for std::borrow::Cow<'static, str>`] axis
+/// — the exact `Semantic::ALL.iter().map(std::borrow::Cow::from).collect()`
+/// pipe shape a future `feira lint --list-styles` CLI enumeration
+/// whose iterator yields `&Semantic` by construction, a future
+/// `.iter().map(|tok| std::borrow::Cow::from(&tok.semantic)).collect()`
+/// per-token fan-out over `&[SemanticToken]` in a future `caixa-lsp`-
+/// side per-`SemanticTokenType` registration walk whose borrowed access
+/// off `&SemanticToken.semantic` avoids a spurious [`Copy`]-bound
+/// dereference on the semantic-style field, a future `caixa.nvim` per-
+/// highlight-group re-loader whose per-`&Semantic` kebab identifier is
+/// bound through a [`std::borrow::Cow<'static, str>`] field so a theme-
+/// overlay row can carry either a static kebab or a per-scheme override
+/// without duplicating the enum-parameterized field type, a future
+/// `blackmatter-shell` per-arm `data-semantic="<kebab>"` DOM emission
+/// composer over an iterator-yielded `&Semantic`, or a future
+/// `axum::response::IntoResponse` per-semantic paint audit column over
+/// an iterator-yielded `&Semantic` reaches — resolves to the same 16-arm
+/// `"keyword"` / `"symbol"` / `"keyword-arg"` / `"string"` / `"number"` /
+/// `"literal"` / `"comment"` / `"accent"` / `"muted"` / `"error"` /
+/// `"warning"` / `"info"` / `"hint"` / `"added"` / `"removed"` /
+/// `"unchanged"` canonical-lowercase kebab byte-strings the paired
+/// [`std::fmt::Display`], [`AsRef<str>`], [`Semantic::as_str`], the
+/// four `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// forward-projection corners, and the paired owned-input
+/// [`From<Semantic> for std::borrow::Cow<'static, str>`] impl already
+/// return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`Semantic::as_str`] accessor's return carries the `&'static str`
+/// lifetime by construction (each `match` arm resolves to an inline
+/// `&'static str` literal), so the zero-alloc borrowed arm is the
+/// type-correct projection with no runtime allocation on the borrowed-
+/// input surface just as on the paired owned-input surface.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the fifth outside-
+/// `caixa-core` peer of the substrate-wide
+/// [`std::borrow::Cow<'static, str>`] forward-projection campaign,
+/// opened one commit prior (0253688) on the paired owned-input impl.
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<&T> for std::borrow::Cow<'static, str>`
+/// (nor an `impl<T: fmt::Display> From<&T> for
+/// std::borrow::Cow<'static, str>`, nor a [`Copy`]-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer on the substrate that carries the paired
+/// owned-input [`std::borrow::Cow<'static, str>`] axis but not the
+/// borrowed-input axis forces every borrowed-input
+/// [`std::borrow::Cow<'static, str>`]-parameterized call site through
+/// a spurious [`Copy`] deref (`std::borrow::Cow::from(*sem)`) or a
+/// `std::borrow::Cow::Borrowed(sem.as_str())` open-code whose type
+/// bounds have no compile-time link to the substrate primitive.
+///
+/// Matches the closure discipline the sibling
+/// [`caixa_lint::diagnostic::FixSafety`] (9a6539f) landed one commit
+/// after (79010c5) closing the whole caixa-lint fix-safety-tier 2×3
+/// corner on the fourth outside-`caixa-core` peer,
+/// [`caixa_lint::diagnostic::Severity`] (1819087) one commit after
+/// (700a95e) closing the whole caixa-lint diagnostic-severity 2×3
+/// corner on the third outside-`caixa-core` peer,
+/// [`caixa_arch::report::ArchVerdict`] (1adb287) one commit after
+/// (b492d5f) closing the whole caixa-arch verdict-outcome 2×3 corner
+/// on the second outside-`caixa-core` peer, d7f3039 on the sibling
+/// caixa-arch [`caixa_arch::invariants::InvariantKind`] one commit
+/// after (9361e96), f80fbd6 on the render-side
+/// [`caixa_core::render::PathShapeViolation`] one commit after
+/// (7342c32), ebeb9e0 on the outside-M3
+/// [`caixa_core::CaixaDialeto`] one commit after 8322511, 702cdf4 on
+/// the two-list dep-graph [`caixa_core::dep::DepList`] one commit
+/// after 6858bac, afdf0f4 on the M3-mesh-shape
+/// [`caixa_core::aplicacao::PlacementStrategy`] one commit after
+/// eee504d, 25690ef on [`caixa_core::aplicacao::WitShape`] one commit
+/// after 8634dec, 53346fb on
+/// [`caixa_core::aplicacao::RateLimitUnit`] one commit after 1d59925
+/// (closing the whole M3 mesh-shape tier), d45c409 on the top-level
+/// [`caixa_core::CaixaKind`] one commit after 99c1735, and 9b3e4b3 /
+/// ee577fd on the M2 OTP-shape
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] sibling peers one commit
+/// after 7dd28b3 / 0612398. Closes the whole caixa-theme semantic-
+/// style sixteen-arm 2×3 corner
+/// (`{Self, &Self} × {&'static str, String, Cow<'static, str>}`); the
+/// remaining outside-`caixa-core` peer (`caixa_provedor::FerriteRuntime`)
+/// is the only future target left on the axis.
+///
+/// Like the sibling [`caixa_lint::diagnostic::FixSafety`] and
+/// [`caixa_lint::diagnostic::Severity`] pairs (whose canonical-
+/// lowercase byte-strings are round-trip-stable), and unlike the peer
+/// [`caixa_core::CaixaKind`] pair (whose forward emit lands on the
+/// lowercase Portuguese diagnostic vocabulary while the reverse parse
+/// lands on the `PascalCase` wire vocabulary, forcing the round-trip
+/// through an intermediate [`caixa_core::CaixaKind::wire_name`] hop),
+/// [`Semantic`] is a caixa-theme semantic-style axis with no
+/// wire/diagnostic vocabulary split — the [`Semantic::as_str`] emit
+/// and [`Semantic::from_wire`] parse share the same sixteen inline
+/// canonical-lowercase kebab byte-strings by construction, so the
+/// borrowed-input [`std::borrow::Cow<'static, str>`] projection this
+/// impl exposes composes directly with the paired trait-idiomatic
+/// reverse [`TryFrom<&str>`] axis on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow — no intermediate wire-vocab
+/// hop required.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_borrowed_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Semantic::as_str`] across the sixteen-
+/// arm emit-set through the borrowed-input
+/// [`std::borrow::Cow<'static, str>`] surface, plus a
+/// [`std::borrow::Cow::Borrowed`] discriminator witness that the
+/// borrowed-input projection lands on the zero-alloc arm rather than
+/// silently allocating through [`std::borrow::Cow::Owned`], plus a
+/// blanket-derived [`Into<std::borrow::Cow<'static, str>>`] shape
+/// witness on the borrowed-input surface that also lands on
+/// [`std::borrow::Cow::Borrowed`]) and
+/// [`tests::semantic_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<Semantic> for std::borrow::Cow<'static, str>`] impl
+/// (0253688), the paired borrowed-input
+/// [`From<&Semantic> for &'static str`], and
+/// [`From<&Semantic> for String`] impls plus
+/// [`ToString::to_string`]-through-[`std::fmt::Display`], plus a
+/// `.iter().map(std::borrow::Cow::from)` pipe witness over
+/// [`Semantic::ALL`] whose iterator yields `&Semantic` by construction
+/// — so the borrowed-input axis is what routes the pipe without a
+/// spurious [`Copy`] deref — pinning zero-alloc
+/// [`std::borrow::Cow::Borrowed`] on every element, plus a direct
+/// round-trip witness through [`TryFrom<&str>`] on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow that closes the two-way
+/// `&Self → Cow<'static, str> → Self` round-trip on the borrowed-
+/// input axis).
+impl From<&Semantic> for std::borrow::Cow<'static, str> {
+    fn from(sem: &Semantic) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(sem.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2540,6 +2686,269 @@ mod tests {
                  the same sixteen inline canonical-lowercase kebab \
                  byte-strings by construction, so the round-trip \
                  composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_borrowed_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&Semantic> for std::borrow::Cow<'static, str>` —
+        // asserts the borrowed-input standard-library trait impl and
+        // the substrate-primitive [`super::Semantic::as_str`]
+        // `pub const fn` accessor resolve to the same sixteen-arm
+        // canonical-lowercase kebab emit-set (`"keyword"` / `"symbol"` /
+        // `"keyword-arg"` / `"string"` / `"number"` / `"literal"` /
+        // `"comment"` / `"accent"` / `"muted"` / `"error"` /
+        // `"warning"` / `"info"` / `"hint"` / `"added"` / `"removed"` /
+        // `"unchanged"`) across every arm the exhaustive
+        // [`super::Semantic::ALL`] slice enumerates. Rust's standard
+        // library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for Cow<'static, str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `Cow<'static, str>` forward-projection
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: Cow<'static, str> = (&sem).into();`-shaped call
+        // site or a `Semantic::ALL.iter().map(Cow::from)`-shaped pipe
+        // reaches through this impl and no other — the paired owned-
+        // input `From<Semantic> for Cow<'static, str>` impl (0253688)
+        // forces every borrowed-input call site through an explicit
+        // `Copy` deref (`Cow::from(*sem)`) or a
+        // `Cow::Borrowed(sem.as_str())` open-code whose type bounds
+        // have no compile-time link back to the substrate primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::Semantic::as_str`] accessor's `&'static str` return
+        // lifetime by construction makes the borrowed arm the type-
+        // correct projection with no runtime allocation on the
+        // borrowed-input surface just as on the paired owned-input
+        // surface.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the fifth
+        // outside-`caixa-core` closed-set fieldless typed enum peer
+        // of the substrate-wide [`std::borrow::Cow<'static, str>`]
+        // forward-projection campaign, exactly as
+        // `fix_safety_from_borrowed_into_static_cow_str_routes_through_as_str_accessor`
+        // (9a6539f) closed it on the sibling caixa-lint
+        // [`caixa_lint::diagnostic::FixSafety`] one commit after
+        // (79010c5) closing the whole 2×3 corner,
+        // `severity_from_borrowed_into_static_cow_str_routes_through_as_str_accessor`
+        // (1819087) on [`caixa_lint::diagnostic::Severity`] one commit
+        // after (700a95e) closing the whole 2×3 corner, and every
+        // peer closer that preceded it on the campaign.
+        for &variant in Semantic::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&Semantic>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&Semantic> for Cow<'static, str> impl must \
+                 round-trip &Semantic::{variant:?} to the same \
+                 canonical-lowercase kebab byte-string \
+                 Semantic::as_str returns — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<&Semantic> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 &Semantic::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive Semantic::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 &Semantic::{variant:?} must byte-equal \
+                 Semantic::as_str on the same input — the blanket-\
+                 derived Into shape on the borrowed-input surface \
+                 must resolve to the same as_str dispatch as the \
+                 explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 &Semantic::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm — the blanket-derived Into shape \
+                 on the borrowed-input surface must resolve to the \
+                 same Cow::Borrowed dispatch as the explicit From \
+                 impl"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds four return-shape paths \
+                  (borrowed-input Cow<'static, str>, owned-input Cow<'static, str>, \
+                  borrowed-input &'static str, borrowed-input String) plus the \
+                  ToString-through-Display witness plus a `.iter().map(Cow::from)` \
+                  pipe witness with zero-alloc discriminator plus a direct \
+                  round-trip witness through TryFrom<&str> over sixteen typed \
+                  variants; the linear per-axis repetition is exactly what the \
+                  fold is pinning — a helper would hide the shape it locks"
+    )]
+    fn semantic_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input `From<&Semantic> for
+        // std::borrow::Cow<'static, str>` (this lift), the paired
+        // owned-input `From<Semantic> for
+        // std::borrow::Cow<'static, str>` (0253688), the paired
+        // borrowed-input `From<&Semantic> for &'static str`, and the
+        // paired borrowed-input `From<&Semantic> for String` forward
+        // projections must resolve identically on every arm, locking
+        // the four return-shape paths together by construction so any
+        // future detour trips at caixa-theme test time. Also byte-
+        // parity witness against the sibling [`ToString::to_string`]
+        // surface routed through [`std::fmt::Display`].
+        //
+        // Then a `.iter().map(std::borrow::Cow::from)` pipe witness
+        // over [`super::Semantic::ALL`] — whose iterator yields
+        // `&Semantic` by construction, so the borrowed-input
+        // [`std::borrow::Cow<'static, str>`] axis is what routes the
+        // pipe through the substrate-primitive
+        // [`super::Semantic::as_str`] accessor with the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm and without a spurious
+        // [`Copy`] deref. Every collected element satisfies the
+        // [`std::borrow::Cow::Borrowed`]-arm predicate so a future
+        // accidental silent-allocation regression on the pipe's
+        // iteration axis is a caixa-theme-test-time failure.
+        //
+        // Then a direct round-trip witness through [`TryFrom<&str>`]
+        // on the projection's [`std::borrow::Cow::as_ref`] borrow —
+        // unlike the peer [`caixa_core::CaixaKind`] axis pair (whose
+        // forward emit lands on the lowercase Portuguese diagnostic
+        // vocabulary while the reverse parse lands on the
+        // `PascalCase` wire vocabulary, forcing the round-trip
+        // through an intermediate [`caixa_core::CaixaKind::wire_name`]
+        // hop), [`super::Semantic`]'s forward emit and reverse parse
+        // share the same sixteen inline canonical-lowercase kebab
+        // byte-strings by construction, so the borrowed-input
+        // [`std::borrow::Cow<'static, str>`] projection composes
+        // directly with the trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis without the wire-vocab intermediate hop.
+        for &variant in Semantic::ALL {
+            let via_borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&Semantic>>::from(&variant);
+            let via_owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<Semantic>>::from(variant);
+            let via_borrowed_static: &'static str =
+                <&'static str as From<&Semantic>>::from(&variant);
+            let via_borrowed_string: String = <String as From<&Semantic>>::from(&variant);
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_owned_cow.as_ref(),
+                "From<&Semantic> for Cow<'static, str> and \
+                 From<Semantic> for Cow<'static, str> must resolve \
+                 identically on Semantic::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 Cow<'static, str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_borrowed_static,
+                "From<&Semantic> for Cow<'static, str> and \
+                 From<&Semantic> for &'static str must resolve \
+                 identically on Semantic::{variant:?} — divergence \
+                 signals the borrowed-input Cow<'static, str> and \
+                 borrowed-input `&'static str` return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_borrowed_string.as_str(),
+                "From<&Semantic> for Cow<'static, str> and \
+                 From<&Semantic> for String must resolve identically \
+                 on Semantic::{variant:?} — divergence signals the \
+                 borrowed-input Cow<'static, str> and borrowed-input \
+                 owned-`String` return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_borrowed_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<&Semantic> for Cow<'static, str> must byte-\
+                 equal Semantic::to_string on Semantic::{variant:?} \
+                 — divergence signals the trait-idiomatic borrowed-\
+                 input Cow<'static, str> forward-projection axis and \
+                 the ToString-through-Display axis have drifted onto \
+                 different emit-sets"
+            );
+            assert!(
+                matches!(via_borrowed_cow, std::borrow::Cow::Borrowed(_)),
+                "From<&Semantic> for Cow<'static, str> must land on \
+                 the zero-alloc Cow::Borrowed arm on \
+                 &Semantic::{variant:?} — a Cow::Owned outcome \
+                 signals the borrowed-input surface has silently \
+                 allocated where the substrate-primitive \
+                 Semantic::as_str `&'static str` return makes the \
+                 borrowed arm the type-correct projection"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> =
+            Semantic::ALL.iter().map(std::borrow::Cow::from).collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = Semantic::ALL
+            .iter()
+            .map(|sem| std::borrow::Cow::Borrowed(sem.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Cow::from)` over Semantic::ALL — a call \
+             site whose iteration axis holds `&Semantic` by \
+             construction — must byte-equal `.iter().map(|sem| \
+             Cow::Borrowed(sem.as_str()))` on every arm — the \
+             borrowed-input `From<&Semantic> for Cow<'static, str>` \
+             axis is what makes the `Cow::from` composition route \
+             through the substrate-primitive `Semantic::as_str` \
+             accessor without a spurious `Copy` deref (which would \
+             only be reachable through the owned-input \
+             `From<Semantic> for Cow<'static, str>` axis by first \
+             calling `.copied()` on the iterator)"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().map(Cow::from)` over Semantic::ALL must \
+                 land on the zero-alloc Cow::Borrowed arm on every \
+                 element — a Cow::Owned outcome signals the pipe has \
+                 silently allocated through the borrowed-input axis \
+                 where the substrate-primitive Semantic::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+        }
+        for &variant in Semantic::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&Semantic>>::from(&variant);
+            let re_parsed: Result<Semantic, ()> =
+                <Semantic as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic borrowed-input Cow<'static, str> \
+                 forward-projection + reverse-projection axis pair \
+                 must round-trip &Semantic::{variant:?} through \
+                 `(&variant).into::<Cow<'static, str>>()` on the \
+                 borrowed-input surface and back through \
+                 `TryFrom<&str>` on the projection's Cow::as_ref \
+                 borrow — a break signals the borrowed-input \
+                 Cow<'static, str> forward-emit and reverse-parse \
+                 axes have drifted onto different vocabularies \
+                 (unlike the peer CaixaKind axis pair, Semantic's \
+                 forward emit and reverse parse share the same \
+                 sixteen inline canonical-lowercase kebab byte-\
+                 strings by construction, so the round-trip composes \
+                 directly)"
             );
         }
     }
