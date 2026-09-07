@@ -689,6 +689,153 @@ impl From<&ArchVerdict> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the caixa-arch verdict-outcome two-arm
+/// closed-set [`ArchVerdict`] typed enum — routes byte-for-byte through
+/// the substrate-primitive [`ArchVerdict::as_str`] `pub const fn`
+/// accessor (via [`std::borrow::Cow::Borrowed`]) so every consumer that
+/// binds an [`ArchVerdict`] through the standard-library `.into()` /
+/// [`From<Self> for std::borrow::Cow<'static, str>`] (equivalently
+/// [`Into<std::borrow::Cow<'static, str>>`]) axis — a future
+/// `axum::response::IntoResponse` per-verdict rejection-body composer
+/// whose typing folds a per-arm verdict tag into a
+/// [`std::borrow::Cow<'static, str>`] boundary, a future M4
+/// `mesh.pleme.io/v1alpha1/ArchAudit` CR admission-webhook rejection-
+/// reason emitter whose typing rules out the sibling [`AsRef<str>`]
+/// borrowed return and the sibling [`From<Self> for &'static str`]
+/// axis's non-[`std::borrow::Cow`]-parameterized shape, a future
+/// substrate-wide per-verdict diagnostic surface that folds either the
+/// zero-alloc [`std::borrow::Cow::Borrowed`] arm (for the closed-set
+/// arms whose byte-string is inline-lifted) or the
+/// [`std::borrow::Cow::Owned`] arm (for a caller that mutates the
+/// projection) through one uniform trait dispatch, a future generic
+/// `<T: Into<std::borrow::Cow<'static, str>>>`-bound emitter on a per-
+/// verdict structured-log or admission-webhook rejection body — reaches
+/// the same two-arm `"proven"` / `"rejected"` canonical-lowercase byte-
+/// strings the paired [`std::fmt::Display`], [`AsRef<str>`],
+/// [`ArchVerdict::as_str`], and the four `{Self, &Self} × {&'static
+/// str, String}` 2×2 trait-idiomatic forward-projection corners
+/// ([`From<ArchVerdict> for &'static str`],
+/// [`From<&ArchVerdict> for &'static str`],
+/// [`From<ArchVerdict> for String`],
+/// [`From<&ArchVerdict> for String`]) already return, rather than an
+/// open-coded per-call-site
+/// `std::borrow::Cow::Borrowed(verdict.as_str())` /
+/// `std::borrow::Cow::Owned(verdict.to_string())` /
+/// `String::from(verdict).into()` composition whose type bounds have no
+/// compile-time link back to the substrate primitive.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`ArchVerdict::as_str`] accessor's return carries the `&'static str`
+/// lifetime by construction (each `match` arm resolves to an inline
+/// `"proven"` / `"rejected"` `&'static str` literal with static
+/// lifetime), so the zero-alloc borrowed arm is the type-correct
+/// projection with no runtime allocation. The paired
+/// [`std::borrow::Cow::Owned`] arm stays reachable at the call site
+/// through the existing [`From<ArchVerdict> for String`] axis composed
+/// with [`std::borrow::Cow::from`] on the resulting owned [`String`] —
+/// a caller who chose to mutate the projection lands on the owned arm
+/// by their own composition, not by the substrate-primitive projection
+/// silently allocating on their behalf.
+///
+/// Eleventh peer on the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection family opened
+/// on the top-level [`caixa_core::CaixaKind`] by 99c1735 (closed on the
+/// `{Self, &Self}` input-shape corner by d45c409), extended onto the
+/// M2 OTP-shape tier by 7dd28b3 / 9b3e4b3
+/// ([`caixa_core::supervisor::RestartStrategy`]) and 0612398 / ee577fd
+/// ([`caixa_core::supervisor::RestartPolicy`], closing the M2 OTP-shape
+/// tier), extended onto the M3 mesh-shape tier by 8634dec / 25690ef
+/// ([`caixa_core::aplicacao::WitShape`]), eee504d / afdf0f4
+/// ([`caixa_core::aplicacao::PlacementStrategy`]), and 1d59925 /
+/// 53346fb ([`caixa_core::aplicacao::RateLimitUnit`], closing the M3
+/// mesh-shape tier), extended onto the outside-M3 caixa-core tier by
+/// 6858bac / 702cdf4 ([`caixa_core::dep::DepList`]) and 8322511 /
+/// ebeb9e0 ([`caixa_core::CaixaDialeto`]), extended onto the outside-
+/// manifest-surface / render-side tier by 7342c32 / f80fbd6
+/// ([`caixa_core::render::PathShapeViolation`], closing the caixa-core
+/// arm of the campaign), and extended onto the outside-`caixa-core`
+/// tier by 9361e96 / d7f3039
+/// ([`crate::invariants::InvariantKind`], first outside-`caixa-core`
+/// peer — the paired severity-classification axis on the sibling
+/// caixa-arch invariant-kind closed-set enum) — this lift extends the
+/// outside-`caixa-core` tier onto the *second* peer (the caixa-arch
+/// verdict-outcome two-arm axis every `feira arch` render site, every
+/// `feira tofu` HCL-emission gate, and every future M4 admission-
+/// webhook / audit-report re-loader dispatches through), on the same
+/// trajectory the paired [`&'static str`]-returning owned-input axis
+/// ([`impl From<ArchVerdict> for &'static str`] above) and the paired
+/// owned-input owned-[`String`] axis ([`impl From<ArchVerdict> for
+/// String`] above) already took onto the same enum.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>` (nor
+/// an `impl<T: fmt::Display> From<T> for std::borrow::Cow<'static, str>`),
+/// so every closed-set fieldless typed enum peer on the substrate that
+/// carries the paired [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`From<Self> for &'static str`] / [`From<&Self> for &'static str`] /
+/// [`From<Self> for String`] / [`From<&Self> for String`] sextet but not
+/// the [`std::borrow::Cow<'static, str>`] axis forces every
+/// [`std::borrow::Cow<'static, str>`]-parameterized call site through a
+/// `std::borrow::Cow::Borrowed(verdict.as_str())` /
+/// `std::borrow::Cow::Owned(verdict.to_string())` /
+/// `String::from(verdict).into()` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// The remaining outside-`caixa-core` closed-set fieldless typed enum
+/// peers on the substrate surface (`Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) are the future targets of this campaign — each
+/// carries the same paired sextet that this axis extends onto.
+///
+/// Unlike the peer [`caixa_core::CaixaKind`] pair (whose forward emit
+/// lands on the lowercase Portuguese diagnostic vocabulary while the
+/// reverse parse lands on the `PascalCase` wire vocabulary, forcing the
+/// round-trip through an intermediate [`caixa_core::CaixaKind::wire_name`]
+/// hop), [`ArchVerdict`] is a caixa-arch verdict-outcome axis with no
+/// wire/diagnostic vocabulary split — the [`ArchVerdict::as_str`] emit
+/// and [`ArchVerdict::from_wire`] parse share the same two inline
+/// canonical-lowercase byte-strings by construction, so the
+/// [`std::borrow::Cow<'static, str>`] projection this impl exposes
+/// composes directly with the paired trait-idiomatic reverse
+/// [`TryFrom<&str>`] axis on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow — no intermediate wire-vocab hop
+/// required.
+///
+/// The paired `{Self, &Self}` borrowed-input closer on
+/// `&ArchVerdict` is the next commit on this axis, matching the
+/// closure discipline every prior peer landed one commit after its
+/// opener.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`ArchVerdict::as_str`] across the two-arm
+/// emit-set through the [`std::borrow::Cow<'static, str>`] surface,
+/// plus a [`std::borrow::Cow::Borrowed`] discriminator witness that the
+/// projection lands on the zero-alloc arm rather than silently
+/// allocating through [`std::borrow::Cow::Owned`], plus a blanket-
+/// derived [`Into<std::borrow::Cow<'static, str>>`] shape witness that
+/// also lands on [`std::borrow::Cow::Borrowed`]) and
+/// [`tests::arch_verdict_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<ArchVerdict> for &'static str`] and
+/// [`From<ArchVerdict> for String`] forward-projection corners plus
+/// the sibling [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(std::borrow::Cow::from)` pipe
+/// witness over [`ArchVerdict::ALL`] whose zero-alloc
+/// [`std::borrow::Cow::Borrowed`] outcome is load-bearing on every arm,
+/// plus a direct round-trip witness through [`TryFrom<&str>`] on the
+/// projection's [`std::borrow::Cow::as_ref`] borrow that closes the
+/// two-way `Self → Cow<'static, str> → Self` round-trip on the trait-
+/// idiomatic [`std::borrow::Cow<'static, str>`] forward + reverse axis
+/// pair without the wire-vocab intermediate hop the peer
+/// [`caixa_core::CaixaKind`] axis pair requires).
+impl From<ArchVerdict> for std::borrow::Cow<'static, str> {
+    fn from(verdict: ArchVerdict) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(verdict.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchReport {
     pub verdict: ArchVerdict,
@@ -1804,6 +1951,245 @@ mod tests {
                  forward-emit borrowed-input owned-`String` axis and \
                  the reverse-parse `TryFrom<&str>` axis have drifted \
                  onto different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<ArchVerdict> for std::borrow::Cow<'static, str>`
+        // — asserts the standard-library trait impl and the substrate-
+        // primitive [`ArchVerdict::as_str`] `pub const fn` accessor
+        // resolve to the same two-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`ArchVerdict::ALL`] slice
+        // enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<T> for
+        // std::borrow::Cow<'static, str>` (nor an
+        // `impl<T: fmt::Display> From<T> for std::borrow::Cow<'static,
+        // str>`), so the [`std::borrow::Cow<'static, str>`] forward-
+        // projection axis is a distinct trait-idiomatic surface that
+        // a `let key: std::borrow::Cow<'static, str> =
+        // verdict.into();`-shaped call site reaches through this impl
+        // and no other — the paired sibling `From<ArchVerdict> for
+        // &'static str` and `From<ArchVerdict> for String` impls
+        // force every [`std::borrow::Cow<'static, str>`]-parameterized
+        // call site through a
+        // `std::borrow::Cow::Borrowed(verdict.as_str())` /
+        // `std::borrow::Cow::Owned(verdict.to_string())` /
+        // `String::from(verdict).into()` composition whose type bounds
+        // have no compile-time link back to the substrate primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`ArchVerdict::as_str`] accessor's `&'static str` return
+        // lifetime by construction makes the borrowed arm the type-
+        // correct projection with no runtime allocation. Any future
+        // silent detour that routes the impl through the owned arm
+        // (an accidental
+        // `std::borrow::Cow::Owned(verdict.to_string())` rewrite that
+        // would allocate on every call site where the `&'static str`
+        // return of [`ArchVerdict::as_str`] makes the zero-alloc
+        // borrowed projection type-correct) trips at caixa-arch test
+        // time under the [`std::borrow::Cow::Borrowed`] discriminator
+        // witness rather than at a downstream
+        // [`std::borrow::Cow<'static, str>`]-bound consumer's silent
+        // allocation.
+        //
+        // Second outside-`caixa-core` peer on the substrate-wide
+        // trait-idiomatic [`std::borrow::Cow<'static, str>`] forward-
+        // projection family — extends the axis off the paired
+        // severity-classification axis on the sibling `caixa-arch`
+        // invariant-kind closed-set enum
+        // ([`crate::invariants::InvariantKind`], 9361e96 / d7f3039 —
+        // first outside-`caixa-core` peer) onto the verdict-outcome
+        // two-arm axis, continuing the outside-`caixa-core` tier of
+        // the campaign.
+        for &variant in ArchVerdict::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<ArchVerdict>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<ArchVerdict> for Cow<'static, str> impl must \
+                 round-trip ArchVerdict::{variant:?} to the same \
+                 canonical-lowercase byte-string \
+                 ArchVerdict::as_str returns — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<ArchVerdict> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 ArchVerdict::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive ArchVerdict::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 ArchVerdict::{variant:?} must byte-equal \
+                 ArchVerdict::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 ArchVerdict::{variant:?} must land on the zero- \
+                 alloc Cow::Borrowed arm — the blanket-derived Into \
+                 shape must resolve to the same Cow::Borrowed \
+                 dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<ArchVerdict> for std::borrow::Cow<'static, str>`
+        // (this lift), the paired owned-input
+        // `From<ArchVerdict> for &'static str`, and the paired
+        // owned-input `From<ArchVerdict> for String` forward
+        // projections must resolve identically on every arm, locking
+        // the three return-shape paths together by construction so
+        // any future detour trips at caixa-arch test time. Also
+        // byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] — every owned-heap-string path (the
+        // [`std::borrow::Cow::Owned`] promotion of this axis's
+        // `.into_owned()`, `From<ArchVerdict> for String`, and
+        // `.to_string()`) resolves to the same canonical-lowercase
+        // byte-string per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`ArchVerdict::ALL`] that materializes the
+        // two-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future `axum::response::IntoResponse` per-verdict
+        // rejection-body composer, a future M4
+        // `mesh.pleme.io/v1alpha1/ArchAudit` CR materializer's
+        // admission-webhook per-verdict rejection-reason emitter
+        // whose typing rules out the sibling [`AsRef<str>`] borrowed
+        // return, or a future substrate-wide per-verdict diagnostic
+        // surface that binds through a
+        // [`std::borrow::Cow<'static, str>`] boundary reaches through
+        // — closing the composable-projection axis on the caixa-arch
+        // verdict-outcome two-arm closed-set fieldless typed enum
+        // peer. The pipe witness also pins the zero-alloc discipline:
+        // every element in the collected vector satisfies the
+        // [`std::borrow::Cow::Borrowed`] arm predicate, so a future
+        // accidental silent-allocation regression on the pipe's
+        // iteration axis is a caixa-arch-test-time failure.
+        //
+        // Then a direct round-trip witness through [`TryFrom<&str>`]
+        // on the projection's [`std::borrow::Cow::as_ref`] borrow —
+        // unlike the peer [`caixa_core::CaixaKind`] axis pair (whose
+        // forward emit lands on the lowercase Portuguese diagnostic
+        // vocabulary while the reverse parse lands on the
+        // `PascalCase` wire vocabulary, forcing the round-trip
+        // through an intermediate
+        // [`caixa_core::CaixaKind::wire_name`] hop), [`ArchVerdict`]'s
+        // forward emit and reverse parse share the same two inline
+        // canonical-lowercase byte-strings by construction, so the
+        // [`std::borrow::Cow<'static, str>`] projection composes
+        // directly with the trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis without the wire-vocab intermediate hop.
+        for &variant in ArchVerdict::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<ArchVerdict>>::from(variant);
+            let via_static: &'static str = <&'static str as From<ArchVerdict>>::from(variant);
+            let via_string: String = <String as From<ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<ArchVerdict> for Cow<'static, str> and \
+                 From<ArchVerdict> for &'static str must resolve \
+                 identically on ArchVerdict::{variant:?} — \
+                 divergence signals the Cow<'static, str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<ArchVerdict> for Cow<'static, str> and \
+                 From<ArchVerdict> for String must resolve \
+                 identically on ArchVerdict::{variant:?} — \
+                 divergence signals the Cow<'static, str> and String \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<ArchVerdict> for Cow<'static, str> must byte- \
+                 equal ArchVerdict::to_string on \
+                 ArchVerdict::{variant:?} — divergence signals the \
+                 trait-idiomatic Cow<'static, str> forward- \
+                 projection axis and the ToString-through-Display \
+                 axis have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = ArchVerdict::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = ArchVerdict::ALL
+            .iter()
+            .map(|v| std::borrow::Cow::Borrowed(v.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over \
+             ArchVerdict::ALL must byte-equal `.iter().map(|v| \
+             Cow::Borrowed(v.as_str()))` on every arm — the trait- \
+             idiomatic `From<ArchVerdict> for Cow<'static, str>` \
+             axis is what makes the `Cow::from` composition route \
+             through the substrate-primitive ArchVerdict::as_str \
+             accessor rather than a per-call-site open-code"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().copied().map(Cow::from)` over \
+                 ArchVerdict::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm on every element — a Cow::Owned \
+                 outcome signals the pipe has silently allocated \
+                 where the substrate-primitive \
+                 ArchVerdict::as_str `&'static str` return makes \
+                 the borrowed arm the type-correct projection"
+            );
+        }
+        for &variant in ArchVerdict::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<ArchVerdict>>::from(variant);
+            let re_parsed: Result<ArchVerdict, ()> =
+                <ArchVerdict as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic Cow<'static, str> forward-projection \
+                 + reverse-projection axis pair must round-trip \
+                 ArchVerdict::{variant:?} through \
+                 `.into::<Cow<'static, str>>()` on the owned-input \
+                 surface and back through `TryFrom<&str>` on the \
+                 projection's Cow::as_ref borrow — a break signals \
+                 the Cow<'static, str> forward-emit and reverse- \
+                 parse axes have drifted onto different vocabularies \
+                 (unlike the peer CaixaKind axis pair, \
+                 ArchVerdict's forward emit and reverse parse \
+                 share the same two inline canonical-lowercase \
+                 byte-strings by construction, so the round-trip \
+                 composes directly)"
             );
         }
     }
