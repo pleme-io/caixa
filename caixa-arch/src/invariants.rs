@@ -668,6 +668,144 @@ impl From<&InvariantKind> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the caixa-arch invariant-severity
+/// three-arm closed-set [`InvariantKind`] typed enum — routes byte-for-
+/// byte through the substrate-primitive [`InvariantKind::as_str`]
+/// `pub const fn` accessor (via [`std::borrow::Cow::Borrowed`]) so every
+/// consumer that binds an [`InvariantKind`] through the standard-library
+/// `.into()` / [`From<Self> for std::borrow::Cow<'static, str>`]
+/// (equivalently [`Into<std::borrow::Cow<'static, str>>`]) axis — a
+/// future `axum::response::IntoResponse` per-severity rejection-body
+/// composer whose typing folds a per-arm severity tag into a
+/// [`std::borrow::Cow<'static, str>`] boundary, a future M4
+/// `mesh.pleme.io/v1alpha1/ArchAudit` CR admission-webhook rejection-
+/// reason emitter whose typing rules out the sibling [`AsRef<str>`]
+/// borrowed return and the sibling [`From<Self> for &'static str`]
+/// axis's non-[`std::borrow::Cow`]-parameterized shape, a future
+/// substrate-wide per-severity diagnostic surface that folds either the
+/// zero-alloc [`std::borrow::Cow::Borrowed`] arm (for the closed-set
+/// arms whose byte-string is inline-lifted) or the
+/// [`std::borrow::Cow::Owned`] arm (for a caller that mutates the
+/// projection) through one uniform trait dispatch, a future generic
+/// `<T: Into<std::borrow::Cow<'static, str>>>`-bound emitter on a per-
+/// severity structured-log or admission-webhook rejection body — reaches
+/// the same three-arm `"safety"` / `"compliance"` / `"hint"` canonical-
+/// lowercase byte-strings the paired [`std::fmt::Display`],
+/// [`AsRef<str>`], [`InvariantKind::as_str`], and the four
+/// `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic forward-
+/// projection corners ([`From<InvariantKind> for &'static str`],
+/// [`From<&InvariantKind> for &'static str`],
+/// [`From<InvariantKind> for String`],
+/// [`From<&InvariantKind> for String`]) already return, rather than an
+/// open-coded per-call-site
+/// `std::borrow::Cow::Borrowed(kind.as_str())` /
+/// `std::borrow::Cow::Owned(kind.to_string())` /
+/// `String::from(kind).into()` composition whose type bounds have no
+/// compile-time link back to the substrate primitive.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`InvariantKind::as_str`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves to
+/// an inline `"safety"` / `"compliance"` / `"hint"` `&'static str`
+/// literal with static lifetime), so the zero-alloc borrowed arm is the
+/// type-correct projection with no runtime allocation. The paired
+/// [`std::borrow::Cow::Owned`] arm stays reachable at the call site
+/// through the existing [`From<InvariantKind> for String`] axis composed
+/// with [`std::borrow::Cow::from`] on the resulting owned [`String`] —
+/// a caller who chose to mutate the projection lands on the owned arm
+/// by their own composition, not by the substrate-primitive projection
+/// silently allocating on their behalf.
+///
+/// Tenth peer on the substrate-wide trait-idiomatic
+/// [`std::borrow::Cow<'static, str>`] forward-projection family opened
+/// on the top-level [`caixa_core::CaixaKind`] by 99c1735 (closed on the
+/// `{Self, &Self}` input-shape corner by d45c409), extended onto the
+/// M2 OTP-shape tier by 7dd28b3 / 9b3e4b3
+/// ([`caixa_core::supervisor::RestartStrategy`]) and 0612398 / ee577fd
+/// ([`caixa_core::supervisor::RestartPolicy`], closing the M2 OTP-shape
+/// tier), extended onto the M3 mesh-shape tier by 8634dec / 25690ef
+/// ([`caixa_core::aplicacao::WitShape`]), eee504d / afdf0f4
+/// ([`caixa_core::aplicacao::PlacementStrategy`]), and 1d59925 /
+/// 53346fb ([`caixa_core::aplicacao::RateLimitUnit`], closing the M3
+/// mesh-shape tier), extended onto the outside-M3 caixa-core tier by
+/// 6858bac / 702cdf4 ([`caixa_core::dep::DepList`]) and 8322511 /
+/// ebeb9e0 ([`caixa_core::CaixaDialeto`]), extended onto the outside-
+/// manifest-surface / render-side tier by 7342c32 / f80fbd6
+/// ([`caixa_core::render::PathShapeViolation`], closing the caixa-core
+/// arm of the campaign) — this lift opens the *outside-caixa-core* tier
+/// on the first peer (the caixa-arch invariant-severity three-arm axis),
+/// on the same trajectory the paired [`&'static str`]-returning owned-
+/// input axis (opened on outside-caixa-core here by the paired
+/// [`From<InvariantKind> for &'static str`] impl above) and the paired
+/// owned-input owned-[`String`] axis (opened on outside-caixa-core here
+/// by the paired [`From<InvariantKind> for String`] impl above) already
+/// took onto the same enum.
+///
+/// Rust's standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static, str>` (nor
+/// an `impl<T: fmt::Display> From<T> for std::borrow::Cow<'static, str>`),
+/// so every closed-set fieldless typed enum peer on the substrate that
+/// carries the paired [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`From<Self> for &'static str`] / [`From<&Self> for &'static str`] /
+/// [`From<Self> for String`] / [`From<&Self> for String`] sextet but not
+/// the [`std::borrow::Cow<'static, str>`] axis forces every
+/// [`std::borrow::Cow<'static, str>`]-parameterized call site through a
+/// `std::borrow::Cow::Borrowed(kind.as_str())` /
+/// `std::borrow::Cow::Owned(kind.to_string())` /
+/// `String::from(kind).into()` detour whose type bounds have no
+/// compile-time link to the substrate primitive.
+///
+/// The remaining outside-`caixa-core` closed-set fieldless typed enum
+/// peers on the substrate surface (`ArchVerdict`, `Severity`,
+/// `FixSafety`, `Semantic`, `FerriteRuntime`) are the future targets of
+/// this campaign — each carries the same paired sextet that this axis
+/// extends onto.
+///
+/// Unlike the peer [`caixa_core::CaixaKind`] pair (whose forward emit
+/// lands on the lowercase Portuguese diagnostic vocabulary while the
+/// reverse parse lands on the `PascalCase` wire vocabulary, forcing the
+/// round-trip through an intermediate [`caixa_core::CaixaKind::wire_name`]
+/// hop), [`InvariantKind`] is a caixa-arch severity axis with no
+/// wire/diagnostic vocabulary split — the [`InvariantKind::as_str`]
+/// emit and [`InvariantKind::from_wire`] parse share the same three
+/// inline canonical-lowercase byte-strings by construction, so the
+/// [`std::borrow::Cow<'static, str>`] projection this impl exposes
+/// composes directly with the paired trait-idiomatic reverse
+/// [`TryFrom<&str>`] axis on the projection's
+/// [`std::borrow::Cow::as_ref`] borrow — no intermediate wire-vocab hop
+/// required.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_into_static_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the three-
+/// arm emit-set through the [`std::borrow::Cow<'static, str>`] surface,
+/// plus a [`std::borrow::Cow::Borrowed`] discriminator witness that the
+/// projection lands on the zero-alloc arm rather than silently
+/// allocating through [`std::borrow::Cow::Owned`], plus a blanket-
+/// derived [`Into<std::borrow::Cow<'static, str>>`] shape witness that
+/// also lands on [`std::borrow::Cow::Borrowed`]) and
+/// [`tests::invariant_kind_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<InvariantKind> for &'static str`] and
+/// [`From<InvariantKind> for String`] forward-projection corners plus
+/// the sibling [`ToString::to_string`]-through-[`std::fmt::Display`]
+/// surface, plus a `.iter().copied().map(std::borrow::Cow::from)` pipe
+/// witness over [`InvariantKind::ALL`] whose zero-alloc
+/// [`std::borrow::Cow::Borrowed`] outcome is load-bearing on every arm,
+/// plus a direct round-trip witness through [`TryFrom<&str>`] on the
+/// projection's [`std::borrow::Cow::as_ref`] borrow that closes the
+/// two-way `Self → Cow<'static, str> → Self` round-trip on the trait-
+/// idiomatic [`std::borrow::Cow<'static, str>`] forward + reverse axis
+/// pair without the wire-vocab intermediate hop the peer
+/// [`caixa_core::CaixaKind`] axis pair requires).
+impl From<InvariantKind> for std::borrow::Cow<'static, str> {
+    fn from(kind: InvariantKind) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(kind.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -2015,6 +2153,247 @@ mod tests {
                  forward-emit borrowed-input owned-`String` axis and \
                  the reverse-parse `TryFrom<&str>` axis have drifted \
                  onto different vocabularies"
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_into_static_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<InvariantKind> for std::borrow::Cow<'static,
+        // str>` — asserts the standard-library trait impl and the
+        // substrate-primitive [`super::InvariantKind::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm
+        // canonical-lowercase emit-set across every arm the
+        // exhaustive [`super::InvariantKind::ALL`] slice enumerates.
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<T> for std::borrow::Cow<'static,
+        // str>` (nor an `impl<T: fmt::Display> From<T> for
+        // std::borrow::Cow<'static, str>`), so the
+        // [`std::borrow::Cow<'static, str>`] forward-projection axis
+        // is a distinct trait-idiomatic surface that a `let key:
+        // std::borrow::Cow<'static, str> = kind.into();`-shaped call
+        // site reaches through this impl and no other — the paired
+        // sibling `From<InvariantKind> for &'static str` and
+        // `From<InvariantKind> for String` impls force every
+        // [`std::borrow::Cow<'static, str>`]-parameterized call site
+        // through a `std::borrow::Cow::Borrowed(kind.as_str())` /
+        // `std::borrow::Cow::Owned(kind.to_string())` /
+        // `String::from(kind).into()` composition whose type bounds
+        // have no compile-time link back to the substrate primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::InvariantKind::as_str`] accessor's `&'static str`
+        // return lifetime by construction makes the borrowed arm the
+        // type-correct projection with no runtime allocation. Any
+        // future silent detour that routes the impl through the owned
+        // arm (an accidental
+        // `std::borrow::Cow::Owned(kind.to_string())` rewrite that
+        // would allocate on every call site where the `&'static str`
+        // return of [`super::InvariantKind::as_str`] makes the zero-
+        // alloc borrowed projection type-correct) trips at caixa-arch
+        // test time under the [`std::borrow::Cow::Borrowed`]
+        // discriminator witness rather than at a downstream
+        // [`std::borrow::Cow<'static, str>`]-bound consumer's silent
+        // allocation.
+        //
+        // First outside-`caixa-core` peer on the substrate-wide
+        // trait-idiomatic [`std::borrow::Cow<'static, str>`] forward-
+        // projection family — extends the axis off the caixa-core
+        // peers (top-level `:kind`, M2 OTP-shape, M3 mesh-shape, two-
+        // list dep-graph, dialect-classification, render-side
+        // sandbox-escape) onto the caixa-arch invariant-severity
+        // axis, opening the outside-`caixa-core` tier of the
+        // campaign.
+        for &variant in super::InvariantKind::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::InvariantKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<InvariantKind> for Cow<'static, str> impl must \
+                 round-trip InvariantKind::{variant:?} to the same \
+                 canonical-lowercase byte-string \
+                 InvariantKind::as_str returns — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<InvariantKind> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 InvariantKind::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive InvariantKind::as_str \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on \
+                 InvariantKind::{variant:?} must byte-equal \
+                 InvariantKind::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on \
+                 InvariantKind::{variant:?} must land on the zero- \
+                 alloc Cow::Borrowed arm — the blanket-derived Into \
+                 shape must resolve to the same Cow::Borrowed \
+                 dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<InvariantKind> for std::borrow::Cow<'static, str>`
+        // (this lift), the paired owned-input
+        // `From<InvariantKind> for &'static str`, and the paired
+        // owned-input `From<InvariantKind> for String` forward
+        // projections must resolve identically on every arm, locking
+        // the three return-shape paths together by construction so
+        // any future detour trips at caixa-arch test time. Also
+        // byte-parity witness against the sibling
+        // [`ToString::to_string`] surface routed through
+        // [`std::fmt::Display`] — every owned-heap-string path (the
+        // [`std::borrow::Cow::Owned`] promotion of this axis's
+        // `.into_owned()`, `From<InvariantKind> for String`, and
+        // `.to_string()`) resolves to the same canonical-lowercase
+        // byte-string per arm.
+        //
+        // Then a `.iter().copied().map(std::borrow::Cow::from)` pipe
+        // witness over [`super::InvariantKind::ALL`] that
+        // materializes the three-arm accept-set through the
+        // [`std::borrow::Cow<'static, str>`] axis alone — the exact
+        // shape a future `axum::response::IntoResponse` per-severity
+        // rejection-body composer, a future M4
+        // `mesh.pleme.io/v1alpha1/ArchAudit` CR materializer's
+        // admission-webhook per-severity rejection-reason emitter
+        // whose typing rules out the sibling [`AsRef<str>`] borrowed
+        // return, or a future substrate-wide per-severity diagnostic
+        // surface that binds through a
+        // [`std::borrow::Cow<'static, str>`] boundary reaches through
+        // — closing the composable-projection axis on the caixa-arch
+        // invariant-severity three-arm closed-set fieldless typed
+        // enum peer. The pipe witness also pins the zero-alloc
+        // discipline: every element in the collected vector
+        // satisfies the [`std::borrow::Cow::Borrowed`] arm
+        // predicate, so a future accidental silent-allocation
+        // regression on the pipe's iteration axis is a caixa-arch-
+        // test-time failure.
+        //
+        // Then a direct round-trip witness through [`TryFrom<&str>`]
+        // on the projection's [`std::borrow::Cow::as_ref`] borrow —
+        // unlike the peer [`caixa_core::CaixaKind`] axis pair (whose
+        // forward emit lands on the lowercase Portuguese diagnostic
+        // vocabulary while the reverse parse lands on the
+        // `PascalCase` wire vocabulary, forcing the round-trip
+        // through an intermediate
+        // [`caixa_core::CaixaKind::wire_name`] hop),
+        // [`super::InvariantKind`]'s forward emit and reverse parse
+        // share the same three inline canonical-lowercase byte-
+        // strings by construction, so the
+        // [`std::borrow::Cow<'static, str>`] projection composes
+        // directly with the trait-idiomatic reverse [`TryFrom<&str>`]
+        // axis without the wire-vocab intermediate hop.
+        for &variant in super::InvariantKind::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::InvariantKind>>::from(variant);
+            let via_static: &'static str =
+                <&'static str as From<super::InvariantKind>>::from(variant);
+            let via_string: String = <String as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_cow.as_ref(),
+                via_static,
+                "From<InvariantKind> for Cow<'static, str> and \
+                 From<InvariantKind> for &'static str must resolve \
+                 identically on InvariantKind::{variant:?} — \
+                 divergence signals the Cow<'static, str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            assert_eq!(
+                via_cow.as_ref(),
+                via_string.as_str(),
+                "From<InvariantKind> for Cow<'static, str> and \
+                 From<InvariantKind> for String must resolve \
+                 identically on InvariantKind::{variant:?} — \
+                 divergence signals the Cow<'static, str> and String \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                via_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<InvariantKind> for Cow<'static, str> must byte- \
+                 equal InvariantKind::to_string on \
+                 InvariantKind::{variant:?} — divergence signals the \
+                 trait-idiomatic Cow<'static, str> forward- \
+                 projection axis and the ToString-through-Display \
+                 axis have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = super::InvariantKind::ALL
+            .iter()
+            .copied()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = super::InvariantKind::ALL
+            .iter()
+            .map(|k| std::borrow::Cow::Borrowed(k.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().copied().map(Cow::from)` over \
+             InvariantKind::ALL must byte-equal `.iter().map(|k| \
+             Cow::Borrowed(k.as_str()))` on every arm — the trait- \
+             idiomatic `From<InvariantKind> for Cow<'static, str>` \
+             axis is what makes the `Cow::from` composition route \
+             through the substrate-primitive InvariantKind::as_str \
+             accessor rather than a per-call-site open-code"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "`.iter().copied().map(Cow::from)` over \
+                 InvariantKind::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm on every element — a Cow::Owned \
+                 outcome signals the pipe has silently allocated \
+                 where the substrate-primitive \
+                 InvariantKind::as_str `&'static str` return makes \
+                 the borrowed arm the type-correct projection"
+            );
+        }
+        for &variant in super::InvariantKind::ALL {
+            let via_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::InvariantKind>>::from(variant);
+            let re_parsed: Result<super::InvariantKind, ()> =
+                <super::InvariantKind as TryFrom<&str>>::try_from(via_cow.as_ref());
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "trait-idiomatic Cow<'static, str> forward-projection \
+                 + reverse-projection axis pair must round-trip \
+                 InvariantKind::{variant:?} through \
+                 `.into::<Cow<'static, str>>()` on the owned-input \
+                 surface and back through `TryFrom<&str>` on the \
+                 projection's Cow::as_ref borrow — a break signals \
+                 the Cow<'static, str> forward-emit and reverse- \
+                 parse axes have drifted onto different vocabularies \
+                 (unlike the peer CaixaKind axis pair, \
+                 InvariantKind's forward emit and reverse parse \
+                 share the same three inline canonical-lowercase \
+                 byte-strings by construction, so the round-trip \
+                 composes directly)"
             );
         }
     }
