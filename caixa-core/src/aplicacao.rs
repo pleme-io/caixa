@@ -6148,6 +6148,111 @@ impl From<RateLimitUnit> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, str>`]
+/// output* forward projection on the M3-mesh-primitive-defining
+/// `:politicas :rate-limit` canonical-suffix [`RateLimitUnit`]
+/// closed-set typed enum — the borrowed-input companion to the paired
+/// owned-input [`From<RateLimitUnit> for std::borrow::Cow<'static,
+/// str>`] impl immediately above (1d59925). Routes byte-for-byte
+/// through the same substrate-primitive [`RateLimitUnit::as_suffix`]
+/// `pub const fn` accessor (via [`std::borrow::Cow::Borrowed`]) so
+/// every consumer that holds a `&RateLimitUnit` and needs a
+/// [`std::borrow::Cow<'static, str>`] — a
+/// `RateLimitUnit::ALL.iter().map(std::borrow::Cow::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer whose iterator over
+/// `&'static [RateLimitUnit]` yields `&RateLimitUnit` (not
+/// `RateLimitUnit`, so the paired owned-input
+/// [`From<RateLimitUnit> for std::borrow::Cow<'static, str>`] axis
+/// alone forces every call site through an explicit `.copied()` /
+/// dereference / [`Copy`]-bound restatement rather than the direct
+/// trait-idiomatic projection), a future generic
+/// `<T: for<'a> Into<std::borrow::Cow<'static, str>>>`-bound emitter
+/// on a per-`:politicas :rate-limit` diagnostic column that walks the
+/// `iter().map(Into::into)` shape verbatim, the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook rejection
+/// body that composes the accepted-`:politicas :rate-limit`
+/// canonical-suffix enumeration from an iterated
+/// `RateLimitUnit::ALL.iter().map(|u| u.into())` pipe rather than a
+/// per-arm `match u { … }` cascade — reaches the same three-arm
+/// inline `"s"` / `"m"` / `"h"` canonical-suffix byte-string the
+/// paired [`std::fmt::Display`], [`AsRef<str>`],
+/// [`RateLimitUnit::as_suffix`], the four
+/// `{Self, &Self} × {&'static str, String}` 2×2 trait-idiomatic
+/// forward-projection corners, and the paired owned-input
+/// [`From<RateLimitUnit> for std::borrow::Cow<'static, str>`] impl
+/// already return.
+///
+/// Deliberately returns [`std::borrow::Cow::Borrowed`] rather than
+/// [`std::borrow::Cow::Owned`] — the substrate-primitive
+/// [`RateLimitUnit::as_suffix`] accessor's return carries the
+/// `&'static str` lifetime by construction (each `match` arm resolves
+/// to one of the three inline `"s"` / `"m"` / `"h"` byte-strings with
+/// static lifetime), so the zero-alloc borrowed arm is the type-correct
+/// projection with no runtime allocation on the borrowed-input surface
+/// just as on the paired owned-input surface.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the M3-mesh-shape
+/// `:politicas :rate-limit` canonical-suffix
+/// [`std::borrow::Cow<'static, str>`] axis opened one commit prior
+/// (1d59925) on the paired owned-input [`From<RateLimitUnit> for
+/// std::borrow::Cow<'static, str>`] impl — third-and-last
+/// M3-mesh-primitive-defining peer on the axis, closing the whole
+/// M3-mesh-shape tier of the substrate-wide
+/// [`std::borrow::Cow<'static, str>`] forward-projection campaign.
+/// One commit after the sibling [`PlacementStrategy`] `:placement
+/// :estrategia` distribution-strategy peer (eee504d owned-input +
+/// afdf0f4 borrowed-input) and the first-mover [`WitShape`]
+/// `:contratos :wit` census-label peer (8634dec owned-input + 25690ef
+/// borrowed-input) closed the first and second M3-mesh-primitive-
+/// defining slot enums, exactly as d45c409 closed the axis on the
+/// top-level [`crate::CaixaKind`] one commit after the owning half
+/// (99c1735) landed and as 9b3e4b3 / ee577fd closed it on the M2
+/// OTP-shape [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] sibling peers one commit
+/// after their owning halves (7dd28b3 / 0612398) landed. Rust's
+/// standard library does not carry a blanket
+/// `impl<T: AsRef<str>> From<&T> for Cow<'static, str>` (nor an
+/// `impl<T: fmt::Display> From<&T> for Cow<'static, str>`), so every
+/// closed-set fieldless typed enum peer on the substrate that carries
+/// the paired owned-input [`Cow<'static, str>`] axis but not the
+/// borrowed-input axis forces every borrowed-input
+/// [`Cow<'static, str>`]-parameterized call site through a spurious
+/// [`Copy`] deref (`std::borrow::Cow::from(*unit)`) or a
+/// `std::borrow::Cow::Borrowed(unit.as_suffix())` open-code whose
+/// type bounds have no compile-time link to the substrate primitive.
+///
+/// The outside-M3 substrate-wide peers ([`crate::render::PathShapeViolation`]
+/// and the outside-`caixa-core` peers `InvariantKind`, `ArchVerdict`)
+/// are the remaining future targets of the campaign; closing this
+/// borrowed-input corner on [`RateLimitUnit`] closes the whole
+/// M3-mesh-shape tier of the substrate-wide
+/// [`std::borrow::Cow<'static, str>`] axis on the
+/// M3-mesh-primitive-defining triple.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_borrowed_into_static_cow_str_routes_through_as_suffix_accessor`]
+/// (byte-parity + zero-alloc [`std::borrow::Cow::Borrowed`]-arm pin
+/// against [`RateLimitUnit::as_suffix`] across the three-arm
+/// [`RateLimitUnit::ALL`] through the borrowed-input surface) and
+/// [`tests::rate_limit_unit_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<RateLimitUnit> for std::borrow::Cow<'static, str>`], the
+/// paired borrowed-input owned-`&'static str`
+/// [`From<&RateLimitUnit> for &'static str`], and the paired
+/// borrowed-input owned-`String` [`From<&RateLimitUnit> for String`]
+/// impls, plus a `.iter().map(std::borrow::Cow::from)` pipe witness
+/// over [`RateLimitUnit::ALL`] — whose iterator yields
+/// `&RateLimitUnit` by construction, so the borrowed-input
+/// [`Cow<'static, str>`] axis is what routes the pipe through the
+/// substrate-primitive [`RateLimitUnit::as_suffix`] accessor with the
+/// zero-alloc [`Cow::Borrowed`] arm by construction and without a
+/// spurious [`Copy`] deref).
+impl From<&RateLimitUnit> for std::borrow::Cow<'static, str> {
+    fn from(unit: &RateLimitUnit) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(unit.as_suffix())
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -27630,6 +27735,231 @@ mod tests {
                  alloc Cow::Borrowed arm — a Cow::Owned outcome on \
                  any arm signals the pipe's iteration axis has \
                  silently allocated where the substrate-primitive \
+                 RateLimitUnit::as_suffix `&'static str` return makes \
+                 the borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_borrowed_into_static_cow_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RateLimitUnit> for
+        // std::borrow::Cow<'static, str>` — asserts the borrowed-input
+        // standard-library trait impl and the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] `pub const fn` accessor
+        // resolve to the same three-arm emit-set across every arm the
+        // exhaustive [`super::RateLimitUnit::ALL`] slice enumerates.
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for Cow<'static, str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `Cow<'static, str>` forward-projection axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: Cow<'static, str> = (&unit).into();`-shaped call
+        // site or a `RateLimitUnit::ALL.iter().map(Cow::from)`-shaped
+        // pipe reaches through this impl and no other — the paired
+        // owned-input `From<RateLimitUnit> for Cow<'static, str>` impl
+        // (1d59925) forces every borrowed-input call site through an
+        // explicit `Copy` deref (`Cow::from(*unit)`) or a
+        // `Cow::Borrowed(unit.as_suffix())` open-code whose type bounds
+        // have no compile-time link back to the substrate primitive.
+        //
+        // Also asserts the projection lands on the zero-alloc
+        // [`std::borrow::Cow::Borrowed`] arm (not the
+        // [`std::borrow::Cow::Owned`] arm) — the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] accessor's `&'static str`
+        // return lifetime by construction (each match arm resolves to
+        // one of the three inline `"s"` / `"m"` / `"h"` byte-strings
+        // with static lifetime) makes the borrowed arm the type-correct
+        // projection with no runtime allocation on the borrowed-input
+        // surface just as on the paired owned-input surface.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the M3-mesh-
+        // shape `:politicas :rate-limit` canonical-suffix
+        // [`Cow<'static, str>`] axis on the third-and-last M3-mesh-
+        // primitive-defining closed-set fieldless typed enum peer on
+        // the caixa surface, closing the whole M3-mesh-shape tier of
+        // the substrate-wide [`Cow<'static, str>`] forward-projection
+        // campaign, exactly as afdf0f4 closed it on the second
+        // M3-mesh-primitive peer ([`super::PlacementStrategy`]) one
+        // commit after the owning half (eee504d) landed, as 25690ef
+        // closed it on the first M3-mesh-primitive peer
+        // ([`super::WitShape`]) one commit after (8634dec) landed, as
+        // d45c409 closed it on the top-level [`super::CaixaKind`] one
+        // commit after (99c1735) landed, and as 9b3e4b3 / ee577fd
+        // closed it on the M2 OTP-shape
+        // [`crate::supervisor::RestartStrategy`] /
+        // [`crate::supervisor::RestartPolicy`] sibling peers one commit
+        // after (7dd28b3 / 0612398) landed.
+        for &variant in super::RateLimitUnit::ALL {
+            let via_trait: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::RateLimitUnit>>::from(&variant);
+            let via_method: &'static str = variant.as_suffix();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RateLimitUnit> for Cow<'static, str> impl must \
+                 round-trip &RateLimitUnit::{variant:?} to the same \
+                 inline canonical-suffix byte-string \
+                 RateLimitUnit::as_suffix returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            assert!(
+                matches!(via_trait, std::borrow::Cow::Borrowed(_)),
+                "From<&RateLimitUnit> for Cow<'static, str> impl must \
+                 land on the zero-alloc Cow::Borrowed arm on \
+                 &RateLimitUnit::{variant:?} — a Cow::Owned outcome \
+                 signals the projection has silently allocated where \
+                 the substrate-primitive RateLimitUnit::as_suffix \
+                 `&'static str` return makes the borrowed arm the \
+                 type-correct projection"
+            );
+            let via_into: std::borrow::Cow<'static, str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Cow<'static, str>>::into on &RateLimitUnit::\
+                 {variant:?} must byte-equal RateLimitUnit::as_suffix \
+                 on the same input — the blanket-derived Into shape \
+                 must resolve to the same as_suffix dispatch as the \
+                 explicit From impl"
+            );
+            assert!(
+                matches!(via_into, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, str>>::into on &RateLimitUnit::\
+                 {variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm — the blanket-derived Into shape \
+                 must resolve to the same Cow::Borrowed dispatch as \
+                 the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // borrowed-input `From<&RateLimitUnit> for
+        // std::borrow::Cow<'static, str>` (this lift), the paired
+        // owned-input `From<RateLimitUnit> for
+        // std::borrow::Cow<'static, str>` (1d59925), the paired
+        // borrowed-input owned-`&'static str` `From<&RateLimitUnit>
+        // for &'static str`, and the paired borrowed-input owned-
+        // `String` `From<&RateLimitUnit> for String` must resolve
+        // identically on every arm, locking the four return-shape ×
+        // input-shape paths together by construction so any future
+        // detour trips at caixa-core test time. Also byte-parity
+        // witness against the sibling [`ToString::to_string`] surface
+        // routed through [`std::fmt::Display`] — every owned-heap-
+        // string path (this axis's `.into_owned()` promotion, the
+        // paired [`From<&RateLimitUnit> for String`], and
+        // `.to_string()`) resolves to the same three-arm inline
+        // canonical-suffix byte-string per arm.
+        //
+        // Then a `.iter().map(std::borrow::Cow::from)` pipe witness
+        // over [`super::RateLimitUnit::ALL`] — whose iterator yields
+        // `&RateLimitUnit` by construction, so the borrowed-input
+        // [`Cow<'static, str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::RateLimitUnit::as_suffix`]
+        // accessor without a spurious [`Copy`] deref (which would only
+        // be reachable through the owned-input [`From<RateLimitUnit>
+        // for Cow<'static, str>`] axis by first calling `.copied()`
+        // on the iterator). The pipe witness also pins the zero-alloc
+        // discipline: every element in the collected vector satisfies
+        // the [`std::borrow::Cow::Borrowed`] arm predicate, so a
+        // future accidental silent-allocation regression on the pipe's
+        // iteration axis is a caixa-core-test-time failure. Peer of
+        // the sibling
+        // [`placement_strategy_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+        // (afdf0f4) and
+        // [`wit_shape_from_borrowed_into_static_cow_str_agrees_with_paired_axes_on_every_arm`]
+        // (25690ef) on the M3-mesh-shape `:placement :estrategia` and
+        // `:contratos :wit` axes — closes the whole borrowed-input
+        // `Cow<'static, str>` + paired `{&'static str, String}` cross-
+        // axis-parity corner on the third-and-last M3-mesh-primitive-
+        // defining closed-set fieldless typed enum peer on the caixa
+        // surface.
+        for &variant in super::RateLimitUnit::ALL {
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::RateLimitUnit>>::from(&variant);
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::RateLimitUnit>>::from(variant);
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::RateLimitUnit>>::from(&variant);
+            let borrowed_string: String = <String as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                borrowed_cow, owned_cow,
+                "From<&RateLimitUnit> for Cow<'static, str> and \
+                 From<RateLimitUnit> for Cow<'static, str> must \
+                 resolve identically on RateLimitUnit::{variant:?} — \
+                 divergence signals the borrowed-input and owned-\
+                 input Cow<'static, str> forward-projection input-\
+                 shape paths have drifted onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                borrowed_static,
+                "From<&RateLimitUnit> for Cow<'static, str> and \
+                 From<&RateLimitUnit> for &'static str must resolve \
+                 identically on RateLimitUnit::{variant:?} — \
+                 divergence signals the borrowed-input Cow<'static, \
+                 str> and &'static str return-shape paths have \
+                 drifted onto different emit-sets"
+            );
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RateLimitUnit> for Cow<'static, str> and \
+                 From<&RateLimitUnit> for String must resolve \
+                 identically on RateLimitUnit::{variant:?} — \
+                 divergence signals the borrowed-input Cow<'static, \
+                 str> and owned-`String` return-shape paths have \
+                 drifted onto different emit-sets"
+            );
+            let via_to_string: String = variant.to_string();
+            assert_eq!(
+                borrowed_cow.as_ref(),
+                via_to_string.as_str(),
+                "From<&RateLimitUnit> for Cow<'static, str> must \
+                 byte-equal RateLimitUnit::to_string on \
+                 RateLimitUnit::{variant:?} — divergence signals the \
+                 trait-idiomatic borrowed-input Cow<'static, str> \
+                 forward-projection axis and the ToString-through-\
+                 Display axis have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::borrow::Cow<'static, str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(std::borrow::Cow::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(|u| std::borrow::Cow::Borrowed(u.as_suffix()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Cow::from)` over RateLimitUnit::ALL — a \
+             call site whose iteration axis holds &RateLimitUnit by \
+             construction — must byte-equal `.iter().map(|u| \
+             Cow::Borrowed(u.as_suffix()))` on every arm — the \
+             borrowed-input Cow<'static, str> `From<&RateLimitUnit> \
+             for Cow<'static, str>` axis is what makes the \
+             `Cow::from` composition route through the substrate-\
+             primitive `RateLimitUnit::as_suffix` accessor with the \
+             zero-alloc Cow::Borrowed arm by construction and \
+             without a spurious `Copy` deref (which would only be \
+             reachable through the owned-input `From<RateLimitUnit> \
+             for Cow<'static, str>` axis by first calling \
+             `.copied()` on the iterator)"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the .iter().map(Cow::from) pipe \
+                 over RateLimitUnit::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm — a Cow::Owned outcome on any arm \
+                 signals the pipe's iteration axis has silently \
+                 allocated where the substrate-primitive \
                  RateLimitUnit::as_suffix `&'static str` return makes \
                  the borrowed arm the type-correct projection"
             );
