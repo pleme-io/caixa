@@ -6385,6 +6385,73 @@ impl From<&RateLimitUnit> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the M3-mesh-primitive-defining `:politicas :rate-limit` canonical-
+/// suffix [`RateLimitUnit`] closed-set fieldless typed enum. Routes byte-
+/// for-byte through the substrate-primitive [`RateLimitUnit::as_suffix`]
+/// `pub const fn` accessor via [`Box::<str>::from`] on the returned
+/// `&'static str`, so every consumer that binds a
+/// `let key: Box<str> = unit.into();`-shaped call site — a per-Aplicacao
+/// rate-limit-suffix census-key materializer that stashes the
+/// `:politicas :rate-limit` canonical-suffix discriminator in a
+/// `Box<str>`-typed heap-owned scalar for cheap clone (the shared-
+/// nothing per-suffix accept-set the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR reconciliation scheduler
+/// carries when it fans on the rate-limit partition), a future
+/// admission-webhook rejection body whose per-arm `Box<str>` field
+/// composes from an owned [`RateLimitUnit`] handle, a future
+/// `feira app graph --by-rate-limit-unit` histogram-column emitter that
+/// stashes each arm as an owned `Box<str>` label — reaches the same
+/// three-arm inline `"s"` / `"m"` / `"h"` canonical-suffix byte-string
+/// the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `RateLimitUnit → Box<str>` `.into()` reaches through this impl and
+/// no other — without a `Box::from(unit.as_suffix())` open-code whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Extends the M3-mesh-shape tier of the substrate-wide trait-idiomatic
+/// [`Box<str>`] forward-projection campaign onto its third — and last —
+/// M3-mesh-primitive-defining slot enum, closing the owned-input surface
+/// of the whole M3 mesh-shape tier. The [`PlacementStrategy`] `:placement
+/// :estrategia` distribution-strategy first-mover (6d73e84 owned-input +
+/// 3c971b2 borrowed-input) opened the tier; the paired [`WitShape`]
+/// `:contratos :wit` census-label peer (bdca41a owned-input + 57ca75e
+/// borrowed-input) extended it onto the second peer. Same discipline as
+/// the peer [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] M2-OTP-shape [`Box<str>`] axes:
+/// forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection corner,
+/// [`std::fmt::Display`], [`AsRef<str>`], [`RateLimitUnit::as_suffix`])
+/// and reverse parse ([`RateLimitUnit::from_suffix`], [`TryFrom<&str>`])
+/// route through the same three inline `"s"` / `"m"` / `"h"` canonical-
+/// suffix byte-strings [`RateLimitUnit::as_suffix`] returns by
+/// construction, so the round-trip composes directly without a
+/// canonical-suffix intermediate hop.
+///
+/// Leaves the paired borrowed-input [`From<&RateLimitUnit> for
+/// Box<str>`] `{Self, &Self}`-closer as the last un-lifted axis on the
+/// M3-mesh-primitive triple — closing that borrowed-input corner closes
+/// the whole M3 mesh-shape tier of the substrate-wide [`Box<str>`]
+/// forward-projection campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_into_box_str_routes_through_as_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::as_suffix`] across the
+/// three-arm [`RateLimitUnit::ALL`] emit-set on the owned-input surface,
+/// plus a blanket-derived [`Into`] shape witness).
+impl From<RateLimitUnit> for Box<str> {
+    fn from(unit: RateLimitUnit) -> Box<str> {
+        Box::<str>::from(unit.as_suffix())
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -28617,6 +28684,58 @@ mod tests {
                  allocated where the substrate-primitive \
                  RateLimitUnit::as_suffix `&'static str` return makes \
                  the borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_into_box_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RateLimitUnit> for Box<str>` — asserts the owned-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] `pub const fn` accessor
+        // resolve to the same three-arm emit-set across every arm the
+        // exhaustive [`super::RateLimitUnit::ALL`] slice enumerates.
+        // Extends the M3-mesh-shape tier of the substrate-wide
+        // `Box<str>` forward-projection campaign onto its third — and
+        // last — M3-mesh-primitive-defining slot enum, closing the
+        // owned-input surface of the whole M3 mesh-shape tier: the
+        // paired [`super::PlacementStrategy`] (6d73e84 owned-input +
+        // 3c971b2 borrowed-input) and [`super::WitShape`] (bdca41a
+        // owned-input + 57ca75e borrowed-input) closed the first and
+        // second M3-mesh-primitive peers, leaving the paired borrowed-
+        // input [`From<&RateLimitUnit> for Box<str>`] `{Self, &Self}`-
+        // closer as the last un-lifted axis on the M3-mesh-primitive
+        // triple. Rust's standard library carries
+        // `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is
+        // a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = unit.into();`-shaped call site reaches
+        // through this impl and no other — a paired
+        // `Box::from(unit.as_suffix())` open-code has no compile-time
+        // link back to the substrate primitive.
+        for &variant in super::RateLimitUnit::ALL {
+            let via_trait: Box<str> = <Box<str> as From<super::RateLimitUnit>>::from(variant);
+            let via_method: &'static str = variant.as_suffix();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RateLimitUnit> for Box<str> impl must round-trip \
+                 RateLimitUnit::{variant:?} to the same inline \
+                 canonical-suffix byte-string RateLimitUnit::as_suffix \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on RateLimitUnit::{variant:?} \
+                 must byte-equal RateLimitUnit::as_suffix on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_suffix dispatch as the explicit From \
+                 impl"
             );
         }
     }
