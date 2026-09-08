@@ -1155,6 +1155,117 @@ impl From<&CaixaDialeto> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection on
+/// the outside-M3 caixa-core dialect-classification [`CaixaDialeto`]
+/// closed-set fieldless typed enum. Routes byte-for-byte through the
+/// substrate-primitive [`CaixaDialeto::as_str`] `pub const fn` accessor
+/// via [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = dialeto.into();`-shaped
+/// call site reaches the same four `"Pacote"` / `"Molde"` /
+/// `"MoldePosicional"` / `"Desconhecido"` byte-strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` forward-
+/// projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a distinct
+/// trait-idiomatic surface that a downstream `CaixaDialeto → Box<str>`
+/// `.into()` reaches through this impl and no other — without a
+/// `Box::from(dialeto.as_str())` open-code whose type bounds have no
+/// compile-time link back to the substrate primitive.
+///
+/// Extends the caixa-core-internal tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign onto the third
+/// caixa-core-internal peer, after the render-side path-shape-diagnostic
+/// [`crate::render::PathShapeViolation`] pair (0d87a72, both corners in
+/// one axis) opened the tier and the outside-M3 caixa-core two-list
+/// dep-graph [`crate::dep::DepList`] pair (4aada99, both corners in one
+/// axis) extended it. Follows the M2 OTP-shape
+/// [`crate::supervisor::RestartStrategy`] / [`crate::supervisor::RestartPolicy`]
+/// pair (59ae5dc + cb1d068), the M3 mesh-shape
+/// [`crate::aplicacao::PlacementStrategy`] / [`crate::aplicacao::WitShape`] /
+/// [`crate::aplicacao::RateLimitUnit`] triple (6d73e84 → df7040c) that
+/// closed the M3 mesh-shape tier, and the outside-`caixa-core` tier
+/// (`InvariantKind` 10613a7 + 5901887, `ArchVerdict` 3e08f5a + c4319a8,
+/// `Severity` 5116c95, `FixSafety` cf0174b, `Semantic` 0cd7dc3,
+/// `FerriteRuntime` 14886a8) that closed one tier prior. Same discipline
+/// as those peers: forward emit (this impl, the sibling `{&'static str,
+/// String, Cow<'static, str>}` forward-projection corner,
+/// [`std::fmt::Display`], [`AsRef<str>`], [`CaixaDialeto::as_str`]) and
+/// reverse parse ([`CaixaDialeto::from_wire`], [`TryFrom<&str>`]) route
+/// through the same four `PascalCase` byte-strings by construction, so
+/// the round-trip composes directly without the wire-vocab intermediate
+/// hop the peer [`crate::CaixaKind`] axis pair requires.
+///
+/// A future arm addition (the module doc's "third dialect" hazard
+/// actualising as a fifth arm) reaches the paired [`Box<str>`] output
+/// axis through one match-arm edit on the [`CaixaDialeto::as_str`]
+/// `pub const fn` accessor, not a coordinated rewrite of every
+/// downstream `Box::from(dialeto.as_str())` open-code.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`] across the four-arm
+/// [`CaixaDialeto::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness).
+impl From<CaixaDialeto> for Box<str> {
+    fn from(dialeto: CaixaDialeto) -> Box<str> {
+        Box::<str>::from(dialeto.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward projection
+/// on the outside-M3 caixa-core dialect-classification [`CaixaDialeto`]
+/// closed-set fieldless typed enum. Routes byte-for-byte through the
+/// substrate-primitive [`CaixaDialeto::as_str`] `pub const fn` accessor
+/// via [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = (&dialeto).into();`-shaped
+/// call site or a `CaixaDialeto::ALL.iter().map(Box::<str>::from)`-shaped
+/// pipe (whose iterator over `&'static [CaixaDialeto]` yields
+/// `&CaixaDialeto` by construction) reaches the same four `"Pacote"` /
+/// `"Molde"` / `"MoldePosicional"` / `"Desconhecido"` byte-strings the
+/// sibling `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner and the paired owned-input
+/// [`From<CaixaDialeto> for Box<str>`] already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input
+/// axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`CaixaDialeto::ALL`]`.iter().map(Box::<str>::from)` reaches through
+/// this impl and no other — without it, the same pipe would force an
+/// explicit `.copied()` restatement whose type bounds have no compile-
+/// time link back to the substrate primitive, and a
+/// `let key: Box<str> = (&dialeto).into();`-shaped call site would force
+/// an explicit `Copy` deref (`Box::<str>::from(*dialeto)`) or a
+/// `Box::<str>::from(dialeto.as_str())` open-code with the same defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the third caixa-
+/// core-internal closed-set fieldless typed enum peer of the substrate-
+/// wide trait-idiomatic [`Box<str>`] forward-projection campaign,
+/// matching the trajectory the paired render-side path-shape-diagnostic
+/// [`crate::render::PathShapeViolation`] pair (0d87a72, both corners in
+/// one axis) and the paired outside-M3 caixa-core two-list dep-graph
+/// [`crate::dep::DepList`] pair (4aada99, both corners in one axis)
+/// walked before it.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_borrowed_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`] across the four-arm
+/// [`CaixaDialeto::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, plus a
+/// `.iter().map(Box::<str>::from)` pipe witness over
+/// [`CaixaDialeto::ALL`] — whose iterator yields `&CaixaDialeto` by
+/// construction, so the borrowed-input [`Box<str>`] axis is what routes
+/// the pipe through the substrate-primitive [`CaixaDialeto::as_str`]
+/// accessor without a spurious [`Copy`] deref).
+impl From<&CaixaDialeto> for Box<str> {
+    fn from(dialeto: &CaixaDialeto) -> Box<str> {
+        Box::<str>::from(dialeto.as_str())
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -3671,6 +3782,146 @@ mod tests {
                  CaixaDialeto's forward emit and reverse parse share \
                  one PascalCase vocabulary by construction, so the \
                  round-trip composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<CaixaDialeto> for Box<str>` — asserts the owned-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::CaixaDialeto::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm PascalCase emit-set across every
+        // arm the exhaustive [`super::CaixaDialeto::ALL`] slice
+        // enumerates. Extends the caixa-core-internal tier of the
+        // substrate-wide [`Box<str>`] forward-projection campaign onto
+        // the third caixa-core-internal peer, after the render-side
+        // path-shape-diagnostic
+        // [`super::super::render::PathShapeViolation`] pair (0d87a72,
+        // both corners in one axis) opened the tier and the outside-M3
+        // caixa-core two-list dep-graph [`super::super::dep::DepList`]
+        // pair (4aada99, both corners in one axis) extended it. Rust's
+        // standard library carries `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: Box<str> = dialeto.into();`-shaped call site reaches
+        // through this impl and no other — a paired
+        // `Box::from(dialeto.as_str())` open-code has no compile-time
+        // link back to the substrate primitive.
+        for &variant in CaixaDialeto::ALL {
+            let via_trait: Box<str> = <Box<str> as From<CaixaDialeto>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<CaixaDialeto> for Box<str> impl must round-trip \
+                 CaixaDialeto::{variant:?} to the same PascalCase \
+                 byte-string CaixaDialeto::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on CaixaDialeto::{variant:?} must \
+                 byte-equal CaixaDialeto::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_borrowed_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&CaixaDialeto> for Box<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::CaixaDialeto::as_str`] `pub const fn`
+        // accessor resolve to the same four-arm PascalCase emit-set
+        // across every arm the exhaustive [`super::CaixaDialeto::ALL`]
+        // slice enumerates. Rust's standard library carries
+        // `impl From<&str> for Box<str>` and `impl From<String> for
+        // Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-
+        // based `impl<T: Copy, U: From<T>> From<&T> for U`), so the
+        // borrowed-input [`Box<str>`] forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `CaixaDialeto::ALL.iter().map(Box::<str>::from)`-shaped pipe
+        // (whose iterator over `&'static [CaixaDialeto]` yields
+        // `&CaixaDialeto` by construction) or a
+        // `let key: Box<str> = (&dialeto).into();`-shaped call site
+        // reaches through this impl and no other — the paired owned-
+        // input `From<CaixaDialeto> for Box<str>` impl alone would
+        // force every borrowed-input call site through an explicit
+        // `Copy` deref (`Box::<str>::from(*dialeto)`) or a
+        // `Box::<str>::from(dialeto.as_str())` open-code whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the third
+        // caixa-core-internal closed-set fieldless typed enum peer of
+        // the substrate-wide [`Box<str>`] forward-projection campaign,
+        // matching the trajectory the paired render-side path-shape-
+        // diagnostic [`super::super::render::PathShapeViolation`] pair
+        // (0d87a72, both corners in one axis) and the paired outside-M3
+        // caixa-core two-list dep-graph [`super::super::dep::DepList`]
+        // pair (4aada99, both corners in one axis) walked before it.
+        for &variant in CaixaDialeto::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&CaixaDialeto>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&CaixaDialeto> for Box<str> impl must round-trip \
+                 &CaixaDialeto::{variant:?} to the same PascalCase \
+                 byte-string CaixaDialeto::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &CaixaDialeto::{variant:?} \
+                 must byte-equal CaixaDialeto::as_str on the same \
+                 input — the blanket-derived Into shape on the \
+                 borrowed-input surface must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `CaixaDialeto::ALL.iter()` yields `&CaixaDialeto` by
+        // construction, so `.map(Box::<str>::from)` resolves through
+        // the borrowed-input `From<&CaixaDialeto> for Box<str>` impl
+        // and no other — without this axis, the same pipe would force
+        // an explicit `.copied()` restatement whose type bounds bypass
+        // the substrate primitive.
+        let via_pipe: Vec<Box<str>> = CaixaDialeto::ALL.iter().map(Box::<str>::from).collect();
+        let via_accessor: Vec<&'static str> =
+            CaixaDialeto::ALL.iter().map(|d| d.as_str()).collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "CaixaDialeto::ALL.iter().map(Box::<str>::from) pipe must \
+             preserve arity against the paired CaixaDialeto::as_str \
+             accessor — a length divergence signals the borrowed-input \
+             axis has silently rejected an arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "CaixaDialeto::ALL.iter().map(Box::<str>::from) pipe \
+                 must byte-equal the paired \
+                 CaixaDialeto::ALL.iter().map(|d| d.as_str()) pipe on \
+                 every arm — divergence signals the borrowed-input \
+                 `From<&CaixaDialeto> for Box<str>` axis has silently \
+                 detoured off the substrate-primitive accessor"
             );
         }
     }
