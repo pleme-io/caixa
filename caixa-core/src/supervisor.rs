@@ -1068,6 +1068,103 @@ impl From<&RestartStrategy> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output*
+/// forward projection on the M2 OTP-shape sibling-restart
+/// [`RestartStrategy`] closed-set fieldless typed enum — opens the
+/// substrate-wide [`std::sync::Arc<str>`] forward-projection campaign
+/// tier on the first M2 OTP-shape closed-set fieldless typed enum peer
+/// on the caixa surface (`:supervisor :estrategia`), immediately after
+/// the paired [`Box<str>`] axis (69ef45c / 59ae5dc) closed the
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// 2×4 corner on this enum. Routes byte-for-byte through the
+/// substrate-primitive [`RestartStrategy::as_str`] `pub const fn`
+/// accessor (via [`std::sync::Arc::<str>::from`] on the returned
+/// `&'static str`), so every consumer that binds a
+/// [`RestartStrategy`] through the standard-library `.into()` /
+/// [`From<Self> for std::sync::Arc<str>`] (equivalently
+/// [`Into<std::sync::Arc<str>>`]) axis — a future admission-webhook
+/// running under `axum` + `tokio` whose per-arm structured-log field
+/// crosses an `.await` boundary and demands the [`Sync`] +
+/// [`Send`]-safe shared-ownership envelope [`std::sync::Arc<str>`]
+/// provides (the sibling [`Box<str>`] axis's owned-move return-shape
+/// forces every downstream `.clone()` through a heap allocation, while
+/// [`std::sync::Arc<str>`]'s reference-counted shared-ownership
+/// resolves the same `.clone()` through a refcount bump), a future
+/// wasm-operator's per-supervisor reconciliation scheduler that
+/// dispatches the same per-strategy diagnostic key onto multiple
+/// concurrent reconcile-loop tasks holding shared-ownership through
+/// [`std::sync::Arc<str>`], a future
+/// `tracing::field::valuable::Value::Str(strategy.into())` structured-
+/// log recorder whose typing folds a shared-ownership envelope onto
+/// the span-context axis, a generic
+/// `<T: Into<std::sync::Arc<str>>>`-bound diagnostic column on a
+/// shared-ownership per-strategy cache — reaches the same four-arm
+/// lifted [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const
+/// the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already returns.
+///
+/// First-mover on the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection family — Rust's
+/// standard library carries `impl From<&str> for std::sync::Arc<str>`
+/// and `impl From<String> for std::sync::Arc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor an
+/// `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so every
+/// closed-set fieldless typed enum on the substrate that carries the
+/// paired [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`From<Self> for &'static str`] / [`From<&Self> for &'static str`] /
+/// [`From<Self> for String`] / [`From<&Self> for String`] /
+/// [`From<Self> for Cow<'static, str>`] /
+/// [`From<&Self> for Cow<'static, str>`] /
+/// [`From<Self> for Box<str>`] / [`From<&Self> for Box<str>`] decet
+/// but not the [`std::sync::Arc<str>`] axis forces every
+/// `std::sync::Arc<str>`-parameterized call site through a
+/// `std::sync::Arc::<str>::from(strategy.as_str())` open-code (or a
+/// `std::sync::Arc::<str>::from(String::from(strategy))` two-step
+/// composition through the owned-`String` axis that allocates
+/// twice — once into the intermediate `String`, once into the
+/// [`Arc<str>`] on the `From<String>` conversion) whose type bounds
+/// have no compile-time link back to the substrate primitive. Opening
+/// the axis on the first M2 OTP-shape closed-set fieldless typed enum
+/// peer on the caixa substrate surface establishes the "route through
+/// `as_str` via [`std::sync::Arc::<str>::from`] on the returned
+/// `&'static str`" discipline; every future closed-set fieldless
+/// typed enum peer on the substrate ([`RestartPolicy`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::aplicacao::WitShape`],
+/// [`crate::dep::DepList`], [`crate::dialeto::CaixaDialeto`],
+/// [`crate::kind::CaixaKind`],
+/// [`crate::render::PathShapeViolation`], and the outside-`caixa-core`
+/// peers `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`,
+/// `Semantic`, `FerriteRuntime`) is a future target of the campaign,
+/// tracking the same 14-peer emit-set every prior projection tier
+/// ([`&'static str`], [`String`], [`Cow<'static, str>`], [`Box<str>`])
+/// converged onto.
+///
+/// Peer of the sibling [`Box<str>`] forward-projection first-mover
+/// (69ef45c) — same "opens a new substrate-wide projection tier"
+/// discipline, extended onto the [`std::sync::Arc<str>`] axis whose
+/// shared-ownership + [`Sync`] + [`Send`] contract is the distinct
+/// value the [`Box<str>`] axis's owned-move return-shape cannot
+/// provide.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm [`RestartStrategy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness and cross-
+/// axis byte-parity pins against the sibling owned-input
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` return-shape
+/// axes).
+impl From<RestartStrategy> for std::sync::Arc<str> {
+    fn from(strategy: RestartStrategy) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(strategy.as_str())
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -9240,6 +9337,115 @@ mod tests {
              `From<RestartStrategy> for Box<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    fn restart_strategy_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartStrategy> for std::sync::Arc<str>` — asserts
+        // the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::RestartStrategy::as_str`]
+        // `pub const fn` accessor resolve to the same four-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartStrategy::ALL`] slice enumerates. Opens the
+        // substrate-wide [`std::sync::Arc<str>`] forward-projection
+        // campaign tier on the first M2 OTP-shape closed-set fieldless
+        // typed enum peer on the caixa surface
+        // (`:supervisor :estrategia`), immediately after the paired
+        // [`Box<str>`] axis (69ef45c / 59ae5dc) closed the
+        // `{Self, &Self} × {&'static str, String, Cow<'static, str>,
+        // Box<str>}` 2×4 corner on this enum. Rust's standard library
+        // carries `impl From<&str> for std::sync::Arc<str>` and
+        // `impl From<String> for std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor
+        // an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`),
+        // so this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = strategy.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(strategy.as_str())` open-code
+        // has no compile-time link back to the substrate primitive,
+        // and a two-step `std::sync::Arc::<str>::from(String::from(
+        // strategy))` composition through the owned-`String` axis
+        // allocates twice (once into the intermediate `String`, once
+        // into the [`Arc<str>`] on the `From<String>` conversion)
+        // where the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::RestartStrategy::as_str`] accessor trips at caixa-
+        // core test time.
+        for &variant in RestartStrategy::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RestartStrategy> for std::sync::Arc<str> impl \
+                 must round-trip RestartStrategy::{variant:?} to the \
+                 same lifted SUPERVISOR_ESTRATEGIA_* const \
+                 RestartStrategy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on \
+                 RestartStrategy::{variant:?} must byte-equal \
+                 RestartStrategy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<RestartStrategy> for std::sync::Arc<str> and \
+                 From<RestartStrategy> for &'static str must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<RestartStrategy> for std::sync::Arc<str> and \
+                 From<RestartStrategy> for String must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and owned-`String` return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<RestartStrategy> for std::sync::Arc<str> and \
+                 From<RestartStrategy> for Cow<'static, str> must \
+                 resolve identically on RestartStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<RestartStrategy> for std::sync::Arc<str> and \
+                 From<RestartStrategy> for Box<str> must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Box<str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+        }
     }
 
     #[test]
