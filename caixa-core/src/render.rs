@@ -8276,6 +8276,156 @@ impl From<&PathShapeViolation> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection on
+/// the render-side sandbox-escape three-arm path-shape-diagnostic
+/// [`PathShapeViolation`] closed-set typed enum. Routes byte-for-byte through
+/// the substrate-primitive [`PathShapeViolation::as_str`] `pub const fn`
+/// accessor via [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = violation.into();`-shaped call
+/// site — a per-path-shape-violation census-key materializer that stashes
+/// the path-shape-diagnostic discriminator in a [`Box<str>`]-typed heap-
+/// owned scalar for cheap clone off an owned handle, a future M4
+/// [`mesh.pleme.io/v1alpha1/Caixa`] CR materializer's per-path admission-
+/// webhook rejection body whose per-arm [`Box<str>`] field composes from an
+/// owned [`PathShapeViolation`] handle naming the accepted-violation-tag
+/// list, a future `feira lint --explain-path-shape=<axis>` per-arm listing
+/// that stashes each arm as an owned [`Box<str>`] label — reaches the same
+/// three-arm `"empty"` / `"absolute"` / `"parent-escape"` canonical-
+/// lowercase kebab byte-strings the sibling `{Self, &Self} × {&'static str,
+/// String, Cow<'static, str>}` forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a distinct
+/// trait-idiomatic surface that a downstream `PathShapeViolation → Box<str>`
+/// `.into()` reaches through this impl and no other — without a
+/// `Box::from(violation.as_str())` open-code whose type bounds have no
+/// compile-time link back to the substrate primitive.
+///
+/// Opens the caixa-core-internal tier of the substrate-wide trait-idiomatic
+/// [`Box<str>`] forward-projection campaign on the first render-side
+/// path-shape-diagnostic closed-set fieldless typed enum peer, following the
+/// M2 OTP-shape [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] pair (59ae5dc + cb1d068), the M3
+/// mesh-shape [`crate::aplicacao::PlacementStrategy`] /
+/// [`crate::aplicacao::WitShape`] / [`crate::aplicacao::RateLimitUnit`]
+/// triple (6d73e84 → 8f7eb1a) that closed the M3 mesh-shape tier, and the
+/// outside-`caixa-core` tier (`InvariantKind` 10613a7 + 5901887,
+/// `ArchVerdict` 3e08f5a + c4319a8, `Severity` 5116c95, `FixSafety`
+/// cf0174b, `Semantic` 0cd7dc3, `FerriteRuntime` 14886a8) closed one axis
+/// prior. Same discipline as those peers: forward emit (this impl, the
+/// sibling `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`PathShapeViolation::as_str`]) and reverse parse
+/// ([`PathShapeViolation::from_wire`], [`TryFrom<&str>`]) route through the
+/// same three inline canonical-kebab byte-strings
+/// [`PathShapeViolation::as_str`] returns by construction, so the round-
+/// trip composes directly without the wire-vocab intermediate hop the peer
+/// [`crate::CaixaKind`] axis pair requires.
+///
+/// A future variant addition (a `Symlink` arm the future symlink-escape
+/// gate would carry once [`std::path::Path::is_symlink`] becomes part of
+/// the sandbox contract, a `TrailingSpace` arm a future authoring-side
+/// whitespace-hygiene gate would raise for `"lib/init.lisp "` shapes)
+/// reaches the paired [`Box<str>`] output axis through one match-arm edit
+/// on the [`PathShapeViolation::as_str`] `pub const fn` accessor, not a
+/// coordinated rewrite of every downstream `Box::from(violation.as_str())`
+/// open-code.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::as_str`] across the
+/// three-arm [`PathShapeViolation::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness).
+impl From<PathShapeViolation> for Box<str> {
+    fn from(violation: PathShapeViolation) -> Box<str> {
+        Box::<str>::from(violation.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward projection
+/// on the render-side sandbox-escape three-arm path-shape-diagnostic
+/// [`PathShapeViolation`] closed-set typed enum. Routes byte-for-byte
+/// through the substrate-primitive [`PathShapeViolation::as_str`] `pub const
+/// fn` accessor via [`Box::<str>::from`] on the returned `&'static str`, so
+/// every consumer that binds a `let key: Box<str> = (&violation).into();`-
+/// shaped call site or a
+/// `PathShapeViolation::ALL.iter().map(Box::<str>::from)`-shaped pipe (whose
+/// iterator over `&'static [PathShapeViolation]` yields
+/// `&PathShapeViolation` by construction) — a per-path-shape-violation
+/// census-key materializer that stashes the path-shape-diagnostic
+/// discriminator in a [`Box<str>`]-typed heap-owned scalar for cheap clone
+/// off a borrowed handle, a future M4 admission-webhook rejection body
+/// whose per-arm [`Box<str>`] field composes from a borrowed
+/// [`PathShapeViolation`] handle off a `&PathShapeViolation` borrow, a
+/// future `feira lint --explain-path-shape` per-axis listing that iterates
+/// [`PathShapeViolation::ALL`] into per-arm owned [`Box<str>`] labels —
+/// reaches the same three-arm `"empty"` / `"absolute"` / `"parent-escape"`
+/// canonical-lowercase kebab byte-strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` forward-
+/// projection corner and the paired owned-input
+/// [`From<PathShapeViolation> for Box<str>`] already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input axis
+/// is a distinct trait-idiomatic surface that the pipe shape
+/// [`PathShapeViolation::ALL`]`.iter().map(Box::<str>::from)` reaches
+/// through this impl and no other — without it, the same pipe would force
+/// an explicit `.copied()` restatement (`.iter().copied()
+/// .map(Box::<str>::from)`) whose type bounds have no compile-time link
+/// back to the substrate primitive, and a `let key: Box<str> =
+/// (&violation).into();`-shaped call site would force an explicit `Copy`
+/// deref (`Box::<str>::from(*violation)`) or a
+/// `Box::<str>::from(violation.as_str())` open-code with the same defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the first render-side
+/// path-shape-diagnostic caixa-core-internal closed-set fieldless typed
+/// enum peer of the substrate-wide trait-idiomatic [`Box<str>`] forward-
+/// projection campaign — the first caixa-core-internal peer to converge
+/// onto the axis (as distinct from the M2 OTP-shape supervisor peers and
+/// the M3 mesh-shape aplicacao peers, which sit on the manifest surface,
+/// and the outside-`caixa-core` peers on the caixa-arch / caixa-lint /
+/// caixa-theme / caixa-provedor surfaces) — matching the trajectory the
+/// paired caixa-theme [`caixa_theme::style::Semantic`] pair (0cd7dc3, both
+/// corners in one axis), the caixa-provedor
+/// [`caixa_provedor::FerriteRuntime`] pair (14886a8, both corners in one
+/// axis), the M2 OTP-shape [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] pair, and the M3 mesh-shape
+/// [`crate::aplicacao::PlacementStrategy`] /
+/// [`crate::aplicacao::WitShape`] / [`crate::aplicacao::RateLimitUnit`]
+/// triple walked before it.
+///
+/// Same discipline as the paired outside-`caixa-core`,
+/// [`crate::supervisor`], and [`crate::aplicacao`] [`Box<str>`]
+/// `{Self, &Self}`-closers: forward emit (this impl, the paired owned-
+/// input [`From<PathShapeViolation> for Box<str>`] impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection corner,
+/// [`std::fmt::Display`], [`AsRef<str>`], [`PathShapeViolation::as_str`])
+/// and reverse parse ([`PathShapeViolation::from_wire`],
+/// [`TryFrom<&str>`]) route through the same three inline canonical-kebab
+/// byte-strings [`PathShapeViolation::as_str`] returns by construction, so
+/// the round-trip composes directly without the wire-vocab intermediate
+/// hop the peer [`crate::CaixaKind`] axis pair requires.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_borrowed_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::as_str`] across the
+/// three-arm [`PathShapeViolation::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness, plus a
+/// `.iter().map(Box::<str>::from)` pipe witness over
+/// [`PathShapeViolation::ALL`] — whose iterator yields
+/// `&PathShapeViolation` by construction, so the borrowed-input
+/// [`Box<str>`] axis is what routes the pipe through the substrate-
+/// primitive [`PathShapeViolation::as_str`] accessor without a spurious
+/// [`Copy`] deref).
+impl From<&PathShapeViolation> for Box<str> {
+    fn from(violation: &PathShapeViolation) -> Box<str> {
+        Box::<str>::from(violation.as_str())
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -42962,6 +43112,170 @@ mod tests {
                  share the same three inline canonical-kebab \
                  byte-strings by construction, so the round-trip \
                  composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PathShapeViolation> for Box<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::PathShapeViolation::as_str`] `pub const fn`
+        // accessor resolve to the same three-arm canonical-lowercase
+        // kebab emit-set (`"empty"` / `"absolute"` / `"parent-escape"`)
+        // across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Opens the
+        // caixa-core-internal tier of the substrate-wide [`Box<str>`]
+        // forward-projection campaign on the first render-side path-
+        // shape-diagnostic closed-set fieldless typed enum peer,
+        // following the M2 OTP-shape [`super::super::supervisor::
+        // RestartStrategy`] / [`super::super::supervisor::RestartPolicy`]
+        // pair (59ae5dc + cb1d068), the M3 mesh-shape
+        // [`super::super::aplicacao::PlacementStrategy`] /
+        // [`super::super::aplicacao::WitShape`] /
+        // [`super::super::aplicacao::RateLimitUnit`] triple (6d73e84 →
+        // 8f7eb1a) that closed the M3 mesh-shape tier, and the outside-
+        // `caixa-core` tier (`InvariantKind` 10613a7 + 5901887,
+        // `ArchVerdict` 3e08f5a + c4319a8, `Severity` 5116c95,
+        // `FixSafety` cf0174b, `Semantic` 0cd7dc3, `FerriteRuntime`
+        // 14886a8) closed one axis prior. Rust's standard library
+        // carries `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: Box<str> = violation.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(violation.as_str())` open-code has no compile-time
+        // link back to the substrate primitive.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_trait: Box<str> = <Box<str> as From<super::PathShapeViolation>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<PathShapeViolation> for Box<str> impl must round-\
+                 trip PathShapeViolation::{variant:?} to the same \
+                 canonical-lowercase kebab byte-string \
+                 PathShapeViolation::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on PathShapeViolation::{variant:?} \
+                 must byte-equal PathShapeViolation::as_str on the same \
+                 input — the blanket-derived Into shape must resolve to \
+                 the same as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_borrowed_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&PathShapeViolation> for Box<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::PathShapeViolation::as_str`] `pub const fn`
+        // accessor resolve to the same three-arm canonical-lowercase
+        // kebab emit-set (`"empty"` / `"absolute"` / `"parent-escape"`)
+        // across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Rust's
+        // standard library carries `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+        // `impl<T: Copy, U: From<T>> From<&T> for U`), so the borrowed-
+        // input [`Box<str>`] forward-projection axis is a distinct
+        // trait-idiomatic surface that a
+        // `PathShapeViolation::ALL.iter().map(Box::<str>::from)`-shaped
+        // pipe (whose iterator over `&'static [PathShapeViolation]`
+        // yields `&PathShapeViolation` by construction) or a
+        // `let key: Box<str> = (&violation).into();`-shaped call site
+        // reaches through this impl and no other — the paired owned-
+        // input `From<PathShapeViolation> for Box<str>` impl alone would
+        // force every borrowed-input call site through an explicit
+        // `Copy` deref (`Box::<str>::from(*violation)`) or a
+        // `Box::<str>::from(violation.as_str())` open-code whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the first
+        // caixa-core-internal render-side path-shape-diagnostic closed-
+        // set fieldless typed enum peer of the substrate-wide
+        // [`Box<str>`] forward-projection campaign — the first caixa-
+        // core-internal peer to converge onto the axis (as distinct from
+        // the M2 OTP-shape supervisor peers and the M3 mesh-shape
+        // aplicacao peers, which sit on the manifest surface, and the
+        // outside-`caixa-core` peers on the caixa-arch / caixa-lint /
+        // caixa-theme / caixa-provedor surfaces) — matching the
+        // trajectory the paired caixa-theme `Semantic` pair (0cd7dc3,
+        // both corners in one axis), the caixa-provedor `FerriteRuntime`
+        // pair (14886a8, both corners in one axis), the M2 OTP-shape
+        // `RestartStrategy` / `RestartPolicy` pair, and the M3 mesh-
+        // shape `PlacementStrategy` / `WitShape` / `RateLimitUnit`
+        // triple walked before it.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_trait: Box<str> =
+                <Box<str> as From<&super::PathShapeViolation>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&PathShapeViolation> for Box<str> impl must round-\
+                 trip &PathShapeViolation::{variant:?} to the same \
+                 canonical-lowercase kebab byte-string \
+                 PathShapeViolation::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &PathShapeViolation::{variant:?} \
+                 must byte-equal PathShapeViolation::as_str on the same \
+                 input — the blanket-derived Into shape on the borrowed-\
+                 input surface must resolve to the same as_str dispatch \
+                 as the explicit From impl"
+            );
+        }
+
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `PathShapeViolation::ALL.iter()` yields
+        // `&PathShapeViolation` by construction, so
+        // `.map(Box::<str>::from)` resolves through the borrowed-input
+        // `From<&PathShapeViolation> for Box<str>` impl and no other —
+        // without this axis, the same pipe would force an explicit
+        // `.copied()` restatement whose type bounds bypass the
+        // substrate primitive.
+        let via_pipe: Vec<Box<str>> = super::PathShapeViolation::ALL
+            .iter()
+            .map(Box::<str>::from)
+            .collect();
+        let via_accessor: Vec<&'static str> = super::PathShapeViolation::ALL
+            .iter()
+            .map(|v| v.as_str())
+            .collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "PathShapeViolation::ALL.iter().map(Box::<str>::from) pipe \
+             must preserve arity against the paired \
+             PathShapeViolation::as_str accessor — a length divergence \
+             signals the borrowed-input axis has silently rejected an \
+             arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "PathShapeViolation::ALL.iter().map(Box::<str>::from) \
+                 pipe must byte-equal the paired \
+                 PathShapeViolation::ALL.iter().map(|v| v.as_str()) pipe \
+                 on every arm — divergence signals the borrowed-input \
+                 `From<&PathShapeViolation> for Box<str>` axis has \
+                 silently detoured off the substrate-primitive accessor"
             );
         }
     }
