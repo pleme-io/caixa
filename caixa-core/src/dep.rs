@@ -3932,6 +3932,149 @@ impl From<&DepList> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection on
+/// the outside-M3 caixa-core two-list dep-graph [`DepList`] closed-set
+/// fieldless typed enum. Routes byte-for-byte through the substrate-
+/// primitive [`DepList::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every consumer
+/// that binds a `let key: Box<str> = list.into();`-shaped call site — a
+/// per-`:deps` / `:deps-dev` census-key materializer that stashes the
+/// dep-list discriminator in a [`Box<str>`]-typed heap-owned scalar for
+/// cheap clone off an owned handle, a future M4
+/// [`caixa.pleme.io/v1alpha1/Caixa`] CR materializer's per-list admission-
+/// webhook rejection body whose per-arm [`Box<str>`] field composes from
+/// an owned [`DepList`] handle naming the accepted-list-tag list, a future
+/// `feira lint --explain-dep-list=<axis>` per-arm listing that stashes
+/// each arm as an owned [`Box<str>`] label — reaches the same two lifted
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str` byte-strings
+/// the sibling `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a distinct
+/// trait-idiomatic surface that a downstream `DepList → Box<str>`
+/// `.into()` reaches through this impl and no other — without a
+/// `Box::from(list.as_str())` open-code whose type bounds have no
+/// compile-time link back to the substrate primitive.
+///
+/// Extends the caixa-core-internal tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign onto the second
+/// caixa-core-internal peer, after the render-side path-shape-diagnostic
+/// [`crate::render::PathShapeViolation`] pair (0d87a72, both corners in
+/// one axis) opened the tier. Follows the M2 OTP-shape
+/// [`crate::supervisor::RestartStrategy`] / [`crate::supervisor::RestartPolicy`]
+/// pair (59ae5dc + cb1d068), the M3 mesh-shape
+/// [`crate::aplicacao::PlacementStrategy`] / [`crate::aplicacao::WitShape`] /
+/// [`crate::aplicacao::RateLimitUnit`] triple (6d73e84 → df7040c) that
+/// closed the M3 mesh-shape tier, and the outside-`caixa-core` tier
+/// (`InvariantKind` 10613a7 + 5901887, `ArchVerdict` 3e08f5a + c4319a8,
+/// `Severity` 5116c95, `FixSafety` cf0174b, `Semantic` 0cd7dc3,
+/// `FerriteRuntime` 14886a8) that closed one tier prior. Same discipline
+/// as those peers: forward emit (this impl, the sibling `{&'static str,
+/// String, Cow<'static, str>}` forward-projection corner, [`std::fmt::Display`],
+/// [`AsRef<str>`], [`DepList::as_str`]) and reverse parse
+/// ([`DepList::from_wire`], [`TryFrom<&str>`]) route through the same two
+/// lifted [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str` byte-strings
+/// by construction, so the round-trip composes directly without the
+/// wire-vocab intermediate hop the peer [`crate::CaixaKind`] axis pair
+/// requires.
+///
+/// A future variant addition (a `Build` build-time-only dep-list axis the
+/// CAIXA-SDLC hints name as a trajectory item once the Cargo
+/// `[build-dependencies]` table gains substrate visibility) reaches the
+/// paired [`Box<str>`] output axis through one match-arm edit on the
+/// [`DepList::as_str`] `pub const fn` accessor, not a coordinated rewrite
+/// of every downstream `Box::from(list.as_str())` open-code.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`] across the two-arm
+/// [`DepList::ALL`] emit-set on the owned-input surface, plus a blanket-
+/// derived [`Into`] shape witness).
+impl From<DepList> for Box<str> {
+    fn from(list: DepList) -> Box<str> {
+        Box::<str>::from(list.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward projection
+/// on the outside-M3 caixa-core two-list dep-graph [`DepList`] closed-set
+/// fieldless typed enum. Routes byte-for-byte through the substrate-
+/// primitive [`DepList::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every consumer
+/// that binds a `let key: Box<str> = (&list).into();`-shaped call site or
+/// a `DepList::ALL.iter().map(Box::<str>::from)`-shaped pipe (whose
+/// iterator over `&'static [DepList]` yields `&DepList` by construction)
+/// — a per-`:deps` / `:deps-dev` census-key materializer that stashes the
+/// dep-list discriminator in a [`Box<str>`]-typed heap-owned scalar for
+/// cheap clone off a borrowed handle, a future M4 admission-webhook
+/// rejection body whose per-arm [`Box<str>`] field composes from a
+/// borrowed [`DepList`] handle off a `&DepList` borrow, a future
+/// `feira lint --explain-dep-list` per-axis listing that iterates
+/// [`DepList::ALL`] into per-arm owned [`Box<str>`] labels — reaches the
+/// same two lifted [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str` byte-strings
+/// the sibling `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner and the paired owned-input
+/// [`From<DepList> for Box<str>`] already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input
+/// axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`DepList::ALL`]`.iter().map(Box::<str>::from)` reaches through this
+/// impl and no other — without it, the same pipe would force an explicit
+/// `.copied()` restatement (`.iter().copied().map(Box::<str>::from)`)
+/// whose type bounds have no compile-time link back to the substrate
+/// primitive, and a `let key: Box<str> = (&list).into();`-shaped call
+/// site would force an explicit `Copy` deref (`Box::<str>::from(*list)`)
+/// or a `Box::<str>::from(list.as_str())` open-code with the same defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the second caixa-
+/// core-internal closed-set fieldless typed enum peer of the substrate-
+/// wide trait-idiomatic [`Box<str>`] forward-projection campaign — one
+/// commit after the paired render-side path-shape-diagnostic
+/// [`crate::render::PathShapeViolation`] pair (0d87a72) opened the caixa-
+/// core-internal tier — matching the trajectory the paired caixa-theme
+/// [`caixa_theme::style::Semantic`] pair (0cd7dc3, both corners in one
+/// axis), the caixa-provedor [`caixa_provedor::FerriteRuntime`] pair
+/// (14886a8, both corners in one axis), and the render-side
+/// [`crate::render::PathShapeViolation`] pair (0d87a72, both corners in
+/// one axis) walked before it.
+///
+/// Same discipline as the paired outside-`caixa-core`,
+/// [`crate::supervisor`], [`crate::aplicacao`], and [`crate::render`]
+/// [`Box<str>`] `{Self, &Self}`-closers: forward emit (this impl, the
+/// paired owned-input [`From<DepList> for Box<str>`] impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection corner,
+/// [`std::fmt::Display`], [`AsRef<str>`], [`DepList::as_str`]) and reverse
+/// parse ([`DepList::from_wire`], [`TryFrom<&str>`]) route through the
+/// same two lifted [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str` byte-strings
+/// by construction, so the round-trip composes directly without the
+/// wire-vocab intermediate hop the peer [`crate::CaixaKind`] axis pair
+/// requires.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_borrowed_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`] across the two-arm
+/// [`DepList::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, plus a
+/// `.iter().map(Box::<str>::from)` pipe witness over [`DepList::ALL`] —
+/// whose iterator yields `&DepList` by construction, so the borrowed-
+/// input [`Box<str>`] axis is what routes the pipe through the substrate-
+/// primitive [`DepList::as_str`] accessor without a spurious [`Copy`]
+/// deref).
+impl From<&DepList> for Box<str> {
+    fn from(list: &DepList) -> Box<str> {
+        Box::<str>::from(list.as_str())
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -19037,6 +19180,149 @@ mod tests {
                  allocated where the substrate-primitive \
                  DepList::as_str `&'static str` return makes the \
                  borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<DepList> for Box<str>` — asserts the owned-input
+        // standard-library trait impl and the substrate-primitive
+        // [`super::DepList::as_str`] `pub const fn` accessor resolve to
+        // the same two-arm emit-set (the paired
+        // [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+        // [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str`
+        // byte-strings) across every arm the exhaustive
+        // [`super::DepList::ALL`] slice enumerates. Extends the caixa-
+        // core-internal tier of the substrate-wide [`Box<str>`] forward-
+        // projection campaign onto the second caixa-core-internal peer,
+        // after the render-side path-shape-diagnostic
+        // [`super::super::render::PathShapeViolation`] pair (0d87a72,
+        // both corners in one axis) opened the tier. Rust's standard
+        // library carries `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: Box<str> = list.into();`-shaped call site reaches
+        // through this impl and no other — a paired
+        // `Box::from(list.as_str())` open-code has no compile-time link
+        // back to the substrate primitive.
+        for &variant in super::DepList::ALL {
+            let via_trait: Box<str> = <Box<str> as From<super::DepList>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<DepList> for Box<str> impl must round-trip \
+                 DepList::{variant:?} to the same lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* const \
+                 DepList::as_str returns — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on DepList::{variant:?} must \
+                 byte-equal DepList::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_from_borrowed_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&DepList> for Box<str>` — asserts the borrowed-input
+        // standard-library trait impl and the substrate-primitive
+        // [`super::DepList::as_str`] `pub const fn` accessor resolve to
+        // the same two-arm emit-set (the paired
+        // [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+        // [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str`
+        // byte-strings) across every arm the exhaustive
+        // [`super::DepList::ALL`] slice enumerates. Rust's standard
+        // library carries `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+        // `impl<T: Copy, U: From<T>> From<&T> for U`), so the borrowed-
+        // input [`Box<str>`] forward-projection axis is a distinct
+        // trait-idiomatic surface that a
+        // `DepList::ALL.iter().map(Box::<str>::from)`-shaped pipe (whose
+        // iterator over `&'static [DepList]` yields `&DepList` by
+        // construction) or a `let key: Box<str> = (&list).into();`-shaped
+        // call site reaches through this impl and no other — the paired
+        // owned-input `From<DepList> for Box<str>` impl alone would force
+        // every borrowed-input call site through an explicit `Copy` deref
+        // (`Box::<str>::from(*list)`) or a
+        // `Box::<str>::from(list.as_str())` open-code whose type bounds
+        // have no compile-time link back to the substrate primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the second
+        // caixa-core-internal closed-set fieldless typed enum peer of
+        // the substrate-wide [`Box<str>`] forward-projection campaign —
+        // one commit after the paired render-side path-shape-diagnostic
+        // [`super::super::render::PathShapeViolation`] pair (0d87a72)
+        // opened the caixa-core-internal tier — matching the trajectory
+        // the paired caixa-theme `Semantic` pair (0cd7dc3, both corners
+        // in one axis), the caixa-provedor `FerriteRuntime` pair
+        // (14886a8, both corners in one axis), and the render-side
+        // `PathShapeViolation` pair (0d87a72, both corners in one axis)
+        // walked before it.
+        for &variant in super::DepList::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&super::DepList>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&DepList> for Box<str> impl must round-trip \
+                 &DepList::{variant:?} to the same lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* const \
+                 DepList::as_str returns — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &DepList::{variant:?} must \
+                 byte-equal DepList::as_str on the same input — the \
+                 blanket-derived Into shape on the borrowed-input \
+                 surface must resolve to the same as_str dispatch as \
+                 the explicit From impl"
+            );
+        }
+
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `DepList::ALL.iter()` yields `&DepList` by
+        // construction, so `.map(Box::<str>::from)` resolves through
+        // the borrowed-input `From<&DepList> for Box<str>` impl and
+        // no other — without this axis, the same pipe would force an
+        // explicit `.copied()` restatement whose type bounds bypass
+        // the substrate primitive.
+        let via_pipe: Vec<Box<str>> = super::DepList::ALL.iter().map(Box::<str>::from).collect();
+        let via_accessor: Vec<&'static str> =
+            super::DepList::ALL.iter().map(|l| l.as_str()).collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "DepList::ALL.iter().map(Box::<str>::from) pipe must \
+             preserve arity against the paired DepList::as_str \
+             accessor — a length divergence signals the borrowed-input \
+             axis has silently rejected an arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "DepList::ALL.iter().map(Box::<str>::from) pipe must \
+                 byte-equal the paired \
+                 DepList::ALL.iter().map(|l| l.as_str()) pipe on every \
+                 arm — divergence signals the borrowed-input \
+                 `From<&DepList> for Box<str>` axis has silently \
+                 detoured off the substrate-primitive accessor"
             );
         }
     }
