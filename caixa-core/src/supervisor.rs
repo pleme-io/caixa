@@ -2322,6 +2322,76 @@ impl From<&RestartPolicy> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output*
+/// forward projection on the M2 OTP-shape per-child-restart
+/// [`RestartPolicy`] closed-set fieldless typed enum — routes byte-
+/// for-byte through the substrate-primitive [`RestartPolicy::as_str`]
+/// `pub const fn` accessor via [`std::sync::Arc::<str>::from`] on the
+/// returned `&'static str`, so every consumer that binds a
+/// [`RestartPolicy`] through the standard-library `.into()` /
+/// [`From<Self> for std::sync::Arc<str>`] (equivalently
+/// [`Into<std::sync::Arc<str>>`]) axis — a future admission-webhook's
+/// per-request `Sync` + `Send`-safe structured-log field composed
+/// across an `.await` boundary through a
+/// `<T: Into<std::sync::Arc<str>>>`-bound diagnostic-column dispatch,
+/// a future wasm-operator's per-child post-exit restart-decision
+/// pipeline holding a shared-ownership per-arm cache key, a
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording a per-child-policy field onto the parent
+/// span's shared-ownership context — reaches the same three-arm
+/// lifted [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] const the
+/// sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already returns.
+///
+/// Second peer on the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection family opened one
+/// projection tier prior (bca2ec8) on the paired sibling-restart
+/// [`RestartStrategy`] owned-input first-mover — extends the tier
+/// onto the second (and third-and-final) M2 OTP-shape closed-set
+/// fieldless typed enum peer on the caixa surface
+/// (`:children :restart`), immediately after the paired [`Box<str>`]
+/// axis (0a1b313 / cb1d068) closed the whole
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// 2×4 corner on this enum. Rust's standard library carries
+/// `impl From<&str> for std::sync::Arc<str>` and
+/// `impl From<String> for std::sync::Arc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor an
+/// `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so this
+/// axis is a distinct trait-idiomatic surface that a
+/// `let key: std::sync::Arc<str> = policy.into();`-shaped call site
+/// reaches through this impl and no other — a paired
+/// `std::sync::Arc::<str>::from(policy.as_str())` open-code has no
+/// compile-time link back to the substrate primitive, and a two-step
+/// `std::sync::Arc::<str>::from(String::from(policy))` composition
+/// through the owned-`String` axis allocates twice (once into the
+/// intermediate `String`, once into the [`Arc<str>`] on the
+/// `From<String>` conversion) where the single-step trait impl
+/// allocates once.
+///
+/// Peer of the sibling [`Box<str>`] second-tier extender (0a1b313) —
+/// same "extends the substrate-wide projection tier onto the next
+/// M2 OTP-shape peer" discipline, extended onto the
+/// [`std::sync::Arc<str>`] axis whose shared-ownership + [`Sync`] +
+/// [`Send`] contract is the distinct value the [`Box<str>`] axis's
+/// owned-move return-shape cannot provide.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartPolicy::as_str`] across the
+/// three-arm [`RestartPolicy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness and cross-
+/// axis byte-parity pins against the sibling owned-input
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` return-shape
+/// axes).
+impl From<RestartPolicy> for std::sync::Arc<str> {
+    fn from(policy: RestartPolicy) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(policy.as_str())
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -11048,6 +11118,117 @@ mod tests {
              `From<RestartPolicy> for Box<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    fn restart_policy_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartPolicy> for std::sync::Arc<str>` — asserts
+        // the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates. Extends the
+        // substrate-wide [`std::sync::Arc<str>`] forward-projection
+        // campaign tier opened one projection tier prior (bca2ec8) on
+        // the paired sibling-restart [`RestartStrategy`] owned-input
+        // first-mover onto the second (and third-and-final) M2 OTP-
+        // shape closed-set fieldless typed enum peer on the caixa
+        // surface (`:children :restart`), immediately after the paired
+        // [`Box<str>`] axis (0a1b313 / cb1d068) closed the
+        // `{Self, &Self} × {&'static str, String, Cow<'static, str>,
+        // Box<str>}` 2×4 corner on this enum. Rust's standard library
+        // carries `impl From<&str> for std::sync::Arc<str>` and
+        // `impl From<String> for std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor
+        // an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`),
+        // so this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = policy.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(policy.as_str())` open-code
+        // has no compile-time link back to the substrate primitive,
+        // and a two-step `std::sync::Arc::<str>::from(String::from(
+        // policy))` composition through the owned-`String` axis
+        // allocates twice (once into the intermediate `String`, once
+        // into the [`Arc<str>`] on the `From<String>` conversion)
+        // where the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::RestartPolicy::as_str`] accessor trips at caixa-
+        // core test time.
+        for &variant in RestartPolicy::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartPolicy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RestartPolicy> for std::sync::Arc<str> impl \
+                 must round-trip RestartPolicy::{variant:?} to the \
+                 same lifted SUPERVISOR_CHILD_RESTART_* const \
+                 RestartPolicy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on \
+                 RestartPolicy::{variant:?} must byte-equal \
+                 RestartPolicy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<RestartPolicy> for std::sync::Arc<str> and \
+                 From<RestartPolicy> for &'static str must resolve \
+                 identically on RestartPolicy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<RestartPolicy> for std::sync::Arc<str> and \
+                 From<RestartPolicy> for String must resolve \
+                 identically on RestartPolicy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and owned-`String` return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<RestartPolicy> for std::sync::Arc<str> and \
+                 From<RestartPolicy> for Cow<'static, str> must \
+                 resolve identically on RestartPolicy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<RestartPolicy> for std::sync::Arc<str> and \
+                 From<RestartPolicy> for Box<str> must resolve \
+                 identically on RestartPolicy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Box<str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+        }
     }
 
     // ── drift-detection: serde-derive-to-SUPERVISOR_CHILD_RESTART_* identity ─
