@@ -951,6 +951,125 @@ impl From<&FerriteRuntime> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the two-arm caixa-provedor ferrite-runtime closed-set fieldless
+/// typed enum [`FerriteRuntime`]. Routes byte-for-byte through the
+/// substrate-primitive [`FerriteRuntime::variant_slug`] `pub const fn`
+/// accessor via [`Box::<str>::from`] on the returned `&'static str`, so
+/// every consumer that binds a `let key: Box<str> = runtime.into();`-
+/// shaped call site — a per-runtime-tier census-key materializer that
+/// stashes the ferrite-runtime discriminator in a [`Box<str>`]-typed
+/// heap-owned scalar for cheap clone off an owned handle, a future M4
+/// admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from an owned [`FerriteRuntime`] handle, a future
+/// `feira publish-provider --list-runtimes` histogram-column label
+/// materializer — reaches the same two-arm `"ferrite-safe"` /
+/// `"ferrite-arena"` canonical-lowercase kebab byte-strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` forward-
+/// projection corner and the [`std::fmt::Display`], [`AsRef<str>`], and
+/// [`FerriteRuntime::variant_slug`] surfaces already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a `let key: Box<str> =
+/// runtime.into();`-shaped call site reaches through this impl and no
+/// other — a paired `Box::from(runtime.variant_slug())` open-code has no
+/// compile-time link back to the substrate primitive.
+///
+/// Extends the outside-`caixa-core` tier of the substrate-wide
+/// [`Box<str>`] forward-projection campaign onto the sixth-and-last
+/// outside-`caixa-core` peer, following the first-mover
+/// [`caixa_arch::invariants::InvariantKind`] pair (10613a7 + 5901887),
+/// second-peer [`caixa_arch::report::ArchVerdict`] pair (3e08f5a +
+/// c4319a8), third-peer [`caixa_lint::diagnostic::Severity`] pair
+/// (5116c95), fourth-peer [`caixa_lint::diagnostic::FixSafety`] pair
+/// (cf0174b), and fifth-peer [`caixa_theme::style::Semantic`] pair
+/// (0cd7dc3, both corners in one axis) that landed the tier one axis
+/// prior. Closes the outside-`caixa-core` tier of the campaign with the
+/// sole closed-set fieldless typed enum on the caixa-provedor surface.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_from_into_box_str_routes_through_variant_slug_accessor`]
+/// (byte-parity pin against [`FerriteRuntime::variant_slug`] across the
+/// two-arm [`FerriteRuntime::ALL`] emit-set on the owned-input surface,
+/// plus a blanket-derived [`Into`] shape witness).
+impl From<FerriteRuntime> for Box<str> {
+    fn from(runtime: FerriteRuntime) -> Box<str> {
+        Box::<str>::from(runtime.variant_slug())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward
+/// projection on the two-arm caixa-provedor ferrite-runtime closed-set
+/// fieldless typed enum [`FerriteRuntime`]. Routes byte-for-byte through
+/// the substrate-primitive [`FerriteRuntime::variant_slug`] `pub const
+/// fn` accessor via [`Box::<str>::from`] on the returned `&'static str`,
+/// so every consumer that binds a `let key: Box<str> = (&runtime).into();`-
+/// shaped call site or a `FerriteRuntime::ALL.iter().map(Box::<str>::from)`-
+/// shaped pipe (whose iterator over `&'static [FerriteRuntime]` yields
+/// `&FerriteRuntime` by construction) — a per-runtime-tier census-key
+/// materializer that stashes the ferrite-runtime discriminator in a
+/// [`Box<str>`]-typed heap-owned scalar for cheap clone off a borrowed
+/// handle, a future M4 admission-webhook rejection body whose per-arm
+/// [`Box<str>`] field composes from a borrowed [`FerriteRuntime`] handle
+/// off a `&FerriteRuntime` borrow, a future `feira publish-provider
+/// --list-runtimes` histogram-column emitter that iterates
+/// [`FerriteRuntime::ALL`] into per-arm owned [`Box<str>`] labels —
+/// reaches the same two-arm `"ferrite-safe"` / `"ferrite-arena"`
+/// canonical-lowercase kebab byte-strings the sibling `{Self, &Self} ×
+/// {&'static str, String, Cow<'static, str>}` forward-projection corner
+/// and the paired owned-input [`From<FerriteRuntime> for Box<str>`]
+/// already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input
+/// axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`FerriteRuntime::ALL`]`.iter().map(Box::<str>::from)` reaches through
+/// this impl and no other — without it, the same pipe would force an
+/// explicit `.copied()` restatement (`.iter().copied()
+/// .map(Box::<str>::from)`) whose type bounds have no compile-time link
+/// back to the substrate primitive, and a `let key: Box<str> =
+/// (&runtime).into();`-shaped call site would force an explicit `Copy`
+/// deref (`Box::<str>::from(*runtime)`) or a
+/// `Box::<str>::from(runtime.variant_slug())` open-code with the same
+/// defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the sixth-and-last
+/// outside-`caixa-core` closed-set fieldless typed enum peer of the
+/// substrate-wide trait-idiomatic [`Box<str>`] forward-projection
+/// campaign, and with it the whole outside-`caixa-core` tier of the
+/// campaign, matching the trajectory the paired caixa-theme
+/// [`caixa_theme::style::Semantic`] pair (0cd7dc3, both corners in one
+/// axis) and the four prior outside-`caixa-core` peers
+/// ([`caixa_arch::invariants::InvariantKind`],
+/// [`caixa_arch::report::ArchVerdict`],
+/// [`caixa_lint::diagnostic::Severity`],
+/// [`caixa_lint::diagnostic::FixSafety`]) walked before it. Closes the
+/// caixa-provedor ferrite-runtime 2×4 `{Self, &Self} × {&'static str,
+/// String, Cow<'static, str>, Box<str>}` trait-idiomatic forward-
+/// projection corner with the sole closed-set fieldless typed enum on
+/// the caixa-provedor surface.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_from_borrowed_into_box_str_routes_through_variant_slug_accessor`]
+/// (byte-parity pin against [`FerriteRuntime::variant_slug`] across the
+/// two-arm [`FerriteRuntime::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness, plus a
+/// `.iter().map(Box::<str>::from)` pipe witness over
+/// [`FerriteRuntime::ALL`] — whose iterator yields `&FerriteRuntime` by
+/// construction, so the borrowed-input [`Box<str>`] axis is what routes
+/// the pipe through the substrate-primitive
+/// [`FerriteRuntime::variant_slug`] accessor without a spurious [`Copy`]
+/// deref).
+impl From<&FerriteRuntime> for Box<str> {
+    fn from(runtime: &FerriteRuntime) -> Box<str> {
+        Box::<str>::from(runtime.variant_slug())
+    }
+}
+
 /// Free-function wrapper preserved for the crate-level `pub use`
 /// re-export in [`crate`]; routes through the substrate-primitive
 /// method [`FerriteRuntime::rt_import`].
@@ -2760,6 +2879,158 @@ mod tests {
                  share the same two inline canonical-lowercase kebab \
                  byte-strings by construction, so the round-trip \
                  composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_into_box_str_routes_through_variant_slug_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<FerriteRuntime> for Box<str>` — asserts the owned-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::FerriteRuntime::variant_slug`] `pub const fn`
+        // accessor resolve to the same two-arm canonical-lowercase
+        // kebab emit-set (`"ferrite-safe"` / `"ferrite-arena"`) across
+        // every arm the exhaustive [`super::FerriteRuntime::ALL`] slice
+        // enumerates. Extends the outside-`caixa-core` tier of the
+        // substrate-wide [`Box<str>`] forward-projection campaign onto
+        // the sixth-and-last outside-`caixa-core` peer — the sole
+        // closed-set fieldless typed enum on the caixa-provedor surface
+        // — following the first-mover
+        // [`caixa_arch::invariants::InvariantKind`] pair (10613a7 +
+        // 5901887), second-peer [`caixa_arch::report::ArchVerdict`]
+        // pair (3e08f5a + c4319a8), third-peer
+        // [`caixa_lint::diagnostic::Severity`] pair (5116c95), fourth-
+        // peer [`caixa_lint::diagnostic::FixSafety`] pair (cf0174b),
+        // and fifth-peer [`caixa_theme::style::Semantic`] pair
+        // (0cd7dc3, both corners in one axis) that landed the tier one
+        // axis prior. Rust's standard library carries `impl From<&str>
+        // for Box<str>` and `impl From<String> for Box<str>` but no
+        // blanket `impl<T: AsRef<str>> From<T> for Box<str>`, so this
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = runtime.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(runtime.variant_slug())` open-code has no compile-
+        // time link back to the substrate primitive.
+        for &variant in FerriteRuntime::ALL {
+            let via_trait: Box<str> = <Box<str> as From<FerriteRuntime>>::from(variant);
+            let via_method: &'static str = variant.variant_slug();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<FerriteRuntime> for Box<str> impl must round-trip \
+                 FerriteRuntime::{variant:?} to the same canonical-\
+                 lowercase kebab byte-string FerriteRuntime::variant_slug \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on FerriteRuntime::{variant:?} \
+                 must byte-equal FerriteRuntime::variant_slug on the \
+                 same input — the blanket-derived Into shape must \
+                 resolve to the same variant_slug dispatch as the \
+                 explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_borrowed_into_box_str_routes_through_variant_slug_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&FerriteRuntime> for Box<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::FerriteRuntime::variant_slug`] `pub const
+        // fn` accessor resolve to the same two-arm canonical-lowercase
+        // kebab emit-set (`"ferrite-safe"` / `"ferrite-arena"`) across
+        // every arm the exhaustive [`super::FerriteRuntime::ALL`] slice
+        // enumerates. Rust's standard library carries `impl From<&str>
+        // for Box<str>` and `impl From<String> for Box<str>` but no
+        // blanket `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input [`Box<str>`] forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `FerriteRuntime::ALL.iter().map(Box::<str>::from)`-shaped
+        // pipe (whose iterator over `&'static [FerriteRuntime]` yields
+        // `&FerriteRuntime` by construction) or a
+        // `let key: Box<str> = (&runtime).into();`-shaped call site
+        // reaches through this impl and no other — the paired owned-
+        // input `From<FerriteRuntime> for Box<str>` impl alone would
+        // force every borrowed-input call site through an explicit
+        // `Copy` deref (`Box::<str>::from(*runtime)`) or a
+        // `Box::<str>::from(runtime.variant_slug())` open-code whose
+        // type bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the sixth-
+        // and-last outside-`caixa-core` closed-set fieldless typed enum
+        // peer of the substrate-wide [`Box<str>`] forward-projection
+        // campaign, and with it the whole outside-`caixa-core` tier of
+        // the campaign — matching the trajectory the paired caixa-theme
+        // [`caixa_theme::style::Semantic`] pair (0cd7dc3, both corners
+        // in one axis) and the four prior outside-`caixa-core` peers
+        // walked before it. Also closes the caixa-provedor ferrite-
+        // runtime 2×4 `{Self, &Self} × {&'static str, String,
+        // Cow<'static, str>, Box<str>}` trait-idiomatic forward-
+        // projection corner.
+        for &variant in FerriteRuntime::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&FerriteRuntime>>::from(&variant);
+            let via_method: &'static str = variant.variant_slug();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&FerriteRuntime> for Box<str> impl must round-trip \
+                 &FerriteRuntime::{variant:?} to the same canonical-\
+                 lowercase kebab byte-string FerriteRuntime::variant_slug \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &FerriteRuntime::{variant:?} \
+                 must byte-equal FerriteRuntime::variant_slug on the \
+                 same input — the blanket-derived Into shape on the \
+                 borrowed-input surface must resolve to the same \
+                 variant_slug dispatch as the explicit From impl"
+            );
+        }
+
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `FerriteRuntime::ALL.iter()` yields `&FerriteRuntime`
+        // by construction, so `.map(Box::<str>::from)` resolves through
+        // the borrowed-input `From<&FerriteRuntime> for Box<str>` impl
+        // and no other — without this axis, the same pipe would force
+        // an explicit `.copied()` restatement whose type bounds bypass
+        // the substrate primitive.
+        let via_pipe: Vec<Box<str>> = FerriteRuntime::ALL.iter().map(Box::<str>::from).collect();
+        let via_accessor: Vec<&'static str> = FerriteRuntime::ALL
+            .iter()
+            .map(|rt| rt.variant_slug())
+            .collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "FerriteRuntime::ALL.iter().map(Box::<str>::from) pipe must \
+             preserve arity against the paired \
+             FerriteRuntime::variant_slug accessor — a length \
+             divergence signals the borrowed-input axis has silently \
+             rejected an arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "FerriteRuntime::ALL.iter().map(Box::<str>::from) pipe \
+                 must byte-equal the paired \
+                 FerriteRuntime::ALL.iter().map(|rt| rt.variant_slug()) \
+                 pipe on every arm — divergence signals the borrowed-\
+                 input `From<&FerriteRuntime> for Box<str>` axis has \
+                 silently detoured off the substrate-primitive accessor"
             );
         }
     }
