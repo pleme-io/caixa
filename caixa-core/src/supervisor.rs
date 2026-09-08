@@ -1165,6 +1165,82 @@ impl From<RestartStrategy> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<str>`] output*
+/// forward projection on the M2 OTP-shape sibling-restart
+/// [`RestartStrategy`] closed-set fieldless typed enum — closes the
+/// `{Self, &Self}` input-shape corner of the [`std::sync::Arc<str>`]
+/// forward-projection axis on the first M2 OTP-shape closed-set
+/// fieldless typed enum peer on the caixa surface
+/// (`:supervisor :estrategia`), companion to the paired owned-input
+/// [`From<RestartStrategy> for std::sync::Arc<str>`] impl one commit
+/// prior (bca2ec8). Routes byte-for-byte through the
+/// substrate-primitive [`RestartStrategy::as_str`] `pub const fn`
+/// accessor (via [`std::sync::Arc::<str>::from`] on the returned
+/// `&'static str`), so every consumer that binds a
+/// [`&RestartStrategy`] through the standard-library `.into()` /
+/// [`From<&Self> for std::sync::Arc<str>`] (equivalently
+/// [`Into<std::sync::Arc<str>>`]) axis — a future admission-webhook's
+/// per-request borrowed-`&RestartStrategy` handle rendering a per-arm
+/// `Sync` + `Send`-safe structured-log field across an `.await`
+/// boundary through a `<T: Into<std::sync::Arc<str>>>`-bound
+/// diagnostic-column dispatch, a future wasm-operator's per-
+/// supervisor reconciliation pipeline whose
+/// `.iter().map(std::sync::Arc::<str>::from)` collector reaches into
+/// the shared-ownership per-strategy key without a spurious [`Copy`]
+/// deref (which would only be reachable through the owned-input
+/// [`From<RestartStrategy> for std::sync::Arc<str>`] axis by first
+/// calling `.copied()` on the iterator), a future
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording a borrowed-`&RestartStrategy` per-arm field
+/// onto the parent span's shared-ownership context — reaches the
+/// same four-arm lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const
+/// the paired owned-input
+/// [`From<RestartStrategy> for std::sync::Arc<str>`] impl and the
+/// sibling `{&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already return.
+///
+/// Second peer on the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection family opened one
+/// commit prior (bca2ec8) on the paired owned-input
+/// [`From<RestartStrategy> for std::sync::Arc<str>`] impl — closes
+/// the `{Self, &Self}` input-shape corner of the
+/// [`std::sync::Arc<str>`] axis on the first M2 OTP-shape closed-set
+/// fieldless typed enum peer on the caixa surface, exactly as
+/// 59ae5dc closed the paired [`Box<str>`] axis one commit after its
+/// owning half (69ef45c) landed. Rust's standard library carries
+/// `impl From<&str> for std::sync::Arc<str>` and
+/// `impl From<String> for std::sync::Arc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor a
+/// `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+/// every closed-set fieldless typed enum peer on the substrate that
+/// carries the paired owned-input [`std::sync::Arc<str>`] axis but
+/// not the borrowed-input axis forces every borrowed-input
+/// [`std::sync::Arc<str>`]-parameterized call site through a
+/// spurious [`Copy`] deref
+/// (`std::sync::Arc::<str>::from((*strategy).as_str())`) or a
+/// `std::sync::Arc::<str>::from(strategy.as_str())` open-code whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_borrowed_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm [`RestartStrategy::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness and a
+/// cross-axis pin against the paired owned-input
+/// [`From<RestartStrategy> for std::sync::Arc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>,
+/// Box<str>}` return-shape axes).
+impl From<&RestartStrategy> for std::sync::Arc<str> {
+    fn from(strategy: &RestartStrategy) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(strategy.as_str())
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -9446,6 +9522,170 @@ mod tests {
                  different emit-sets"
             );
         }
+    }
+
+    #[test]
+    fn restart_strategy_from_borrowed_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartStrategy> for std::sync::Arc<str>` —
+        // asserts the borrowed-input standard-library trait impl and
+        // the substrate-primitive [`super::RestartStrategy::as_str`]
+        // `pub const fn` accessor resolve to the same four-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartStrategy::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor
+        // a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`),
+        // so the borrowed-input [`std::sync::Arc<str>`] forward-
+        // projection axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = (&strategy).into();`-shaped
+        // call site or a
+        // `RestartStrategy::ALL.iter().map(std::sync::Arc::<str>::from)`-
+        // shaped pipe reaches through this impl and no other — the
+        // paired owned-input
+        // `From<RestartStrategy> for std::sync::Arc<str>` impl
+        // (bca2ec8) forces every borrowed-input call site through an
+        // explicit `Copy` deref
+        // (`std::sync::Arc::<str>::from((*strategy).as_str())`) or a
+        // `std::sync::Arc::<str>::from(strategy.as_str())` open-code
+        // whose type bounds have no compile-time link back to the
+        // substrate primitive.
+        //
+        // Second peer on the substrate-wide trait-idiomatic
+        // [`std::sync::Arc<str>`] forward-projection family on this
+        // enum — closes the `{Self, &Self}` input-shape corner of
+        // the [`std::sync::Arc<str>`] axis on the first M2 OTP-shape
+        // closed-set fieldless typed enum peer on the caixa surface
+        // (`:supervisor :estrategia`), exactly as 59ae5dc closed the
+        // paired [`Box<str>`] axis one commit after its owning half
+        // (69ef45c) landed. Every future closed-set fieldless typed
+        // enum peer on the substrate is a future target of the
+        // campaign.
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<RestartStrategy> for std::sync::Arc<str>`] and the
+        // sibling borrowed-input
+        // [`From<&RestartStrategy> for &'static str`],
+        // [`From<&RestartStrategy> for String`],
+        // [`From<&RestartStrategy> for Cow<'static, str>`], and
+        // [`From<&RestartStrategy> for Box<str>`] return-shape axes —
+        // locking the five return-shape × input-shape paths together
+        // by construction so any future detour trips at caixa-core
+        // test time. Then a
+        // `.iter().map(std::sync::Arc::<str>::from)` pipe witness over
+        // [`super::RestartStrategy::ALL`] — whose iterator yields
+        // `&RestartStrategy` by construction, so the borrowed-input
+        // [`std::sync::Arc<str>`] axis is what routes the pipe
+        // through the substrate-primitive
+        // [`super::RestartStrategy::as_str`] accessor without a
+        // spurious [`Copy`] deref (which would only be reachable
+        // through the owned-input
+        // [`From<RestartStrategy> for std::sync::Arc<str>`] axis by
+        // first calling `.copied()` on the iterator).
+        for &variant in RestartStrategy::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&RestartStrategy>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RestartStrategy> for std::sync::Arc<str> impl \
+                 must round-trip &RestartStrategy::{variant:?} to the \
+                 same lifted SUPERVISOR_ESTRATEGIA_* const \
+                 RestartStrategy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on \
+                 &RestartStrategy::{variant:?} must byte-equal \
+                 RestartStrategy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait, owned_arc,
+                "From<&RestartStrategy> for std::sync::Arc<str> and \
+                 From<RestartStrategy> for std::sync::Arc<str> must \
+                 resolve identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input and owned-input \
+                 std::sync::Arc<str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&RestartStrategy> for std::sync::Arc<str> and \
+                 From<&RestartStrategy> for &'static str must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::sync::Arc<str> and &'static str return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RestartStrategy> for std::sync::Arc<str> and \
+                 From<&RestartStrategy> for String must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::sync::Arc<str> and owned-`String` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&RestartStrategy> for std::sync::Arc<str> and \
+                 From<&RestartStrategy> for Cow<'static, str> must \
+                 resolve identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::sync::Arc<str> and Cow<'static, str> return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&RestartStrategy> for std::sync::Arc<str> and \
+                 From<&RestartStrategy> for Box<str> must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::sync::Arc<str> and Box<str> return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::sync::Arc<str>> = RestartStrategy::ALL
+            .iter()
+            .map(std::sync::Arc::<str>::from)
+            .collect();
+        let via_method: Vec<std::sync::Arc<str>> = RestartStrategy::ALL
+            .iter()
+            .map(|s| std::sync::Arc::<str>::from(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::sync::Arc::<str>::from)` over \
+             RestartStrategy::ALL — a call site whose iteration axis \
+             holds `&RestartStrategy` by construction — must byte-\
+             equal `.iter().map(|s| std::sync::Arc::<str>::from(s.as_str()))` \
+             on every arm — the borrowed-input std::sync::Arc<str> \
+             `From<&RestartStrategy> for std::sync::Arc<str>` axis is \
+             what makes the `std::sync::Arc::<str>::from` composition \
+             route through the substrate-primitive \
+             `RestartStrategy::as_str` accessor without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<RestartStrategy> for std::sync::Arc<str>` \
+             axis by first calling `.copied()` on the iterator)"
+        );
     }
 
     #[test]
