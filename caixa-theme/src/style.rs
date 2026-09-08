@@ -1090,6 +1090,155 @@ impl From<&Semantic> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the caixa-theme semantic-style sixteen-arm closed-set fieldless
+/// typed enum [`Semantic`]. Routes byte-for-byte through the substrate-
+/// primitive [`Semantic::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every consumer
+/// that binds a `let key: Box<str> = sem.into();`-shaped call site — a
+/// per-semantic-style census-key materializer that stashes the
+/// semantic-style discriminator in a [`Box<str>`]-typed heap-owned
+/// scalar for cheap clone (a future per-semantic-style token-coloring
+/// legend the LSP-side rich-diagnostics surface keys off), a future M4
+/// admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from an owned [`Semantic`] handle naming the accepted
+/// semantic-style tier list, a future `feira lint --by-semantic`
+/// histogram-column emitter that stashes each arm as an owned
+/// [`Box<str>`] label — reaches the same sixteen canonical-lowercase
+/// kebab byte-strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` forward-
+/// projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `Semantic → Box<str>` `.into()` reaches through this impl and no
+/// other — without a `Box::from(sem.as_str())` open-code whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Extends the outside-`caixa-core` tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign onto the fifth
+/// peer — the caixa-theme semantic-style sixteen-arm closed-set
+/// fieldless typed enum — following the first-mover
+/// [`caixa_arch::invariants::InvariantKind`] pair (10613a7 owned +
+/// 5901887 borrowed) that opened the tier, the second-peer
+/// [`caixa_arch::report::ArchVerdict`] pair (3e08f5a owned + c4319a8
+/// borrowed), the third-peer [`Severity`] pair (5116c95), and the
+/// fourth-peer [`FixSafety`] pair (cf0174b) that landed one axis prior.
+/// Same discipline as the paired
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// axes: forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`], [`Semantic::as_str`])
+/// and reverse parse ([`Semantic::from_wire`], [`TryFrom<&str>`]) route
+/// through the same sixteen inline canonical-lowercase kebab byte-
+/// strings [`Semantic::as_str`] returns by construction, so the round-
+/// trip composes directly without the wire-vocab intermediate hop the
+/// peer [`caixa_core::CaixaKind`] axis pair requires.
+///
+/// Leaves the remaining outside-`caixa-core` peer
+/// ([`caixa_provedor::FerriteRuntime`]) whose [`Box<str>`] axis closure
+/// remains the last future target on this tier of the campaign, and
+/// leaves the paired borrowed-input [`From<&Semantic> for Box<str>`]
+/// `{Self, &Self}`-closer as the direct next target on this axis.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Semantic::as_str`] across the sixteen-
+/// arm [`Semantic::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness).
+impl From<Semantic> for Box<str> {
+    fn from(sem: Semantic) -> Box<str> {
+        Box::<str>::from(sem.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward
+/// projection on the caixa-theme semantic-style sixteen-arm closed-set
+/// fieldless typed enum [`Semantic`]. Routes byte-for-byte through the
+/// substrate-primitive [`Semantic::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every consumer
+/// that binds a `let key: Box<str> = (&sem).into();`-shaped call site or
+/// a `Semantic::ALL.iter().map(Box::<str>::from)`-shaped pipe (whose
+/// iterator over `&'static [Semantic]` yields `&Semantic` by
+/// construction) — a per-semantic-style census-key materializer that
+/// stashes the semantic-style discriminator in a [`Box<str>`]-typed
+/// heap-owned scalar for cheap clone off a borrowed handle, a future M4
+/// admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from a borrowed [`Semantic`] handle off a `&Semantic`
+/// borrow, a future `feira lint --by-semantic` histogram-column emitter
+/// that iterates [`Semantic::ALL`] into per-arm owned [`Box<str>`]
+/// labels — reaches the same sixteen canonical-lowercase kebab byte-
+/// strings the sibling `{Self, &Self} × {&'static str, String,
+/// Cow<'static, str>}` forward-projection corner and the paired owned-
+/// input [`From<Semantic> for Box<str>`] already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input
+/// axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`Semantic::ALL`]`.iter().map(Box::<str>::from)` reaches through
+/// this impl and no other — without it, the same pipe would force an
+/// explicit `.copied()` restatement (`.iter().copied()
+/// .map(Box::<str>::from)`) whose type bounds have no compile-time link
+/// back to the substrate primitive, and a `let key: Box<str> =
+/// (&sem).into();`-shaped call site would force an explicit `Copy`
+/// deref (`Box::<str>::from(*sem)`) or a
+/// `Box::<str>::from(sem.as_str())` open-code with the same defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the fifth outside-
+/// `caixa-core` closed-set fieldless typed enum peer of the substrate-
+/// wide trait-idiomatic [`Box<str>`] forward-projection campaign,
+/// exactly as 5901887 closed the paired first-mover `InvariantKind`
+/// axis one commit after (10613a7) landed, c4319a8 closed the paired
+/// second-peer `ArchVerdict` axis one commit after (3e08f5a) landed,
+/// 5116c95 landed the paired third-peer `Severity` pair one axis prior,
+/// cf0174b landed the paired fourth-peer `FixSafety` pair one axis
+/// prior, cb1d068 closed the paired M2-OTP-shape `RestartPolicy` axis
+/// one commit after (0a1b313) landed, and 3c971b2 closed the paired M3-
+/// mesh-shape `PlacementStrategy` axis one commit after (6d73e84)
+/// landed. The remaining outside-`caixa-core` peer
+/// ([`caixa_provedor::FerriteRuntime`]) remains the last future target
+/// on this tier of the axis.
+///
+/// Same discipline as the paired
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// `{Self, &Self}`-closers: forward emit (this impl, the paired owned-
+/// input [`From<Semantic> for Box<str>`] impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`], [`Semantic::as_str`])
+/// and reverse parse ([`Semantic::from_wire`], [`TryFrom<&str>`]) route
+/// through the same sixteen inline canonical-lowercase kebab byte-
+/// strings [`Semantic::as_str`] returns by construction, so the round-
+/// trip composes directly without the wire-vocab intermediate hop the
+/// peer [`caixa_core::CaixaKind`] axis pair requires.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_borrowed_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Semantic::as_str`] across the sixteen-
+/// arm [`Semantic::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, plus a
+/// `.iter().map(Box::<str>::from)` pipe witness over [`Semantic::ALL`]
+/// — whose iterator yields `&Semantic` by construction, so the
+/// borrowed-input [`Box<str>`] axis is what routes the pipe through the
+/// substrate-primitive [`Semantic::as_str`] accessor without a spurious
+/// [`Copy`] deref).
+impl From<&Semantic> for Box<str> {
+    fn from(sem: &Semantic) -> Box<str> {
+        Box::<str>::from(sem.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2949,6 +3098,151 @@ mod tests {
                  sixteen inline canonical-lowercase kebab byte-\
                  strings by construction, so the round-trip composes \
                  directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Semantic> for Box<str>` — asserts the owned-input
+        // standard-library trait impl and the substrate-primitive
+        // [`super::Semantic::as_str`] `pub const fn` accessor resolve
+        // to the same sixteen-arm canonical-lowercase kebab emit-set
+        // across every arm the exhaustive [`super::Semantic::ALL`]
+        // slice enumerates. Extends the outside-`caixa-core` tier of
+        // the substrate-wide [`Box<str>`] forward-projection campaign
+        // onto the fifth peer — the caixa-theme semantic-style
+        // sixteen-arm closed-set fieldless typed enum — following the
+        // first-mover [`caixa_arch::invariants::InvariantKind`] pair
+        // (10613a7 owned + 5901887 borrowed), second-peer
+        // [`caixa_arch::report::ArchVerdict`] pair (3e08f5a owned +
+        // c4319a8 borrowed), third-peer [`super::Severity`] pair
+        // (5116c95), and fourth-peer [`super::FixSafety`] pair
+        // (cf0174b) that landed the tier one axis prior. Rust's
+        // standard library carries `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is
+        // a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = sem.into();`-shaped call site reaches
+        // through this impl and no other — a paired
+        // `Box::from(sem.as_str())` open-code has no compile-time link
+        // back to the substrate primitive.
+        for &variant in Semantic::ALL {
+            let via_trait: Box<str> = <Box<str> as From<Semantic>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<Semantic> for Box<str> impl must round-trip \
+                 Semantic::{variant:?} to the same canonical-lowercase \
+                 kebab byte-string Semantic::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on Semantic::{variant:?} must \
+                 byte-equal Semantic::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_borrowed_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&Semantic> for Box<str>` — asserts the borrowed-
+        // input standard-library trait impl and the substrate-
+        // primitive [`super::Semantic::as_str`] `pub const fn`
+        // accessor resolve to the same sixteen-arm canonical-lowercase
+        // kebab emit-set across every arm the exhaustive
+        // [`super::Semantic::ALL`] slice enumerates. Rust's standard
+        // library carries `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-
+        // based `impl<T: Copy, U: From<T>> From<&T> for U`), so the
+        // borrowed-input [`Box<str>`] forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `Semantic::ALL.iter().map(Box::<str>::from)`-shaped pipe
+        // (whose iterator over `&'static [Semantic]` yields
+        // `&Semantic` by construction) or a `let key: Box<str> =
+        // (&sem).into();`-shaped call site reaches through this impl
+        // and no other — the paired owned-input
+        // `From<Semantic> for Box<str>` impl alone would force every
+        // borrowed-input call site through an explicit `Copy` deref
+        // (`Box::<str>::from(*sem)`) or a
+        // `Box::<str>::from(sem.as_str())` open-code whose type bounds
+        // have no compile-time link back to the substrate primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the fifth
+        // outside-`caixa-core` closed-set fieldless typed enum peer of
+        // the substrate-wide [`Box<str>`] forward-projection campaign,
+        // exactly as 5901887 closed the paired first-mover
+        // `InvariantKind` axis one commit after (10613a7) landed,
+        // c4319a8 closed the paired second-peer `ArchVerdict` axis one
+        // commit after (3e08f5a) landed, 5116c95 landed the paired
+        // third-peer `Severity` pair one axis prior, cf0174b landed
+        // the paired fourth-peer `FixSafety` pair one axis prior,
+        // cb1d068 closed the paired M2-OTP-shape `RestartPolicy` axis
+        // one commit after (0a1b313) landed, and 3c971b2 closed the
+        // paired M3-mesh-shape `PlacementStrategy` axis one commit
+        // after (6d73e84) landed.
+        for &variant in Semantic::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&Semantic>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&Semantic> for Box<str> impl must round-trip \
+                 &Semantic::{variant:?} to the same canonical-\
+                 lowercase kebab byte-string Semantic::as_str returns \
+                 — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &Semantic::{variant:?} must \
+                 byte-equal Semantic::as_str on the same input — the \
+                 blanket-derived Into shape on the borrowed-input \
+                 surface must resolve to the same as_str dispatch as \
+                 the explicit From impl"
+            );
+        }
+
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `Semantic::ALL.iter()` yields `&Semantic` by
+        // construction, so `.map(Box::<str>::from)` resolves through
+        // the borrowed-input `From<&Semantic> for Box<str>` impl and
+        // no other — without this axis, the same pipe would force an
+        // explicit `.copied()` restatement whose type bounds bypass
+        // the substrate primitive.
+        let via_pipe: Vec<Box<str>> = Semantic::ALL.iter().map(Box::<str>::from).collect();
+        let via_accessor: Vec<&'static str> = Semantic::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "Semantic::ALL.iter().map(Box::<str>::from) pipe must \
+             preserve arity against the paired Semantic::as_str \
+             accessor — a length divergence signals the borrowed-input \
+             axis has silently rejected an arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "Semantic::ALL.iter().map(Box::<str>::from) pipe must \
+                 byte-equal the paired Semantic::ALL.iter().map(|s| \
+                 s.as_str()) pipe on every arm — divergence signals \
+                 the borrowed-input `From<&Semantic> for Box<str>` \
+                 axis has silently detoured off the substrate-\
+                 primitive accessor"
             );
         }
     }
