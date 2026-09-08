@@ -2080,6 +2080,153 @@ impl From<&FixSafety> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the caixa-lint fix-safety-tier two-arm closed-set fieldless typed
+/// enum [`FixSafety`]. Routes byte-for-byte through the substrate-
+/// primitive [`FixSafety::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every consumer
+/// that binds a `let key: Box<str> = safety.into();`-shaped call site — a
+/// per-safety census-key materializer that stashes the fix-safety-tier
+/// discriminator in a [`Box<str>`]-typed heap-owned scalar for cheap
+/// clone (the shared-nothing per-safety accept-set a future
+/// `feira lint --fix-safety=<policy>` verb keys off), a future M4
+/// admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from an owned [`FixSafety`] handle naming the accepted
+/// safety-tier list, a future `feira lint --by-safety` histogram-column
+/// emitter that stashes each arm as an owned [`Box<str>`] label — reaches
+/// the same two `"safe"` / `"unsafe"` canonical-lowercase byte-strings
+/// the sibling `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `FixSafety → Box<str>` `.into()` reaches through this impl and no
+/// other — without a `Box::from(safety.as_str())` open-code whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Extends the outside-`caixa-core` tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign onto the fourth
+/// peer — the caixa-lint fix-safety-tier two-arm closed-set fieldless
+/// typed enum — following the first-mover
+/// [`caixa_arch::invariants::InvariantKind`] pair (10613a7 owned +
+/// 5901887 borrowed) that opened the tier, the second-peer
+/// [`caixa_arch::report::ArchVerdict`] pair (3e08f5a owned + c4319a8
+/// borrowed), and the third-peer [`Severity`] pair (5116c95) that landed
+/// one axis prior. Same discipline as the paired
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// axes: forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`FixSafety::as_str`]) and reverse parse ([`FixSafety::from_wire`],
+/// [`TryFrom<&str>`]) route through the same two inline `"safe"` /
+/// `"unsafe"` canonical-lowercase byte-strings [`FixSafety::as_str`]
+/// returns by construction, so the round-trip composes directly without
+/// the wire-vocab intermediate hop the peer [`caixa_core::CaixaKind`]
+/// axis pair requires.
+///
+/// The remaining outside-`caixa-core` peers ([`caixa_theme::Semantic`]
+/// and [`caixa_provedor::FerriteRuntime`]) whose [`Box<str>`] axis
+/// closures remain future targets of this campaign. Leaves the paired
+/// borrowed-input [`From<&FixSafety> for Box<str>`] `{Self, &Self}`-
+/// closer as the direct next target on this axis.
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`FixSafety::as_str`] across the two-arm
+/// [`FixSafety::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness).
+impl From<FixSafety> for Box<str> {
+    fn from(safety: FixSafety) -> Box<str> {
+        Box::<str>::from(safety.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward
+/// projection on the caixa-lint fix-safety-tier two-arm closed-set
+/// fieldless typed enum [`FixSafety`]. Routes byte-for-byte through the
+/// substrate-primitive [`FixSafety::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every consumer
+/// that binds a `let key: Box<str> = (&safety).into();`-shaped call site
+/// or a `FixSafety::ALL.iter().map(Box::<str>::from)`-shaped pipe (whose
+/// iterator over `&'static [FixSafety]` yields `&FixSafety` by
+/// construction) — a per-safety census-key materializer that stashes the
+/// fix-safety-tier discriminator in a [`Box<str>`]-typed heap-owned
+/// scalar for cheap clone off a borrowed handle, a future M4 admission-
+/// webhook rejection body whose per-arm [`Box<str>`] field composes from
+/// a borrowed [`FixSafety`] handle off `&Fix.safety`, a future
+/// `feira lint --by-safety` histogram-column emitter that iterates
+/// [`FixSafety::ALL`] into per-arm owned [`Box<str>`] labels — reaches
+/// the same two `"safe"` / `"unsafe"` canonical-lowercase byte-strings
+/// the sibling `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner and the paired owned-input
+/// [`From<FixSafety> for Box<str>`] already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input
+/// axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`FixSafety::ALL`]`.iter().map(Box::<str>::from)` reaches through
+/// this impl and no other — without it, the same pipe would force an
+/// explicit `.copied()` restatement (`.iter().copied()
+/// .map(Box::<str>::from)`) whose type bounds have no compile-time link
+/// back to the substrate primitive, and a `let key: Box<str> =
+/// (&safety).into();`-shaped call site would force an explicit
+/// `Copy` deref (`Box::<str>::from(*safety)`) or a
+/// `Box::<str>::from(safety.as_str())` open-code with the same defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the fourth outside-
+/// `caixa-core` closed-set fieldless typed enum peer of the substrate-
+/// wide trait-idiomatic [`Box<str>`] forward-projection campaign,
+/// exactly as 5901887 closed the paired first-mover `InvariantKind`
+/// axis one commit after (10613a7) landed, c4319a8 closed the paired
+/// second-peer `ArchVerdict` axis one commit after (3e08f5a) landed,
+/// 5116c95 landed the paired third-peer `Severity` pair one axis prior,
+/// cb1d068 closed the paired M2-OTP-shape `RestartPolicy` axis one
+/// commit after (0a1b313) landed, and 3c971b2 closed the paired M3-mesh-
+/// shape `PlacementStrategy` axis one commit after (6d73e84) landed. The
+/// remaining outside-`caixa-core` peers ([`caixa_theme::Semantic`] and
+/// [`caixa_provedor::FerriteRuntime`]) remain future targets on the axis.
+///
+/// Same discipline as the paired
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// `{Self, &Self}`-closers: forward emit (this impl, the paired owned-
+/// input [`From<FixSafety> for Box<str>`] impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`FixSafety::as_str`]) and reverse parse ([`FixSafety::from_wire`],
+/// [`TryFrom<&str>`]) route through the same two inline `"safe"` /
+/// `"unsafe"` canonical-lowercase byte-strings [`FixSafety::as_str`]
+/// returns by construction, so the round-trip composes directly without
+/// the wire-vocab intermediate hop the peer [`caixa_core::CaixaKind`]
+/// axis pair requires.
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_from_borrowed_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`FixSafety::as_str`] across the two-arm
+/// [`FixSafety::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, plus a
+/// `.iter().map(Box::<str>::from)` pipe witness over
+/// [`FixSafety::ALL`] — whose iterator yields `&FixSafety` by
+/// construction, so the borrowed-input [`Box<str>`] axis is what
+/// routes the pipe through the substrate-primitive
+/// [`FixSafety::as_str`] accessor without a spurious [`Copy`] deref).
+impl From<&FixSafety> for Box<str> {
+    fn from(safety: &FixSafety) -> Box<str> {
+        Box::<str>::from(safety.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: &'static str,
@@ -4231,6 +4378,146 @@ mod tests {
                  byte-equal the paired Severity::ALL.iter().map(|s| \
                  s.as_str()) pipe on every arm — divergence signals \
                  the borrowed-input `From<&Severity> for Box<str>` \
+                 axis has silently detoured off the substrate-\
+                 primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<FixSafety> for Box<str>` — asserts the owned-input
+        // standard-library trait impl and the substrate-primitive
+        // [`super::FixSafety::as_str`] `pub const fn` accessor resolve
+        // to the same two-arm canonical-lowercase emit-set across every
+        // arm the exhaustive [`super::FixSafety::ALL`] slice enumerates.
+        // Extends the outside-`caixa-core` tier of the substrate-wide
+        // [`Box<str>`] forward-projection campaign onto the fourth peer
+        // — the caixa-lint fix-safety-tier two-arm closed-set fieldless
+        // typed enum — following the first-mover
+        // [`caixa_arch::invariants::InvariantKind`] pair (10613a7 owned
+        // + 5901887 borrowed), second-peer
+        // [`caixa_arch::report::ArchVerdict`] pair (3e08f5a owned +
+        // c4319a8 borrowed), and third-peer [`Severity`] pair (5116c95)
+        // that landed the tier one axis prior. Rust's standard library
+        // carries `impl From<&str> for Box<str>` and `impl From<String>
+        // for Box<str>` but no blanket `impl<T: AsRef<str>> From<T> for
+        // Box<str>`, so this axis is a distinct trait-idiomatic surface
+        // that a `let key: Box<str> = safety.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(safety.as_str())` open-code has no compile-time
+        // link back to the substrate primitive.
+        for &variant in FixSafety::ALL {
+            let via_trait: Box<str> = <Box<str> as From<FixSafety>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<FixSafety> for Box<str> impl must round-trip \
+                 FixSafety::{variant:?} to the same canonical-lowercase \
+                 byte-string FixSafety::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on FixSafety::{variant:?} must \
+                 byte-equal FixSafety::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_from_borrowed_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&FixSafety> for Box<str>` — asserts the borrowed-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::FixSafety::as_str`] `pub const fn` accessor resolve
+        // to the same two-arm canonical-lowercase emit-set across every
+        // arm the exhaustive [`super::FixSafety::ALL`] slice enumerates.
+        // Rust's standard library carries `impl From<&str> for Box<str>`
+        // and `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-
+        // based `impl<T: Copy, U: From<T>> From<&T> for U`), so the
+        // borrowed-input [`Box<str>`] forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `FixSafety::ALL.iter().map(Box::<str>::from)`-shaped pipe
+        // (whose iterator over `&'static [FixSafety]` yields `&FixSafety`
+        // by construction) or a `let key: Box<str> = (&safety)
+        // .into();`-shaped call site reaches through this impl and no
+        // other — the paired owned-input `From<FixSafety> for Box<str>`
+        // impl alone would force every borrowed-input call site through
+        // an explicit `Copy` deref (`Box::<str>::from(*safety)`) or a
+        // `Box::<str>::from(safety.as_str())` open-code whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the fourth
+        // outside-`caixa-core` closed-set fieldless typed enum peer of
+        // the substrate-wide [`Box<str>`] forward-projection campaign,
+        // exactly as 5901887 closed the paired first-mover
+        // `InvariantKind` axis one commit after (10613a7) landed,
+        // c4319a8 closed the paired second-peer `ArchVerdict` axis one
+        // commit after (3e08f5a) landed, 5116c95 landed the paired
+        // third-peer `Severity` pair one axis prior, cb1d068 closed the
+        // paired M2-OTP-shape `RestartPolicy` axis one commit after
+        // (0a1b313) landed, and 3c971b2 closed the paired M3-mesh-shape
+        // `PlacementStrategy` axis one commit after (6d73e84) landed.
+        for &variant in FixSafety::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&FixSafety>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&FixSafety> for Box<str> impl must round-trip \
+                 &FixSafety::{variant:?} to the same canonical-lowercase \
+                 byte-string FixSafety::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &FixSafety::{variant:?} must \
+                 byte-equal FixSafety::as_str on the same input — the \
+                 blanket-derived Into shape on the borrowed-input \
+                 surface must resolve to the same as_str dispatch as \
+                 the explicit From impl"
+            );
+        }
+
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input peer.
+        // `FixSafety::ALL.iter()` yields `&FixSafety` by construction,
+        // so `.map(Box::<str>::from)` resolves through the borrowed-
+        // input `From<&FixSafety> for Box<str>` impl and no other —
+        // without this axis, the same pipe would force an explicit
+        // `.copied()` restatement whose type bounds bypass the
+        // substrate primitive.
+        let via_pipe: Vec<Box<str>> = FixSafety::ALL.iter().map(Box::<str>::from).collect();
+        let via_accessor: Vec<&'static str> = FixSafety::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "FixSafety::ALL.iter().map(Box::<str>::from) pipe must \
+             preserve arity against the paired FixSafety::as_str \
+             accessor — a length divergence signals the borrowed-input \
+             axis has silently rejected an arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "FixSafety::ALL.iter().map(Box::<str>::from) pipe must \
+                 byte-equal the paired FixSafety::ALL.iter().map(|s| \
+                 s.as_str()) pipe on every arm — divergence signals \
+                 the borrowed-input `From<&FixSafety> for Box<str>` \
                  axis has silently detoured off the substrate-\
                  primitive accessor"
             );
