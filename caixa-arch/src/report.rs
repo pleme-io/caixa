@@ -957,6 +957,73 @@ impl From<&ArchVerdict> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the caixa-arch verdict-outcome two-arm closed-set fieldless
+/// typed enum [`ArchVerdict`]. Routes byte-for-byte through the
+/// substrate-primitive [`ArchVerdict::as_str`] `pub const fn` accessor
+/// via [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = verdict.into();`-shaped
+/// call site — a per-verdict census-key materializer that stashes the
+/// verdict-outcome discriminator in a [`Box<str>`]-typed heap-owned
+/// scalar for cheap clone (the shared-nothing per-verdict accept-set a
+/// future caixa-arch policy-fanout materializer keys off), a future M4
+/// `mesh.pleme.io/v1alpha1/ArchAudit` CR reconciliation scheduler's
+/// admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from an owned [`ArchVerdict`] handle, a future `feira arch
+/// --by-verdict` histogram-column emitter that stashes each arm as an
+/// owned [`Box<str>`] label — reaches the same two
+/// `"proven"` / `"rejected"` canonical-lowercase byte-strings the
+/// sibling `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `ArchVerdict → Box<str>` `.into()` reaches through this impl and no
+/// other — without a `Box::from(verdict.as_str())` open-code whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Extends the outside-`caixa-core` tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign onto the second
+/// peer — the caixa-arch verdict-outcome two-arm closed-set fieldless
+/// typed enum — following the first-mover
+/// [`crate::invariants::InvariantKind`] pair (10613a7 owned +
+/// 5901887 borrowed) that opened the tier one commit prior. Same
+/// discipline as the paired
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// axes: forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`ArchVerdict::as_str`]) and reverse parse
+/// ([`ArchVerdict::from_wire`], [`TryFrom<&str>`]) route through the
+/// same two inline `"proven"` / `"rejected"` canonical-lowercase byte-
+/// strings [`ArchVerdict::as_str`] returns by construction, so the
+/// round-trip composes directly without the wire-vocab intermediate
+/// hop the peer [`caixa_core::CaixaKind`] axis pair requires.
+///
+/// The sibling outside-`caixa-core` peers ([`caixa_lint::Severity`],
+/// [`caixa_lint::FixSafety`], [`caixa_theme::Semantic`], and
+/// [`caixa_provedor::FerriteRuntime`]) whose [`Box<str>`] axis
+/// closures remain future targets of this campaign. Leaves the paired
+/// borrowed-input [`From<&ArchVerdict> for Box<str>`]
+/// `{Self, &Self}`-closer as the direct next target on this axis.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`ArchVerdict::as_str`] across the two-arm
+/// [`ArchVerdict::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness).
+impl From<ArchVerdict> for Box<str> {
+    fn from(verdict: ArchVerdict) -> Box<str> {
+        Box::<str>::from(verdict.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchReport {
     pub verdict: ArchVerdict,
@@ -2583,6 +2650,52 @@ mod tests {
                  the same two inline canonical-lowercase byte-\
                  strings by construction, so the round-trip \
                  composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<ArchVerdict> for Box<str>` — asserts the owned-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::ArchVerdict::as_str`] `pub const fn` accessor
+        // resolve to the same two-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`super::ArchVerdict::ALL`]
+        // slice enumerates. Extends the outside-`caixa-core` tier of
+        // the substrate-wide [`Box<str>`] forward-projection campaign
+        // onto the second peer — the caixa-arch verdict-outcome two-arm
+        // closed-set fieldless typed enum — following the first-mover
+        // [`super::super::invariants::InvariantKind`] pair (10613a7
+        // owned + 5901887 borrowed) that opened the tier one commit
+        // prior. Rust's standard library carries `impl From<&str> for
+        // Box<str>` and `impl From<String> for Box<str>` but no
+        // blanket `impl<T: AsRef<str>> From<T> for Box<str>`, so this
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = verdict.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(verdict.as_str())` open-code has no compile-time
+        // link back to the substrate primitive.
+        for &variant in super::ArchVerdict::ALL {
+            let via_trait: Box<str> = <Box<str> as From<super::ArchVerdict>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<ArchVerdict> for Box<str> impl must round-trip \
+                 ArchVerdict::{variant:?} to the same canonical- \
+                 lowercase byte-string ArchVerdict::as_str returns — \
+                 divergence signals a silent detour off the substrate- \
+                 primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on ArchVerdict::{variant:?} \
+                 must byte-equal ArchVerdict::as_str on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_str dispatch as the explicit From impl"
             );
         }
     }
