@@ -999,6 +999,75 @@ impl From<RestartStrategy> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward
+/// projection on the M2 OTP-shape sibling-restart [`RestartStrategy`]
+/// closed-set fieldless typed enum — closes the `{Self, &Self}`
+/// input-shape corner of the substrate-wide `Box<str>`
+/// forward-projection axis opened one commit prior (69ef45c) on the
+/// paired owned-input [`From<RestartStrategy> for Box<str>`] impl.
+/// Routes byte-for-byte through the same substrate-primitive
+/// [`RestartStrategy::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that holds a `&RestartStrategy` and needs a
+/// [`Box<str>`] — a
+/// `RestartStrategy::ALL.iter().map(Box::<str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer (whose iterator over
+/// `&'static [RestartStrategy]` yields `&RestartStrategy`, not
+/// `RestartStrategy`, so the paired owned-input
+/// [`From<RestartStrategy> for Box<str>`] axis alone forces every
+/// call site through an explicit `.copied()` / dereference /
+/// [`Copy`]-bound restatement rather than the direct trait-idiomatic
+/// projection), a per-supervisor metric-key materializer holding
+/// `&RestartStrategy` through a `caixa-operator` reconciliation
+/// scheduler's borrow lifetime, a future admission-webhook rejection
+/// body whose per-arm `Box<str>` field composes from a borrowed
+/// `&RestartStrategy` handle without a spurious [`Copy`] deref —
+/// reaches the same four-arm lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const
+/// the paired owned-input [`From<RestartStrategy> for Box<str>`] and
+/// the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already return.
+///
+/// Second peer on the substrate-wide trait-idiomatic
+/// [`Box<str>`] forward-projection family opened one commit prior
+/// (69ef45c) on the paired owned-input
+/// [`From<RestartStrategy> for Box<str>`] impl — closes the
+/// `{Self, &Self}` input-shape corner of the [`Box<str>`] axis on
+/// the first M2 OTP-shape closed-set fieldless typed enum peer on
+/// the caixa surface (`:supervisor :estrategia`), exactly as
+/// ee577fd closed the paired [`Cow<'static, str>`] axis one commit
+/// after its owning half (7dd28b3) landed. Rust's standard library
+/// carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a
+/// `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+/// every closed-set fieldless typed enum peer on the substrate that
+/// carries the paired owned-input `Box<str>` axis but not the
+/// borrowed-input axis forces every borrowed-input
+/// `Box<str>`-parameterized call site through a spurious [`Copy`]
+/// deref (`Box::<str>::from((*strategy).as_str())`) or a
+/// `Box::<str>::from(strategy.as_str())` open-code whose type bounds
+/// have no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_borrowed_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm [`RestartStrategy::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness and a
+/// cross-axis pin against the paired owned-input
+/// [`From<RestartStrategy> for Box<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>}`
+/// return-shape axes).
+impl From<&RestartStrategy> for Box<str> {
+    fn from(strategy: &RestartStrategy) -> Box<str> {
+        Box::<str>::from(strategy.as_str())
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -8896,6 +8965,148 @@ mod tests {
                  to the same as_str dispatch as the explicit From impl"
             );
         }
+    }
+
+    #[test]
+    fn restart_strategy_from_borrowed_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartStrategy> for Box<str>` — asserts the
+        // borrowed-input standard-library trait impl and the
+        // substrate-primitive [`super::RestartStrategy::as_str`]
+        // `pub const fn` accessor resolve to the same four-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartStrategy::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`),
+        // so the borrowed-input `Box<str>` forward-projection axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = (&strategy).into();`-shaped call site
+        // or a `RestartStrategy::ALL.iter().map(Box::<str>::from)`-
+        // shaped pipe reaches through this impl and no other — the
+        // paired owned-input `From<RestartStrategy> for Box<str>`
+        // impl (69ef45c) forces every borrowed-input call site
+        // through an explicit `Copy` deref
+        // (`Box::<str>::from((*strategy).as_str())`) or a
+        // `Box::<str>::from(strategy.as_str())` open-code whose
+        // type bounds have no compile-time link back to the
+        // substrate primitive.
+        //
+        // Second peer on the substrate-wide trait-idiomatic
+        // [`Box<str>`] forward-projection family on this enum —
+        // closes the `{Self, &Self}` input-shape corner of the
+        // [`Box<str>`] axis on the first M2 OTP-shape closed-set
+        // fieldless typed enum peer on the caixa surface
+        // (`:supervisor :estrategia`), exactly as ee577fd closed
+        // the paired [`Cow<'static, str>`] axis one commit after
+        // its owning half (7dd28b3) landed. Every future closed-
+        // set fieldless typed enum peer on the substrate is a
+        // future target of the campaign.
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<RestartStrategy> for Box<str>`] and the sibling
+        // borrowed-input [`From<&RestartStrategy> for &'static str`],
+        // [`From<&RestartStrategy> for String`], and
+        // [`From<&RestartStrategy> for Cow<'static, str>`]
+        // return-shape axes — locking the four
+        // return-shape × input-shape paths together by construction
+        // so any future detour trips at caixa-core test time. Then a
+        // `.iter().map(Box::<str>::from)` pipe witness over
+        // [`super::RestartStrategy::ALL`] — whose iterator yields
+        // `&RestartStrategy` by construction, so the borrowed-input
+        // [`Box<str>`] axis is what routes the pipe through the
+        // substrate-primitive [`super::RestartStrategy::as_str`]
+        // accessor without a spurious [`Copy`] deref (which would
+        // only be reachable through the owned-input
+        // [`From<RestartStrategy> for Box<str>`] axis by first
+        // calling `.copied()` on the iterator).
+        for &variant in RestartStrategy::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&RestartStrategy>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RestartStrategy> for Box<str> impl must \
+                 round-trip &RestartStrategy::{variant:?} to the same \
+                 lifted SUPERVISOR_ESTRATEGIA_* const \
+                 RestartStrategy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &RestartStrategy::{variant:?} \
+                 must byte-equal RestartStrategy::as_str on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_str dispatch as the explicit From impl"
+            );
+            let owned_box: Box<str> = <Box<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait, owned_box,
+                "From<&RestartStrategy> for Box<str> and \
+                 From<RestartStrategy> for Box<str> must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input and owned-input \
+                 Box<str> forward-projection input-shape paths have \
+                 drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&RestartStrategy> for Box<str> and \
+                 From<&RestartStrategy> for &'static str must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input Box<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RestartStrategy> for Box<str> and \
+                 From<&RestartStrategy> for String must resolve \
+                 identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input Box<str> and \
+                 owned-`String` return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&RestartStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&RestartStrategy> for Box<str> and \
+                 From<&RestartStrategy> for Cow<'static, str> must \
+                 resolve identically on RestartStrategy::{variant:?} — \
+                 divergence signals the borrowed-input Box<str> and \
+                 Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<Box<str>> = RestartStrategy::ALL.iter().map(Box::<str>::from).collect();
+        let via_method: Vec<Box<str>> = RestartStrategy::ALL
+            .iter()
+            .map(|s| Box::<str>::from(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Box::<str>::from)` over \
+             RestartStrategy::ALL — a call site whose iteration axis \
+             holds `&RestartStrategy` by construction — must byte-\
+             equal `.iter().map(|s| Box::<str>::from(s.as_str()))` \
+             on every arm — the borrowed-input Box<str> \
+             `From<&RestartStrategy> for Box<str>` axis is what \
+             makes the `Box::<str>::from` composition route through \
+             the substrate-primitive `RestartStrategy::as_str` \
+             accessor without a spurious `Copy` deref (which would \
+             only be reachable through the owned-input \
+             `From<RestartStrategy> for Box<str>` axis by first \
+             calling `.copied()` on the iterator)"
+        );
     }
 
     #[test]
