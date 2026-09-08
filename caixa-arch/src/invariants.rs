@@ -906,6 +906,73 @@ impl From<&InvariantKind> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the caixa-arch invariant-severity three-arm closed-set fieldless
+/// typed enum [`InvariantKind`]. Routes byte-for-byte through the
+/// substrate-primitive [`InvariantKind::as_str`] `pub const fn` accessor
+/// via [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = kind.into();`-shaped call
+/// site — a per-invariant census-key materializer that stashes the
+/// invariant-severity discriminator in a [`Box<str>`]-typed heap-owned
+/// scalar for cheap clone (the shared-nothing per-severity accept-set a
+/// future caixa-arch violation-fanout materializer keys off), a future
+/// M4 `mesh.pleme.io/v1alpha1/ArchAudit` CR reconciliation scheduler's
+/// admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from an owned [`InvariantKind`] handle, a future `feira
+/// arch --by-severity` histogram-column emitter that stashes each arm
+/// as an owned [`Box<str>`] label — reaches the same three
+/// `"safety"` / `"compliance"` / `"hint"` canonical-lowercase byte-
+/// strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` forward-
+/// projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `InvariantKind → Box<str>` `.into()` reaches through this impl and
+/// no other — without a `Box::from(kind.as_str())` open-code whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Opens the outside-`caixa-core` tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign — first-mover on
+/// the caixa-arch invariant-severity three-arm closed-set fieldless
+/// typed enum peer, ahead of the sibling outside-`caixa-core` peers
+/// [`crate::ArchVerdict`], [`caixa_lint::Severity`],
+/// [`caixa_lint::FixSafety`], [`caixa_theme::Semantic`], and
+/// [`caixa_provedor::FerriteRuntime`] whose [`Box<str>`] axis
+/// closures remain future targets of this campaign. Same discipline as
+/// the paired [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// axes: forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`InvariantKind::as_str`]) and reverse parse
+/// ([`InvariantKind::from_wire`], [`TryFrom<&str>`]) route through the
+/// same three inline `"safety"` / `"compliance"` / `"hint"` canonical-
+/// lowercase byte-strings [`InvariantKind::as_str`] returns by
+/// construction, so the round-trip composes directly without the wire-
+/// vocab intermediate hop the peer [`caixa_core::CaixaKind`] axis pair
+/// requires.
+///
+/// Leaves the paired borrowed-input [`From<&InvariantKind> for
+/// Box<str>`] `{Self, &Self}`-closer as the direct next target on the
+/// outside-`caixa-core` tier of the campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the three-
+/// arm [`InvariantKind::ALL`] emit-set on the owned-input surface, plus
+/// a blanket-derived [`Into`] shape witness).
+impl From<InvariantKind> for Box<str> {
+    fn from(kind: InvariantKind) -> Box<str> {
+        Box::<str>::from(kind.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -2765,6 +2832,54 @@ mod tests {
                  share the same three inline canonical-lowercase \
                  byte-strings by construction, so the round-trip \
                  composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<InvariantKind> for Box<str>` — asserts the owned-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::InvariantKind::as_str`] `pub const fn` accessor
+        // resolve to the same three-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`super::InvariantKind::ALL`]
+        // slice enumerates. Opens the outside-`caixa-core` tier of the
+        // substrate-wide [`Box<str>`] forward-projection campaign — the
+        // first-mover on the caixa-arch invariant-severity three-arm
+        // closed-set fieldless typed enum peer, extending the axis off
+        // the M2 OTP-shape and M3 mesh-shape caixa-core peers
+        // (RestartStrategy / RestartPolicy on the M2 OTP-shape tier and
+        // PlacementStrategy / WitShape / RateLimitUnit on the M3 mesh-
+        // shape tier) onto the caixa-arch invariant-severity axis.
+        // Rust's standard library carries `impl From<&str> for Box<str>`
+        // and `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: Box<str> = kind.into();`-shaped call site reaches
+        // through this impl and no other — a paired
+        // `Box::from(kind.as_str())` open-code has no compile-time link
+        // back to the substrate primitive.
+        for &variant in super::InvariantKind::ALL {
+            let via_trait: Box<str> = <Box<str> as From<super::InvariantKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<InvariantKind> for Box<str> impl must round-trip \
+                 InvariantKind::{variant:?} to the same canonical- \
+                 lowercase byte-string InvariantKind::as_str returns — \
+                 divergence signals a silent detour off the substrate- \
+                 primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on InvariantKind::{variant:?} \
+                 must byte-equal InvariantKind::as_str on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_str dispatch as the explicit From impl"
             );
         }
     }
