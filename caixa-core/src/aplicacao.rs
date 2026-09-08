@@ -6452,6 +6452,83 @@ impl From<RateLimitUnit> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:politicas :rate-limit`
+/// canonical-suffix [`RateLimitUnit`] closed-set fieldless typed enum —
+/// the borrowed-input companion to the paired owned-input
+/// [`From<RateLimitUnit> for Box<str>`] impl (8f7eb1a, opening the
+/// third-and-last M3-mesh-primitive peer of the M3 mesh-shape tier)
+/// that closes the `{Self, &Self}` input-shape corner of the substrate-
+/// wide [`Box<str>`] forward-projection axis on the last un-lifted
+/// M3-mesh-primitive-defining slot enum, routing byte-for-byte through
+/// the substrate-primitive [`RateLimitUnit::as_suffix`] `pub const fn`
+/// accessor via [`Box::<str>::from`] on the returned `&'static str`.
+/// Every consumer that holds a `&RateLimitUnit` and needs a
+/// [`Box<str>`] — a
+/// `RateLimitUnit::ALL.iter().map(Box::<str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer (whose iterator over
+/// `&'static [RateLimitUnit]` yields `&RateLimitUnit`, not
+/// `RateLimitUnit`, so the paired owned-input
+/// [`From<RateLimitUnit> for Box<str>`] axis alone forces every call
+/// site through an explicit [`Copy`] deref or a `.copied()`
+/// restatement rather than the direct trait-idiomatic projection), a
+/// per-Aplicacao rate-limit-suffix census-key materializer holding
+/// `&RateLimitUnit` through a `caixa-mesh` renderer's borrow lifetime,
+/// a future admission-webhook rejection body whose per-arm `Box<str>`
+/// field composes from a borrowed `&RateLimitUnit` handle, a future
+/// `feira app graph --by-rate-limit-unit` histogram-column emitter that
+/// stashes each arm as an owned `Box<str>` label through an iterator
+/// over [`RateLimitUnit::ALL`] — reaches the substrate-primitive
+/// [`RateLimitUnit::as_suffix`] accessor through this impl and no
+/// other, without a `Box::<str>::from(unit.as_suffix())` open-code
+/// whose type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer on the substrate that carries the paired
+/// owned-input `Box<str>` axis but not the borrowed-input axis forces
+/// every borrowed-input `Box<str>`-parameterized call site through a
+/// spurious [`Copy`] deref (`Box::<str>::from((*unit).as_suffix())`)
+/// or a `Box::<str>::from(unit.as_suffix())` open-code whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the third-and-last
+/// peer of the M3-mesh-shape tier of the substrate-wide trait-idiomatic
+/// [`Box<str>`] forward-projection campaign, closing the whole M3
+/// mesh-shape tier on the M3-mesh-primitive-defining triple, exactly
+/// as 57ca75e closed the second peer ([`WitShape`]) one commit after
+/// its owning half (bdca41a) landed on that enum, as 3c971b2 closed
+/// the first peer ([`PlacementStrategy`]) one commit after its owning
+/// half (6d73e84), and as cb1d068 closed the paired M2-OTP-shape
+/// tier's second peer ([`crate::supervisor::RestartPolicy`]) one
+/// commit after its owning half (0a1b313). Leaves the outside-M3
+/// substrate-wide peers ([`crate::render::PathShapeViolation`] and the
+/// outside-`caixa-core` peers) as the remaining future targets of the
+/// campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_borrowed_into_box_str_routes_through_as_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::as_suffix`] across the
+/// three-arm [`RateLimitUnit::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness, a cross-
+/// axis partition pin against the paired owned-input
+/// [`From<RateLimitUnit> for Box<str>`] and the sibling borrowed-input
+/// `{&'static str, String, Cow<'static, str>}` return-shape axes, and
+/// a `.iter().map(Box::<str>::from)` pipe witness over
+/// [`RateLimitUnit::ALL`] — whose iterator yields `&RateLimitUnit` by
+/// construction, so the borrowed-input [`Box<str>`] axis is what
+/// routes the pipe through the substrate-primitive
+/// [`RateLimitUnit::as_suffix`] accessor without a spurious [`Copy`]
+/// deref).
+impl From<&RateLimitUnit> for Box<str> {
+    fn from(unit: &RateLimitUnit) -> Box<str> {
+        Box::<str>::from(unit.as_suffix())
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -28738,6 +28815,152 @@ mod tests {
                  impl"
             );
         }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_borrowed_into_box_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RateLimitUnit> for Box<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::RateLimitUnit::as_suffix`] `pub const fn`
+        // accessor resolve to the same three-arm emit-set across every
+        // arm the exhaustive [`super::RateLimitUnit::ALL`] slice
+        // enumerates. Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `Box<str>` forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: Box<str> = (&unit).into();`-shaped call site or a
+        // `RateLimitUnit::ALL.iter().map(Box::<str>::from)`-shaped pipe
+        // reaches through this impl and no other — the paired owned-
+        // input `From<RateLimitUnit> for Box<str>` impl (8f7eb1a)
+        // forces every borrowed-input call site through an explicit
+        // `Copy` deref (`Box::<str>::from((*unit).as_suffix())`) or a
+        // `Box::<str>::from(unit.as_suffix())` open-code whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the third-
+        // and-last peer of the M3-mesh-shape tier of the substrate-wide
+        // [`Box<str>`] axis, closing the whole M3 mesh-shape tier on
+        // the M3-mesh-primitive-defining triple, exactly as 57ca75e
+        // closed the second peer ([`super::WitShape`]) one commit after
+        // its owning half (bdca41a) landed, as 3c971b2 closed the first
+        // peer ([`super::PlacementStrategy`]) one commit after its
+        // owning half (6d73e84), and as cb1d068 closed the paired
+        // M2-OTP-shape tier's second peer
+        // ([`crate::supervisor::RestartPolicy`]) one commit after its
+        // owning half (0a1b313). Leaves the outside-M3 substrate-wide
+        // peers ([`crate::render::PathShapeViolation`] and the outside-
+        // `caixa-core` peers) as the remaining future targets of the
+        // campaign.
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<RateLimitUnit> for Box<str>`] and the sibling
+        // borrowed-input [`From<&RateLimitUnit> for &'static str`],
+        // [`From<&RateLimitUnit> for String`], and
+        // [`From<&RateLimitUnit> for Cow<'static, str>`] return-shape
+        // axes — locking the four return-shape × input-shape paths
+        // together by construction so any future detour trips at
+        // caixa-core test time. Then a `.iter().map(Box::<str>::from)`
+        // pipe witness over [`super::RateLimitUnit::ALL`] — whose
+        // iterator yields `&RateLimitUnit` by construction, so the
+        // borrowed-input [`Box<str>`] axis is what routes the pipe
+        // through the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] accessor without a
+        // spurious [`Copy`] deref (which would only be reachable
+        // through the owned-input [`From<RateLimitUnit> for Box<str>`]
+        // axis by first calling `.copied()` on the iterator).
+        for &variant in super::RateLimitUnit::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&super::RateLimitUnit>>::from(&variant);
+            let via_method: &'static str = variant.as_suffix();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RateLimitUnit> for Box<str> impl must round-trip \
+                 &RateLimitUnit::{variant:?} to the same inline \
+                 canonical-suffix byte-string RateLimitUnit::as_suffix \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &RateLimitUnit::{variant:?} \
+                 must byte-equal RateLimitUnit::as_suffix on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_suffix dispatch as the explicit From \
+                 impl"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait, owned_box,
+                "From<&RateLimitUnit> for Box<str> and \
+                 From<RateLimitUnit> for Box<str> must resolve \
+                 identically on RateLimitUnit::{variant:?} — \
+                 divergence signals the borrowed-input and owned-input \
+                 Box<str> forward-projection input-shape paths have \
+                 drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&RateLimitUnit> for Box<str> and \
+                 From<&RateLimitUnit> for &'static str must resolve \
+                 identically on RateLimitUnit::{variant:?} — \
+                 divergence signals the borrowed-input Box<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RateLimitUnit> for Box<str> and \
+                 From<&RateLimitUnit> for String must resolve \
+                 identically on RateLimitUnit::{variant:?} — \
+                 divergence signals the borrowed-input Box<str> and \
+                 owned-`String` return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&RateLimitUnit> for Box<str> and \
+                 From<&RateLimitUnit> for Cow<'static, str> must \
+                 resolve identically on RateLimitUnit::{variant:?} — \
+                 divergence signals the borrowed-input Box<str> and \
+                 Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<Box<str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(Box::<str>::from)
+            .collect();
+        let via_method: Vec<Box<str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(|u| Box::<str>::from(u.as_suffix()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Box::<str>::from)` over RateLimitUnit::ALL — \
+             a call site whose iteration axis holds `&RateLimitUnit` \
+             by construction — must byte-equal `.iter().map(|u| \
+             Box::<str>::from(u.as_suffix()))` on every arm — the \
+             borrowed-input Box<str> `From<&RateLimitUnit> for \
+             Box<str>` axis is what makes the `Box::<str>::from` \
+             composition route through the substrate-primitive \
+             `RateLimitUnit::as_suffix` accessor without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<RateLimitUnit> for Box<str>` axis by \
+             first calling `.copied()` on the iterator)"
+        );
     }
 
     #[test]
