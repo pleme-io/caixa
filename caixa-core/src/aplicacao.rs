@@ -1341,6 +1341,70 @@ impl From<&WitShape> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the M3-mesh-primitive-defining `:contratos :wit` census-label
+/// [`WitShape`] closed-set fieldless typed enum — extends the M3-mesh-
+/// shape tier of the substrate-wide [`Box<str>`] forward-projection
+/// campaign (opened on [`PlacementStrategy`] — 6d73e84 owned-input +
+/// 3c971b2 borrowed-input) onto its second M3-mesh-primitive-defining
+/// slot enum. Routes byte-for-byte through the substrate-primitive
+/// [`WitShape::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = shape.into();`-shaped
+/// call site — a per-Aplicacao WIT-shape census-key materializer that
+/// stashes the `:contratos :wit` census-label discriminator in a
+/// `Box<str>`-typed heap-owned scalar for cheap clone (the shared-
+/// nothing per-shape accept-set the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR reconciliation scheduler
+/// carries when it fans on the WIT-shape partition), a future
+/// admission-webhook rejection body whose per-arm `Box<str>` field
+/// composes from an owned [`WitShape`] handle, a future
+/// `feira app graph --by-wit-shape` histogram-column emitter that
+/// stashes each arm as an owned `Box<str>` label — reaches the same
+/// four-arm inline `"http"` / `"pubsub"` / `"store"` / `"capability"`
+/// census-label byte-string the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>`
+/// and `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `WitShape → Box<str>` `.into()` reaches through this impl and no
+/// other — without a `Box::from(shape.as_str())` open-code whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Extends the M3-mesh-shape tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign onto its second
+/// M3-mesh-primitive-defining slot enum, ahead of the remaining
+/// [`RateLimitUnit`] `:politicas :rate-limit` canonical-suffix axis
+/// whose [`Box<str>`] axis closure is the final future target on the
+/// M3 mesh-shape tier. Same discipline as the peer
+/// [`PlacementStrategy`] M3-mesh-shape [`Box<str>`] axis (6d73e84 /
+/// 3c971b2) and the peer [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] M2-OTP-shape [`Box<str>`]
+/// axes: forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`WitShape::as_str`]) and reverse parse
+/// ([`WitShape::from_wire`], [`TryFrom<&str>`]) route through the
+/// same four inline `"http"` / `"pubsub"` / `"store"` / `"capability"`
+/// census-label byte-strings [`WitShape::as_str`] returns by
+/// construction, so the round-trip composes directly without a
+/// wire-vocab intermediate hop.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`WitShape::as_str`] across the four-arm
+/// [`WitShape::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness).
+impl From<WitShape> for Box<str> {
+    fn from(shape: WitShape) -> Box<str> {
+        Box::<str>::from(shape.as_str())
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -18381,6 +18445,56 @@ mod tests {
                  allocated where the substrate-primitive \
                  WitShape::as_str `&'static str` return makes the \
                  borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<WitShape> for Box<str>` — asserts the owned-input
+        // standard-library trait impl and the substrate-primitive
+        // [`super::WitShape::as_str`] `pub const fn` accessor resolve
+        // to the same four-arm emit-set across every arm the
+        // exhaustive [`super::WitShape::ALL`] slice enumerates.
+        // Extends the M3-mesh-shape tier of the substrate-wide
+        // `Box<str>` forward-projection campaign — second-mover on
+        // the M3 mesh-slot family the caixa-mesh renderer keys off
+        // end-to-end, one commit after the paired
+        // [`super::PlacementStrategy`] closed its `{Self, &Self}`
+        // input-shape corner on the same tier (6d73e84 owned-input +
+        // 3c971b2 borrowed-input), and ahead of the remaining
+        // [`super::RateLimitUnit`] `:politicas :rate-limit`
+        // canonical-suffix axis whose [`Box<str>`] axis closure is
+        // the final future target on the M3 mesh-shape tier. Rust's
+        // standard library carries `impl From<&str> for Box<str>`
+        // and `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = shape.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(shape.as_str())` open-code has no compile-
+        // time link back to the substrate primitive.
+        for &variant in WitShape::ALL {
+            let via_trait: Box<str> = <Box<str> as From<WitShape>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<WitShape> for Box<str> impl must round-trip \
+                 WitShape::{variant:?} to the same inline census-\
+                 label byte-string WitShape::as_str returns — \
+                 divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on WitShape::{variant:?} must \
+                 byte-equal WitShape::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
             );
         }
     }
