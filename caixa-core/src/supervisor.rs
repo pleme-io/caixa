@@ -2016,6 +2016,66 @@ impl From<&RestartPolicy> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward
+/// projection on the M2 OTP-shape per-child-restart [`RestartPolicy`]
+/// closed-set fieldless typed enum — extends the substrate-wide
+/// `Box<str>` forward-projection campaign tier opened one commit prior
+/// (69ef45c) on the paired sibling-restart [`RestartStrategy`] onto
+/// the second (and third-and-final) M2 OTP-shape closed-set fieldless
+/// typed enum peer on the caixa surface (`:children :restart`),
+/// immediately after the paired `Cow<'static, str>` axis (0612398 /
+/// b4dc55c) closed the
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` 2×3
+/// corner on this enum. Routes byte-for-byte through the
+/// substrate-primitive [`RestartPolicy::as_str`] `pub const fn`
+/// accessor via [`Box::<str>::from`] on the returned `&'static str`,
+/// so every consumer that binds a
+/// `let key: Box<str> = policy.into();`-shaped call site — a
+/// per-child metric-key materializer that stashes the policy
+/// discriminator in a `Box<str>`-typed heap-owned scalar for cheap
+/// clone (a shared-nothing per-policy accept-set the `caixa-operator`
+/// hierarchical reconciliation scheduler's per-child restart-decision
+/// fan-out carries), a future admission-webhook rejection body whose
+/// per-arm `Box<str>` field composes from an owned `RestartPolicy`
+/// handle — reaches the same three-arm lifted
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] const the
+/// sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns. Rust's standard library
+/// carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>` (nor any
+/// `impl<T: Copy, U: From<T>> From<T> for U` route from the enum), so
+/// this axis is a distinct trait-idiomatic surface that a downstream
+/// `RestartPolicy → Box<str>` `.into()` reaches through this impl and
+/// no other — without a `Box::from(policy.as_str())` open-code whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Second peer on the substrate-wide trait-idiomatic [`Box<str>`]
+/// forward-projection family opened on the sibling-restart
+/// [`RestartStrategy`] (69ef45c / 59ae5dc) — closes the whole M2
+/// OTP-shape tier of the substrate-wide [`Box<str>`] forward-
+/// projection campaign's owned-input corner on both M2 OTP-shape
+/// sibling peers ([`RestartStrategy`] and [`RestartPolicy`]), the
+/// paired borrowed-input `From<&RestartPolicy> for Box<str>` closer
+/// and the remaining fieldless-enum peers on the M3 mesh-shape /
+/// outside-M3 caixa-core / render-side / outside-caixa-core tiers
+/// are the future targets of the campaign.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartPolicy::as_str`] across the
+/// three-arm [`RestartPolicy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness).
+impl From<RestartPolicy> for Box<str> {
+    fn from(policy: RestartPolicy) -> Box<str> {
+        Box::<str>::from(policy.as_str())
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -10268,6 +10328,61 @@ mod tests {
                  silently allocated where the substrate-primitive \
                  RestartPolicy::as_str `&'static str` return makes \
                  the borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartPolicy> for Box<str>` — asserts the
+        // owned-input standard-library trait impl and the
+        // substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates. Extends the
+        // substrate-wide `Box<str>` forward-projection campaign tier
+        // opened one commit prior (69ef45c) on the paired sibling-
+        // restart [`RestartStrategy`] onto the second (and third-and-
+        // final) M2 OTP-shape closed-set fieldless typed enum peer on
+        // the caixa surface (`:children :restart`), immediately after
+        // the paired `Cow<'static, str>` axis (0612398 / b4dc55c)
+        // closed the
+        // `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+        // 2×3 corner on this enum. Rust's standard library carries
+        // `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is
+        // a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = policy.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(policy.as_str())` open-code has no compile-time
+        // link back to the substrate primitive. Peer of the sibling
+        // [`restart_strategy_from_into_box_str_routes_through_as_str_accessor`]
+        // (69ef45c) — extends the trait-idiomatic owned-input
+        // [`Box<str>`] forward-projection axis onto the third and
+        // final M2-OTP-shape closed-set typed enum on the caixa
+        // surface.
+        for &variant in RestartPolicy::ALL {
+            let via_trait: Box<str> = <Box<str> as From<RestartPolicy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RestartPolicy> for Box<str> impl must round-\
+                 trip RestartPolicy::{variant:?} to the same lifted \
+                 SUPERVISOR_CHILD_RESTART_* const RestartPolicy::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on RestartPolicy::{variant:?} \
+                 must byte-equal RestartPolicy::as_str on the same \
+                 input — the blanket-derived Into shape must resolve \
+                 to the same as_str dispatch as the explicit From impl"
             );
         }
     }
