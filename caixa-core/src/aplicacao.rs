@@ -8734,6 +8734,70 @@ impl From<&PlacementStrategy> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the M3-mesh-primitive-defining `:placement :estrategia`
+/// distribution-strategy [`PlacementStrategy`] closed-set fieldless
+/// typed enum — extends the substrate-wide `Box<str>` forward-projection
+/// campaign off the M2 OTP-shape tier (opened on
+/// [`crate::supervisor::RestartStrategy`] — 69ef45c owned-input +
+/// 59ae5dc borrowed-input — and closed on
+/// [`crate::supervisor::RestartPolicy`] — 0a1b313 owned-input + cb1d068
+/// borrowed-input) onto the first M3-mesh-primitive-defining slot enum.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = strategy.into();`-shaped
+/// call site — a per-Aplicacao metric-key materializer that stashes
+/// the placement-strategy discriminator in a `Box<str>`-typed heap-
+/// owned scalar for cheap clone (a shared-nothing per-strategy accept-
+/// set the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// reconciliation scheduler carries), a future admission-webhook
+/// rejection body whose per-arm `Box<str>` field composes from an
+/// owned `PlacementStrategy` handle — reaches the same three-arm
+/// lifted [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] const the
+/// sibling `{Self, &Self} × {&'static str, String, Cow<'static, str>}`
+/// forward-projection corner already returns. Rust's standard library
+/// carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `PlacementStrategy → Box<str>` `.into()` reaches through this impl
+/// and no other — without a `Box::from(strategy.as_str())` open-code
+/// whose type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Opens the M3-mesh-shape tier of the substrate-wide trait-idiomatic
+/// [`Box<str>`] forward-projection campaign — first-mover on the M3
+/// mesh-slot family the caixa-mesh renderer keys off end-to-end,
+/// ahead of the sibling [`WitShape`] `:contratos :wit` census-label
+/// axis and [`RateLimitUnit`] `:politicas :rate-limit` canonical-
+/// suffix axis whose [`Box<str>`] axis closures remain future
+/// targets of this campaign. Same discipline as the peer
+/// [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] M2-OTP-shape [`Box<str>`]
+/// axes: forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`PlacementStrategy::as_str`]) and reverse parse
+/// ([`PlacementStrategy::from_wire`], [`TryFrom<&str>`]) route through
+/// the same three lifted [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`]
+/// `pub const &str` values by construction, so the round-trip
+/// composes directly without the wire-vocab intermediate hop the peer
+/// [`crate::CaixaKind`] axis pair requires.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm [`PlacementStrategy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness).
+impl From<PlacementStrategy> for Box<str> {
+    fn from(strategy: PlacementStrategy) -> Box<str> {
+        Box::<str>::from(strategy.as_str())
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -25311,6 +25375,57 @@ mod tests {
                  silently allocated where the substrate-primitive \
                  PlacementStrategy::as_str `&'static str` return \
                  makes the borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for Box<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::PlacementStrategy::as_str`] `pub const
+        // fn` accessor resolve to the same three-arm emit-set across
+        // every arm the exhaustive [`super::PlacementStrategy::ALL`]
+        // slice enumerates. Opens the M3-mesh-shape tier of the
+        // substrate-wide `Box<str>` forward-projection campaign —
+        // first-mover on the M3 mesh-slot family the caixa-mesh
+        // renderer keys off end-to-end, one commit after the paired
+        // M2 OTP-shape tier closed on
+        // [`crate::supervisor::RestartPolicy`] (0a1b313 owned-input +
+        // cb1d068 borrowed-input) after opening on
+        // [`crate::supervisor::RestartStrategy`] (69ef45c owned-input
+        // + 59ae5dc borrowed-input). Rust's standard library carries
+        // `impl From<&str> for Box<str>` and
+        // `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is
+        // a distinct trait-idiomatic surface that a
+        // `let key: Box<str> = strategy.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(strategy.as_str())` open-code has no compile-
+        // time link back to the substrate primitive.
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: Box<str> = <Box<str> as From<PlacementStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<PlacementStrategy> for Box<str> impl must round-\
+                 trip PlacementStrategy::{variant:?} to the same \
+                 lifted M3_PLACEMENT_ESTRATEGIA_* const \
+                 PlacementStrategy::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on PlacementStrategy::\
+                 {variant:?} must byte-equal PlacementStrategy::as_str \
+                 on the same input — the blanket-derived Into shape \
+                 must resolve to the same as_str dispatch as the \
+                 explicit From impl"
             );
         }
     }
