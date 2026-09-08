@@ -940,6 +940,158 @@ impl From<&Severity> for std::borrow::Cow<'static, str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<str>`] output* forward projection
+/// on the caixa-lint diagnostic-severity four-arm closed-set fieldless
+/// typed enum [`Severity`]. Routes byte-for-byte through the
+/// substrate-primitive [`Severity::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = severity.into();`-shaped
+/// call site — a per-severity census-key materializer that stashes the
+/// diagnostic-severity discriminator in a [`Box<str>`]-typed heap-owned
+/// scalar for cheap clone (the shared-nothing per-severity accept-set a
+/// future caixa-lint diagnostic-fanout materializer keys off), a future
+/// M4 admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from an owned [`Severity`] handle, a future
+/// `feira lint --by-severity` histogram-column emitter that stashes
+/// each arm as an owned [`Box<str>`] label — reaches the same four
+/// `"error"` / `"warning"` / `"info"` / `"hint"` canonical-lowercase
+/// byte-strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>}` forward-
+/// projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+/// distinct trait-idiomatic surface that a downstream
+/// `Severity → Box<str>` `.into()` reaches through this impl and no
+/// other — without a `Box::from(severity.as_str())` open-code whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Extends the outside-`caixa-core` tier of the substrate-wide trait-
+/// idiomatic [`Box<str>`] forward-projection campaign onto the third
+/// peer — the caixa-lint diagnostic-severity four-arm closed-set
+/// fieldless typed enum — following the first-mover
+/// [`caixa_arch::invariants::InvariantKind`] pair (10613a7 owned +
+/// 5901887 borrowed) that opened the tier and the second-peer
+/// [`caixa_arch::report::ArchVerdict`] pair (3e08f5a owned + c4319a8
+/// borrowed) that landed one axis prior. Same discipline as the paired
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// axes: forward emit (this impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`Severity::as_str`]) and reverse parse ([`Severity::from_wire`],
+/// [`TryFrom<&str>`]) route through the same four inline `"error"` /
+/// `"warning"` / `"info"` / `"hint"` canonical-lowercase byte-strings
+/// [`Severity::as_str`] returns by construction, so the round-trip
+/// composes directly without the wire-vocab intermediate hop the peer
+/// [`caixa_core::CaixaKind`] axis pair requires.
+///
+/// The remaining outside-`caixa-core` peers ([`FixSafety`],
+/// [`caixa_theme::Semantic`], and [`caixa_provedor::FerriteRuntime`])
+/// whose [`Box<str>`] axis closures remain future targets of this
+/// campaign. Leaves the paired borrowed-input [`From<&Severity> for
+/// Box<str>`] `{Self, &Self}`-closer as the direct next target on this
+/// axis.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Severity::as_str`] across the four-arm
+/// [`Severity::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness).
+impl From<Severity> for Box<str> {
+    fn from(severity: Severity) -> Box<str> {
+        Box::<str>::from(severity.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<str>`] output* forward
+/// projection on the caixa-lint diagnostic-severity four-arm closed-set
+/// fieldless typed enum [`Severity`]. Routes byte-for-byte through the
+/// substrate-primitive [`Severity::as_str`] `pub const fn` accessor via
+/// [`Box::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: Box<str> = (&severity).into();`-
+/// shaped call site or a
+/// `Severity::ALL.iter().map(Box::<str>::from)`-shaped pipe (whose
+/// iterator over `&'static [Severity]` yields `&Severity` by
+/// construction) — a per-severity census-key materializer that stashes
+/// the diagnostic-severity discriminator in a [`Box<str>`]-typed heap-
+/// owned scalar for cheap clone off a borrowed handle, a future M4
+/// admission-webhook rejection body whose per-arm [`Box<str>`] field
+/// composes from a borrowed [`Severity`] handle off `&Diagnostic
+/// .severity`, a future `feira lint --by-severity` histogram-column
+/// emitter that iterates [`Severity::ALL`] into per-arm owned
+/// [`Box<str>`] labels — reaches the same four `"error"` /
+/// `"warning"` / `"info"` / `"hint"` canonical-lowercase byte-strings
+/// the sibling `{Self, &Self} × {&'static str, String, Cow<'static,
+/// str>}` forward-projection corner and the paired owned-input
+/// [`From<Severity> for Box<str>`] already return.
+///
+/// Rust's standard library carries `impl From<&str> for Box<str>` and
+/// `impl From<String> for Box<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input
+/// axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`Severity::ALL`]`.iter().map(Box::<str>::from)` reaches through
+/// this impl and no other — without it, the same pipe would force an
+/// explicit `.copied()` restatement (`.iter().copied()
+/// .map(Box::<str>::from)`) whose type bounds have no compile-time link
+/// back to the substrate primitive, and a `let key: Box<str> =
+/// (&severity).into();`-shaped call site would force an explicit
+/// `Copy` deref (`Box::<str>::from(*severity)`) or a
+/// `Box::<str>::from(severity.as_str())` open-code with the same
+/// defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the third outside-
+/// `caixa-core` closed-set fieldless typed enum peer of the substrate-
+/// wide trait-idiomatic [`Box<str>`] forward-projection campaign,
+/// exactly as 5901887 closed the paired first-mover `InvariantKind`
+/// axis one commit after (10613a7) landed, c4319a8 closed the paired
+/// second-peer `ArchVerdict` axis one commit after (3e08f5a) landed,
+/// cb1d068 closed the paired M2-OTP-shape `RestartPolicy` axis one
+/// commit after (0a1b313) landed, and 3c971b2 closed the paired M3-
+/// mesh-shape `PlacementStrategy` axis one commit after (6d73e84)
+/// landed. The remaining outside-`caixa-core` peers ([`FixSafety`],
+/// [`caixa_theme::Semantic`], and [`caixa_provedor::FerriteRuntime`])
+/// remain future targets on the axis.
+///
+/// Same discipline as the paired
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] M2-OTP-shape and
+/// [`caixa_core::aplicacao::PlacementStrategy`] /
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] M3-mesh-shape [`Box<str>`]
+/// `{Self, &Self}`-closers: forward emit (this impl, the paired owned-
+/// input [`From<Severity> for Box<str>`] impl, the sibling
+/// `{&'static str, String, Cow<'static, str>}` forward-projection
+/// corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`Severity::as_str`]) and reverse parse ([`Severity::from_wire`],
+/// [`TryFrom<&str>`]) route through the same four inline `"error"` /
+/// `"warning"` / `"info"` / `"hint"` canonical-lowercase byte-strings
+/// [`Severity::as_str`] returns by construction, so the round-trip
+/// composes directly without the wire-vocab intermediate hop the peer
+/// [`caixa_core::CaixaKind`] axis pair requires.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_borrowed_into_box_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Severity::as_str`] across the four-arm
+/// [`Severity::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, plus a
+/// `.iter().map(Box::<str>::from)` pipe witness over
+/// [`Severity::ALL`] — whose iterator yields `&Severity` by
+/// construction, so the borrowed-input [`Box<str>`] axis is what
+/// routes the pipe through the substrate-primitive
+/// [`Severity::as_str`] accessor without a spurious [`Copy`] deref).
+impl From<&Severity> for Box<str> {
+    fn from(severity: &Severity) -> Box<str> {
+        Box::<str>::from(severity.as_str())
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -3942,6 +4094,145 @@ mod tests {
                  forward emit and reverse parse share the same four \
                  inline canonical-lowercase byte-strings by \
                  construction, so the round-trip composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Severity> for Box<str>` — asserts the owned-input
+        // standard-library trait impl and the substrate-primitive
+        // [`super::Severity::as_str`] `pub const fn` accessor resolve
+        // to the same four-arm canonical-lowercase emit-set across
+        // every arm the exhaustive [`super::Severity::ALL`] slice
+        // enumerates. Extends the outside-`caixa-core` tier of the
+        // substrate-wide [`Box<str>`] forward-projection campaign onto
+        // the third peer — the caixa-lint diagnostic-severity four-arm
+        // closed-set fieldless typed enum — following the first-mover
+        // [`caixa_arch::invariants::InvariantKind`] pair (10613a7 owned
+        // + 5901887 borrowed) and second-peer
+        // [`caixa_arch::report::ArchVerdict`] pair (3e08f5a owned +
+        // c4319a8 borrowed) that landed the tier one axis prior.
+        // Rust's standard library carries `impl From<&str> for
+        // Box<str>` and `impl From<String> for Box<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for Box<str>`, so this axis is a
+        // distinct trait-idiomatic surface that a
+        // `let key: Box<str> = severity.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `Box::from(severity.as_str())` open-code has no compile-time
+        // link back to the substrate primitive.
+        for &variant in Severity::ALL {
+            let via_trait: Box<str> = <Box<str> as From<Severity>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<Severity> for Box<str> impl must round-trip \
+                 Severity::{variant:?} to the same canonical-lowercase \
+                 byte-string Severity::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: Box<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on Severity::{variant:?} must \
+                 byte-equal Severity::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_borrowed_into_box_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&Severity> for Box<str>` — asserts the borrowed-
+        // input standard-library trait impl and the substrate-primitive
+        // [`super::Severity::as_str`] `pub const fn` accessor resolve
+        // to the same four-arm canonical-lowercase emit-set across
+        // every arm the exhaustive [`super::Severity::ALL`] slice
+        // enumerates. Rust's standard library carries `impl From<&str>
+        // for Box<str>` and `impl From<String> for Box<str>` but no
+        // blanket `impl<T: AsRef<str>> From<&T> for Box<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input [`Box<str>`] forward-projection axis is a
+        // distinct trait-idiomatic surface that a
+        // `Severity::ALL.iter().map(Box::<str>::from)`-shaped pipe
+        // (whose iterator over `&'static [Severity]` yields `&Severity`
+        // by construction) or a `let key: Box<str> = (&severity)
+        // .into();`-shaped call site reaches through this impl and no
+        // other — the paired owned-input `From<Severity> for Box<str>`
+        // impl alone would force every borrowed-input call site through
+        // an explicit `Copy` deref (`Box::<str>::from(*severity)`) or a
+        // `Box::<str>::from(severity.as_str())` open-code whose type
+        // bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the third
+        // outside-`caixa-core` closed-set fieldless typed enum peer of
+        // the substrate-wide [`Box<str>`] forward-projection campaign,
+        // exactly as 5901887 closed the paired first-mover
+        // `InvariantKind` axis one commit after (10613a7) landed,
+        // c4319a8 closed the paired second-peer `ArchVerdict` axis one
+        // commit after (3e08f5a) landed, cb1d068 closed the paired M2-
+        // OTP-shape `RestartPolicy` axis one commit after (0a1b313)
+        // landed, and 3c971b2 closed the paired M3-mesh-shape
+        // `PlacementStrategy` axis one commit after (6d73e84) landed.
+        for &variant in Severity::ALL {
+            let via_trait: Box<str> = <Box<str> as From<&Severity>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&Severity> for Box<str> impl must round-trip \
+                 &Severity::{variant:?} to the same canonical-lowercase \
+                 byte-string Severity::as_str returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: Box<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<Box<str>>::into on &Severity::{variant:?} must \
+                 byte-equal Severity::as_str on the same input — the \
+                 blanket-derived Into shape on the borrowed-input \
+                 surface must resolve to the same as_str dispatch as \
+                 the explicit From impl"
+            );
+        }
+
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `Severity::ALL.iter()` yields `&Severity` by
+        // construction, so `.map(Box::<str>::from)` resolves through
+        // the borrowed-input `From<&Severity> for Box<str>` impl and
+        // no other — without this axis, the same pipe would force an
+        // explicit `.copied()` restatement whose type bounds bypass
+        // the substrate primitive.
+        let via_pipe: Vec<Box<str>> = Severity::ALL.iter().map(Box::<str>::from).collect();
+        let via_accessor: Vec<&'static str> = Severity::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "Severity::ALL.iter().map(Box::<str>::from) pipe must \
+             preserve arity against the paired Severity::as_str \
+             accessor — a length divergence signals the borrowed-input \
+             axis has silently rejected an arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "Severity::ALL.iter().map(Box::<str>::from) pipe must \
+                 byte-equal the paired Severity::ALL.iter().map(|s| \
+                 s.as_str()) pipe on every arm — divergence signals \
+                 the borrowed-input `From<&Severity> for Box<str>` \
+                 axis has silently detoured off the substrate-\
+                 primitive accessor"
             );
         }
     }
