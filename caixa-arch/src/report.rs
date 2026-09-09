@@ -1097,6 +1097,85 @@ impl From<&ArchVerdict> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the caixa-arch verdict-outcome two-arm closed-set
+/// fieldless typed enum [`ArchVerdict`] — extends the outside-`caixa-core`
+/// tier of the substrate-wide trait-idiomatic [`std::sync::Arc<str>`]
+/// forward-projection campaign onto its second peer, one commit after
+/// 03c043f closed the paired [`crate::invariants::InvariantKind`]
+/// `{Self, &Self}` corner (4e923c1 owned + 03c043f borrowed) as the
+/// first-mover on this tier. Routes byte-for-byte through the substrate-
+/// primitive [`ArchVerdict::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<str>::from`] on the returned `&'static str`.
+///
+/// Every consumer that binds an [`ArchVerdict`] through the standard-
+/// library `.into()` / [`From<Self> for std::sync::Arc<str>`]
+/// (equivalently [`Into<std::sync::Arc<str>>`]) axis — a future caixa-arch
+/// admission-webhook whose per-request rejection body composes from a
+/// moved [`ArchVerdict`] handle across an `.await` boundary through a
+/// `<T: Into<std::sync::Arc<str>>>`-bound diagnostic-column dispatch, a
+/// future per-Aplicacao arch-audit metric-key materializer holding a
+/// shared-ownership per-arm verdict-outcome label across concurrent
+/// tokio-scheduled reconcile loops, a future
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording an owned [`ArchVerdict`] per-arm field onto the
+/// parent span's shared-ownership context — reaches the same two
+/// `"proven"` / `"rejected"` canonical-lowercase byte-strings the sibling
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` forward-
+/// projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>`
+/// but no blanket `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>`
+/// (nor an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so
+/// this axis is a distinct trait-idiomatic surface that a
+/// `let key: std::sync::Arc<str> = verdict.into();`-shaped call site
+/// reaches through this impl and no other — a paired
+/// `std::sync::Arc::<str>::from(verdict.as_str())` open-code has no
+/// compile-time link back to the substrate primitive, and a two-step
+/// `std::sync::Arc::<str>::from(String::from(verdict))` composition
+/// through the owned-`String` axis allocates twice (once into the
+/// intermediate `String`, once into the [`std::sync::Arc<str>`] on the
+/// `From<String>` conversion) where the single-step trait impl allocates
+/// once. The shared-ownership + [`Sync`] + [`Send`] contract
+/// [`std::sync::Arc<str>`] provides is the distinct value the sibling
+/// [`Box<str>`] axis's owned-move return-shape cannot provide — a per-
+/// arch-audit verdict-outcome label reachable from multiple concurrent
+/// per-cluster reconcile tasks through the same two canonical-lowercase
+/// byte-strings, without a `.clone()`-per-task materialization the
+/// owned-move [`Box<str>`] axis would force.
+///
+/// Second peer on the outside-`caixa-core` tier of the substrate-wide
+/// trait-idiomatic [`std::sync::Arc<str>`] forward-projection campaign,
+/// following the first-mover [`crate::invariants::InvariantKind`] pair
+/// (4e923c1 owned + 03c043f borrowed) — every remaining outside-
+/// `caixa-core` closed-set fieldless typed enum peer
+/// ([`caixa_lint::Severity`], [`caixa_lint::FixSafety`],
+/// [`caixa_theme::Semantic`], [`caixa_provedor::FerriteRuntime`]) whose
+/// [`std::sync::Arc<str>`] pair remains a future target of this campaign,
+/// tracking the same 2-corner `{Self, &Self}` × 5-tier
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` emit-set the M2 OTP-shape and M3 mesh-shape
+/// tiers already converged onto. Leaves the paired borrowed-input
+/// [`From<&ArchVerdict> for std::sync::Arc<str>`] `{Self, &Self}`-closer
+/// as the direct next target on the same enum, mirroring the shape
+/// 03c043f used to close the first-mover [`crate::invariants::InvariantKind`]
+/// pair one commit after 4e923c1 opened its owned-input half.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`ArchVerdict::as_str`] across the two-arm
+/// [`ArchVerdict::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` return-shape
+/// axes).
+impl From<ArchVerdict> for std::sync::Arc<str> {
+    fn from(verdict: ArchVerdict) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(verdict.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchReport {
     pub verdict: ArchVerdict,
@@ -2865,6 +2944,118 @@ mod tests {
                  every arm — divergence signals the borrowed-input \
                  `From<&ArchVerdict> for Box<str>` axis has silently \
                  detoured off the substrate-primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn arch_verdict_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<ArchVerdict> for std::sync::Arc<str>` — asserts
+        // the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::ArchVerdict::as_str`]
+        // `pub const fn` accessor resolve to the same two-arm
+        // canonical-lowercase emit-set across every arm the exhaustive
+        // [`super::ArchVerdict::ALL`] slice enumerates. Extends the
+        // outside-`caixa-core` tier of the substrate-wide
+        // [`std::sync::Arc<str>`] forward-projection campaign onto the
+        // second peer — the caixa-arch verdict-outcome two-arm closed-
+        // set fieldless typed enum — one commit after 03c043f closed
+        // the paired first-mover
+        // [`super::super::invariants::InvariantKind`] `{Self, &Self}`
+        // corner (4e923c1 owned + 03c043f borrowed) on this tier.
+        // Rust's standard library carries `impl From<&str> for
+        // std::sync::Arc<str>` and `impl From<String> for
+        // std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor
+        // an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`),
+        // so this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = verdict.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(verdict.as_str())` open-code
+        // has no compile-time link back to the substrate primitive,
+        // and a two-step
+        // `std::sync::Arc::<str>::from(String::from(verdict))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`Arc<str>`] on the `From<String>` conversion) where the
+        // single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::ArchVerdict::as_str`] accessor trips at caixa-
+        // arch test time.
+        for &variant in super::ArchVerdict::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::ArchVerdict>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<ArchVerdict> for std::sync::Arc<str> impl must \
+                 round-trip ArchVerdict::{variant:?} to the same \
+                 canonical-lowercase byte-string ArchVerdict::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on ArchVerdict::\
+                 {variant:?} must byte-equal ArchVerdict::as_str on \
+                 the same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_static: &'static str =
+                <&'static str as From<super::ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<ArchVerdict> for std::sync::Arc<str> and \
+                 From<ArchVerdict> for &'static str must resolve \
+                 identically on ArchVerdict::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and &'static str return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_string: String = <String as From<super::ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<ArchVerdict> for std::sync::Arc<str> and \
+                 From<ArchVerdict> for String must resolve \
+                 identically on ArchVerdict::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and owned-`String` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<ArchVerdict> for std::sync::Arc<str> and \
+                 From<ArchVerdict> for Cow<'static, str> must \
+                 resolve identically on ArchVerdict::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and Cow<'static, str> return- \
+                 shape paths have drifted onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<ArchVerdict> for std::sync::Arc<str> and \
+                 From<ArchVerdict> for Box<str> must resolve \
+                 identically on ArchVerdict::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and Box<str> return-shape paths \
+                 have drifted onto different emit-sets"
             );
         }
     }
