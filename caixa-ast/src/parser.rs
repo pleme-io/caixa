@@ -76,7 +76,7 @@ pub fn parse(src: &str) -> Result<Vec<Node>, ParseError> {
         } else {
             // uncommon, but merge
             let mut combined = leading;
-            combined.extend(node.leading.drain(..));
+            combined.append(&mut node.leading);
             node.leading = combined;
         }
         out.push(node);
