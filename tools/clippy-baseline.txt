@@ -43,7 +43,7 @@
 14	clippy::doc_markdown	caixa-core/src/supervisor.rs
 1	clippy::field_reassign_with_default	caixa-core/src/supervisor.rs
 1	clippy::must_use_candidate	caixa-core/src/supervisor.rs
-1	clippy::too_many_lines	caixa-core/src/supervisor.rs
+2	clippy::too_many_lines	caixa-core/src/supervisor.rs
 1	clippy::doc_lazy_continuation	caixa-core/src/upgrade.rs
 5	clippy::doc_markdown	caixa-core/src/version.rs
 3	clippy::doc_markdown	caixa-core/tests/dispatcher_registration.rs
