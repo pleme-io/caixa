@@ -1055,6 +1055,86 @@ impl From<&InvariantKind> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the caixa-arch invariant-severity three-arm closed-set
+/// fieldless typed enum [`InvariantKind`] — opens the outside-`caixa-core`
+/// tier of the substrate-wide trait-idiomatic [`std::sync::Arc<str>`]
+/// forward-projection campaign on the first-mover outside-`caixa-core`
+/// closed-set fieldless typed enum peer, one commit after the M3 mesh-shape
+/// tier closed on [`caixa_core::aplicacao::RateLimitUnit`] (c481bfe owned-
+/// input + dae722f borrowed-input) after opening on
+/// [`caixa_core::aplicacao::PlacementStrategy`] (977d577 owned-input +
+/// cc87908 borrowed-input) and extending onto
+/// [`caixa_core::aplicacao::WitShape`] (9a59b77 owned-input + 941748c
+/// borrowed-input). Routes byte-for-byte through the substrate-primitive
+/// [`InvariantKind::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<str>::from`] on the returned `&'static str`.
+///
+/// Every consumer that binds an [`InvariantKind`] through the standard-
+/// library `.into()` / [`From<Self> for std::sync::Arc<str>`]
+/// (equivalently [`Into<std::sync::Arc<str>>`]) axis — a future caixa-arch
+/// admission-webhook whose per-request rejection body composes from a
+/// moved [`InvariantKind`] handle across an `.await` boundary through a
+/// `<T: Into<std::sync::Arc<str>>>`-bound diagnostic-column dispatch, a
+/// future per-Aplicacao arch-audit metric-key materializer holding a
+/// shared-ownership per-arm severity-label across concurrent tokio-
+/// scheduled reconcile loops, a future
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording an owned [`InvariantKind`] per-arm field onto the
+/// parent span's shared-ownership context — reaches the same three
+/// `"safety"` / `"compliance"` / `"hint"` canonical-lowercase byte-strings
+/// the sibling `{&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>`
+/// but no blanket `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>`
+/// (nor an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so
+/// this axis is a distinct trait-idiomatic surface that a
+/// `let key: std::sync::Arc<str> = kind.into();`-shaped call site reaches
+/// through this impl and no other — a paired
+/// `std::sync::Arc::<str>::from(kind.as_str())` open-code has no
+/// compile-time link back to the substrate primitive, and a two-step
+/// `std::sync::Arc::<str>::from(String::from(kind))` composition through
+/// the owned-`String` axis allocates twice (once into the intermediate
+/// `String`, once into the [`std::sync::Arc<str>`] on the `From<String>`
+/// conversion) where the single-step trait impl allocates once. The
+/// shared-ownership + [`Sync`] + [`Send`] contract [`std::sync::Arc<str>`]
+/// provides is the distinct value the sibling [`Box<str>`] axis's owned-
+/// move return-shape cannot provide — a per-arch-audit invariant-severity
+/// label reachable from multiple concurrent per-cluster reconcile tasks
+/// through the same three canonical-lowercase byte-strings, without a
+/// `.clone()`-per-task materialization the owned-move [`Box<str>`] axis
+/// would force.
+///
+/// First peer on the outside-`caixa-core` tier of the substrate-wide
+/// trait-idiomatic [`std::sync::Arc<str>`] forward-projection campaign —
+/// every future outside-`caixa-core` closed-set fieldless typed enum peer
+/// ([`crate::ArchVerdict`], [`caixa_lint::Severity`],
+/// [`caixa_lint::FixSafety`], [`caixa_theme::Semantic`],
+/// [`caixa_provedor::FerriteRuntime`]) whose [`std::sync::Arc<str>`] pair
+/// remains a future target of this campaign, tracking the same 2-corner
+/// `{Self, &Self}` × 5-tier `{&'static str, String, Cow<'static, str>,
+/// Box<str>, std::sync::Arc<str>}` emit-set the M2 OTP-shape and M3 mesh-
+/// shape tiers already converged onto. The next commit closes the
+/// borrowed-input half on this same enum through the paired
+/// [`From<&InvariantKind> for std::sync::Arc<str>`] `{Self, &Self}`-closer
+/// as the direct next target on the same enum.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the three-
+/// arm [`InvariantKind::ALL`] emit-set on the owned-input surface, plus
+/// a blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` return-shape
+/// axes).
+impl From<InvariantKind> for std::sync::Arc<str> {
+    fn from(kind: InvariantKind) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(kind.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -3057,6 +3137,119 @@ mod tests {
                  every arm — divergence signals the borrowed-input \
                  `From<&InvariantKind> for Box<str>` axis has silently \
                  detoured off the substrate-primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<InvariantKind> for std::sync::Arc<str>` — asserts
+        // the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::InvariantKind::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm
+        // canonical-lowercase emit-set across every arm the exhaustive
+        // [`super::InvariantKind::ALL`] slice enumerates. Opens the
+        // outside-`caixa-core` tier of the substrate-wide
+        // [`std::sync::Arc<str>`] forward-projection campaign — first-
+        // mover on the caixa-arch invariant-severity three-arm closed-
+        // set fieldless typed enum peer, one commit after the M3 mesh-
+        // shape tier closed on [`caixa_core::aplicacao::RateLimitUnit`]
+        // (c481bfe owned-input + dae722f borrowed-input) after opening
+        // on [`caixa_core::aplicacao::PlacementStrategy`] (977d577
+        // owned-input + cc87908 borrowed-input) and extending onto
+        // [`caixa_core::aplicacao::WitShape`] (9a59b77 owned-input +
+        // 941748c borrowed-input). Rust's standard library carries
+        // `impl From<&str> for std::sync::Arc<str>` and
+        // `impl From<String> for std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor
+        // an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`),
+        // so this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = kind.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(kind.as_str())` open-code has
+        // no compile-time link back to the substrate primitive, and a
+        // two-step `std::sync::Arc::<str>::from(String::from(kind))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`Arc<str>`] on the `From<String>` conversion) where the
+        // single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::InvariantKind::as_str`] accessor trips at caixa-
+        // arch test time.
+        for &variant in super::InvariantKind::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::InvariantKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<InvariantKind> for std::sync::Arc<str> impl must \
+                 round-trip InvariantKind::{variant:?} to the same \
+                 canonical-lowercase byte-string InvariantKind::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on InvariantKind::\
+                 {variant:?} must byte-equal InvariantKind::as_str on \
+                 the same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_static: &'static str =
+                <&'static str as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<InvariantKind> for std::sync::Arc<str> and \
+                 From<InvariantKind> for &'static str must resolve \
+                 identically on InvariantKind::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and &'static str return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_string: String = <String as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<InvariantKind> for std::sync::Arc<str> and \
+                 From<InvariantKind> for String must resolve \
+                 identically on InvariantKind::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and owned-`String` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<InvariantKind> for std::sync::Arc<str> and \
+                 From<InvariantKind> for Cow<'static, str> must \
+                 resolve identically on InvariantKind::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and Cow<'static, str> return- \
+                 shape paths have drifted onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<InvariantKind> for std::sync::Arc<str> and \
+                 From<InvariantKind> for Box<str> must resolve \
+                 identically on InvariantKind::{variant:?} — \
+                 divergence signals the owned-input \
+                 std::sync::Arc<str> and Box<str> return-shape paths \
+                 have drifted onto different emit-sets"
             );
         }
     }
