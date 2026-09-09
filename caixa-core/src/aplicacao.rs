@@ -9147,6 +9147,81 @@ impl From<&PlacementStrategy> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:placement :estrategia`
+/// distribution-strategy [`PlacementStrategy`] closed-set fieldless typed
+/// enum — opens the M3 mesh-shape tier of the substrate-wide trait-
+/// idiomatic [`std::sync::Arc<str>`] forward-projection campaign on the
+/// first (and hierarchically most fundamental) M3-mesh-primitive-defining
+/// slot enum, one commit after the paired M2 OTP-shape tier closed on
+/// [`crate::supervisor::RestartPolicy`] (b05724e owned-input + ea91551
+/// borrowed-input) after opening on
+/// [`crate::supervisor::RestartStrategy`] (bca2ec8 owned-input + b3e72d7
+/// borrowed-input). Routes byte-for-byte through the substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<str>::from`] on the returned `&'static str`.
+///
+/// Every consumer that binds a [`PlacementStrategy`] through the standard-
+/// library `.into()` / [`From<Self> for std::sync::Arc<str>`]
+/// (equivalently [`Into<std::sync::Arc<str>>`]) axis — a future
+/// admission-webhook's per-request rejection body whose per-arm `Sync` +
+/// `Send`-safe structured-log field composes from a moved
+/// [`PlacementStrategy`] handle across an `.await` boundary through a
+/// `<T: Into<std::sync::Arc<str>>>`-bound diagnostic-column dispatch, a
+/// future caixa-mesh renderer's per-Aplicacao `placement.strategy`
+/// metric-key materializer holding a shared-ownership per-arm label
+/// across concurrent tokio-scheduled reconcile loops, a future
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording an owned [`PlacementStrategy`] per-arm field onto
+/// the parent span's shared-ownership context — reaches the same three-
+/// arm lifted [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] const the sibling
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` forward-
+/// projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>`
+/// but no blanket `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>`
+/// (nor an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so
+/// this axis is a distinct trait-idiomatic surface that a
+/// `let key: std::sync::Arc<str> = strategy.into();`-shaped call site
+/// reaches through this impl and no other — a paired
+/// `std::sync::Arc::<str>::from(strategy.as_str())` open-code has no
+/// compile-time link back to the substrate primitive, and a two-step
+/// `std::sync::Arc::<str>::from(String::from(strategy))` composition
+/// through the owned-`String` axis allocates twice (once into the
+/// intermediate `String`, once into the [`std::sync::Arc<str>`] on the
+/// `From<String>` conversion) where the single-step trait impl allocates
+/// once. The shared-ownership + [`Sync`] + [`Send`] contract
+/// [`std::sync::Arc<str>`] provides is the distinct value the sibling
+/// [`Box<str>`] axis's owned-move return-shape cannot provide — a per-
+/// Aplicacao `:placement :estrategia` label reachable from multiple
+/// concurrent per-cluster reconcile tasks through the same lifted const,
+/// without a `.clone()`-per-task materialization the owned-move
+/// [`Box<str>`] axis would force.
+///
+/// First peer on the M3-mesh-shape tier of the substrate-wide trait-
+/// idiomatic [`std::sync::Arc<str>`] forward-projection campaign — every
+/// future M3 closed-set fieldless typed enum peer ([`WitShape`],
+/// [`RateLimitUnit`]) is a future target of the campaign, tracking the
+/// same 2-corner {Self, &Self} × 5-tier {`&'static str`, `String`,
+/// `Cow<'static, str>`, `Box<str>`, `std::sync::Arc<str>`} emit-set the
+/// M2 OTP-shape tier converged onto on its two peers.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm [`PlacementStrategy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness and cross-axis
+/// byte-parity pins against the sibling owned-input `{&'static str,
+/// String, Cow<'static, str>, Box<str>}` return-shape axes).
+impl From<PlacementStrategy> for std::sync::Arc<str> {
+    fn from(strategy: PlacementStrategy) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(strategy.as_str())
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -26112,6 +26187,117 @@ mod tests {
              `From<PlacementStrategy> for Box<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    fn placement_strategy_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for std::sync::Arc<str>` —
+        // asserts the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::PlacementStrategy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::PlacementStrategy::ALL`] slice enumerates. Opens the
+        // M3-mesh-shape tier of the substrate-wide
+        // [`std::sync::Arc<str>`] forward-projection campaign — first-
+        // mover on the M3 mesh-slot family the caixa-mesh renderer
+        // keys off end-to-end, one commit after the paired M2 OTP-
+        // shape tier closed on [`crate::supervisor::RestartPolicy`]
+        // (b05724e owned-input + ea91551 borrowed-input) after opening
+        // on [`crate::supervisor::RestartStrategy`] (bca2ec8 owned-
+        // input + b3e72d7 borrowed-input). Rust's standard library
+        // carries `impl From<&str> for std::sync::Arc<str>` and
+        // `impl From<String> for std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor
+        // an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`),
+        // so this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = strategy.into();`-shaped
+        // call site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(strategy.as_str())` open-code
+        // has no compile-time link back to the substrate primitive,
+        // and a two-step `std::sync::Arc::<str>::from(String::from(
+        // strategy))` composition through the owned-`String` axis
+        // allocates twice (once into the intermediate `String`, once
+        // into the [`Arc<str>`] on the `From<String>` conversion)
+        // where the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] accessor trips at
+        // caixa-core test time.
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<PlacementStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<PlacementStrategy> for std::sync::Arc<str> impl \
+                 must round-trip PlacementStrategy::{variant:?} to the \
+                 same lifted M3_PLACEMENT_ESTRATEGIA_* const \
+                 PlacementStrategy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on PlacementStrategy::\
+                 {variant:?} must byte-equal PlacementStrategy::as_str \
+                 on the same input — the blanket-derived Into shape \
+                 must resolve to the same as_str dispatch as the \
+                 explicit From impl"
+            );
+            let owned_static: &'static str =
+                <&'static str as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<PlacementStrategy> for std::sync::Arc<str> and \
+                 From<PlacementStrategy> for &'static str must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<PlacementStrategy> for std::sync::Arc<str> and \
+                 From<PlacementStrategy> for String must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and owned-`String` return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<PlacementStrategy> for std::sync::Arc<str> and \
+                 From<PlacementStrategy> for Cow<'static, str> must \
+                 resolve identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<PlacementStrategy> for std::sync::Arc<str> and \
+                 From<PlacementStrategy> for Box<str> must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Box<str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+        }
     }
 
     #[test]
