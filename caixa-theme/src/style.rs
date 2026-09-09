@@ -1239,6 +1239,95 @@ impl From<&Semantic> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the caixa-theme semantic-style sixteen-arm closed-set
+/// fieldless typed enum [`Semantic`]. Opens the fifth peer of the
+/// outside-`caixa-core` tier of the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection campaign, following the
+/// first-mover [`caixa_arch::invariants::InvariantKind`] pair (4e923c1
+/// owned + 03c043f borrowed), the second-peer
+/// [`caixa_arch::report::ArchVerdict`] pair (1682f8b owned + 92ddfb2
+/// borrowed), the third-peer `caixa_lint::diagnostic::Severity` pair
+/// (a7a9a6d owned + 4f041e1 borrowed), and the fourth-peer
+/// `caixa_lint::diagnostic::FixSafety` pair (fb73edb owned + 822138e
+/// borrowed) that landed the tier one axis prior. Routes byte-for-byte
+/// through the substrate-primitive [`Semantic::as_str`] `pub const fn`
+/// accessor via [`std::sync::Arc::<str>::from`] on the returned
+/// `&'static str`.
+///
+/// Every consumer that binds a `let key: std::sync::Arc<str> =
+/// sem.into();`-shaped call site — a future M4 admission-webhook
+/// rejection body whose per-semantic-style [`std::sync::Arc<str>`] field
+/// composes off an owned [`Semantic`] handle across an `.await` boundary
+/// through a `<T: Into<std::sync::Arc<str>>>`-bound diagnostic-column
+/// dispatch, a future `caixa-lsp`-side per-semantic-style materializer
+/// stashing the semantic-style discriminator in a
+/// [`std::sync::Arc<str>`]-typed shared-ownership scalar cloned across
+/// concurrent tokio-scheduled `SemanticTokenType`-dispatch tasks through
+/// [`std::sync::Arc::clone`] rather than a per-task allocation, a future
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording an owned [`Semantic`] per-arm field onto the
+/// parent span's shared-ownership context, a future
+/// `feira lint --by-semantic` per-arm histogram-column emitter binding
+/// an owned [`Semantic`] handle into a shared-ownership per-arm bucket
+/// key across concurrent per-file lint tasks — reaches the substrate-
+/// primitive [`Semantic::as_str`] accessor through this impl and no
+/// other, without a `std::sync::Arc::<str>::from(sem.as_str())` open-
+/// code whose type bounds have no compile-time link back to the
+/// substrate primitive.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>`
+/// but no blanket `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>`
+/// (nor an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so
+/// this axis is a distinct trait-idiomatic surface — a two-step
+/// `std::sync::Arc::<str>::from(String::from(sem))` composition through
+/// the owned-`String` axis allocates twice (once into the intermediate
+/// `String`, once into the [`std::sync::Arc<str>`] on the `From<String>`
+/// conversion) where the single-step trait impl allocates once. The
+/// shared-ownership + [`Sync`] + [`Send`] contract
+/// [`std::sync::Arc<str>`] provides is the distinct value the sibling
+/// [`Box<str>`] axis's owned-move return-shape cannot provide without a
+/// `.clone()`-per-task materialization.
+///
+/// Leaves the remaining outside-`caixa-core` peer
+/// ([`caixa_provedor::FerriteRuntime`]) as the last future target on
+/// this tier of the campaign, and leaves the paired borrowed-input
+/// [`From<&Semantic> for std::sync::Arc<str>`] `{Self, &Self}`-closer as
+/// the direct next target on this same enum, mirroring the shape 03c043f
+/// used to close the first-mover [`caixa_arch::invariants::InvariantKind`]
+/// pair one commit after 4e923c1 opened its owned-input half, 92ddfb2
+/// used to close the second-peer [`caixa_arch::report::ArchVerdict`]
+/// pair one commit after 1682f8b, 4f041e1 used to close the third-peer
+/// `caixa_lint::diagnostic::Severity` pair one commit after a7a9a6d, and
+/// 822138e used to close the fourth-peer
+/// `caixa_lint::diagnostic::FixSafety` pair one commit after fb73edb.
+///
+/// Same discipline as the paired [`From<Semantic> for Box<str>`] axis on
+/// this same enum already opened the outside-`caixa-core` [`Box<str>`]
+/// tier's fifth peer: forward emit (this impl, the paired sibling
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` forward-
+/// projection corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`Semantic::as_str`]) and reverse parse ([`Semantic::from_wire`],
+/// [`TryFrom<&str>`]) route through the same sixteen inline canonical-
+/// lowercase kebab byte-strings [`Semantic::as_str`] returns by
+/// construction, so the round-trip composes directly without the wire-
+/// vocab intermediate hop the peer [`caixa_core::CaixaKind`] axis pair
+/// requires.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Semantic::as_str`] across the sixteen-arm
+/// [`Semantic::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>}` return-shape axes).
+impl From<Semantic> for std::sync::Arc<str> {
+    fn from(sem: Semantic) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(sem.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3243,6 +3332,121 @@ mod tests {
                  the borrowed-input `From<&Semantic> for Box<str>` \
                  axis has silently detoured off the substrate-\
                  primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<Semantic> for std::sync::Arc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::Semantic::as_str`] `pub const fn` accessor
+        // resolve to the same sixteen-arm canonical-lowercase kebab
+        // emit-set across every arm the exhaustive
+        // [`super::Semantic::ALL`] slice enumerates. Extends the
+        // outside-`caixa-core` tier of the substrate-wide
+        // [`std::sync::Arc<str>`] forward-projection campaign onto the
+        // fifth peer — the caixa-theme semantic-style sixteen-arm
+        // closed-set fieldless typed enum — following the first-mover
+        // [`caixa_arch::invariants::InvariantKind`] pair (4e923c1 owned
+        // + 03c043f borrowed), second-peer
+        // [`caixa_arch::report::ArchVerdict`] pair (1682f8b owned +
+        // 92ddfb2 borrowed), third-peer `caixa_lint::diagnostic::Severity`
+        // pair (a7a9a6d owned + 4f041e1 borrowed), and fourth-peer
+        // `caixa_lint::diagnostic::FixSafety` pair (fb73edb owned +
+        // 822138e borrowed) that landed the tier one axis prior.
+        //
+        // Rust's standard library carries `impl From<&str> for
+        // std::sync::Arc<str>` and `impl From<String> for
+        // std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor
+        // an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`),
+        // so this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = sem.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(sem.as_str())` open-code has
+        // no compile-time link back to the substrate primitive, and a
+        // two-step `std::sync::Arc::<str>::from(String::from(sem))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`std::sync::Arc<str>`] on the `From<String>` conversion)
+        // where the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::Semantic::as_str`] accessor trips at caixa-theme
+        // test time.
+        for &variant in Semantic::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<Semantic>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<Semantic> for std::sync::Arc<str> impl must \
+                 round-trip Semantic::{variant:?} to the same \
+                 canonical-lowercase kebab byte-string Semantic::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on Semantic::\
+                 {variant:?} must byte-equal Semantic::as_str on the \
+                 same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<Semantic>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<Semantic> for std::sync::Arc<str> and \
+                 From<Semantic> for &'static str must resolve \
+                 identically on Semantic::{variant:?} — divergence \
+                 signals the owned-input std::sync::Arc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<Semantic>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<Semantic> for std::sync::Arc<str> and \
+                 From<Semantic> for String must resolve identically \
+                 on Semantic::{variant:?} — divergence signals the \
+                 owned-input std::sync::Arc<str> and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<Semantic>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<Semantic> for std::sync::Arc<str> and \
+                 From<Semantic> for Cow<'static, str> must resolve \
+                 identically on Semantic::{variant:?} — divergence \
+                 signals the owned-input std::sync::Arc<str> and \
+                 Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<Semantic>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<Semantic> for std::sync::Arc<str> and \
+                 From<Semantic> for Box<str> must resolve identically \
+                 on Semantic::{variant:?} — divergence signals the \
+                 owned-input std::sync::Arc<str> and Box<str> \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
             );
         }
     }
