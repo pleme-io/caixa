@@ -1179,6 +1179,110 @@ impl From<Severity> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the caixa-lint diagnostic-severity four-arm closed-set
+/// fieldless typed enum [`Severity`] — the borrowed-input companion to
+/// the paired owned-input [`From<Severity> for std::sync::Arc<str>`] impl
+/// (a7a9a6d, one commit prior) that closes the `{Self, &Self}` input-
+/// shape corner of the outside-`caixa-core` tier of the substrate-wide
+/// trait-idiomatic [`std::sync::Arc<str>`] forward-projection campaign on
+/// its third peer, mirroring the shape 03c043f used to close the paired
+/// first-mover [`caixa_arch::invariants::InvariantKind`] `{Self, &Self}`
+/// corner on this tier one commit after 4e923c1 opened its owned-input
+/// half and 92ddfb2 used to close the paired second-peer
+/// [`caixa_arch::report::ArchVerdict`] `{Self, &Self}` corner on this
+/// tier one commit after 1682f8b opened its owned-input half. Routes
+/// byte-for-byte through the substrate-primitive [`Severity::as_str`]
+/// `pub const fn` accessor via [`std::sync::Arc::<str>::from`] on the
+/// returned `&'static str`.
+///
+/// Every consumer that holds a `&Severity` and needs a
+/// [`std::sync::Arc<str>`] — a
+/// `Severity::ALL.iter().map(std::sync::Arc::<str>::from).collect::<Vec<_>>()`
+/// per-arm diagnostic-severity census-key materializer (whose iterator
+/// over `&'static [Severity]` yields `&Severity`, not `Severity`, so
+/// the paired owned-input [`From<Severity> for std::sync::Arc<str>`]
+/// axis alone forces every call site through an explicit [`Copy`] deref
+/// or a `.copied()` restatement rather than the direct trait-idiomatic
+/// projection), a future M4 admission-webhook whose per-diagnostic
+/// rejection body composes from a borrowed `&Severity` handle across an
+/// `.await` boundary through a `<T: Into<std::sync::Arc<str>>>`-bound
+/// diagnostic-column dispatch, a future `caixa-lsp`-side per-diagnostic
+/// severity-label materializer holding a shared-ownership per-arm
+/// canonical tag from a `&Severity` borrow through a per-file lifetime
+/// and cloning the shared-ownership label into concurrent tokio-
+/// scheduled hover-line composer tasks through [`std::sync::Arc::clone`]
+/// rather than a per-task allocation, a future
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording a borrowed [`Severity`] per-arm field onto the
+/// parent span's shared-ownership context, a future
+/// `feira lint --by-severity` per-arm histogram-column emitter binding
+/// a borrowed [`Severity`] handle into a shared-ownership per-arm
+/// bucket key across concurrent per-file lint tasks — reaches the
+/// substrate-primitive [`Severity::as_str`] accessor through this impl
+/// and no other, without a `std::sync::Arc::<str>::from(severity.as_str())`
+/// open-code whose type bounds have no compile-time link back to the
+/// substrate primitive.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>`
+/// but no blanket `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>`
+/// (nor a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+/// every closed-set fieldless typed enum peer on the substrate that
+/// carries the paired owned-input [`std::sync::Arc<str>`] axis but not
+/// the borrowed-input axis forces every borrowed-input
+/// [`std::sync::Arc<str>`]-parameterized call site through a spurious
+/// [`Copy`] deref (`std::sync::Arc::<str>::from((*severity).as_str())`)
+/// or a `std::sync::Arc::<str>::from(severity.as_str())` open-code whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive. The shared-ownership + [`Sync`] + [`Send`] contract
+/// [`std::sync::Arc<str>`] provides is the distinct value the sibling
+/// [`Box<str>`] axis's owned-move return-shape cannot provide from a
+/// borrowed-input axis without a `.clone()`-per-task materialization.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the third peer of
+/// the outside-`caixa-core` tier of the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection campaign, following the
+/// first-mover [`caixa_arch::invariants::InvariantKind`] `{Self, &Self}`
+/// corner (4e923c1 owned + 03c043f borrowed) and second-peer
+/// [`caixa_arch::report::ArchVerdict`] `{Self, &Self}` corner (1682f8b
+/// owned + 92ddfb2 borrowed). Same discipline as the paired
+/// [`From<&Severity> for Box<str>`] axis on this same enum (5116c95
+/// owned + the paired borrowed corner) closed the outside-`caixa-core`
+/// [`Box<str>`] tier's `{Self, &Self}` corner on the third peer, as
+/// cc87908 closed the first M3 mesh peer
+/// ([`caixa_core::aplicacao::PlacementStrategy`]) one commit after
+/// 977d577 opened its owned-input half, 941748c closed the second M3
+/// mesh peer ([`caixa_core::aplicacao::WitShape`]) one commit after
+/// 9a59b77, and dae722f closed the third M3 mesh peer
+/// ([`caixa_core::aplicacao::RateLimitUnit`]) one commit after c481bfe.
+/// Leaves the remaining outside-`caixa-core` closed-set fieldless typed
+/// enum peers ([`FixSafety`], [`caixa_theme::Semantic`],
+/// [`caixa_provedor::FerriteRuntime`]) as the campaign's next multi-
+/// peer targets — this commit gives them a three-peer `{Self, &Self}`
+/// corner template to converge onto on the outside-`caixa-core` tier
+/// of the Arc<str> axis.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_borrowed_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`Severity::as_str`] across the four-arm
+/// [`Severity::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, a cross-axis partition pin
+/// against the paired owned-input
+/// [`From<Severity> for std::sync::Arc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>}`
+/// return-shape axes, and a `.iter().map(std::sync::Arc::<str>::from)`
+/// pipe witness over [`Severity::ALL`] — whose iterator yields
+/// `&Severity` by construction, so the borrowed-input
+/// [`std::sync::Arc<str>`] axis is what routes the pipe through the
+/// substrate-primitive [`Severity::as_str`] accessor without a spurious
+/// [`Copy`] deref).
+impl From<&Severity> for std::sync::Arc<str> {
+    fn from(severity: &Severity) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(severity.as_str())
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -4582,6 +4686,194 @@ mod tests {
                  owned-input std::sync::Arc<str> and Box<str> \
                  return-shape paths have drifted onto different \
                  emit-sets"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds four return-shape paths \
+                  (borrowed-input &'static str, String, Cow<'static, str>, \
+                  Box<str>) plus the paired owned-input Arc<str> witness \
+                  and the .iter().map(std::sync::Arc::<str>::from) pipe \
+                  witness into one exhaustive round-trip over \
+                  Severity::ALL — the accepted line-count cost of keying \
+                  the whole borrowed-input Arc<str> corner to the \
+                  substrate-primitive as_str accessor at the same test-site"
+    )]
+    fn severity_from_borrowed_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&Severity> for std::sync::Arc<str>` — asserts
+        // the borrowed-input standard-library trait impl and the
+        // substrate-primitive [`super::Severity::as_str`]
+        // `pub const fn` accessor resolve to the same four-arm
+        // canonical-lowercase emit-set across every arm the exhaustive
+        // [`super::Severity::ALL`] slice enumerates. Rust's standard
+        // library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor
+        // a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `std::sync::Arc<str>` forward-projection
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = (&severity).into();`-shaped
+        // call site or a
+        // `Severity::ALL.iter().map(std::sync::Arc::<str>::from)`-shaped
+        // pipe reaches through this impl and no other — the paired
+        // owned-input `From<Severity> for std::sync::Arc<str>` impl
+        // (a7a9a6d) forces every borrowed-input call site through an
+        // explicit `Copy` deref
+        // (`std::sync::Arc::<str>::from((*severity).as_str())`) or a
+        // `std::sync::Arc::<str>::from(severity.as_str())` open-code
+        // whose type bounds have no compile-time link back to the
+        // substrate primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the third
+        // peer of the outside-`caixa-core` tier of the substrate-wide
+        // trait-idiomatic [`std::sync::Arc<str>`] forward-projection
+        // campaign, exactly as 03c043f closed the paired first-mover
+        // [`caixa_arch::invariants::InvariantKind`] `{Self, &Self}`
+        // corner (4e923c1 owned + 03c043f borrowed) on this tier,
+        // 92ddfb2 closed the paired second-peer
+        // [`caixa_arch::report::ArchVerdict`] `{Self, &Self}` corner
+        // (1682f8b owned + 92ddfb2 borrowed) on this tier, and as
+        // cc87908 / 941748c / dae722f closed the M3 mesh peers
+        // ([`caixa_core::aplicacao::PlacementStrategy`],
+        // [`caixa_core::aplicacao::WitShape`],
+        // [`caixa_core::aplicacao::RateLimitUnit`]) one commit after
+        // their respective owning halves (977d577 / 9a59b77 / c481bfe).
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<Severity> for std::sync::Arc<str>`] and the sibling
+        // borrowed-input [`From<&Severity> for &'static str`],
+        // [`From<&Severity> for String`],
+        // [`From<&Severity> for Cow<'static, str>`], and
+        // [`From<&Severity> for Box<str>`] return-shape axes —
+        // locking the five return-shape × input-shape paths together
+        // by construction so any future detour off the substrate-
+        // primitive accessor trips at caixa-lint test time. Then a
+        // `.iter().map(std::sync::Arc::<str>::from)` pipe witness over
+        // [`super::Severity::ALL`] — whose iterator yields
+        // `&Severity` by construction, so the borrowed-input
+        // [`std::sync::Arc<str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::Severity::as_str`] accessor
+        // without a spurious [`Copy`] deref (which would only be
+        // reachable through the owned-input
+        // [`From<Severity> for std::sync::Arc<str>`] axis by first
+        // calling `.copied()` on the iterator).
+        for &variant in Severity::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&Severity>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&Severity> for std::sync::Arc<str> impl must \
+                 round-trip &Severity::{variant:?} to the same \
+                 canonical-lowercase byte-string Severity::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on &Severity::\
+                 {variant:?} must byte-equal Severity::as_str on the \
+                 same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<Severity>>::from(variant);
+            assert_eq!(
+                via_trait, owned_arc,
+                "From<&Severity> for std::sync::Arc<str> and \
+                 From<Severity> for std::sync::Arc<str> must resolve \
+                 identically on Severity::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 std::sync::Arc<str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str = <&'static str as From<&Severity>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&Severity> for std::sync::Arc<str> and \
+                 From<&Severity> for &'static str must resolve \
+                 identically on Severity::{variant:?} — divergence \
+                 signals the borrowed-input std::sync::Arc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&Severity>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&Severity> for std::sync::Arc<str> and \
+                 From<&Severity> for String must resolve identically \
+                 on Severity::{variant:?} — divergence signals the \
+                 borrowed-input std::sync::Arc<str> and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&Severity>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&Severity> for std::sync::Arc<str> and \
+                 From<&Severity> for Cow<'static, str> must resolve \
+                 identically on Severity::{variant:?} — divergence \
+                 signals the borrowed-input std::sync::Arc<str> and \
+                 Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&Severity>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&Severity> for std::sync::Arc<str> and \
+                 From<&Severity> for Box<str> must resolve identically \
+                 on Severity::{variant:?} — divergence signals the \
+                 borrowed-input std::sync::Arc<str> and Box<str> \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `Severity::ALL.iter()` yields `&Severity` by
+        // construction, so `.map(std::sync::Arc::<str>::from)`
+        // resolves through the borrowed-input
+        // `From<&Severity> for std::sync::Arc<str>` impl and no other
+        // — without this axis, the same pipe would force an explicit
+        // `.copied()` restatement whose type bounds bypass the
+        // substrate primitive.
+        let via_pipe: Vec<std::sync::Arc<str>> = Severity::ALL
+            .iter()
+            .map(std::sync::Arc::<str>::from)
+            .collect();
+        let via_accessor: Vec<&'static str> = Severity::ALL.iter().map(|s| s.as_str()).collect();
+        assert_eq!(
+            via_pipe.len(),
+            via_accessor.len(),
+            "Severity::ALL.iter().map(std::sync::Arc::<str>::from) pipe \
+             must preserve arity against the paired \
+             Severity::ALL.iter().map(|s| s.as_str()) accessor pipe — \
+             a length divergence signals the borrowed-input axis has \
+             silently rejected an arm"
+        );
+        for (pipe_arm, accessor_arm) in via_pipe.iter().zip(via_accessor.iter()) {
+            assert_eq!(
+                pipe_arm.as_ref(),
+                *accessor_arm,
+                "Severity::ALL.iter().map(std::sync::Arc::<str>::from) \
+                 pipe must byte-equal the paired \
+                 Severity::ALL.iter().map(|s| s.as_str()) pipe on \
+                 every arm — divergence signals the borrowed-input \
+                 `From<&Severity> for std::sync::Arc<str>` axis has \
+                 silently detoured off the substrate-primitive \
+                 accessor"
             );
         }
     }
