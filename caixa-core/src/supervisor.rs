@@ -2392,6 +2392,85 @@ impl From<RestartPolicy> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<str>`] output*
+/// forward projection on the M2 OTP-shape per-child-restart
+/// [`RestartPolicy`] closed-set fieldless typed enum — closes the
+/// `{Self, &Self}` input-shape corner of the [`std::sync::Arc<str>`]
+/// forward-projection axis on the second (and third-and-final) M2
+/// OTP-shape closed-set fieldless typed enum peer on the caixa
+/// surface (`:children :restart`), companion to the paired
+/// owned-input [`From<RestartPolicy> for std::sync::Arc<str>`] impl
+/// one commit prior (b05724e). Routes byte-for-byte through the
+/// substrate-primitive [`RestartPolicy::as_str`] `pub const fn`
+/// accessor (via [`std::sync::Arc::<str>::from`] on the returned
+/// `&'static str`), so every consumer that binds a
+/// [`&RestartPolicy`] through the standard-library `.into()` /
+/// [`From<&Self> for std::sync::Arc<str>`] (equivalently
+/// [`Into<std::sync::Arc<str>>`]) axis — a future admission-webhook's
+/// per-request borrowed-`&RestartPolicy` handle rendering a per-arm
+/// `Sync` + `Send`-safe structured-log field across an `.await`
+/// boundary through a `<T: Into<std::sync::Arc<str>>>`-bound
+/// diagnostic-column dispatch, a future wasm-operator's per-child
+/// post-exit restart-decision pipeline whose
+/// `.iter().map(std::sync::Arc::<str>::from)` collector reaches
+/// into the shared-ownership per-arm key without a spurious [`Copy`]
+/// deref (which would only be reachable through the owned-input
+/// [`From<RestartPolicy> for std::sync::Arc<str>`] axis by first
+/// calling `.copied()` on the iterator), a future
+/// `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording a borrowed-`&RestartPolicy` per-arm field
+/// onto the parent span's shared-ownership context — reaches the
+/// same three-arm lifted
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] const the
+/// paired owned-input [`From<RestartPolicy> for std::sync::Arc<str>`]
+/// impl and the sibling `{&'static str, String, Cow<'static, str>,
+/// Box<str>}` forward-projection corner already return.
+///
+/// Closes the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection family opened one
+/// commit prior (b05724e) on the paired owned-input
+/// [`From<RestartPolicy> for std::sync::Arc<str>`] impl — closes
+/// the `{Self, &Self}` input-shape corner of the
+/// [`std::sync::Arc<str>`] axis on the second (and third-and-final)
+/// M2 OTP-shape closed-set fieldless typed enum peer on the caixa
+/// surface, exactly as b3e72d7 closed the paired
+/// [`std::sync::Arc<str>`] corner on the sibling-restart
+/// [`RestartStrategy`] first-mover one commit after its owning half
+/// (bca2ec8) landed, and as cb1d068 closed the paired [`Box<str>`]
+/// corner on this enum one commit after its owning half (0a1b313)
+/// landed. Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for
+/// std::sync::Arc<str>` but no blanket `impl<T: AsRef<str>> From<&T>
+/// for std::sync::Arc<str>` (nor a `Copy`-based `impl<T: Copy,
+/// U: From<T>> From<&T> for U`), so every closed-set fieldless typed
+/// enum peer on the substrate that carries the paired owned-input
+/// [`std::sync::Arc<str>`] axis but not the borrowed-input axis
+/// forces every borrowed-input [`std::sync::Arc<str>`]-parameterized
+/// call site through a spurious [`Copy`] deref
+/// (`std::sync::Arc::<str>::from((*policy).as_str())`) or a
+/// `std::sync::Arc::<str>::from(policy.as_str())` open-code whose
+/// type bounds have no compile-time link back to the substrate
+/// primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_borrowed_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartPolicy::as_str`] across the
+/// three-arm [`RestartPolicy::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness, a
+/// cross-axis pin against the paired owned-input
+/// [`From<RestartPolicy> for std::sync::Arc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>,
+/// Box<str>}` return-shape axes, and a
+/// `.iter().map(std::sync::Arc::<str>::from)` pipe witness over
+/// [`RestartPolicy::ALL`]).
+impl From<&RestartPolicy> for std::sync::Arc<str> {
+    fn from(policy: &RestartPolicy) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(policy.as_str())
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -11229,6 +11308,172 @@ mod tests {
                  different emit-sets"
             );
         }
+    }
+
+    #[test]
+    fn restart_policy_from_borrowed_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartPolicy> for std::sync::Arc<str>` —
+        // asserts the borrowed-input standard-library trait impl and
+        // the substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm
+        // emit-set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates. Rust's
+        // standard library carries `impl From<&str> for
+        // std::sync::Arc<str>` and `impl From<String> for
+        // std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor
+        // a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`),
+        // so the borrowed-input [`std::sync::Arc<str>`] forward-
+        // projection axis is a distinct trait-idiomatic surface that
+        // a `let key: std::sync::Arc<str> = (&policy).into();`-shaped
+        // call site or a
+        // `RestartPolicy::ALL.iter().map(std::sync::Arc::<str>::from)`-
+        // shaped pipe reaches through this impl and no other — the
+        // paired owned-input [`From<RestartPolicy> for
+        // std::sync::Arc<str>`] impl (b05724e) forces every borrowed-
+        // input call site through an explicit [`Copy`] deref
+        // (`std::sync::Arc::<str>::from((*policy).as_str())`) or a
+        // `std::sync::Arc::<str>::from(policy.as_str())` open-code
+        // whose type bounds have no compile-time link back to the
+        // substrate primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner of the
+        // substrate-wide trait-idiomatic [`std::sync::Arc<str>`]
+        // forward-projection family on the second (and third-and-
+        // final) M2 OTP-shape closed-set fieldless typed enum peer
+        // on the caixa surface (`:children :restart`), one commit
+        // after b05724e opened the owned-input half — exactly as
+        // b3e72d7 closed the paired [`std::sync::Arc<str>`] corner on
+        // the sibling-restart [`RestartStrategy`] first-mover one
+        // commit after its owning half (bca2ec8) landed, and as
+        // cb1d068 closed the paired [`Box<str>`] corner on this
+        // enum one commit after its owning half (0a1b313) landed.
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<RestartPolicy> for std::sync::Arc<str>`] and the
+        // sibling borrowed-input [`From<&RestartPolicy> for
+        // &'static str`], [`From<&RestartPolicy> for String`],
+        // [`From<&RestartPolicy> for Cow<'static, str>`], and
+        // [`From<&RestartPolicy> for Box<str>`] return-shape axes —
+        // locking the five return-shape × input-shape paths together
+        // by construction so any future detour off the substrate-
+        // primitive [`super::RestartPolicy::as_str`] accessor trips
+        // at caixa-core test time. Then a
+        // `.iter().map(std::sync::Arc::<str>::from)` pipe witness
+        // over [`super::RestartPolicy::ALL`] — whose iterator yields
+        // `&RestartPolicy` by construction, so the borrowed-input
+        // [`std::sync::Arc<str>`] axis is what routes the pipe
+        // through the substrate-primitive
+        // [`super::RestartPolicy::as_str`] accessor without a
+        // spurious [`Copy`] deref (which would only be reachable
+        // through the owned-input
+        // [`From<RestartPolicy> for std::sync::Arc<str>`] axis by
+        // first calling `.copied()` on the iterator).
+        for &variant in RestartPolicy::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&RestartPolicy>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RestartPolicy> for std::sync::Arc<str> impl \
+                 must round-trip &RestartPolicy::{variant:?} to the \
+                 same lifted SUPERVISOR_CHILD_RESTART_* const \
+                 RestartPolicy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on \
+                 &RestartPolicy::{variant:?} must byte-equal \
+                 RestartPolicy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait, owned_arc,
+                "From<&RestartPolicy> for std::sync::Arc<str> and \
+                 From<RestartPolicy> for std::sync::Arc<str> must \
+                 resolve identically on RestartPolicy::{variant:?} — \
+                 divergence signals the borrowed-input and owned-input \
+                 std::sync::Arc<str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&RestartPolicy> for std::sync::Arc<str> and \
+                 From<&RestartPolicy> for &'static str must resolve \
+                 identically on RestartPolicy::{variant:?} — \
+                 divergence signals the borrowed-input std::sync::Arc<str> \
+                 and &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RestartPolicy> for std::sync::Arc<str> and \
+                 From<&RestartPolicy> for String must resolve \
+                 identically on RestartPolicy::{variant:?} — \
+                 divergence signals the borrowed-input std::sync::Arc<str> \
+                 and owned-`String` return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&RestartPolicy> for std::sync::Arc<str> and \
+                 From<&RestartPolicy> for Cow<'static, str> must \
+                 resolve identically on RestartPolicy::{variant:?} — \
+                 divergence signals the borrowed-input std::sync::Arc<str> \
+                 and Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&RestartPolicy> for std::sync::Arc<str> and \
+                 From<&RestartPolicy> for Box<str> must resolve \
+                 identically on RestartPolicy::{variant:?} — \
+                 divergence signals the borrowed-input std::sync::Arc<str> \
+                 and Box<str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::sync::Arc<str>> = RestartPolicy::ALL
+            .iter()
+            .map(std::sync::Arc::<str>::from)
+            .collect();
+        let via_method: Vec<std::sync::Arc<str>> = RestartPolicy::ALL
+            .iter()
+            .map(|p| std::sync::Arc::<str>::from(p.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::sync::Arc::<str>::from)` over \
+             RestartPolicy::ALL — a call site whose iteration axis \
+             holds `&RestartPolicy` by construction — must byte-\
+             equal `.iter().map(|p| std::sync::Arc::<str>::from(p.as_str()))` \
+             on every arm — the borrowed-input std::sync::Arc<str> \
+             `From<&RestartPolicy> for std::sync::Arc<str>` axis is \
+             what makes the `std::sync::Arc::<str>::from` composition \
+             route through the substrate-primitive \
+             `RestartPolicy::as_str` accessor without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<RestartPolicy> for std::sync::Arc<str>` \
+             axis by first calling `.copied()` on the iterator)"
+        );
     }
 
     // ── drift-detection: serde-derive-to-SUPERVISOR_CHILD_RESTART_* identity ─
