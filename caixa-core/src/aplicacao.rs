@@ -1473,6 +1473,77 @@ impl From<&WitShape> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:contratos :wit`
+/// census-label [`WitShape`] closed-set fieldless typed enum — extends
+/// the M3-mesh-shape tier of the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection campaign (opened on
+/// [`PlacementStrategy`] — 977d577 owned-input + cc87908 borrowed-input)
+/// onto its second M3-mesh-primitive-defining slot enum. Routes byte-
+/// for-byte through the substrate-primitive [`WitShape::as_str`]
+/// `pub const fn` accessor via [`std::sync::Arc::<str>::from`] on the
+/// returned `&'static str`.
+///
+/// Every consumer that binds a [`WitShape`] through the standard-library
+/// `.into()` / [`From<Self> for std::sync::Arc<str>`] (equivalently
+/// [`Into<std::sync::Arc<str>>`]) axis — a future caixa-mesh renderer's
+/// per-Aplicacao WIT-shape census-key materializer holding a shared-
+/// ownership per-arm `Sync` + `Send`-safe label across concurrent tokio-
+/// scheduled reconcile loops (cloning through [`std::sync::Arc::clone`]
+/// rather than allocating per-task), a future admission-webhook's
+/// per-request rejection body whose per-arm shared-ownership diagnostic
+/// column composes from a moved [`WitShape`] handle across an `.await`
+/// boundary through a `<T: Into<std::sync::Arc<str>>>`-bound structured-
+/// log dispatch, a future `<T: Into<std::sync::Arc<str>>>`-bound
+/// `tracing`-span attributes collector recording an owned [`WitShape`]
+/// per-arm field onto the parent span's shared-ownership context —
+/// reaches the same four-arm inline `"http"` / `"pubsub"` / `"store"` /
+/// `"capability"` census-label byte-string the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>`
+/// but no blanket `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>`
+/// (nor an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so
+/// this axis is a distinct trait-idiomatic surface that a
+/// `let key: std::sync::Arc<str> = shape.into();`-shaped call site
+/// reaches through this impl and no other — a paired
+/// `std::sync::Arc::<str>::from(shape.as_str())` open-code has no
+/// compile-time link back to the substrate primitive, and a two-step
+/// `std::sync::Arc::<str>::from(String::from(shape))` composition
+/// through the owned-`String` axis allocates twice (once into the
+/// intermediate `String`, once into the [`std::sync::Arc<str>`] on the
+/// `From<String>` conversion) where the single-step trait impl allocates
+/// once. The shared-ownership + [`Sync`] + [`Send`] contract
+/// [`std::sync::Arc<str>`] provides is the distinct value the sibling
+/// [`Box<str>`] axis's owned-move return-shape cannot provide — a per-
+/// Aplicacao `:contratos :wit` census-label reachable from multiple
+/// concurrent per-cluster reconcile tasks through the same four-arm
+/// census-label byte-string, without a `.clone()`-per-task
+/// materialization the owned-move [`Box<str>`] axis would force.
+///
+/// Second peer on the M3-mesh-shape tier of the substrate-wide trait-
+/// idiomatic [`std::sync::Arc<str>`] forward-projection campaign — the
+/// remaining [`RateLimitUnit`] `:politicas :rate-limit` canonical-suffix
+/// axis is the final future target on the M3 mesh-shape tier, tracking
+/// the same 2-corner {Self, &Self} × 5-tier {`&'static str`, `String`,
+/// `Cow<'static, str>`, `Box<str>`, `std::sync::Arc<str>`} emit-set the
+/// M2 OTP-shape tier and the first M3 peer converged onto.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`WitShape::as_str`] across the four-arm
+/// [`WitShape::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>}` return-shape axes).
+impl From<WitShape> for std::sync::Arc<str> {
+    fn from(shape: WitShape) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(shape.as_str())
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -19000,6 +19071,117 @@ mod tests {
              `From<WitShape> for Box<str>` axis by first calling \
              `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    fn wit_shape_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<WitShape> for std::sync::Arc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::WitShape::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm emit-set across every arm the
+        // exhaustive [`super::WitShape::ALL`] slice enumerates. Extends
+        // the M3-mesh-shape tier of the substrate-wide trait-idiomatic
+        // [`std::sync::Arc<str>`] forward-projection campaign — second-
+        // mover on the M3 mesh-slot family the caixa-mesh renderer
+        // keys off end-to-end, after the paired
+        // [`super::PlacementStrategy`] closed its `{Self, &Self}`
+        // input-shape corner on the same tier (977d577 owned-input +
+        // cc87908 borrowed-input), and ahead of the remaining
+        // [`super::RateLimitUnit`] `:politicas :rate-limit`
+        // canonical-suffix axis whose [`std::sync::Arc<str>`] axis
+        // closure is the final future target on the M3 mesh-shape tier.
+        // Rust's standard library carries `impl From<&str> for
+        // std::sync::Arc<str>` and `impl From<String> for
+        // std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor an
+        // `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so
+        // this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = shape.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(shape.as_str())` open-code has
+        // no compile-time link back to the substrate primitive, and a
+        // two-step `std::sync::Arc::<str>::from(String::from(shape))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`Arc<str>`] on the `From<String>` conversion) where the
+        // single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::WitShape::as_str`] accessor trips at caixa-core
+        // test time.
+        for &variant in WitShape::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<WitShape>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<WitShape> for std::sync::Arc<str> impl must \
+                 round-trip WitShape::{variant:?} to the same inline \
+                 census-label byte-string WitShape::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on WitShape::\
+                 {variant:?} must byte-equal WitShape::as_str on the \
+                 same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<WitShape> for std::sync::Arc<str> and \
+                 From<WitShape> for &'static str must resolve \
+                 identically on WitShape::{variant:?} — divergence \
+                 signals the owned-input std::sync::Arc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<WitShape> for std::sync::Arc<str> and \
+                 From<WitShape> for String must resolve identically \
+                 on WitShape::{variant:?} — divergence signals the \
+                 owned-input std::sync::Arc<str> and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<WitShape> for std::sync::Arc<str> and \
+                 From<WitShape> for Cow<'static, str> must resolve \
+                 identically on WitShape::{variant:?} — divergence \
+                 signals the owned-input std::sync::Arc<str> and \
+                 Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<WitShape> for std::sync::Arc<str> and \
+                 From<WitShape> for Box<str> must resolve identically \
+                 on WitShape::{variant:?} — divergence signals the \
+                 owned-input std::sync::Arc<str> and Box<str> return-\
+                 shape paths have drifted onto different emit-sets"
+            );
+        }
     }
 
     #[test]
