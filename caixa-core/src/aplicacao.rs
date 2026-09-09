@@ -6755,6 +6755,87 @@ impl From<RateLimitUnit> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:politicas :rate-limit`
+/// canonical-suffix [`RateLimitUnit`] closed-set fieldless typed enum — the
+/// borrowed-input companion to the paired owned-input
+/// [`From<RateLimitUnit> for std::sync::Arc<str>`] impl (c481bfe, one commit
+/// prior) that closes the `{Self, &Self}` input-shape corner of the
+/// M3-mesh-shape tier of the substrate-wide [`std::sync::Arc<str>`]
+/// forward-projection campaign on the third — and last — M3-mesh-primitive-
+/// defining slot enum, closing the whole M3 mesh-shape tier of the
+/// [`std::sync::Arc<str>`] axis on the M3-mesh-primitive-defining triple,
+/// routing byte-for-byte through the substrate-primitive
+/// [`RateLimitUnit::as_suffix`] `pub const fn` accessor via
+/// [`std::sync::Arc::<str>::from`] on the returned `&'static str`.
+///
+/// Every consumer that holds a `&RateLimitUnit` and needs a
+/// [`std::sync::Arc<str>`] — a
+/// `RateLimitUnit::ALL.iter().map(std::sync::Arc::<str>::from).collect::<Vec<_>>()`
+/// per-arm accept-set materializer (whose iterator over
+/// `&'static [RateLimitUnit]` yields `&RateLimitUnit`, not `RateLimitUnit`,
+/// so the paired owned-input [`From<RateLimitUnit> for std::sync::Arc<str>`]
+/// axis alone forces every call site through an explicit [`Copy`] deref or
+/// a `.copied()` restatement rather than the direct trait-idiomatic
+/// projection), a future caixa-mesh renderer's per-Aplicacao
+/// `:politicas :rate-limit` canonical-suffix census-key shared-ownership
+/// materializer holding a `&RateLimitUnit` through a per-Aplicacao borrow
+/// lifetime and cloning the shared-ownership label into concurrent per-
+/// cluster reconcile tasks through [`std::sync::Arc::clone`] rather than a
+/// per-task allocation, a future admission-webhook rejection body whose
+/// per-arm `Sync` + `Send`-safe diagnostic column composes from a borrowed
+/// `&RateLimitUnit` handle across an `.await` boundary — reaches the
+/// substrate-primitive [`RateLimitUnit::as_suffix`] accessor through this
+/// impl and no other, without a
+/// `std::sync::Arc::<str>::from(unit.as_suffix())` open-code whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>` but
+/// no blanket `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor
+/// a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so every
+/// closed-set fieldless typed enum peer on the substrate that carries the
+/// paired owned-input [`std::sync::Arc<str>`] axis but not the borrowed-
+/// input axis forces every borrowed-input
+/// [`std::sync::Arc<str>`]-parameterized call site through a spurious
+/// [`Copy`] deref (`std::sync::Arc::<str>::from((*unit).as_suffix())`) or
+/// a `std::sync::Arc::<str>::from(unit.as_suffix())` open-code whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the third-and-last peer
+/// of the M3-mesh-shape tier of the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection campaign, closing the whole
+/// M3 mesh-shape tier of the [`std::sync::Arc<str>`] axis on the
+/// M3-mesh-primitive-defining triple, exactly as 941748c closed the second
+/// peer ([`WitShape`]) one commit after its owning half (9a59b77) landed
+/// on that enum, as cc87908 closed the first peer ([`PlacementStrategy`])
+/// one commit after its owning half (977d577), and as df7040c closed the
+/// paired [`Box<str>`] tier's third owned-input peer on this same enum one
+/// commit after its owning half (8f7eb1a). Leaves the outside-M3 substrate-
+/// wide peers ([`crate::render::PathShapeViolation`] and the outside-
+/// `caixa-core` peers) as the remaining future targets of the
+/// [`std::sync::Arc<str>`] axis.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_borrowed_into_arc_str_routes_through_as_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::as_suffix`] across the three-
+/// arm [`RateLimitUnit::ALL`] emit-set on the borrowed-input surface, plus
+/// a blanket-derived [`Into`] shape witness, a cross-axis partition pin
+/// against the paired owned-input
+/// [`From<RateLimitUnit> for std::sync::Arc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>}`
+/// return-shape axes, and a `.iter().map(std::sync::Arc::<str>::from)`
+/// pipe witness over [`RateLimitUnit::ALL`] — whose iterator yields
+/// `&RateLimitUnit` by construction, so the borrowed-input
+/// [`std::sync::Arc<str>`] axis is what routes the pipe through the
+/// substrate-primitive [`RateLimitUnit::as_suffix`] accessor without a
+/// spurious [`Copy`] deref).
+impl From<&RateLimitUnit> for std::sync::Arc<str> {
+    fn from(unit: &RateLimitUnit) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(unit.as_suffix())
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -30006,6 +30087,170 @@ mod tests {
                  emit-sets"
             );
         }
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn rate_limit_unit_from_borrowed_into_arc_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RateLimitUnit> for std::sync::Arc<str>` — asserts
+        // the borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::RateLimitUnit::as_suffix`] `pub const fn`
+        // accessor resolve to the same three-arm emit-set across every arm
+        // the exhaustive [`super::RateLimitUnit::ALL`] slice enumerates.
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so the
+        // borrowed-input `std::sync::Arc<str>` forward-projection axis is
+        // a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = (&unit).into();`-shaped call
+        // site or a
+        // `RateLimitUnit::ALL.iter().map(std::sync::Arc::<str>::from)`-shaped
+        // pipe reaches through this impl and no other — the paired owned-
+        // input `From<RateLimitUnit> for std::sync::Arc<str>` impl
+        // (c481bfe) forces every borrowed-input call site through an
+        // explicit `Copy` deref
+        // (`std::sync::Arc::<str>::from((*unit).as_suffix())`) or a
+        // `std::sync::Arc::<str>::from(unit.as_suffix())` open-code whose
+        // type bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the third-and-
+        // last peer of the M3-mesh-shape tier of the substrate-wide
+        // trait-idiomatic [`std::sync::Arc<str>`] forward-projection
+        // campaign, closing the whole M3 mesh-shape tier of the
+        // [`std::sync::Arc<str>`] axis on the M3-mesh-primitive-defining
+        // triple, exactly as 941748c closed the second peer
+        // ([`super::WitShape`]) one commit after its owning half (9a59b77)
+        // landed on that enum, as cc87908 closed the first peer
+        // ([`super::PlacementStrategy`]) one commit after its owning half
+        // (977d577), and as df7040c closed the paired [`Box<str>`] tier's
+        // third-and-last peer on this same enum one commit after its
+        // owning half (8f7eb1a). Leaves the outside-M3 substrate-wide
+        // peers ([`crate::render::PathShapeViolation`] and the outside-
+        // `caixa-core` peers) as the remaining future targets of the
+        // [`std::sync::Arc<str>`] axis.
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<RateLimitUnit> for std::sync::Arc<str>`] and the sibling
+        // borrowed-input [`From<&RateLimitUnit> for &'static str`],
+        // [`From<&RateLimitUnit> for String`],
+        // [`From<&RateLimitUnit> for Cow<'static, str>`], and
+        // [`From<&RateLimitUnit> for Box<str>`] return-shape axes —
+        // locking the five return-shape × input-shape paths together by
+        // construction so any future detour trips at caixa-core test time.
+        // Then a `.iter().map(std::sync::Arc::<str>::from)` pipe witness
+        // over [`super::RateLimitUnit::ALL`] — whose iterator yields
+        // `&RateLimitUnit` by construction, so the borrowed-input
+        // [`std::sync::Arc<str>`] axis is what routes the pipe through the
+        // substrate-primitive [`super::RateLimitUnit::as_suffix`] accessor
+        // without a spurious [`Copy`] deref (which would only be reachable
+        // through the owned-input
+        // [`From<RateLimitUnit> for std::sync::Arc<str>`] axis by first
+        // calling `.copied()` on the iterator).
+        for &variant in super::RateLimitUnit::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&super::RateLimitUnit>>::from(&variant);
+            let via_method: &'static str = variant.as_suffix();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RateLimitUnit> for std::sync::Arc<str> impl must \
+                 round-trip &RateLimitUnit::{variant:?} to the same inline \
+                 canonical-suffix byte-string RateLimitUnit::as_suffix \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on &RateLimitUnit::\
+                 {variant:?} must byte-equal RateLimitUnit::as_suffix on \
+                 the same input — the blanket-derived Into shape must \
+                 resolve to the same as_suffix dispatch as the explicit \
+                 From impl"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait, owned_arc,
+                "From<&RateLimitUnit> for std::sync::Arc<str> and \
+                 From<RateLimitUnit> for std::sync::Arc<str> must resolve \
+                 identically on RateLimitUnit::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 std::sync::Arc<str> forward-projection input-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&RateLimitUnit> for std::sync::Arc<str> and \
+                 From<&RateLimitUnit> for &'static str must resolve \
+                 identically on RateLimitUnit::{variant:?} — divergence \
+                 signals the borrowed-input std::sync::Arc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RateLimitUnit> for std::sync::Arc<str> and \
+                 From<&RateLimitUnit> for String must resolve identically \
+                 on RateLimitUnit::{variant:?} — divergence signals the \
+                 borrowed-input std::sync::Arc<str> and owned-`String` \
+                 return-shape paths have drifted onto different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&RateLimitUnit> for std::sync::Arc<str> and \
+                 From<&RateLimitUnit> for Cow<'static, str> must resolve \
+                 identically on RateLimitUnit::{variant:?} — divergence \
+                 signals the borrowed-input std::sync::Arc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&RateLimitUnit> for std::sync::Arc<str> and \
+                 From<&RateLimitUnit> for Box<str> must resolve \
+                 identically on RateLimitUnit::{variant:?} — divergence \
+                 signals the borrowed-input std::sync::Arc<str> and \
+                 Box<str> return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+        }
+        let via_iter: Vec<std::sync::Arc<str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(std::sync::Arc::<str>::from)
+            .collect();
+        let via_method: Vec<std::sync::Arc<str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(|u| std::sync::Arc::<str>::from(u.as_suffix()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::sync::Arc::<str>::from)` over \
+             RateLimitUnit::ALL — a call site whose iteration axis holds \
+             `&RateLimitUnit` by construction — must byte-equal \
+             `.iter().map(|u| std::sync::Arc::<str>::from(u.as_suffix()))` \
+             on every arm — the borrowed-input std::sync::Arc<str> \
+             `From<&RateLimitUnit> for std::sync::Arc<str>` axis is what \
+             makes the `std::sync::Arc::<str>::from` composition route \
+             through the substrate-primitive \
+             `RateLimitUnit::as_suffix` accessor without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<RateLimitUnit> for std::sync::Arc<str>` \
+             axis by first calling `.copied()` on the iterator)"
+        );
     }
 
     #[test]
