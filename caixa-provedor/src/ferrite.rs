@@ -1070,6 +1070,96 @@ impl From<&FerriteRuntime> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the two-arm caixa-provedor ferrite-runtime closed-set
+/// fieldless typed enum [`FerriteRuntime`]. Extends the outside-`caixa-core`
+/// tier of the substrate-wide trait-idiomatic [`std::sync::Arc<str>`]
+/// forward-projection campaign onto the sixth-and-last outside-`caixa-core`
+/// peer — the sole closed-set fieldless typed enum on the caixa-provedor
+/// surface — following the first-mover
+/// [`caixa_arch::invariants::InvariantKind`] pair (4e923c1 + 03c043f),
+/// second-peer [`caixa_arch::report::ArchVerdict`] pair (1682f8b + 92ddfb2),
+/// third-peer `caixa_lint::diagnostic::Severity` pair (a7a9a6d + 4f041e1),
+/// fourth-peer `caixa_lint::diagnostic::FixSafety` pair (fb73edb + 822138e),
+/// and fifth-peer [`caixa_theme::style::Semantic`] pair (65dbcff + f3a55c7)
+/// that landed the tier one axis prior. Routes byte-for-byte through the
+/// substrate-primitive [`FerriteRuntime::variant_slug`] `pub const fn`
+/// accessor via [`std::sync::Arc::<str>::from`] on the returned `&'static
+/// str`.
+///
+/// Every consumer that binds a `let key: std::sync::Arc<str> =
+/// runtime.into();`-shaped call site — a per-runtime-tier census-key
+/// materializer that stashes the ferrite-runtime discriminator in a
+/// [`std::sync::Arc<str>`]-typed shared-ownership per-arm bucket key for
+/// cheap [`std::sync::Arc::clone`] across concurrent per-provider dispatch
+/// tasks off an owned handle, a future M4 admission-webhook whose per-arm
+/// [`std::sync::Arc<str>`] field composes from an owned [`FerriteRuntime`]
+/// handle across an `.await` boundary through a
+/// `<T: Into<std::sync::Arc<str>>>`-bound diagnostic-column dispatch, a
+/// future `<T: Into<std::sync::Arc<str>>>`-bound `tracing`-span attributes
+/// collector recording an owned [`FerriteRuntime`] per-arm field onto the
+/// parent span's shared-ownership context, a future
+/// `feira publish-provider --list-runtimes` per-arm histogram-column
+/// emitter binding an owned [`FerriteRuntime`] handle into a shared-
+/// ownership per-arm bucket key across concurrent per-runtime tasks —
+/// reaches the substrate-primitive [`FerriteRuntime::variant_slug`]
+/// accessor through this impl and no other, without a
+/// `std::sync::Arc::<str>::from(runtime.variant_slug())` open-code whose
+/// type bounds have no compile-time link back to the substrate primitive.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::sync::Arc<str>` and `impl From<String> for std::sync::Arc<str>`
+/// but no blanket `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>`
+/// (nor an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so
+/// this axis is a distinct trait-idiomatic surface — a two-step
+/// `std::sync::Arc::<str>::from(String::from(runtime))` composition through
+/// the owned-`String` axis allocates twice (once into the intermediate
+/// `String`, once into the [`std::sync::Arc<str>`] on the `From<String>`
+/// conversion) where the single-step trait impl allocates once. The
+/// shared-ownership + [`Sync`] + [`Send`] contract [`std::sync::Arc<str>`]
+/// provides is the distinct value the sibling [`Box<str>`] axis's owned-
+/// move return-shape cannot provide without a `.clone()`-per-task
+/// materialization.
+///
+/// Leaves the paired borrowed-input [`From<&FerriteRuntime> for
+/// std::sync::Arc<str>`] `{Self, &Self}`-closer as the direct next target
+/// on this same enum, mirroring the shape 03c043f used to close the
+/// first-mover [`caixa_arch::invariants::InvariantKind`] pair one commit
+/// after 4e923c1 opened its owned-input half, 92ddfb2 used to close the
+/// second-peer [`caixa_arch::report::ArchVerdict`] pair one commit after
+/// 1682f8b, 4f041e1 used to close the third-peer
+/// `caixa_lint::diagnostic::Severity` pair one commit after a7a9a6d,
+/// 822138e used to close the fourth-peer
+/// `caixa_lint::diagnostic::FixSafety` pair one commit after fb73edb, and
+/// f3a55c7 used to close the fifth-peer [`caixa_theme::style::Semantic`]
+/// pair one commit after 65dbcff. With the direct-next borrowed-input
+/// close, the whole outside-`caixa-core` tier of the substrate-wide
+/// [`std::sync::Arc<str>`] forward-projection campaign will be complete
+/// across all six outside-`caixa-core` closed-set fieldless typed enum
+/// peers on both `{Self, &Self}` input-shape corners.
+///
+/// Same discipline as the paired [`From<FerriteRuntime> for Box<str>`]
+/// axis on this same enum already closed the outside-`caixa-core`
+/// [`Box<str>`] tier's sixth-and-last peer: forward emit (this impl, the
+/// paired sibling `{&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner, [`std::fmt::Display`], [`AsRef<str>`],
+/// [`FerriteRuntime::variant_slug`]) route through the same two inline
+/// `"ferrite-safe"` / `"ferrite-arena"` canonical-lowercase kebab byte-
+/// strings [`FerriteRuntime::variant_slug`] returns by construction.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_from_into_arc_str_routes_through_variant_slug_accessor`]
+/// (byte-parity pin against [`FerriteRuntime::variant_slug`] across the
+/// two-arm [`FerriteRuntime::ALL`] emit-set on the owned-input surface,
+/// plus a blanket-derived [`Into`] shape witness and cross-axis byte-
+/// parity pins against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>}` return-shape axes).
+impl From<FerriteRuntime> for std::sync::Arc<str> {
+    fn from(runtime: FerriteRuntime) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(runtime.variant_slug())
+    }
+}
+
 /// Free-function wrapper preserved for the crate-level `pub use`
 /// re-export in [`crate`]; routes through the substrate-primitive
 /// method [`FerriteRuntime::rt_import`].
@@ -3031,6 +3121,131 @@ mod tests {
                  pipe on every arm — divergence signals the borrowed-\
                  input `From<&FerriteRuntime> for Box<str>` axis has \
                  silently detoured off the substrate-primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_from_into_arc_str_routes_through_variant_slug_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<FerriteRuntime> for std::sync::Arc<str>` — asserts
+        // the owned-input standard-library trait impl and the substrate-
+        // primitive [`super::FerriteRuntime::variant_slug`] `pub const
+        // fn` accessor resolve to the same two-arm canonical-lowercase
+        // kebab emit-set (`"ferrite-safe"` / `"ferrite-arena"`) across
+        // every arm the exhaustive [`super::FerriteRuntime::ALL`] slice
+        // enumerates. Extends the outside-`caixa-core` tier of the
+        // substrate-wide [`std::sync::Arc<str>`] forward-projection
+        // campaign onto the sixth-and-last outside-`caixa-core` peer —
+        // the sole closed-set fieldless typed enum on the caixa-provedor
+        // surface — following the first-mover
+        // [`caixa_arch::invariants::InvariantKind`] pair (4e923c1 owned
+        // + 03c043f borrowed), second-peer
+        // [`caixa_arch::report::ArchVerdict`] pair (1682f8b owned +
+        // 92ddfb2 borrowed), third-peer
+        // `caixa_lint::diagnostic::Severity` pair (a7a9a6d owned +
+        // 4f041e1 borrowed), fourth-peer
+        // `caixa_lint::diagnostic::FixSafety` pair (fb73edb owned +
+        // 822138e borrowed), and fifth-peer
+        // [`caixa_theme::style::Semantic`] pair (65dbcff owned + f3a55c7
+        // borrowed) that landed the tier one axis prior.
+        //
+        // Rust's standard library carries `impl From<&str> for
+        // std::sync::Arc<str>` and `impl From<String> for
+        // std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor
+        // an `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`),
+        // so this axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = runtime.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(runtime.variant_slug())` open-
+        // code has no compile-time link back to the substrate primitive,
+        // and a two-step
+        // `std::sync::Arc::<str>::from(String::from(runtime))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`std::sync::Arc<str>`] on the `From<String>` conversion)
+        // where the single-step trait impl allocates once. The
+        // shared-ownership + [`Sync`] + [`Send`] contract
+        // [`std::sync::Arc<str>`] provides is the distinct value the
+        // sibling [`Box<str>`] axis's owned-move return-shape cannot
+        // provide without a `.clone()`-per-task materialization.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>}`
+        // return-shape axes — locking the five return-shape paths on
+        // the owned-input surface together by construction so any
+        // future detour off the substrate-primitive
+        // [`super::FerriteRuntime::variant_slug`] accessor trips at
+        // caixa-provedor test time.
+        for &variant in FerriteRuntime::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<FerriteRuntime>>::from(variant);
+            let via_method: &'static str = variant.variant_slug();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<FerriteRuntime> for std::sync::Arc<str> impl must \
+                 round-trip FerriteRuntime::{variant:?} to the same \
+                 canonical-lowercase kebab byte-string \
+                 FerriteRuntime::variant_slug returns — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on \
+                 FerriteRuntime::{variant:?} must byte-equal \
+                 FerriteRuntime::variant_slug on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 variant_slug dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<FerriteRuntime> for std::sync::Arc<str> and \
+                 From<FerriteRuntime> for &'static str must resolve \
+                 identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<FerriteRuntime> for std::sync::Arc<str> and \
+                 From<FerriteRuntime> for String must resolve \
+                 identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and owned-`String` return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<FerriteRuntime> for std::sync::Arc<str> and \
+                 From<FerriteRuntime> for Cow<'static, str> must \
+                 resolve identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<FerriteRuntime> for std::sync::Arc<str> and \
+                 From<FerriteRuntime> for Box<str> must resolve \
+                 identically on FerriteRuntime::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Box<str> return-shape paths have drifted onto \
+                 different emit-sets"
             );
         }
     }
