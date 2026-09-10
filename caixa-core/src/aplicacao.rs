@@ -8278,6 +8278,76 @@ impl PlacementStrategy {
     /// to converge onto the same discipline.
     pub const ALL: &'static [Self] = &[Self::SingleNode, Self::Replicated, Self::Sharded];
 
+    /// Substrate-canonical exhaustive accept-set on the
+    /// [`PlacementStrategy`] `PascalCase` wire byte-string axis — the
+    /// closed three-arm roster of every byte-string [`Self::as_str`]
+    /// returns, routed byte-for-byte through the paired
+    /// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+    /// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+    /// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] lifted
+    /// `pub const` roster the [`Self::as_str`] emitter (and the
+    /// [`std::fmt::Display`] impl / `Serialize` derive routed through it)
+    /// walks — and byte-for-byte the same three strings the un-`rename`d
+    /// `Serialize` derive emits under the paired
+    /// [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`] tag key on every JSON /
+    /// YAML CR round-trip.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::WIRE_NAMES`] (bd708bd)
+    /// roster on the top-level typed-kind discriminator's `PascalCase`
+    /// wire byte-string axis, the sibling
+    /// [`crate::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45)
+    /// roster on the first M2 OTP-shape sibling-restart closed-set axis,
+    /// and the sibling
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e) /
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77)
+    /// rosters on the OTP-appup discriminator's two-axis roster split —
+    /// the same closed-set exhaustive-accept-set roster discipline
+    /// extended here onto the M3 mesh-shape distribution-strategy
+    /// closed-set typed enum, the first M3 mesh-primitive-defining
+    /// closed-set typed enum on the caixa surface to converge onto the
+    /// paired-roster discipline.
+    ///
+    /// Downstream consumers of the closed accepted-wire-form set — a
+    /// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook
+    /// rejection body enumerating the accepted JSON `:placement
+    /// :estrategia` values verbatim, a future `feira app placement --set
+    /// …` CLI-side "did you mean" hint whose candidate-list must
+    /// byte-match the wire form the `lareira-fleet-programs` aggregator's
+    /// per-strategy dispatch keys off, a future `feira app graph`
+    /// per-Aplicacao `:placement :estrategia`-histogram column that
+    /// renders zero-count arms, a future `app-operator` per-reconcile-
+    /// step diagnostic log line enumerating accepted wire forms on an
+    /// unknown-strategy rejection, a future
+    /// `tracing::field::valuable::Value::List` structured-log accepted-
+    /// wire-form emit — now reach for one lifted substrate-primitive
+    /// roster rather than open-coding a three-string array-literal
+    /// (`["SingleNode", "Replicated", "Sharded"]`) whose arm-set has no
+    /// compile-time link back to the typed [`PlacementStrategy`] enum.
+    /// A future arm addition (an `Anycast` mesh-anycast arm the theory
+    /// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
+    /// §II.5 hint names as a trajectory item) extends this roster as a
+    /// single edit — paired with the [`Self::as_str`] match's
+    /// compiler-checked exhaustiveness on the new arm — and every
+    /// consumer picks up the new wire form by construction rather than a
+    /// coordinated array-literal rewrite across every downstream site.
+    ///
+    /// Length is pinned load-bearing at `PlacementStrategy::ALL.len()`
+    /// (three) by
+    /// [`tests::placement_strategy_wire_names_covers_every_arm`], every
+    /// variant's [`Self::as_str`] projection is pinned to a member of the
+    /// roster so a silent skew between the emitter's arm-set and this
+    /// const's arm-set trips at caixa-core test time rather than at a
+    /// downstream consumer's accepted-set enumeration miss, and every
+    /// entry is further pinned to open with an ASCII uppercase byte so a
+    /// silent collapse of the `PascalCase` wire-form axis with any
+    /// hypothetical peer kebab-case dispatcher-catalog axis trips here
+    /// rather than at a downstream K8s-CR round-trip miss.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+        crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+        crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+    ];
+
     /// Canonical camelCase-schema discriminator scalar this variant
     /// serializes as under [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`]. The
     /// three arms return the paired [`crate::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`]
@@ -25236,6 +25306,96 @@ mod tests {
                  addition that grows the enum but forgets to grow the ALL slice \
                  silently truncates every downstream consumer's accept-set at the \
                  pre-addition boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`PlacementStrategy::WIRE_NAMES`] exhaustive accept-set roster
+        // on the `PascalCase` wire byte-string axis: every variant of
+        // the sibling [`PlacementStrategy::ALL`] exhaustive-iteration
+        // surface must project through [`PlacementStrategy::as_str`]
+        // onto an entry the [`PlacementStrategy::WIRE_NAMES`] roster
+        // carries, and the roster's length must byte-equal
+        // `PlacementStrategy::ALL.len()` so a silent skew between the
+        // [`PlacementStrategy::as_str`] match's arm-set and the roster's
+        // arm-set trips here at caixa-core test time rather than at a
+        // downstream M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-
+        // webhook rejection body's wire-form `:placement :estrategia`
+        // accepted-set enumeration miss / a `feira app placement --set
+        // …` "did you mean" hint drift / a future `app-operator`
+        // per-reconcile-step diagnostic log line's accepted-wire-form
+        // enumeration miss. A future arm addition (an `Anycast`
+        // mesh-anycast arm the theory
+        // [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
+        // §II.5 hint names as a trajectory item) extends
+        // [`PlacementStrategy::ALL`] as a single edit and this pin
+        // sweeps the new arm by iteration; the paired
+        // [`PlacementStrategy::WIRE_NAMES`] roster must grow in lockstep
+        // or this assertion trips. Every entry is further pinned to
+        // open with an ASCII uppercase byte so a silent collapse of
+        // the `PascalCase` wire-form axis with any hypothetical peer
+        // kebab-case dispatcher-catalog axis trips here rather than at
+        // a downstream K8s-CR round-trip miss.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) pin on the top-level typed-kind discriminator's
+        // `PascalCase` wire byte-string axis, the sibling
+        // [`crate::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) pin on the first M2 OTP-shape sibling-restart
+        // closed-set axis, and the sibling
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) /
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) pins on the OTP-appup discriminator's two-axis
+        // roster split — the same closed-set exhaustive-roster coverage
+        // discipline extended here onto the M3 mesh-shape distribution-
+        // strategy closed-set typed enum, the first M3 mesh-primitive-
+        // defining closed-set typed enum to converge on the roster
+        // discipline.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`]
+        // const family (e.g. dropping the trailing `d` from
+        // `"Sharded"` → `"Sharde"`) — the length pin still passes but
+        // the `contains` check fires on the mutated arm; and by
+        // shortening the roster to two entries — the length pin fires
+        // first.
+        assert_eq!(
+            PlacementStrategy::WIRE_NAMES.len(),
+            PlacementStrategy::ALL.len(),
+            "PlacementStrategy::WIRE_NAMES.len() must byte-equal \
+             PlacementStrategy::ALL.len() — a mismatch means the roster \
+             and the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in PlacementStrategy::ALL {
+            let wire = variant.as_str();
+            assert!(
+                PlacementStrategy::WIRE_NAMES.contains(&wire),
+                "PlacementStrategy::{variant:?}.as_str() = {wire:?} must \
+                 be a member of PlacementStrategy::WIRE_NAMES — the \
+                 emitter and the roster have drifted out of lockstep"
+            );
+        }
+        for tag in PlacementStrategy::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "PlacementStrategy::WIRE_NAMES entry {tag:?} must be \
+                     a non-empty PascalCase byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_uppercase(),
+                "PlacementStrategy::WIRE_NAMES entry {tag:?} must open \
+                 with an ASCII uppercase byte (PascalCase wire form) — \
+                 a lowercase entry would collide the `PascalCase` \
+                 wire-form axis with any hypothetical peer kebab-case \
+                 dispatcher-catalog axis"
             );
         }
     }
