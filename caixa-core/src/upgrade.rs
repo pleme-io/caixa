@@ -1705,6 +1705,85 @@ impl UpgradeInstruction {
         crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART,
     ];
 
+    /// Substrate-canonical exhaustive accept-set on the OTP-appup
+    /// peer wire-form axis — the closed five-arm roster of every
+    /// un-prefixed kebab-case byte-string [`Self::as_str`] emits,
+    /// routed byte-for-byte through the paired
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_WIRE_STATE_CHANGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_WIRE_SOFT_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_WIRE_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_WIRE_RESTART`] lifted
+    /// `pub const` roster the [`Self::as_str`] emitter walks — and
+    /// byte-for-byte the same five strings the
+    /// `#[serde(tag = "kind", rename_all = "kebab-case")]` derive
+    /// carries on every K8s-CR JSON / YAML round-trip and the
+    /// [`gen_platform::Discriminant`]-derived [`Self::discriminant`]
+    /// returns for fleet-wide dispatcher-catalog registration under
+    /// `"caixa.upgrade-instruction"`.
+    ///
+    /// Peer to the sibling [`Self::LISP_FORMS`] roster on the
+    /// tatara-lisp author-surface form axis (`:` -prefixed): the
+    /// two-axis split the sibling
+    /// [`tests::upgrade_instruction_display_matches_as_str_and_not_lisp_form`]
+    /// pin already makes load-bearing on the scalar-accessor pair is
+    /// now extended onto the roster pair. `LISP_FORMS` / `WIRE_FORMS`
+    /// carry per-arm byte-strings that are byte-distinct by design
+    /// (one opens with `:`, the other does not); the paired
+    /// [`tests::upgrade_instruction_wire_forms_covers_every_arm`] and
+    /// [`tests::upgrade_instruction_lisp_and_wire_forms_are_length_aligned`]
+    /// pins keep the two rosters in structural lockstep so a variant
+    /// addition on either axis trips at caixa-core test time rather
+    /// than silently splitting the two rosters at some downstream
+    /// consumer's accepted-set enumeration.
+    ///
+    /// Consumers today (and future): an M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection
+    /// body enumerating the accepted wire-form `"kind"` tag-set
+    /// verbatim on an unknown-tag miss (the un-prefixed kebab bytes
+    /// the JSON payload carries, not the `:` -prefixed tatara-lisp
+    /// form), a future `caixa-actions` renderer that surfaces the
+    /// accepted appup instruction wire-vocabulary in a workflow
+    /// annotation the CI pipeline reads verbatim, a fleet-side
+    /// operator's per-cluster catalog enumeration listing the
+    /// registered dispatcher identities under
+    /// `"caixa.upgrade-instruction"` (each dispatcher's identity
+    /// being a member of this roster by construction of the paired
+    /// `.discriminant()` derive), an M4-side per-instruction structured
+    /// log audit table keyed off the wire-form byte-string — every
+    /// consumer that wants to enumerate the closed OTP-appup wire
+    /// kind-tag set outside caixa-core now reaches for one lifted
+    /// substrate-primitive roster rather than open-coding a
+    /// `["load-module", "state-change", "soft-purge", "purge",
+    /// "restart"]` array-literal whose arm-set has no compile-time
+    /// link back to the typed [`UpgradeInstruction`] enum. A future
+    /// variant addition (a `Discard` peer the `code:delete/1` analog
+    /// might inspire, a `SoftPurge` split into `SoftPurgeCoop` /
+    /// `SoftPurgeForce` peers as the drain-cool-down policy grows a
+    /// two-arm shape) extends this roster as a single edit — paired
+    /// with the [`Self::as_str`] match's compiler-checked
+    /// exhaustiveness on the new arm — and every consumer picks up
+    /// the new tag by construction rather than a coordinated
+    /// array-literal rewrite across every downstream site.
+    ///
+    /// Length is pinned load-bearing at 5 by
+    /// [`tests::upgrade_instruction_wire_forms_covers_every_arm`] via
+    /// the shared `upgrade_instruction_arm_roster()` fixture, and
+    /// every entry is pinned to a member of the roster on every arm
+    /// so a silent skew between the [`Self::as_str`] match's arm-set
+    /// and this const's arm-set trips at caixa-core test time rather
+    /// than at a downstream admission-webhook rejection body's
+    /// accepted-set enumeration miss. The paired
+    /// [`tests::upgrade_instruction_lisp_and_wire_forms_are_length_aligned`]
+    /// pin further gates the peer-axis alignment.
+    pub const WIRE_FORMS: &'static [&'static str] = &[
+        crate::render::M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE,
+        crate::render::M2_UPGRADE_INSTRUCTION_WIRE_STATE_CHANGE,
+        crate::render::M2_UPGRADE_INSTRUCTION_WIRE_SOFT_PURGE,
+        crate::render::M2_UPGRADE_INSTRUCTION_WIRE_PURGE,
+        crate::render::M2_UPGRADE_INSTRUCTION_WIRE_RESTART,
+    ];
+
     /// Substrate-canonical per-`UpgradeInstruction` OTP-appup kind-tag
     /// projection every consumer that renders / classifies / grepping-
     /// projects an instruction's lisp form keys off — returns the
@@ -10779,5 +10858,122 @@ mod tests {
                  emits"
             );
         }
+    }
+
+    #[test]
+    fn upgrade_instruction_wire_forms_covers_every_arm() {
+        // Load-bearing pin on the peer substrate-canonical
+        // [`UpgradeInstruction::WIRE_FORMS`] exhaustive accept-set
+        // roster on the un-prefixed kebab wire-form axis: every arm
+        // of the shared [`upgrade_instruction_arm_roster`] fixture
+        // must project through [`UpgradeInstruction::as_str`] onto an
+        // entry the [`UpgradeInstruction::WIRE_FORMS`] roster
+        // carries, and the roster's length must byte-equal the
+        // fixture's arm count so a silent skew between the
+        // [`UpgradeInstruction::as_str`] match's arm-set and the
+        // roster's arm-set trips here at caixa-core test time rather
+        // than at a downstream M4 admission-webhook rejection body's
+        // wire-form `"kind"` tag accepted-set enumeration miss / a
+        // fleet-side operator's per-cluster catalog enumeration miss
+        // on `"caixa.upgrade-instruction"` / a `caixa-actions`
+        // workflow annotation drift on the accepted appup wire
+        // vocabulary. A future arm addition (a `Discard` peer the
+        // `code:delete/1` analog might inspire, a `SoftPurge` split
+        // into `SoftPurgeCoop` / `SoftPurgeForce` as the drain-cool-
+        // down policy grows a two-arm shape) extends the shared
+        // [`upgrade_instruction_arm_roster`] fixture as a single edit
+        // and this pin sweeps the new arm by iteration; the paired
+        // [`UpgradeInstruction::WIRE_FORMS`] roster must grow in
+        // lockstep or this assertion trips. Peer of the sibling
+        // [`upgrade_instruction_lisp_forms_covers_every_arm`] pin on
+        // the tatara-lisp author-surface form axis — the two-axis
+        // discipline (author-surface `:load-module` / wire-form
+        // `load-module`) is now fully lifted into caixa-core through
+        // paired `LISP_FORMS` + `WIRE_FORMS` roster consts, so a
+        // per-consumer rebrand at either axis lands at exactly one
+        // roster edit and every downstream projection picks it up by
+        // construction. Every entry is pinned to *not* open with `:`
+        // so a silent collapse of the two axes (a bare `:` -prefixed
+        // entry that would let a wire-axis consumer accept the
+        // lisp-axis byte-string) trips here rather than at a
+        // downstream serde-round-trip miss.
+        //
+        // Fail-before-pass-after locally verified by mutating one
+        // arm of the fixture's expected wire byte-string (e.g.
+        // dropping the hyphen from `"load-module"` → `"loadmodule"`)
+        // — this pin fires as expected on the `contains` check
+        // before the paired [`UpgradeInstruction::as_str`] match
+        // arm's routing is restored.
+        let fixture = upgrade_instruction_arm_roster();
+        assert_eq!(
+            UpgradeInstruction::WIRE_FORMS.len(),
+            fixture.len(),
+            "UpgradeInstruction::WIRE_FORMS.len() must byte-equal the \
+             shared upgrade_instruction_arm_roster fixture's arm count \
+             — a mismatch means the roster and the enum's arm-set \
+             have drifted"
+        );
+        for (variant, expected_wire) in fixture {
+            let wire = variant.as_str();
+            assert_eq!(
+                wire, expected_wire,
+                "UpgradeInstruction::{variant:?}.as_str() must byte-equal \
+                 the shared upgrade_instruction_arm_roster fixture's \
+                 per-arm wire byte-string"
+            );
+            assert!(
+                UpgradeInstruction::WIRE_FORMS.contains(&wire),
+                "UpgradeInstruction::{variant:?}.as_str() = {wire:?} \
+                 must be a member of UpgradeInstruction::WIRE_FORMS — \
+                 the emitter and the roster have drifted out of lockstep"
+            );
+        }
+        for tag in UpgradeInstruction::WIRE_FORMS {
+            assert!(
+                !tag.starts_with(':'),
+                "UpgradeInstruction::WIRE_FORMS entry {tag:?} must not \
+                 open with a `:` prefix (un-prefixed kebab wire form) \
+                 — a `:` -prefixed entry would collide the roster with \
+                 the tatara-lisp author-surface axis UpgradeInstruction::\
+                 lisp_form emits"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_lisp_and_wire_forms_are_length_aligned() {
+        // Two-axis structural-lockstep pin: the paired
+        // [`UpgradeInstruction::LISP_FORMS`] (tatara-lisp author-
+        // surface, `:` -prefixed) and [`UpgradeInstruction::WIRE_FORMS`]
+        // (un-prefixed kebab wire-form) rosters must always carry the
+        // same arm count. Every arm of the discriminated-union
+        // [`UpgradeInstruction`] enum projects through both accessors
+        // ([`Self::lisp_form`] and [`Self::as_str`]) onto exactly one
+        // entry of each roster by construction of the paired
+        // `M2_UPGRADE_INSTRUCTION_KIND_*` / `M2_UPGRADE_INSTRUCTION_WIRE_*`
+        // const families the two rosters route through; a future arm
+        // addition (`Discard`, `SoftPurgeCoop` / `SoftPurgeForce`, …)
+        // must extend both rosters in lockstep. The individual
+        // [`upgrade_instruction_lisp_forms_covers_every_arm`] and
+        // [`upgrade_instruction_wire_forms_covers_every_arm`] pins
+        // each gate their own roster against the shared fixture; this
+        // pin closes the transitive triangle so a hypothetical shared-
+        // fixture drift that landed identically on one roster but not
+        // the other (or a copy-paste that grew one roster without the
+        // other) trips at caixa-core test time. Peer of the sibling
+        // [`tests::upgrade_instruction_display_matches_as_str_and_not_lisp_form`]
+        // pin on the scalar-accessor pair, extended here onto the
+        // exhaustive-iteration roster pair.
+        assert_eq!(
+            UpgradeInstruction::LISP_FORMS.len(),
+            UpgradeInstruction::WIRE_FORMS.len(),
+            "UpgradeInstruction::LISP_FORMS.len() must byte-equal \
+             UpgradeInstruction::WIRE_FORMS.len() — the two rosters \
+             enumerate the same closed set of enum arms through \
+             different axes, so a length mismatch means one axis's \
+             roster grew without the other and downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
     }
 }
