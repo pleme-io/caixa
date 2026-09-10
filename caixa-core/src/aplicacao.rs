@@ -5637,6 +5637,50 @@ impl RateLimit {
     }
 }
 
+/// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Second`]
+/// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Second`
+/// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
+/// same arm. Peer of [`RATE_LIMIT_UNIT_SUFFIX_MINUTE`] /
+/// [`RATE_LIMIT_UNIT_SUFFIX_HOUR`] on the three-arm canonical-suffix axis
+/// the paired [`RateLimitUnit::SUFFIXES`] roster enumerates — the single
+/// source of truth every consumer that emits or parses the `Second` arm's
+/// canonical author-surface suffix reads, closing the prior open-coded
+/// `"s"` inline string literal against a future rebrand (a hypothetical
+/// `"sec"` disambiguator once a peer `"ms"` sub-second arm lands per
+/// MESH-COMPOSITION §III.2 #3) that would otherwise silently split the
+/// emitter's byte-string from any peer consumer that hard-coded the
+/// pre-rebrand form. Same "one canonical lifted const per arm, every
+/// consumer routes through it" discipline the peer
+/// [`WIT_SHAPE_LABEL_HTTP`] / [`WIT_SHAPE_LABEL_PUBSUB`] /
+/// [`WIT_SHAPE_LABEL_STORE`] / [`WIT_SHAPE_LABEL_CAPABILITY`] lifted
+/// per-arm const family already establishes on the sibling
+/// `:contratos :wit` census-label axis, and the peer
+/// [`crate::render::CAIXA_KIND_LABEL_*`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_*`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_*`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] lifted per-arm const
+/// families already establish on the sibling caixa-core closed-set
+/// typed-enum discriminator axes.
+pub const RATE_LIMIT_UNIT_SUFFIX_SECOND: &str = "s";
+
+/// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Minute`]
+/// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Minute`
+/// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
+/// same arm. Peer of [`RATE_LIMIT_UNIT_SUFFIX_SECOND`] /
+/// [`RATE_LIMIT_UNIT_SUFFIX_HOUR`] on the three-arm canonical-suffix axis
+/// the paired [`RateLimitUnit::SUFFIXES`] roster enumerates; see the
+/// `_SECOND` constant's docstring for the full lift rationale.
+pub const RATE_LIMIT_UNIT_SUFFIX_MINUTE: &str = "m";
+
+/// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Hour`]
+/// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Hour`
+/// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
+/// same arm. Peer of [`RATE_LIMIT_UNIT_SUFFIX_SECOND`] /
+/// [`RATE_LIMIT_UNIT_SUFFIX_MINUTE`] on the three-arm canonical-suffix
+/// axis the paired [`RateLimitUnit::SUFFIXES`] roster enumerates; see the
+/// `_SECOND` constant's docstring for the full lift rationale.
+pub const RATE_LIMIT_UNIT_SUFFIX_HOUR: &str = "h";
+
 /// Typed closed-set enum for the three canonical `:politicas :rate-limit`
 /// `:window` units — `Second` / `Minute` / `Hour` — the `rate_limit_codec`
 /// round-trips losslessly (`"<n>/s"` / `"<n>/m"` / `"<n>/h"`).
@@ -5708,6 +5752,83 @@ impl RateLimitUnit {
     /// build-time guarantee that no arm forgets to grow.
     pub const ALL: &'static [Self] = &[Self::Second, Self::Minute, Self::Hour];
 
+    /// Substrate-canonical exhaustive accept-set on the [`RateLimitUnit`]
+    /// lowercase canonical-suffix byte-string axis — the closed three-arm
+    /// roster of every byte-string [`Self::as_suffix`] returns, routed
+    /// byte-for-byte through the paired [`RATE_LIMIT_UNIT_SUFFIX_SECOND`] /
+    /// [`RATE_LIMIT_UNIT_SUFFIX_MINUTE`] / [`RATE_LIMIT_UNIT_SUFFIX_HOUR`]
+    /// lifted `pub const` roster the [`Self::as_suffix`] emitter (and the
+    /// [`std::fmt::Display`] / [`AsRef<str>`] / `From<{Self,&Self}> for
+    /// {&'static str, String, Cow<'static, str>, Box<str>, Arc<str>}` trait
+    /// triple + quintuple routed through it) walks, and the same three
+    /// strings the paired [`Self::from_suffix`] reverse projection accepts.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::LABELS`] (427fe75) /
+    /// [`WitShape::LABELS`] (9d9f585) rosters on the lowercase kebab
+    /// census-label byte-string axis, the sibling
+    /// [`crate::CaixaKind::WIRE_NAMES`] (bd708bd) /
+    /// [`crate::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`crate::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`PlacementStrategy::WIRE_NAMES`] (3e5b194) rosters on the
+    /// `PascalCase` wire byte-string axis, and the sibling
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) /
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e)
+    /// rosters on the OTP-appup discriminator's two-axis roster split —
+    /// the same closed-set exhaustive-accept-set roster discipline
+    /// extended here onto the M3 `:politicas :rate-limit :window`
+    /// canonical-unit closed-set typed enum on the caixa surface, closing
+    /// the eighth substrate-side closed-set typed enum on the
+    /// roster-discipline axis and the third (and last) M3 mesh-shape
+    /// closed-set typed enum (alongside the peer
+    /// [`PlacementStrategy::WIRE_NAMES`] on the `:placement :estrategia`
+    /// axis and the peer [`WitShape::LABELS`] on the `:contratos :wit`
+    /// census-label axis) to converge onto the discipline.
+    ///
+    /// Downstream consumers of the closed accepted-suffix set — a future
+    /// `feira app graph --by-rate-limit-unit` histogram column whose
+    /// per-arm-header emission walks every arm's canonical suffix to
+    /// render zero-count arms as well as present arms, a future M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook rejection
+    /// body enumerating the accepted-`:politicas :rate-limit` canonical
+    /// suffixes verbatim, a future `feira app policy census`
+    /// per-Aplicacao `:politicas :rate-limit :window` histogram whose
+    /// accept-set enumeration reads the roster verbatim, a future
+    /// `tracing::field::valuable::Value::List` structured-log
+    /// accepted-suffix emit, any future round-trip fuzz harness that
+    /// sweeps every arm's canonical suffix — now reach for one lifted
+    /// substrate-primitive roster rather than open-coding a three-string
+    /// array-literal (`["s", "m", "h"]`) whose arm-set has no
+    /// compile-time link back to the typed [`RateLimitUnit`] enum. A
+    /// future arm addition (a `"d"` day suffix once Envoy's
+    /// `rate_limit_action` grows daily-bucket support, a `"ms"`
+    /// sub-second window once high-throughput per-edge policies come into
+    /// scope per MESH-COMPOSITION §III.2 #3 — both trajectory items the
+    /// sibling [`Self::window_from_suffix`] doc block already names)
+    /// extends this roster as a single edit — paired with the
+    /// [`Self::as_suffix`] match's compiler-checked exhaustiveness on the
+    /// new arm — and every consumer picks up the new canonical suffix by
+    /// construction rather than a coordinated array-literal rewrite
+    /// across every downstream site.
+    ///
+    /// Length is pinned load-bearing at `RateLimitUnit::ALL.len()`
+    /// (three) by [`tests::rate_limit_unit_suffixes_covers_every_arm`],
+    /// every variant's [`Self::as_suffix`] projection is pinned to a
+    /// member of the roster so a silent skew between the emitter's
+    /// arm-set and this const's arm-set trips at caixa-core test time
+    /// rather than at a downstream consumer's accepted-set enumeration
+    /// miss, and every entry is further pinned to open with an ASCII
+    /// lowercase byte so a silent collapse of the canonical-suffix axis
+    /// with any hypothetical peer `PascalCase` discriminator axis (an
+    /// entry byte-identical to a sibling variant's `Debug`-derived
+    /// `PascalCase` byte-string that would let a suffix-axis consumer
+    /// accept the discriminator vocabulary) trips here rather than at a
+    /// downstream K8s-CR round-trip miss.
+    pub const SUFFIXES: &'static [&'static str] = &[
+        RATE_LIMIT_UNIT_SUFFIX_SECOND,
+        RATE_LIMIT_UNIT_SUFFIX_MINUTE,
+        RATE_LIMIT_UNIT_SUFFIX_HOUR,
+    ];
+
     /// Canonical author-surface suffix — the `"s"` / `"m"` / `"h"` byte-
     /// string every `<n>/<unit>` rate-limit shape carries after its
     /// `/` separator. The single source of truth the codec's parse and
@@ -5715,12 +5836,24 @@ impl RateLimitUnit {
     /// suffix against every [`RateLimitUnit::ALL`] entry's `as_suffix`
     /// output; the render arm emits the entry's `as_suffix` verbatim
     /// after the rate magnitude.
+    ///
+    /// The three arms return the paired [`RATE_LIMIT_UNIT_SUFFIX_SECOND`] /
+    /// [`RATE_LIMIT_UNIT_SUFFIX_MINUTE`] / [`RATE_LIMIT_UNIT_SUFFIX_HOUR`]
+    /// lifted constants so every substrate consumer that dispatches on
+    /// the unit's canonical suffix reads the same byte-string the paired
+    /// [`Self::from_suffix`] reverse projection accepts and the sibling
+    /// [`Self::SUFFIXES`] roster enumerates — a future rebrand of the
+    /// suffix byte-strings reaches this emitter, the paired reverse
+    /// projection, the roster, and every trait impl routed through the
+    /// emitter through one caixa-core edit rather than a coordinated
+    /// per-arm inline-literal rewrite that would silently split the
+    /// surfaces on any missed site.
     #[must_use]
     pub const fn as_suffix(self) -> &'static str {
         match self {
-            Self::Second => "s",
-            Self::Minute => "m",
-            Self::Hour => "h",
+            Self::Second => RATE_LIMIT_UNIT_SUFFIX_SECOND,
+            Self::Minute => RATE_LIMIT_UNIT_SUFFIX_MINUTE,
+            Self::Hour => RATE_LIMIT_UNIT_SUFFIX_HOUR,
         }
     }
 
@@ -28521,6 +28654,129 @@ mod tests {
             ],
             "RateLimitUnit::ALL must enumerate every arm exactly once, \
              in canonical shortest-to-longest window order"
+        );
+    }
+
+    #[test]
+    fn rate_limit_unit_suffixes_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`RateLimitUnit::SUFFIXES`] exhaustive accept-set roster on the
+        // lowercase canonical-suffix byte-string axis: every variant of
+        // the sibling [`RateLimitUnit::ALL`] exhaustive-iteration surface
+        // must project through [`RateLimitUnit::as_suffix`] onto an entry
+        // the [`RateLimitUnit::SUFFIXES`] roster carries, and the roster's
+        // length must byte-equal `RateLimitUnit::ALL.len()` so a silent
+        // skew between the [`RateLimitUnit::as_suffix`] match's arm-set
+        // and the roster's arm-set trips here at caixa-core test time
+        // rather than at a downstream `feira app graph
+        // --by-rate-limit-unit` histogram column's zero-count-arm miss /
+        // a future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-
+        // webhook rejection body's accepted-suffix enumeration miss / a
+        // `tracing::field::valuable::Value::List` structured-log accepted-
+        // suffix emit's drift. A future arm addition (a `"d"` day suffix
+        // once Envoy's `rate_limit_action` grows daily-bucket support, a
+        // `"ms"` sub-second window once high-throughput per-edge policies
+        // come into scope per MESH-COMPOSITION §III.2 #3 — both
+        // trajectory items the sibling
+        // [`RateLimitUnit::window_from_suffix`] doc block already names)
+        // extends [`RateLimitUnit::ALL`] as a single edit and this pin
+        // sweeps the new arm by iteration; the paired
+        // [`RateLimitUnit::SUFFIXES`] roster must grow in lockstep or
+        // this assertion trips. Every entry is further pinned to open
+        // with an ASCII lowercase byte so a silent collapse of the
+        // canonical-suffix axis with any hypothetical peer PascalCase
+        // discriminator axis (an entry byte-identical to a sibling
+        // variant's `Debug`-derived PascalCase byte-string that would let
+        // a suffix-axis consumer accept the discriminator vocabulary)
+        // trips here rather than at a downstream consumer's
+        // vocabulary-collision miss.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_labels_covers_every_arm`]
+        // (427fe75) pin on the top-level typed-kind discriminator's
+        // lowercase-Portuguese human-readable label axis, the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`crate::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`crate::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`placement_strategy_wire_names_covers_every_arm`] (3e5b194)
+        // pins on the `PascalCase` wire byte-string axes, the sibling
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) /
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) pins on the OTP-appup discriminator's two-axis
+        // roster split, and the sibling
+        // [`wit_shape_labels_covers_every_arm`] (9d9f585) pin on the
+        // `:contratos :wit` census-label axis — the same closed-set
+        // exhaustive-roster coverage discipline extended here onto the
+        // M3 `:politicas :rate-limit :window` canonical-unit closed-set
+        // typed enum, the eighth substrate-side closed-set typed enum on
+        // the roster axis and the third (and last) M3 mesh-shape
+        // closed-set typed enum to converge onto the discipline.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm of
+        // the paired [`RATE_LIMIT_UNIT_SUFFIX_*`] const family (e.g.
+        // rebranding `RATE_LIMIT_UNIT_SUFFIX_MINUTE` from `"m"` to
+        // `"min"`) — the length pin still passes but the exact-declaration-
+        // order pin fires on the mutated arm; and by shortening the
+        // roster to two entries — the length pin fires first.
+        assert_eq!(
+            super::RateLimitUnit::SUFFIXES.len(),
+            super::RateLimitUnit::ALL.len(),
+            "RateLimitUnit::SUFFIXES.len() must byte-equal \
+             RateLimitUnit::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers that \
+             fan through both will silently disagree on the accepted \
+             arm-set"
+        );
+        for &variant in super::RateLimitUnit::ALL {
+            let suffix = variant.as_suffix();
+            assert!(
+                super::RateLimitUnit::SUFFIXES.contains(&suffix),
+                "RateLimitUnit::{variant:?}.as_suffix() = {suffix:?} must \
+                 be a member of RateLimitUnit::SUFFIXES — the emitter and \
+                 the roster have drifted out of lockstep"
+            );
+        }
+        for tag in super::RateLimitUnit::SUFFIXES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "RateLimitUnit::SUFFIXES entry {tag:?} must be a \
+                     non-empty lowercase canonical-suffix byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "RateLimitUnit::SUFFIXES entry {tag:?} must open with \
+                 an ASCII lowercase byte (lowercase canonical-suffix \
+                 form) — an uppercase entry would collide the roster \
+                 with any hypothetical peer PascalCase discriminator \
+                 axis a downstream consumer might disambiguate against"
+            );
+        }
+        // Pin the exact three-arm roster in declaration order so a
+        // silent reorder of the roster (that would still satisfy the
+        // length + membership + case-shape probes above) splits the
+        // paired [`RateLimitUnit::ALL`] iteration order from every
+        // consumer that walks SUFFIXES in lockstep. Compared against
+        // literal byte-strings (not through the
+        // [`RATE_LIMIT_UNIT_SUFFIX_*`] const indirection) so a future
+        // rebrand of any per-arm const surfaces at this pin as well — a
+        // rebrand that flips only the const's definition without a
+        // paired literal edit here trips the assertion, closing the
+        // sibling-test drift-detection posture (the
+        // [`rate_limit_unit_from_suffix_and_as_suffix_round_trip`] and
+        // [`rate_limit_unit_display_routes_through_as_suffix`] pins on
+        // the peer surfaces) with a same-test byte-value witness.
+        assert_eq!(
+            super::RateLimitUnit::SUFFIXES,
+            &["s", "m", "h"],
+            "RateLimitUnit::SUFFIXES must enumerate the canonical suffix \
+             byte-strings in declaration order — a silent reorder or \
+             rebrand splits the paired [`RateLimitUnit::ALL`] iteration \
+             order from every consumer that walks SUFFIXES in lockstep"
         );
     }
 
