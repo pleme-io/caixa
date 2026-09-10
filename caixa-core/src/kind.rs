@@ -124,6 +124,90 @@ impl CaixaKind {
         matches!(self, Self::Acao)
     }
 
+    /// Substrate-canonical exhaustive accept-set on the [`CaixaKind`]
+    /// `PascalCase` wire byte-string axis — the closed six-arm roster of
+    /// every un-`rename`d byte-string [`Self::wire_name`] emits, routed
+    /// byte-for-byte through the paired
+    /// [`crate::render::CAIXA_KIND_WIRE_BIBLIOTECA`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_BINARIO`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_SERVICO`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_SUPERVISOR`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_APLICACAO`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_ACAO`] lifted `pub const` roster
+    /// the [`Self::wire_name`] emitter walks — and byte-for-byte the
+    /// same six strings the un-`rename`d `Serialize` derive carries on
+    /// every K8s-CR JSON / YAML round-trip and the paired
+    /// [`Self::from_wire`] parser accepts.
+    ///
+    /// Peer of the sibling
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e) roster
+    /// on the OTP-appup wire-form axis and its paired
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) roster
+    /// on the tatara-lisp author-surface form axis — the same
+    /// exhaustive-accept-set roster discipline `UpgradeInstruction`
+    /// closed on its five-arm OTP-appup discriminator is now extended
+    /// onto the structurally most fundamental caixa-core enum (every
+    /// caixa carries a `:kind`). Companion to the sibling [`Self::ALL`]
+    /// exhaustive-iteration surface on the variant axis: where `ALL`
+    /// enumerates the six typed variants, this const enumerates the
+    /// six wire byte-strings the paired [`Self::wire_name`] emitter
+    /// projects each variant onto — the two rosters carry the same
+    /// closed set of arms through different axes, and the paired
+    /// [`tests::caixa_kind_wire_names_covers_every_arm`] pin gates the
+    /// two rosters against each other so a silent skew between the
+    /// variant set and the wire-string set trips at caixa-core test
+    /// time rather than at a downstream K8s-CR admission-webhook
+    /// rejection body's accepted-set enumeration miss.
+    ///
+    /// Consumers today (and future): the future M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection
+    /// body enumerating the accepted `:kind` `PascalCase` byte-string set
+    /// verbatim on an unknown-tag miss (the six wire tags the JSON /
+    /// YAML payload carries, not the lowercase Portuguese diagnostic
+    /// form the sibling [`Self::as_str`] emits), a future `feira --kind
+    /// …` CLI arg-parse's "did you mean" hint that scans this slice
+    /// rather than open-coding the six literal `PascalCase` strings, a
+    /// future `feira app graph` per-Aplicacao `:kind`-histogram column
+    /// that walks the roster to render every arm's tally (including
+    /// zero-count arms — a hand-rolled projection off `ALL` alone would
+    /// need a companion per-variant-to-wire map at every consumer;
+    /// this roster closes the two-axis walk in one lifted const), any
+    /// future K8s CRD generation tool that emits the accepted-set enum
+    /// on the Caixa CR schema — every consumer that wants to enumerate
+    /// the closed `PascalCase` wire kind-tag set outside caixa-core now
+    /// reaches for one lifted substrate-primitive roster rather than
+    /// open-coding a `["Biblioteca", "Binario", "Servico",
+    /// "Supervisor", "Aplicacao", "Acao"]` array-literal whose arm-set
+    /// has no compile-time link back to the typed [`CaixaKind`] enum.
+    /// A future variant addition (an `Actor` virtual-actor arm the
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// M5 Orleans-inspired kind reaches through) extends this roster as
+    /// a single edit — paired with the [`Self::wire_name`] match's
+    /// compiler-checked exhaustiveness on the new arm — and every
+    /// consumer picks up the new tag by construction rather than a
+    /// coordinated array-literal rewrite across every downstream site.
+    ///
+    /// Length is pinned load-bearing at `CaixaKind::ALL.len()` (six) by
+    /// [`tests::caixa_kind_wire_names_covers_every_arm`], and every
+    /// entry is pinned to a member of the roster on every arm so a
+    /// silent skew between the [`Self::wire_name`] match's arm-set and
+    /// this const's arm-set trips at caixa-core test time rather than
+    /// at a downstream admission-webhook rejection body's accepted-set
+    /// enumeration miss. Every entry is further pinned to open with an
+    /// ASCII uppercase byte so a silent collapse of the two axes (an
+    /// entry byte-identical to a sibling [`Self::as_str`] lowercase-
+    /// Portuguese label that would let a wire-axis consumer accept the
+    /// human-readable diagnostic byte-string) trips here rather than at
+    /// a downstream K8s-CR round-trip miss.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        crate::render::CAIXA_KIND_WIRE_BIBLIOTECA,
+        crate::render::CAIXA_KIND_WIRE_BINARIO,
+        crate::render::CAIXA_KIND_WIRE_SERVICO,
+        crate::render::CAIXA_KIND_WIRE_SUPERVISOR,
+        crate::render::CAIXA_KIND_WIRE_APLICACAO,
+        crate::render::CAIXA_KIND_WIRE_ACAO,
+    ];
+
     /// Substrate-canonical per-[`CaixaKind`] PascalCase wire byte-string
     /// every consumer that emits the Caixa's `:kind` axis onto a wire
     /// surface outside the caixa-core boundary keys off — returns the
@@ -3627,5 +3711,88 @@ mod tests {
              `From<CaixaKind> for std::sync::Arc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    fn caixa_kind_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`CaixaKind::WIRE_NAMES`] exhaustive accept-set roster on the
+        // PascalCase wire byte-string axis: every variant of the sibling
+        // [`CaixaKind::ALL`] exhaustive-iteration surface must project
+        // through [`CaixaKind::wire_name`] onto an entry the
+        // [`CaixaKind::WIRE_NAMES`] roster carries, and the roster's
+        // length must byte-equal `CaixaKind::ALL.len()` so a silent
+        // skew between the [`CaixaKind::wire_name`] match's arm-set
+        // and the roster's arm-set trips here at caixa-core test time
+        // rather than at a downstream M4
+        // `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection
+        // body's wire-form `:kind` accepted-set enumeration miss / a
+        // fleet-side operator's per-cluster catalog enumeration miss /
+        // a `feira --kind …` "did you mean" hint drift. A future arm
+        // addition (an `Actor` virtual-actor arm the M5 Orleans-
+        // inspired kind reaches through — the candidate future arm
+        // named in the sibling [`CaixaKind::from_wire`] doc block)
+        // extends [`CaixaKind::ALL`] as a single edit and this pin
+        // sweeps the new arm by iteration; the paired
+        // [`CaixaKind::WIRE_NAMES`] roster must grow in lockstep or
+        // this assertion trips. Every entry is further pinned to open
+        // with an ASCII uppercase byte so a silent collapse of the two
+        // axes (an entry byte-identical to a sibling
+        // [`CaixaKind::as_str`] lowercase-Portuguese label that would
+        // let a wire-axis consumer accept the human-readable diagnostic
+        // byte-string) trips here rather than at a downstream K8s-CR
+        // round-trip miss.
+        //
+        // Peer of the sibling
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) and
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) pins on the OTP-appup discriminator's wire and
+        // author-surface roster axes — the same closed-set-roster
+        // exhaustive-coverage discipline extended here onto the
+        // structurally most fundamental caixa-core enum.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`crate::render::CAIXA_KIND_WIRE_*`] const
+        // family (e.g. dropping the trailing `a` from `"Biblioteca"`
+        // → `"Bibliotec"`) — the length pin still passes but the
+        // `contains` check fires on the mutated arm; and by shortening
+        // the roster to five entries — the length pin fires first.
+        assert_eq!(
+            CaixaKind::WIRE_NAMES.len(),
+            CaixaKind::ALL.len(),
+            "CaixaKind::WIRE_NAMES.len() must byte-equal \
+             CaixaKind::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; the two rosters \
+             enumerate the same closed six-arm set through different \
+             axes (variant vs. wire byte-string) and downstream \
+             consumers that fan through both will silently disagree \
+             on the accepted arm-set"
+        );
+        for &variant in CaixaKind::ALL {
+            let wire = variant.wire_name();
+            assert!(
+                CaixaKind::WIRE_NAMES.contains(&wire),
+                "CaixaKind::{variant:?}.wire_name() = {wire:?} must be \
+                 a member of CaixaKind::WIRE_NAMES — the emitter and \
+                 the roster have drifted out of lockstep"
+            );
+        }
+        for tag in CaixaKind::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "CaixaKind::WIRE_NAMES entry {tag:?} must be a \
+                     non-empty PascalCase byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_uppercase(),
+                "CaixaKind::WIRE_NAMES entry {tag:?} must open with an \
+                 ASCII uppercase byte (PascalCase wire form) — a \
+                 lowercase entry would collide the roster with the \
+                 sibling CaixaKind::as_str lowercase-Portuguese label \
+                 axis"
+            );
+        }
     }
 }
