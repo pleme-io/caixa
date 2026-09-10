@@ -2,6 +2,69 @@ use caixa_ast::Span;
 use caixa_theme::{Semantic, Theme};
 use serde::{Deserialize, Serialize};
 
+/// Substrate-canonical `"error"` lowercase wire-form tag for
+/// [`Severity::Error`] — the one canonical byte-string the paired
+/// forward emitter [`Severity::as_str`], the paired reverse parser
+/// [`Severity::from_wire`], and the paired exhaustive-roster
+/// [`Severity::WIRE_NAMES`] axis all route through, so a future
+/// rebrand of the tag (an `"err"` shortening, an operator-vocabulary
+/// migration for a future `feira lint --list-severities` per-arm
+/// listing, a per-arm slug tightening the rulebook grows) reaches
+/// every one of the sibling substrate-primitive dispatches through a
+/// single caixa-lint edit here — not an open-coded three-site
+/// parallel-maintained inline byte-string. Peer of
+/// [`CAIXA_LINT_SEVERITY_WIRE_WARNING`] /
+/// [`CAIXA_LINT_SEVERITY_WIRE_INFO`] /
+/// [`CAIXA_LINT_SEVERITY_WIRE_HINT`] on the four-arm caixa-lint
+/// diagnostic-severity canonical-lowercase wire-form axis.
+///
+/// Same closed-set lifted-const discipline as the sibling caixa-arch
+/// invariant-severity axis'
+/// [`caixa_arch::invariants::CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] /
+/// [`caixa_arch::invariants::CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE`] /
+/// [`caixa_arch::invariants::CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT`]
+/// (78f5522) and the sibling caixa-arch verdict-outcome axis'
+/// [`caixa_arch::report::CAIXA_ARCH_VERDICT_WIRE_PROVEN`] /
+/// [`caixa_arch::report::CAIXA_ARCH_VERDICT_WIRE_REJECTED`] (ebddef0)
+/// paired-const families carry — extends the paired substrate-primitive
+/// wire-form lift onto the third outside-caixa-core closed-set
+/// fieldless typed enum on the caixa surface (the caixa-lint
+/// diagnostic-severity axis, and the first inside `caixa-lint`).
+///
+/// Pinned load-bearing at the substrate-primitive level by
+/// [`tests::severity_wire_names_covers_every_arm`] (paired roster
+/// coverage pin closing this const family into
+/// [`Severity::WIRE_NAMES`]).
+pub const CAIXA_LINT_SEVERITY_WIRE_ERROR: &str = "error";
+
+/// Substrate-canonical `"warning"` lowercase wire-form tag for
+/// [`Severity::Warning`] — peer of [`CAIXA_LINT_SEVERITY_WIRE_ERROR`]
+/// on the four-arm caixa-lint diagnostic-severity canonical-lowercase
+/// wire-form axis. See [`CAIXA_LINT_SEVERITY_WIRE_ERROR`] for the full
+/// lift rationale.
+pub const CAIXA_LINT_SEVERITY_WIRE_WARNING: &str = "warning";
+
+/// Substrate-canonical `"info"` lowercase wire-form tag for
+/// [`Severity::Info`] — peer of [`CAIXA_LINT_SEVERITY_WIRE_ERROR`] on
+/// the four-arm caixa-lint diagnostic-severity canonical-lowercase
+/// wire-form axis. See [`CAIXA_LINT_SEVERITY_WIRE_ERROR`] for the full
+/// lift rationale.
+pub const CAIXA_LINT_SEVERITY_WIRE_INFO: &str = "info";
+
+/// Substrate-canonical `"hint"` lowercase wire-form tag for
+/// [`Severity::Hint`] — peer of [`CAIXA_LINT_SEVERITY_WIRE_ERROR`] on
+/// the four-arm caixa-lint diagnostic-severity canonical-lowercase
+/// wire-form axis. Byte-identical to the sibling
+/// `caixa_arch::invariants::CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT`
+/// `"hint"` const and the peer `caixa_theme::Semantic::as_str`
+/// `"hint"` arm — a coincidence of lowercase-tag choice on the three
+/// axes, not a typed cross-axis promise, so the sibling
+/// [`Severity::from_wire`] rejection-witness pin refuses the non-shared
+/// caixa-arch invariant-severity arms (`"safety"` / `"compliance"`)
+/// to prevent a silent accept-set collapse across the two axes; see
+/// [`CAIXA_LINT_SEVERITY_WIRE_ERROR`] for the full lift rationale.
+pub const CAIXA_LINT_SEVERITY_WIRE_HINT: &str = "hint";
+
 /// The four-arm diagnostic-severity discriminator every rule attaches
 /// to its emitted [`Diagnostic`] via [`Diagnostic::severity`] — the
 /// closed-set typed enum every consumer of the linter's severity axis
@@ -80,13 +143,82 @@ impl Severity {
     /// ordering every listing / rendering consumer defers to.
     pub const ALL: &'static [Self] = &[Self::Error, Self::Warning, Self::Info, Self::Hint];
 
+    /// Substrate-canonical exhaustive accept-set roster of every
+    /// canonical-lowercase wire-form byte-string
+    /// [`Severity::as_str`] emits — routed byte-for-byte through the
+    /// paired [`CAIXA_LINT_SEVERITY_WIRE_ERROR`] /
+    /// [`CAIXA_LINT_SEVERITY_WIRE_WARNING`] /
+    /// [`CAIXA_LINT_SEVERITY_WIRE_INFO`] /
+    /// [`CAIXA_LINT_SEVERITY_WIRE_HINT`] lifted `pub const` scalars in
+    /// variant declaration order (`Error` → `Warning` → `Info` →
+    /// `Hint`), so every future consumer that enumerates the
+    /// caixa-lint diagnostic-severity axis's accept-set (a future
+    /// `feira lint --list-severities` CLI-side enumeration of the
+    /// accepted severity tags, a future
+    /// `feira lint --severity <error|warning|info|hint>` CLI arg-parse's
+    /// "did you mean" hint on an unknown-tag miss, a future M4
+    /// `mesh.pleme.io/v1alpha1/LintReport` CR admission-webhook
+    /// rejection body enumerating accepted per-severity wire-form slugs
+    /// on an unknown-tag miss, a future `feira lint` per-severity
+    /// histogram column that walks the roster to render every arm's
+    /// tally including zero-count arms, a future
+    /// `tracing::field::valuable::Value::List` structured-log accepted-
+    /// severity emit on the runner's per-diagnostic emission path)
+    /// reaches one lifted substrate-primitive roster rather than open-
+    /// coding a `["error", "warning", "info", "hint"]` four-string
+    /// array literal whose arm-set has no compile-time link back to
+    /// the typed [`Severity`] enum.
+    ///
+    /// Peer of the sibling closed-set fieldless typed enums'
+    /// [`caixa_core::CaixaKind::WIRE_NAMES`] (bd708bd) /
+    /// [`caixa_core::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`caixa_core::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194) /
+    /// [`caixa_core::render::PathShapeViolation::WIRE_NAMES`] (0330bd3) /
+    /// [`caixa_core::CaixaDialeto::WIRE_NAMES`] (0402726) /
+    /// `caixa_arch::invariants::InvariantKind::WIRE_NAMES` (78f5522) /
+    /// `caixa_arch::report::ArchVerdict::WIRE_NAMES` (ebddef0) rosters
+    /// on the peer wire-side exhaustive-roster axes — the third
+    /// outside-`caixa-core` closed-set fieldless typed enum on the
+    /// caixa surface (and the first inside `caixa-lint`) to converge
+    /// onto the same one-canonical-arm-list-per-enum discipline. Order
+    /// matches variant declaration order verbatim (`Error` → `Warning`
+    /// → `Info` → `Hint`) so the slice is the canonical severity
+    /// ordering every listing / rendering consumer defers to.
+    ///
+    /// A future variant addition (a `Debug` tier below [`Self::Hint`]
+    /// once verbose per-node lint traces enter scope, a `Critical`
+    /// tier above [`Self::Error`] the M3-and-later LSP surfaces for
+    /// build-halting failures — both trajectory items the sibling
+    /// [`Severity::ALL`] doc block already names) extends this roster
+    /// as a single edit and every consumer picks up the new entry by
+    /// construction; the paired
+    /// [`tests::severity_wire_names_covers_every_arm`] pin's length /
+    /// membership / declaration-order / round-trip gates keep the
+    /// roster, the emitter [`Severity::as_str`], and the parser
+    /// [`Severity::from_wire`] in structural lockstep by construction.
+    ///
+    /// The three outside-`caixa-core` peer rosters
+    /// (`InvariantKind::WIRE_NAMES`, `ArchVerdict::WIRE_NAMES`, this
+    /// lift) all consume the identity forward-parse round-trip; the
+    /// three remaining outside-`caixa-core` closed-set fieldless typed
+    /// enums (`caixa_lint::FixSafety`, `caixa_theme::Semantic`,
+    /// `caixa_provedor::FerriteRuntime`) remain the next natural peers
+    /// on the roster axis.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        CAIXA_LINT_SEVERITY_WIRE_ERROR,
+        CAIXA_LINT_SEVERITY_WIRE_WARNING,
+        CAIXA_LINT_SEVERITY_WIRE_INFO,
+        CAIXA_LINT_SEVERITY_WIRE_HINT,
+    ];
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Error => "error",
-            Self::Warning => "warning",
-            Self::Info => "info",
-            Self::Hint => "hint",
+            Self::Error => CAIXA_LINT_SEVERITY_WIRE_ERROR,
+            Self::Warning => CAIXA_LINT_SEVERITY_WIRE_WARNING,
+            Self::Info => CAIXA_LINT_SEVERITY_WIRE_INFO,
+            Self::Hint => CAIXA_LINT_SEVERITY_WIRE_HINT,
         }
     }
 
@@ -157,10 +289,10 @@ impl Severity {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "error" => Some(Self::Error),
-            "warning" => Some(Self::Warning),
-            "info" => Some(Self::Info),
-            "hint" => Some(Self::Hint),
+            CAIXA_LINT_SEVERITY_WIRE_ERROR => Some(Self::Error),
+            CAIXA_LINT_SEVERITY_WIRE_WARNING => Some(Self::Warning),
+            CAIXA_LINT_SEVERITY_WIRE_INFO => Some(Self::Info),
+            CAIXA_LINT_SEVERITY_WIRE_HINT => Some(Self::Hint),
             _ => None,
         }
     }
@@ -7031,6 +7163,162 @@ mod tests {
                  forward emit and reverse parse share the same two \
                  inline canonical-lowercase byte-strings by \
                  construction, so the round-trip composes directly)"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::Severity::WIRE_NAMES`] exhaustive accept-set roster
+        // on the caixa-lint diagnostic-severity lowercase wire-form
+        // axis: every variant of the sibling [`super::Severity::ALL`]
+        // exhaustive-iteration surface must project through
+        // [`super::Severity::as_str`] onto an entry the
+        // [`super::Severity::WIRE_NAMES`] roster carries, and the
+        // roster's length must byte-equal `super::Severity::ALL.len()`
+        // so a silent skew between the [`super::Severity::as_str`]
+        // match's arm-set and the roster's arm-set trips here at
+        // caixa-lint test time rather than at a downstream `feira lint
+        // --list-severities` per-arm listing / M4 admission-webhook
+        // rejection-body accepted-tag enumeration miss / structured-log
+        // accepted-wire-form emit drift.
+        //
+        // A future arm addition (a `Debug` tier below
+        // [`super::Severity::Hint`] once verbose per-node lint traces
+        // enter scope, a `Critical` tier above [`super::Severity::Error`]
+        // the M3-and-later LSP surfaces for build-halting failures —
+        // both trajectory items the sibling [`super::Severity::ALL`]
+        // doc block already names) extends [`super::Severity::ALL`] as
+        // a single edit and this pin sweeps the new arm by iteration;
+        // the paired [`super::Severity::WIRE_NAMES`] roster must grow
+        // in lockstep or this assertion trips. Every entry is further
+        // pinned to open with a lowercase ASCII byte (matching the
+        // substrate-wide lowercase-tag convention every peer closed-set
+        // enum whose canonical projection is a lowercase-tag byte-
+        // string carries), so a silent collapse of the caixa-lint
+        // diagnostic-severity axis with any hypothetical PascalCase
+        // peer wire-form axis (an entry byte-identical to the pre-lift
+        // Debug-derived `"Error"` / `"Warning"` / `"Info"` / `"Hint"`
+        // shapes that would let a wire-axis consumer accept the
+        // source-side variant identifier) trips here rather than at a
+        // downstream lint-report round-trip miss.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`caixa_core::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`caixa_core::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`caixa_core::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194) /
+        // [`caixa_core::render::tests::path_shape_violation_wire_names_covers_every_arm`]
+        // (0330bd3) /
+        // [`caixa_core::dialeto::tests::caixa_dialeto_wire_names_covers_every_arm`]
+        // (0402726) /
+        // `caixa_arch::invariants::tests::invariant_kind_wire_names_covers_every_arm`
+        // (78f5522) /
+        // `caixa_arch::report::tests::arch_verdict_wire_names_covers_every_arm`
+        // (ebddef0) pins — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the *third outside*-
+        // caixa-core closed-set fieldless typed enum on the caixa
+        // surface (the caixa-lint diagnostic-severity axis, and the
+        // first inside `caixa-lint`), the fourteenth substrate-side
+        // closed-set typed enum on the roster axis.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired `CAIXA_LINT_SEVERITY_WIRE_*` const family
+        // (e.g. rebranding `CAIXA_LINT_SEVERITY_WIRE_WARNING` from
+        // `"warning"` to `"warn"`) — the length pin still passes but
+        // the `contains` check fires on the mutated arm; and by
+        // shortening the roster to three entries — the length pin
+        // fires first.
+        assert_eq!(
+            super::Severity::WIRE_NAMES.len(),
+            super::Severity::ALL.len(),
+            "Severity::WIRE_NAMES.len() must byte-equal \
+             Severity::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in super::Severity::ALL {
+            let wire = variant.as_str();
+            assert!(
+                super::Severity::WIRE_NAMES.contains(&wire),
+                "Severity::{variant:?}.as_str() = {wire:?} must be a \
+                 member of Severity::WIRE_NAMES — the emitter and \
+                 the roster have drifted out of lockstep"
+            );
+        }
+        for tag in super::Severity::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "Severity::WIRE_NAMES entry {tag:?} must be a \
+                     non-empty lowercase-tag byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "Severity::WIRE_NAMES entry {tag:?} must open with a \
+                 lowercase ASCII byte (matching the substrate-wide \
+                 lowercase-tag convention every peer closed-set enum \
+                 whose canonical projection is a lowercase-tag byte-\
+                 string carries) — an entry opening with an uppercase \
+                 byte would collide the roster with any hypothetical \
+                 peer PascalCase wire-form axis a downstream consumer \
+                 might disambiguate against (the pre-lift Debug-\
+                 derived `\"Error\"` / `\"Warning\"` / `\"Info\"` / \
+                 `\"Hint\"` shapes)"
+            );
+        }
+        // Pin the exact four-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `CAIXA_LINT_SEVERITY_WIRE_*` constants (a rebrand of the
+        // arm-tag mapping that leaves both the length pin and the
+        // membership pin passing on their own) trips at caixa-lint
+        // test time under `assert_eq!`. Order matches variant
+        // declaration order verbatim (`Error` → `Warning` → `Info` →
+        // `Hint`) so the roster is the canonical severity ordering
+        // every listing / rendering consumer defers to. Same
+        // declaration-order pin the sibling
+        // `caixa_arch::invariants::tests::invariant_kind_wire_names_covers_every_arm`
+        // (78f5522) /
+        // `caixa_arch::report::tests::arch_verdict_wire_names_covers_every_arm`
+        // (ebddef0) close on the peer caixa-arch axes.
+        assert_eq!(
+            super::Severity::WIRE_NAMES,
+            &[
+                super::CAIXA_LINT_SEVERITY_WIRE_ERROR,
+                super::CAIXA_LINT_SEVERITY_WIRE_WARNING,
+                super::CAIXA_LINT_SEVERITY_WIRE_INFO,
+                super::CAIXA_LINT_SEVERITY_WIRE_HINT,
+            ],
+            "Severity::WIRE_NAMES must enumerate every arm's wire-form \
+             tag exactly once, in variant declaration order (Error → \
+             Warning → Info → Hint)"
+        );
+        // Byte-parity pin on the paired reverse projection: every
+        // entry in the roster must round-trip cleanly through
+        // [`super::Severity::from_wire`] back to the same arm the
+        // [`super::Severity::as_str`] emitter returned it for.
+        // Refuses any future de-lift that swaps the four consts
+        // through the reverse projection out of lockstep with the
+        // forward emitter (a mid-arm rebrand touching only `as_str`
+        // but not `from_wire`, an argument-ordering swap on one of the
+        // match arms, a stray `to_lowercase` normalization on either
+        // side that would silently pass the identity round-trip on
+        // the already-lowercase corpus but split the two projections
+        // on any future non-lowercase input).
+        for (&variant, tag) in super::Severity::ALL.iter().zip(super::Severity::WIRE_NAMES) {
+            assert_eq!(
+                super::Severity::from_wire(tag),
+                Some(variant),
+                "Severity::from_wire({tag:?}) must round-trip back to \
+                 Severity::{variant:?} — emitter and parser have \
+                 drifted off the paired CAIXA_LINT_SEVERITY_WIRE_* \
+                 const family"
             );
         }
     }

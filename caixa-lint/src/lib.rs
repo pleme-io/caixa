@@ -34,7 +34,10 @@ pub mod rule;
 pub mod rules;
 pub mod runner;
 
-pub use diagnostic::{Diagnostic, Edit, Fix, FixSafety, Severity};
+pub use diagnostic::{
+    CAIXA_LINT_SEVERITY_WIRE_ERROR, CAIXA_LINT_SEVERITY_WIRE_HINT, CAIXA_LINT_SEVERITY_WIRE_INFO,
+    CAIXA_LINT_SEVERITY_WIRE_WARNING, Diagnostic, Edit, Fix, FixSafety, Severity,
+};
 pub use lisp_config::{CustomRule, LintConfigLisp, RuleOverride};
 pub use rule::{Rule, RuleCheck};
 pub use rules::all_rules;
