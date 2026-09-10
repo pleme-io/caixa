@@ -208,6 +208,87 @@ impl CaixaKind {
         crate::render::CAIXA_KIND_WIRE_ACAO,
     ];
 
+    /// Substrate-canonical exhaustive accept-set on the [`CaixaKind`]
+    /// lowercase-Portuguese human-readable label axis — the closed
+    /// six-arm roster of every byte-string [`Self::as_str`] returns,
+    /// routed byte-for-byte through the paired
+    /// [`crate::render::CAIXA_KIND_LABEL_BIBLIOTECA`] /
+    /// [`crate::render::CAIXA_KIND_LABEL_BINARIO`] /
+    /// [`crate::render::CAIXA_KIND_LABEL_SERVICO`] /
+    /// [`crate::render::CAIXA_KIND_LABEL_SUPERVISOR`] /
+    /// [`crate::render::CAIXA_KIND_LABEL_APLICACAO`] /
+    /// [`crate::render::CAIXA_KIND_LABEL_ACAO`] lifted `pub const` roster
+    /// the [`Self::as_str`] emitter (and the [`std::fmt::Display`] /
+    /// [`AsRef<str>`] / `From<Self|&Self> for {&'static str, String,
+    /// Cow<'static, str>, Box<str>, Arc<str>}` trait triple + quintuple
+    /// routed through it) walks — and byte-for-byte the same six strings
+    /// the sibling [`std::fmt::Display`] impl emits.
+    ///
+    /// Second corner on the two-axis roster split for the structurally
+    /// most fundamental caixa-core enum: where the sibling
+    /// [`Self::WIRE_NAMES`] (bd708bd) enumerates the six `PascalCase` wire
+    /// byte-strings [`Self::wire_name`] emits, this const enumerates the
+    /// six lowercase-Portuguese human-readable label byte-strings
+    /// [`Self::as_str`] emits — the two rosters carry the same closed set
+    /// of arms through the two-axis split the sibling
+    /// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+    /// pin already makes load-bearing (wire byte-string ≠ human-readable
+    /// label; the split is by design, not drift). Peer of the sibling
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) roster
+    /// on the OTP-appup author-surface form axis and
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e) roster
+    /// on the wire-form axis — the same paired two-axis exhaustive-
+    /// accept-set roster discipline extended onto the top-level
+    /// [`CaixaKind`] discriminator.
+    ///
+    /// Consumers today (and future): a future `feira app graph`
+    /// per-Aplicacao `:kind`-histogram column that wants to walk every
+    /// arm's human-readable label to render zero-count arms as well as
+    /// present arms (a hand-rolled projection off `ALL` alone would need
+    /// a companion per-variant-to-label map at every consumer site; this
+    /// roster closes the two-axis walk in one lifted const), a future
+    /// wasm-operator per-reconcile-step diagnostic log line that
+    /// enumerates the six accepted human-readable labels on an
+    /// unknown-kind rejection (rejection body reaches for one lifted
+    /// substrate-primitive roster rather than open-coding a
+    /// `["biblioteca", "binario", "servico", "supervisor", "aplicacao",
+    /// "acao"]` array-literal whose arm-set has no compile-time link
+    /// back to the typed [`CaixaKind`] enum), a future
+    /// `tracing::field::valuable::Value::List` structured-log accepted-
+    /// label emit that materializes the roster verbatim, a future
+    /// M4 admission-webhook rejection body's *user-facing* diagnostic
+    /// (as distinct from the wire-form enumeration the sibling
+    /// [`Self::WIRE_NAMES`] roster carries — the two rosters serve two
+    /// audiences by design). A future variant addition (an `Actor`
+    /// virtual-actor arm the
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// M5 Orleans-inspired kind reaches through) extends this roster as
+    /// a single edit — paired with the [`Self::as_str`] match's
+    /// compiler-checked exhaustiveness on the new arm — and every
+    /// consumer picks up the new label by construction rather than a
+    /// coordinated array-literal rewrite across every downstream site.
+    ///
+    /// Length is pinned load-bearing at `CaixaKind::ALL.len()` (six) by
+    /// [`tests::caixa_kind_labels_covers_every_arm`], and every entry is
+    /// pinned to a member of the roster on every arm so a silent skew
+    /// between the [`Self::as_str`] match's arm-set and this const's
+    /// arm-set trips at caixa-core test time rather than at a downstream
+    /// consumer's accepted-set enumeration miss. Every entry is further
+    /// pinned to open with an ASCII lowercase byte so a silent collapse
+    /// of the two axes (an entry byte-identical to a sibling
+    /// [`Self::wire_name`] `PascalCase` byte-string that would let a
+    /// label-axis consumer accept the wire byte-string) trips here
+    /// rather than at a downstream consumer's collision on the wrong
+    /// vocabulary.
+    pub const LABELS: &'static [&'static str] = &[
+        crate::render::CAIXA_KIND_LABEL_BIBLIOTECA,
+        crate::render::CAIXA_KIND_LABEL_BINARIO,
+        crate::render::CAIXA_KIND_LABEL_SERVICO,
+        crate::render::CAIXA_KIND_LABEL_SUPERVISOR,
+        crate::render::CAIXA_KIND_LABEL_APLICACAO,
+        crate::render::CAIXA_KIND_LABEL_ACAO,
+    ];
+
     /// Substrate-canonical per-[`CaixaKind`] PascalCase wire byte-string
     /// every consumer that emits the Caixa's `:kind` axis onto a wire
     /// surface outside the caixa-core boundary keys off — returns the
@@ -3791,6 +3872,95 @@ mod tests {
                  ASCII uppercase byte (PascalCase wire form) — a \
                  lowercase entry would collide the roster with the \
                  sibling CaixaKind::as_str lowercase-Portuguese label \
+                 axis"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_labels_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`CaixaKind::LABELS`] exhaustive accept-set roster on the
+        // lowercase-Portuguese human-readable label axis: every variant
+        // of the sibling [`CaixaKind::ALL`] exhaustive-iteration surface
+        // must project through [`CaixaKind::as_str`] onto an entry the
+        // [`CaixaKind::LABELS`] roster carries, and the roster's length
+        // must byte-equal `CaixaKind::ALL.len()` so a silent skew between
+        // the [`CaixaKind::as_str`] match's arm-set and the roster's
+        // arm-set trips here at caixa-core test time rather than at a
+        // downstream `feira app graph` per-Aplicacao `:kind`-histogram
+        // column's zero-count-arm miss / a future wasm-operator
+        // rejection-body user-facing diagnostic's accepted-label
+        // enumeration miss / a `tracing::field::valuable::Value::List`
+        // structured-log accepted-label emit's drift. A future arm
+        // addition (an `Actor` virtual-actor arm the M5 Orleans-inspired
+        // kind reaches through — the candidate future arm named in the
+        // sibling [`CaixaKind::from_wire`] doc block) extends
+        // [`CaixaKind::ALL`] as a single edit and this pin sweeps the
+        // new arm by iteration; the paired [`CaixaKind::LABELS`] roster
+        // must grow in lockstep or this assertion trips. Every entry is
+        // further pinned to open with an ASCII lowercase byte so a
+        // silent collapse of the two axes (an entry byte-identical to a
+        // sibling [`CaixaKind::wire_name`] PascalCase byte-string that
+        // would let a label-axis consumer accept the wire byte-string)
+        // trips here rather than at a downstream consumer's vocabulary
+        // collision miss.
+        //
+        // Second corner on the two-axis roster split — peer of the
+        // sibling [`caixa_kind_wire_names_covers_every_arm`] (bd708bd)
+        // pin on the PascalCase wire byte-string axis. The two rosters
+        // enumerate the same closed six-arm set through the two-axis
+        // split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin already makes load-bearing (wire ≠ human-readable; the
+        // split is by design). Peer of the sibling
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) and
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) pins on the OTP-appup discriminator's two-axis
+        // roster split.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`crate::render::CAIXA_KIND_LABEL_*`] const
+        // family (e.g. dropping the trailing `a` from `"biblioteca"`
+        // → `"bibliotec"`) — the length pin still passes but the
+        // `contains` check fires on the mutated arm; and by shortening
+        // the roster to five entries — the length pin fires first.
+        assert_eq!(
+            CaixaKind::LABELS.len(),
+            CaixaKind::ALL.len(),
+            "CaixaKind::LABELS.len() must byte-equal \
+             CaixaKind::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; the two rosters \
+             enumerate the same closed six-arm set through different \
+             axes (variant vs. lowercase-Portuguese human-readable \
+             label byte-string) and downstream consumers that fan \
+             through both will silently disagree on the accepted \
+             arm-set"
+        );
+        for &variant in CaixaKind::ALL {
+            let label = variant.as_str();
+            assert!(
+                CaixaKind::LABELS.contains(&label),
+                "CaixaKind::{variant:?}.as_str() = {label:?} must be \
+                 a member of CaixaKind::LABELS — the emitter and the \
+                 roster have drifted out of lockstep"
+            );
+        }
+        for tag in CaixaKind::LABELS {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "CaixaKind::LABELS entry {tag:?} must be a \
+                     non-empty lowercase-Portuguese human-readable \
+                     label byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "CaixaKind::LABELS entry {tag:?} must open with an \
+                 ASCII lowercase byte (lowercase-Portuguese label \
+                 form) — an uppercase entry would collide the roster \
+                 with the sibling CaixaKind::wire_name PascalCase wire \
                  axis"
             );
         }
