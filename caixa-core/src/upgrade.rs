@@ -1612,6 +1612,99 @@ pub fn validate_upgrade_from_against_behavior(
 }
 
 impl UpgradeInstruction {
+    /// Substrate-canonical exhaustive accept-set on the OTP-appup
+    /// tatara-lisp author-surface form axis — the closed five-arm
+    /// roster of every `:` -prefixed instruction kind tag
+    /// [`Self::lisp_form`] emits, routed byte-for-byte through the
+    /// paired [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`]
+    /// / [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE`] /
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART`] lifted
+    /// `pub const` roster the [`Self::lisp_form`] emitter walks.
+    ///
+    /// The fieldless-enum peer discipline [`crate::CaixaKind::ALL`] /
+    /// [`crate::supervisor::RestartStrategy::ALL`] /
+    /// [`crate::supervisor::RestartPolicy::ALL`] /
+    /// [`crate::aplicacao::PlacementStrategy::ALL`] /
+    /// [`crate::aplicacao::RateLimitUnit::ALL`] /
+    /// [`crate::dep::DepList::ALL`] /
+    /// [`crate::dialeto::CaixaDialeto::ALL`] carry as `&'static [Self]`
+    /// exhaustive-iteration surfaces cannot land on this enum
+    /// verbatim: [`UpgradeInstruction`] is a discriminated union
+    /// carrying per-variant data ([`String`] `:module` on the
+    /// [`Self::LoadModule`] / [`Self::SoftPurge`] / [`Self::Purge`]
+    /// arms, [`std::path::PathBuf`] `:script` on [`Self::StateChange`]),
+    /// so a `&'static [Self]` roster would demand static-lifetime
+    /// dummy instances at build time that leak the "no canonical
+    /// value" defect at every consumer. The closed set that *is*
+    /// exhaustively enumerable on this enum is the per-arm lisp-form
+    /// tag byte-string — the discriminant axis. Lifting it here as
+    /// `&'static [&'static str]` closes the exhaustive-iteration
+    /// surface on the axis that admits one, matching the peer
+    /// fieldless-enum discipline through the discriminator projection
+    /// rather than the variant enumeration.
+    ///
+    /// Consumers today (and future): an M4 `mesh.pleme.io/v1alpha1/Caixa`
+    /// CR admission-webhook rejection body naming the accepted
+    /// `:upgrade-from :instructions (…)` kind-tag set verbatim, a
+    /// future `feira lint --upgrade-from` per-instruction author-time
+    /// audit surface listing accepted tags on an unknown-tag miss, a
+    /// future `caixa-actions` renderer that surfaces the accepted
+    /// appup instruction vocabulary in a workflow annotation, an LSP
+    /// hover completion source that offers the accepted-tag set on a
+    /// partial `:upgrade-from :instructions (` author position — every
+    /// consumer that wants to enumerate the closed OTP-appup
+    /// kind-tag set outside caixa-core now reaches for one lifted
+    /// substrate-primitive roster rather than open-coding a
+    /// `[":load-module", ":state-change", ":soft-purge", ":purge",
+    /// ":restart"]` array-literal whose arm-set has no compile-time
+    /// link back to the typed [`UpgradeInstruction`] enum. A future
+    /// variant addition (a `Discard` peer the `code:delete/1` analog
+    /// might inspire, a `SoftPurge` split into `SoftPurgeCoop` /
+    /// `SoftPurgeForce` as the drain-cool-down policy grows a two-arm
+    /// shape) extends this roster as a single edit — paired with the
+    /// [`Self::lisp_form`] match's compiler-checked exhaustiveness on
+    /// the new arm — and every consumer picks up the new tag by
+    /// construction rather than a coordinated array-literal rewrite
+    /// across every downstream site.
+    ///
+    /// Distinct axis from the un-prefixed kebab wire-form
+    /// [`Self::as_str`] emits (`"load-module"` / `"state-change"` /
+    /// `"soft-purge"` / `"purge"` / `"restart"` — the serde-carried
+    /// JSON `"kind"` tag and the fleet-wide dispatcher-catalog identity
+    /// under `"caixa.upgrade-instruction"`): the two-axis split the
+    /// sibling
+    /// [`tests::upgrade_instruction_display_matches_as_str_and_not_lisp_form`]
+    /// pin already makes load-bearing is preserved here by
+    /// construction — this roster lands on the tatara-lisp author-
+    /// surface form (`:` -prefixed) that every `feira lint`
+    /// diagnostic and per-arm [`UpgradeError`] `list:` payload
+    /// carries verbatim, not the kebab wire byte-string. A future
+    /// author-facing rebrand (an Elixir/Phoenix hot-reload
+    /// convergence collapsing `:load-module` under `:reload`, an M4-
+    /// side rename of `:state-change` onto Erlang's own `code_change/3`
+    /// verbatim) lands at one match arm in [`Self::lisp_form`] plus
+    /// one edit to the corresponding
+    /// [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] const, and this
+    /// roster (routed through the same consts) migrates in lockstep.
+    ///
+    /// Length is pinned load-bearing at 5 by
+    /// [`tests::upgrade_instruction_lisp_forms_covers_every_arm`] via
+    /// the shared `upgrade_instruction_arm_roster()` fixture, and
+    /// every entry is pinned to a member of the roster on every arm
+    /// so a silent skew between the [`Self::lisp_form`] match's
+    /// arm-set and this const's arm-set trips at caixa-core test time
+    /// rather than at a downstream admission-webhook rejection body's
+    /// accepted-set enumeration miss.
+    pub const LISP_FORMS: &'static [&'static str] = &[
+        crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+        crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+        crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+        crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+        crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART,
+    ];
+
     /// Substrate-canonical per-`UpgradeInstruction` OTP-appup kind-tag
     /// projection every consumer that renders / classifies / grepping-
     /// projects an instruction's lisp form keys off — returns the
@@ -10547,5 +10640,72 @@ mod tests {
         // on the top-level [`crate::CaixaKind`] axis.
         const RESTART_WIRE: &str = UpgradeInstruction::Restart.as_str();
         assert_eq!(RESTART_WIRE, "restart");
+    }
+
+    #[test]
+    fn upgrade_instruction_lisp_forms_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`UpgradeInstruction::LISP_FORMS`] exhaustive accept-set
+        // roster: every arm of the shared
+        // [`upgrade_instruction_arm_roster`] fixture must project
+        // through [`UpgradeInstruction::lisp_form`] onto an entry the
+        // [`UpgradeInstruction::LISP_FORMS`] roster carries, and the
+        // roster's length must byte-equal the fixture's arm count so
+        // a silent skew between the [`UpgradeInstruction::lisp_form`]
+        // match's arm-set and the roster's arm-set trips here at
+        // caixa-core test time rather than at a downstream M4
+        // admission-webhook rejection body's accepted-set enumeration
+        // miss / `feira lint --upgrade-from` per-instruction author-
+        // audit unknown-tag-cascade miss / LSP hover completion
+        // source's partial-position accepted-tag miss. A future arm
+        // addition (a `Discard` peer the `code:delete/1` analog might
+        // inspire, a `SoftPurge` split into `SoftPurgeCoop` /
+        // `SoftPurgeForce` as the drain-cool-down policy grows a two-
+        // arm shape) extends the shared
+        // [`upgrade_instruction_arm_roster`] fixture as a single edit
+        // and this pin sweeps the new arm by iteration; the paired
+        // [`UpgradeInstruction::LISP_FORMS`] roster must grow in
+        // lockstep or this assertion trips. Peer of the sibling
+        // fieldless-enum roster round-trips
+        // [`crate::supervisor::tests::restart_strategy_all_matches_from_wire_accept_set`]
+        // /
+        // [`crate::supervisor::tests::restart_policy_all_matches_from_wire_accept_set`]
+        // /
+        // [`crate::aplicacao::tests::placement_strategy_all_matches_from_wire_accept_set`]
+        // /
+        // [`crate::kind::tests::caixa_kind_all_matches_wire_name_emit_set`]
+        // pins on the peer closed-set typed-enum exhaustive-iteration
+        // surfaces, extended onto the discriminator axis of the
+        // discriminated-union [`UpgradeInstruction`] enum where the
+        // per-variant data payload rules out a `&'static [Self]`
+        // roster.
+        let fixture = upgrade_instruction_arm_roster();
+        assert_eq!(
+            UpgradeInstruction::LISP_FORMS.len(),
+            fixture.len(),
+            "UpgradeInstruction::LISP_FORMS.len() must byte-equal the \
+             shared upgrade_instruction_arm_roster fixture's arm count \
+             — a mismatch means the roster and the enum's arm-set \
+             have drifted"
+        );
+        for (variant, _wire) in fixture {
+            let lisp = variant.lisp_form();
+            assert!(
+                UpgradeInstruction::LISP_FORMS.contains(&lisp),
+                "UpgradeInstruction::{variant:?}.lisp_form() = {lisp:?} \
+                 must be a member of UpgradeInstruction::LISP_FORMS — \
+                 the emitter and the roster have drifted out of lockstep"
+            );
+        }
+        for tag in UpgradeInstruction::LISP_FORMS {
+            assert!(
+                tag.starts_with(':'),
+                "UpgradeInstruction::LISP_FORMS entry {tag:?} must \
+                 open with a `:` prefix (tatara-lisp author-surface \
+                 form) — a bare kebab entry would collide the roster \
+                 with the un-prefixed wire axis UpgradeInstruction::as_str \
+                 emits"
+            );
+        }
     }
 }
