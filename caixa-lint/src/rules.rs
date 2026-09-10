@@ -618,7 +618,7 @@ fn to_kebab(s: &str) -> String {
             if i > 0 {
                 out.push('-');
             }
-            out.extend(c.to_ascii_lowercase().to_string().chars());
+            out.push(c.to_ascii_lowercase());
         } else if c == '_' {
             out.push('-');
         } else {
@@ -635,7 +635,7 @@ fn to_pascal(s: &str) -> String {
         if c == '-' || c == '_' {
             upper = true;
         } else if upper {
-            out.extend(c.to_ascii_uppercase().to_string().chars());
+            out.push(c.to_ascii_uppercase());
             upper = false;
         } else {
             out.push(c);
