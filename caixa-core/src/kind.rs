@@ -1177,6 +1177,134 @@ impl From<&CaixaKind> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the structurally most fundamental closed-set fieldless
+/// typed enum on the caixa surface ([`CaixaKind`]) — every [`crate::Caixa`]
+/// carries a `:kind`. Routes byte-for-byte through the substrate-primitive
+/// [`CaixaKind::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: std::sync::Arc<str> = kind.into();`-shaped
+/// call site reaches the same six-arm lowercase-Portuguese diagnostic
+/// emit-set the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for std::sync::Arc<str>`
+/// and `impl From<String> for std::sync::Arc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor an
+/// `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so this axis is
+/// a distinct trait-idiomatic surface that a
+/// `let key: std::sync::Arc<str> = kind.into();`-shaped call site reaches
+/// through this impl and no other — a paired
+/// `std::sync::Arc::<str>::from(kind.as_str())` open-code has no compile-
+/// time link back to the substrate primitive, and a two-step
+/// `std::sync::Arc::<str>::from(String::from(kind))` composition through the
+/// owned-`String` axis allocates twice (once into the intermediate `String`,
+/// once into the [`std::sync::Arc<str>`] on the `From<String>` conversion)
+/// where the single-step trait impl allocates once. The shared-ownership +
+/// [`Sync`] + [`Send`] contract [`std::sync::Arc<str>`] provides is the
+/// distinct value the sibling [`Box<str>`] axis's owned-move return-shape
+/// cannot provide — a per-cluster reconcile `:kind`-label reachable from
+/// multiple concurrent per-Aplicacao / per-Servico tasks through the same
+/// six lowercase-Portuguese byte-strings, without a `.clone()`-per-task
+/// materialization the owned-move [`Box<str>`] axis would force.
+///
+/// Opens the caixa-core-internal tier of the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection campaign on the structurally
+/// most fundamental caixa-core enum peer — after the M2 OTP-shape tier
+/// closed on [`crate::supervisor::RestartStrategy`] (bca2ec8 owned + b3e72d7
+/// borrowed) and [`crate::supervisor::RestartPolicy`] (b05724e / ea91551),
+/// the M3 mesh-shape tier closed on
+/// [`crate::aplicacao::PlacementStrategy`] (977d577 / cc87908),
+/// [`crate::aplicacao::WitShape`] (9a59b77 / 941748c), and
+/// [`crate::aplicacao::RateLimitUnit`] (c481bfe / dae722f), and the outside-
+/// `caixa-core` tier completed on `InvariantKind` / `ArchVerdict` /
+/// `Severity` / `FixSafety` / `Semantic` / `FerriteRuntime`. Leaves the
+/// remaining caixa-core-internal closed-set fieldless typed enum peers
+/// ([`crate::dep::DepList`], [`crate::dialeto::CaixaDialeto`],
+/// [`crate::render::PathShapeViolation`]) as the campaign's next multi-peer
+/// targets on the caixa-core-internal tier of the Arc<str> axis.
+///
+/// Deliberately routes through the human-readable [`CaixaKind::as_str`]
+/// axis, not the `PascalCase` [`CaixaKind::wire_name`] axis — the two-axis
+/// split the sibling
+/// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`] pin
+/// makes load-bearing is preserved here by construction. A future variant
+/// addition (a virtual-actor `Actor` arm the
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// M5 Orleans-inspired kind reaches through) grows the
+/// [`std::sync::Arc<str>`] forward-projection axis by construction — one
+/// caixa-core edit on [`CaixaKind::as_str`] extends every one of the sibling
+/// forward-projection paths.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] across the six-arm
+/// [`CaixaKind::ALL`] emit-set on the owned-input surface, plus a blanket-
+/// derived [`Into`] shape witness and cross-axis byte-parity pins against
+/// the sibling owned-input
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` return-shape axes).
+impl From<CaixaKind> for std::sync::Arc<str> {
+    fn from(kind: CaixaKind) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(kind.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the structurally most fundamental closed-set fieldless
+/// typed enum on the caixa surface ([`CaixaKind`]) — the borrowed-input
+/// companion to the paired owned-input
+/// [`From<CaixaKind> for std::sync::Arc<str>`] impl one commit above that
+/// opens the caixa-core-internal tier of the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection campaign. Routes byte-for-byte
+/// through the substrate-primitive [`CaixaKind::as_str`] `pub const fn`
+/// accessor via [`std::sync::Arc::<str>::from`] on the returned
+/// `&'static str`, so every consumer that binds a
+/// `let key: std::sync::Arc<str> = (&kind).into();`-shaped call site or a
+/// `CaixaKind::ALL.iter().map(std::sync::Arc::<str>::from)`-shaped pipe
+/// (whose iterator over `&'static [CaixaKind]` yields `&CaixaKind` by
+/// construction) reaches the same six-arm lowercase-Portuguese diagnostic
+/// emit-set the paired owned-input
+/// [`From<CaixaKind> for std::sync::Arc<str>`] and the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already return.
+///
+/// Rust's standard library carries `impl From<&str> for std::sync::Arc<str>`
+/// and `impl From<String> for std::sync::Arc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-input
+/// axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`CaixaKind::ALL`]`.iter().map(std::sync::Arc::<str>::from)` reaches
+/// through this impl and no other — without it, the same pipe would force
+/// a spurious [`Copy`] deref
+/// (`std::sync::Arc::<str>::from((*kind).as_str())`) or a
+/// `.copied()` restatement whose type bounds have no compile-time link back
+/// to the substrate primitive.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the
+/// [`std::sync::Arc<str>`] forward-projection axis for the structurally most
+/// fundamental closed-set fieldless typed enum on the caixa substrate,
+/// matching the `{Self, &Self} × {&'static str, String, Cow<'static, str>,
+/// Box<str>}` 2×4 forward-projection matrix the peer projection surfaces
+/// already close.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_borrowed_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] across the six-arm
+/// [`CaixaKind::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, a cross-axis partition pin
+/// against the paired owned-input
+/// [`From<CaixaKind> for std::sync::Arc<str>`] and the sibling borrowed-
+/// input `{&'static str, String, Cow<'static, str>, Box<str>}` return-shape
+/// axes, and a `.iter().map(std::sync::Arc::<str>::from)` pipe witness over
+/// [`CaixaKind::ALL`] that resolves through the borrowed-input axis without
+/// a spurious [`Copy`] deref).
+impl From<&CaixaKind> for std::sync::Arc<str> {
+    fn from(kind: &CaixaKind) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(kind.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3230,5 +3358,274 @@ mod tests {
                  accessor"
             );
         }
+    }
+
+    #[test]
+    fn caixa_kind_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<CaixaKind> for std::sync::Arc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::CaixaKind::as_str`] `pub const fn` accessor
+        // resolve to the same six-arm lowercase-Portuguese emit-set across
+        // every arm the exhaustive [`super::CaixaKind::ALL`] slice
+        // enumerates. Opens the caixa-core-internal tier of the substrate-
+        // wide [`std::sync::Arc<str>`] forward-projection campaign on the
+        // structurally most fundamental caixa-core closed-set fieldless
+        // typed enum peer — after the M2 OTP-shape tier
+        // ([`crate::supervisor::RestartStrategy`],
+        // [`crate::supervisor::RestartPolicy`]), the M3 mesh-shape tier
+        // ([`crate::aplicacao::PlacementStrategy`],
+        // [`crate::aplicacao::WitShape`],
+        // [`crate::aplicacao::RateLimitUnit`]), and the outside-`caixa-
+        // core` tier (`InvariantKind`, `ArchVerdict`, `Severity`,
+        // `FixSafety`, `Semantic`, `FerriteRuntime`) already closed on
+        // this same axis. Rust's standard library carries
+        // `impl From<&str> for std::sync::Arc<str>` and
+        // `impl From<String> for std::sync::Arc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor an
+        // `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so this
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = kind.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(kind.as_str())` open-code has no
+        // compile-time link back to the substrate primitive, and a two-
+        // step `std::sync::Arc::<str>::from(String::from(kind))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`std::sync::Arc<str>`] on the `From<String>` conversion) where
+        // the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-input
+        // `{&'static str, String, Cow<'static, str>, Box<str>}` return-
+        // shape axes — locking the five return-shape paths on the owned-
+        // input surface together by construction so any future detour off
+        // the substrate-primitive [`super::CaixaKind::as_str`] accessor
+        // trips at caixa-core test time.
+        for &variant in CaixaKind::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<CaixaKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<CaixaKind> for std::sync::Arc<str> impl must round-\
+                 trip CaixaKind::{variant:?} to the same lowercase-\
+                 Portuguese byte-string CaixaKind::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on CaixaKind::{variant:?} \
+                 must byte-equal CaixaKind::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<CaixaKind> for std::sync::Arc<str> and \
+                 From<CaixaKind> for &'static str must resolve identically \
+                 on CaixaKind::{variant:?} — divergence signals the owned-\
+                 input std::sync::Arc<str> and &'static str return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_string: String = <String as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<CaixaKind> for std::sync::Arc<str> and \
+                 From<CaixaKind> for String must resolve identically on \
+                 CaixaKind::{variant:?} — divergence signals the owned-\
+                 input std::sync::Arc<str> and owned-`String` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<CaixaKind> for std::sync::Arc<str> and \
+                 From<CaixaKind> for Cow<'static, str> must resolve \
+                 identically on CaixaKind::{variant:?} — divergence \
+                 signals the owned-input std::sync::Arc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<CaixaKind> for std::sync::Arc<str> and \
+                 From<CaixaKind> for Box<str> must resolve identically on \
+                 CaixaKind::{variant:?} — divergence signals the owned-\
+                 input std::sync::Arc<str> and Box<str> return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds four borrowed-input \
+                  return-shape paths (&'static str, String, Cow<'static, \
+                  str>, Box<str>) plus the paired owned-input Arc<str> \
+                  witness and the .iter().map(std::sync::Arc::<str>::from) \
+                  pipe witness into one exhaustive round-trip over \
+                  CaixaKind::ALL — the accepted line-count cost of keying \
+                  the whole borrowed-input Arc<str> corner to the \
+                  substrate-primitive as_str accessor at the same test-site"
+    )]
+    fn caixa_kind_from_borrowed_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&CaixaKind> for std::sync::Arc<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::CaixaKind::as_str`] `pub const fn` accessor
+        // resolve to the same six-arm lowercase-Portuguese emit-set across
+        // every arm the exhaustive [`super::CaixaKind::ALL`] slice
+        // enumerates. Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `std::sync::Arc<str>` forward-projection axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = (&kind).into();`-shaped call
+        // site or a
+        // `CaixaKind::ALL.iter().map(std::sync::Arc::<str>::from)`-shaped
+        // pipe reaches through this impl and no other — the paired owned-
+        // input `From<CaixaKind> for std::sync::Arc<str>` impl alone
+        // forces every borrowed-input call site through a spurious `Copy`
+        // deref (`std::sync::Arc::<str>::from((*kind).as_str())`) or a
+        // `.copied()` restatement whose type bounds have no compile-time
+        // link back to the substrate primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the caixa-
+        // core-internal tier of the substrate-wide trait-idiomatic
+        // [`std::sync::Arc<str>`] forward-projection campaign for the
+        // structurally most fundamental caixa-core enum peer, matching
+        // the `{Self, &Self} × {&'static str, String, Cow<'static, str>,
+        // Box<str>}` 2×4 forward-projection matrix the peer projection
+        // surfaces already close on this same enum.
+        //
+        // Cross-axis partition pin against the paired owned-input
+        // [`From<CaixaKind> for std::sync::Arc<str>`] and the sibling
+        // borrowed-input `{&'static str, String, Cow<'static, str>,
+        // Box<str>}` return-shape axes — locking the five return-shape ×
+        // input-shape paths on the borrowed-input surface together by
+        // construction so any future detour off the substrate-primitive
+        // accessor trips at caixa-core test time. Then a
+        // `.iter().map(std::sync::Arc::<str>::from)` pipe witness over
+        // [`super::CaixaKind::ALL`] — whose iterator yields `&CaixaKind`
+        // by construction, so the borrowed-input
+        // [`std::sync::Arc<str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::CaixaKind::as_str`] accessor
+        // without a spurious [`Copy`] deref (which would only be
+        // reachable through the owned-input
+        // [`From<CaixaKind> for std::sync::Arc<str>`] axis by first
+        // calling `.copied()` on the iterator).
+        for &variant in CaixaKind::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&CaixaKind>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&CaixaKind> for std::sync::Arc<str> impl must round-\
+                 trip &CaixaKind::{variant:?} to the same lowercase-\
+                 Portuguese byte-string CaixaKind::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on &CaixaKind::\
+                 {variant:?} must byte-equal CaixaKind::as_str on the \
+                 same input — the blanket-derived Into shape on the \
+                 borrowed-input surface must resolve to the same as_str \
+                 dispatch as the explicit From impl"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait, owned_arc,
+                "From<&CaixaKind> for std::sync::Arc<str> and \
+                 From<CaixaKind> for std::sync::Arc<str> must resolve \
+                 identically on CaixaKind::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 std::sync::Arc<str> forward-projection input-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str = <&'static str as From<&CaixaKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&CaixaKind> for std::sync::Arc<str> and \
+                 From<&CaixaKind> for &'static str must resolve \
+                 identically on CaixaKind::{variant:?} — divergence \
+                 signals the borrowed-input std::sync::Arc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&CaixaKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&CaixaKind> for std::sync::Arc<str> and \
+                 From<&CaixaKind> for String must resolve identically on \
+                 CaixaKind::{variant:?} — divergence signals the \
+                 borrowed-input std::sync::Arc<str> and owned-`String` \
+                 return-shape paths have drifted onto different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&CaixaKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&CaixaKind> for std::sync::Arc<str> and \
+                 From<&CaixaKind> for Cow<'static, str> must resolve \
+                 identically on CaixaKind::{variant:?} — divergence \
+                 signals the borrowed-input std::sync::Arc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&CaixaKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&CaixaKind> for std::sync::Arc<str> and \
+                 From<&CaixaKind> for Box<str> must resolve identically \
+                 on CaixaKind::{variant:?} — divergence signals the \
+                 borrowed-input std::sync::Arc<str> and Box<str> return-\
+                 shape paths have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::sync::Arc<str>> = CaixaKind::ALL
+            .iter()
+            .map(std::sync::Arc::<str>::from)
+            .collect();
+        let via_method: Vec<std::sync::Arc<str>> = CaixaKind::ALL
+            .iter()
+            .map(|k| std::sync::Arc::<str>::from(k.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::sync::Arc::<str>::from)` over \
+             CaixaKind::ALL — a call site whose iteration axis holds \
+             `&CaixaKind` by construction — must byte-equal \
+             `.iter().map(|k| std::sync::Arc::<str>::from(k.as_str()))` \
+             on every arm — the borrowed-input std::sync::Arc<str> \
+             `From<&CaixaKind> for std::sync::Arc<str>` axis is what \
+             makes the `std::sync::Arc::<str>::from` composition route \
+             through the substrate-primitive `CaixaKind::as_str` \
+             accessor without a spurious `Copy` deref (which would only \
+             be reachable through the owned-input \
+             `From<CaixaKind> for std::sync::Arc<str>` axis by first \
+             calling `.copied()` on the iterator)"
+        );
     }
 }
