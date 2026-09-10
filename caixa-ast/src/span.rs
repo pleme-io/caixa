@@ -94,7 +94,7 @@ impl Span {
     }
 
     #[must_use]
-    pub fn slice<'a>(self, src: &'a str) -> &'a str {
+    pub fn slice(self, src: &str) -> &str {
         let start = self.start as usize;
         let end = self.end as usize;
         if start >= src.len() {
