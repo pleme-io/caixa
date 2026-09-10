@@ -1856,11 +1856,11 @@ impl UpgradeInstruction {
     #[must_use]
     pub const fn as_str(&self) -> &'static str {
         match self {
-            Self::LoadModule { .. } => "load-module",
-            Self::StateChange { .. } => "state-change",
-            Self::SoftPurge { .. } => "soft-purge",
-            Self::Purge { .. } => "purge",
-            Self::Restart => "restart",
+            Self::LoadModule { .. } => crate::render::M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE,
+            Self::StateChange { .. } => crate::render::M2_UPGRADE_INSTRUCTION_WIRE_STATE_CHANGE,
+            Self::SoftPurge { .. } => crate::render::M2_UPGRADE_INSTRUCTION_WIRE_SOFT_PURGE,
+            Self::Purge { .. } => crate::render::M2_UPGRADE_INSTRUCTION_WIRE_PURGE,
+            Self::Restart => crate::render::M2_UPGRADE_INSTRUCTION_WIRE_RESTART,
         }
     }
 
@@ -8611,6 +8611,78 @@ mod tests {
                 *expected,
                 "UpgradeInstruction::lisp_form on {instr:?} must route through the lifted \
                  const (expected {expected:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_as_str_routes_through_lifted_wire_consts() {
+        // Production-through-const pin on the peer wire-form axis: the
+        // five per-variant un-prefixed kebab byte-strings
+        // [`UpgradeInstruction::as_str`] returns route through the
+        // lifted [`crate::render::M2_UPGRADE_INSTRUCTION_WIRE_*`] consts,
+        // so a future rebrand that reaches the const but not the
+        // dispatch (or vice versa) surfaces here at build time rather
+        // than at runtime as a divergent JSON `"kind"` tag between the
+        // serde-derived wire byte-string and the accessor-routed
+        // source of truth on every K8s-CR round-trip / structured-log
+        // line / dispatcher-catalog lookup. Peer of the sibling
+        // [`upgrade_instruction_lisp_form_routes_through_lifted_kind_consts`]
+        // pin on the tatara-lisp author-surface form axis — the
+        // two-axis discipline (author-surface `:load-module` /
+        // wire-form `load-module`) is now fully lifted into caixa-core
+        // through paired `M2_UPGRADE_INSTRUCTION_KIND_*` +
+        // `M2_UPGRADE_INSTRUCTION_WIRE_*` const families, so a per-
+        // consumer rebrand at either axis lands at exactly one edit
+        // site and every downstream projection picks it up by
+        // construction.
+        //
+        // Fail-before-pass-after locally verified by mutating
+        // `UpgradeInstruction::as_str`'s `Self::Purge` arm to return
+        // `"purge-drift"` — this pin fires as expected; restoring
+        // passes.
+        let cases: &[(UpgradeInstruction, &'static str)] = &[
+            (
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                crate::render::M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE,
+            ),
+            (
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_WIRE_STATE_CHANGE,
+            ),
+            (
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_WIRE_SOFT_PURGE,
+            ),
+            (
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_WIRE_PURGE,
+            ),
+            (
+                UpgradeInstruction::Restart,
+                crate::render::M2_UPGRADE_INSTRUCTION_WIRE_RESTART,
+            ),
+        ];
+        for (instr, expected) in cases {
+            assert_eq!(
+                instr.as_str(),
+                *expected,
+                "UpgradeInstruction::as_str on {instr:?} must route through the lifted \
+                 M2_UPGRADE_INSTRUCTION_WIRE_* const (expected {expected:?})",
+            );
+            assert!(
+                !expected.starts_with(':'),
+                "M2_UPGRADE_INSTRUCTION_WIRE_* entry {expected:?} must \
+                 not open with a `:` prefix — a bare `:` -prefixed entry \
+                 would collide the wire-form axis with the peer tatara-\
+                 lisp author-surface form the M2_UPGRADE_INSTRUCTION_KIND_* \
+                 family carries",
             );
         }
     }
