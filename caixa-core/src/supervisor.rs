@@ -109,6 +109,88 @@ impl RestartStrategy {
         Self::SimpleOneForOne,
     ];
 
+    /// Substrate-canonical exhaustive accept-set on the
+    /// [`RestartStrategy`] `PascalCase` wire byte-string axis — the
+    /// closed four-arm roster of every byte-string [`Self::as_str`]
+    /// returns, routed byte-for-byte through the paired
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`]
+    /// lifted `pub const` roster the [`Self::as_str`] emitter (and the
+    /// [`std::fmt::Display`] / [`AsRef<str>`] /
+    /// `From<{Self,&Self}> for {&'static str, String, Cow<'static, str>,
+    /// Box<str>, Arc<str>}` trait triple + quintuple routed through it)
+    /// walks — and byte-for-byte the same four strings the un-`rename`d
+    /// `Serialize` derive emits under the paired
+    /// [`crate::render::SUPERVISOR_KEY_ESTRATEGIA`] tag key on every
+    /// JSON / YAML CR round-trip.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::WIRE_NAMES`] (bd708bd)
+    /// roster on the top-level typed-kind discriminator's `PascalCase`
+    /// wire byte-string axis, and of the sibling
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e) /
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77)
+    /// rosters on the OTP-appup discriminator's two-axis roster split —
+    /// the same closed-set exhaustive-accept-set roster discipline
+    /// extended here onto the first M2 OTP-shape sibling-restart
+    /// closed-set typed enum. The sibling
+    /// [`crate::aplicacao::PlacementStrategy`] M3 mesh-shape distribution
+    /// strategy enum is the next natural peer on the same axis, still
+    /// carrying only [`crate::aplicacao::PlacementStrategy::ALL`].
+    ///
+    /// Downstream consumers of the closed accepted-wire-form set — a
+    /// future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR admission-webhook
+    /// rejection body enumerating the accepted JSON `:estrategia` values
+    /// verbatim (as distinct from the kebab-case dispatcher-catalog
+    /// enumeration [`Self::discriminant`] serves, whose per-arm form
+    /// `"one-for-one"` / `"one-for-all"` / `"rest-for-one"` /
+    /// `"simple-one-for-one"` structurally disagrees with the wire byte-
+    /// string these `PascalCase` entries carry), a future `feira
+    /// supervisor --estrategia …` CLI-side "did you mean" hint whose
+    /// candidate-list must byte-match the wire form the operator's
+    /// per-strategy dispatch keys off (rather than the kebab
+    /// dispatcher-catalog identity), a future `feira app graph`
+    /// per-supervisor `:estrategia`-histogram column that renders
+    /// zero-count arms, a future wasm-operator per-reconcile-step
+    /// diagnostic log line enumerating accepted wire forms on an
+    /// unknown-strategy rejection, a future
+    /// `tracing::field::valuable::Value::List` structured-log accepted-
+    /// wire-form emit — now reach for one lifted substrate-primitive
+    /// roster rather than open-coding a four-string array-literal
+    /// (`["OneForOne", "OneForAll", "RestForOne", "SimpleOneForOne"]`)
+    /// whose arm-set has no compile-time link back to the typed
+    /// [`RestartStrategy`] enum. A future arm addition (an OTP-`rest_for_all`
+    /// arm the theory
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// might reach for once the four canonical OTP strategies stop
+    /// covering the substrate's discovered load-shape) extends this
+    /// roster as a single edit — paired with the [`Self::as_str`]
+    /// match's compiler-checked exhaustiveness on the new arm — and
+    /// every consumer picks up the new wire form by construction rather
+    /// than a coordinated array-literal rewrite across every downstream
+    /// site.
+    ///
+    /// Length is pinned load-bearing at `RestartStrategy::ALL.len()`
+    /// (four) by
+    /// [`tests::restart_strategy_wire_names_covers_every_arm`], every
+    /// variant's [`Self::as_str`] projection is pinned to a member of
+    /// the roster so a silent skew between the emitter's arm-set and
+    /// this const's arm-set trips at caixa-core test time rather than
+    /// at a downstream consumer's accepted-set enumeration miss, and
+    /// every entry is further pinned to open with an ASCII uppercase
+    /// byte so a silent collapse of the wire-form axis with the peer
+    /// kebab-case dispatcher-catalog axis (an entry byte-identical to a
+    /// sibling [`Self::discriminant`] kebab byte-string that would let
+    /// a wire-axis consumer accept the dispatcher-catalog vocabulary)
+    /// trips here rather than at a downstream K8s-CR round-trip miss.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE,
+        crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL,
+        crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE,
+        crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE,
+    ];
+
     /// Canonical PascalCase discriminator scalar this variant serializes
     /// as under [`crate::render::SUPERVISOR_KEY_ESTRATEGIA`]. The four arms
     /// return the paired [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`]
@@ -8065,6 +8147,95 @@ mod tests {
                  addition that grows the enum but forgets to grow the ALL slice \
                  silently truncates every downstream consumer's accept-set at \
                  the pre-addition boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`RestartStrategy::WIRE_NAMES`] exhaustive accept-set roster
+        // on the `PascalCase` wire byte-string axis: every variant of
+        // the sibling [`RestartStrategy::ALL`] exhaustive-iteration
+        // surface must project through [`RestartStrategy::as_str`] onto
+        // an entry the [`RestartStrategy::WIRE_NAMES`] roster carries,
+        // and the roster's length must byte-equal
+        // `RestartStrategy::ALL.len()` so a silent skew between the
+        // [`RestartStrategy::as_str`] match's arm-set and the roster's
+        // arm-set trips here at caixa-core test time rather than at a
+        // downstream M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+        // admission-webhook rejection body's wire-form `:estrategia`
+        // accepted-set enumeration miss / a `feira supervisor
+        // --estrategia …` "did you mean" hint drift / a future
+        // wasm-operator per-reconcile-step diagnostic log line's
+        // accepted-wire-form enumeration miss. A future arm addition
+        // (an OTP-`rest_for_all` arm the theory
+        // [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+        // might reach for once the four canonical OTP strategies stop
+        // covering the substrate's discovered load-shape) extends
+        // [`RestartStrategy::ALL`] as a single edit and this pin
+        // sweeps the new arm by iteration; the paired
+        // [`RestartStrategy::WIRE_NAMES`] roster must grow in lockstep
+        // or this assertion trips. Every entry is further pinned to
+        // open with an ASCII uppercase byte so a silent collapse of
+        // the wire-form axis with the peer kebab-case
+        // dispatcher-catalog axis (an entry byte-identical to a
+        // sibling [`Self::discriminant`] kebab byte-string that would
+        // let a wire-axis consumer accept the dispatcher-catalog
+        // vocabulary) trips here rather than at a downstream K8s-CR
+        // round-trip miss.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) pin on the top-level typed-kind discriminator's
+        // `PascalCase` wire byte-string axis, and of the sibling
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) /
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) pins on the OTP-appup discriminator's two-axis
+        // roster split — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the first M2
+        // OTP-shape sibling-restart closed-set typed enum.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`crate::render::SUPERVISOR_ESTRATEGIA_*`]
+        // const family (e.g. dropping the trailing `e` from
+        // `"OneForOne"` → `"OneForOn"`) — the length pin still passes
+        // but the `contains` check fires on the mutated arm; and by
+        // shortening the roster to three entries — the length pin
+        // fires first.
+        assert_eq!(
+            RestartStrategy::WIRE_NAMES.len(),
+            RestartStrategy::ALL.len(),
+            "RestartStrategy::WIRE_NAMES.len() must byte-equal \
+             RestartStrategy::ALL.len() — a mismatch means the roster \
+             and the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in RestartStrategy::ALL {
+            let wire = variant.as_str();
+            assert!(
+                RestartStrategy::WIRE_NAMES.contains(&wire),
+                "RestartStrategy::{variant:?}.as_str() = {wire:?} must \
+                 be a member of RestartStrategy::WIRE_NAMES — the \
+                 emitter and the roster have drifted out of lockstep"
+            );
+        }
+        for tag in RestartStrategy::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "RestartStrategy::WIRE_NAMES entry {tag:?} must be \
+                     a non-empty PascalCase byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_uppercase(),
+                "RestartStrategy::WIRE_NAMES entry {tag:?} must open \
+                 with an ASCII uppercase byte (PascalCase wire form) — \
+                 a lowercase entry would collide the wire-form axis \
+                 with the peer kebab-case dispatcher-catalog axis \
+                 [`RestartStrategy::discriminant`] serves"
             );
         }
     }
