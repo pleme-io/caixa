@@ -2,6 +2,44 @@ use serde::{Deserialize, Serialize};
 
 use crate::invariants::Violation;
 
+/// Substrate-canonical `"proven"` lowercase wire-form tag for
+/// [`ArchVerdict::Proven`] — the one canonical byte-string the paired
+/// forward emitter [`ArchVerdict::as_str`], the paired reverse parser
+/// [`ArchVerdict::from_wire`], and the paired exhaustive-roster
+/// [`ArchVerdict::WIRE_NAMES`] axis all route through, so a future
+/// rebrand of the tag (a `Warning`-style verdict-tier rename an
+/// operator's audit-report policy engine grows, an operator's
+/// per-verdict slug rebrand touching the two-arm proof-outcome axis)
+/// reaches every one of the sibling substrate-primitive dispatches
+/// through a single caixa-arch edit here — not an open-coded three-
+/// site parallel-maintained inline byte-string. Peer of
+/// [`CAIXA_ARCH_VERDICT_WIRE_REJECTED`] on the two-arm caixa-arch
+/// verdict-outcome canonical-lowercase wire-form axis.
+///
+/// Same closed-set lifted-const discipline as the sibling caixa-arch
+/// invariant-severity axis'
+/// [`crate::invariants::CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] /
+/// [`crate::invariants::CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE`] /
+/// [`crate::invariants::CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT`] (78f5522)
+/// paired-const family carries — extends the paired substrate-primitive
+/// wire-form lift onto the second outside-caixa-core closed-set
+/// fieldless typed enum on the caixa surface (the caixa-arch verdict-
+/// outcome axis, after the peer caixa-arch invariant-severity axis on
+/// [`crate::invariants::InvariantKind`]).
+///
+/// Pinned load-bearing at the substrate-primitive level by
+/// [`tests::arch_verdict_wire_names_covers_every_arm`] (paired roster
+/// coverage pin closing this const family into
+/// [`ArchVerdict::WIRE_NAMES`]).
+pub const CAIXA_ARCH_VERDICT_WIRE_PROVEN: &str = "proven";
+
+/// Substrate-canonical `"rejected"` lowercase wire-form tag for
+/// [`ArchVerdict::Rejected`] — peer of
+/// [`CAIXA_ARCH_VERDICT_WIRE_PROVEN`] on the two-arm caixa-arch verdict-
+/// outcome canonical-lowercase wire-form axis. See
+/// [`CAIXA_ARCH_VERDICT_WIRE_PROVEN`] for the full lift rationale.
+pub const CAIXA_ARCH_VERDICT_WIRE_REJECTED: &str = "rejected";
+
 /// Two-arm proof outcome the `caixa-arch` invariant sweep summarizes into
 /// — the closed-set typed enum every consumer of the `check_manifest`
 /// verdict keys off (the render-refusal gate in [`ArchReport::passed`],
@@ -73,6 +111,62 @@ impl ArchVerdict {
     /// rendering consumer defers to.
     pub const ALL: &'static [Self] = &[Self::Proven, Self::Rejected];
 
+    /// Substrate-canonical exhaustive accept-set roster of every
+    /// canonical-lowercase wire-form byte-string
+    /// [`ArchVerdict::as_str`] emits — routed byte-for-byte through the
+    /// paired [`CAIXA_ARCH_VERDICT_WIRE_PROVEN`] /
+    /// [`CAIXA_ARCH_VERDICT_WIRE_REJECTED`] lifted `pub const` scalars in
+    /// variant declaration order (`Proven` → `Rejected`), so every future
+    /// consumer that enumerates the caixa-arch verdict-outcome axis's
+    /// accept-set (a future `feira arch --list-verdicts` CLI-side
+    /// enumeration of the accepted outcome tags, a future
+    /// `feira arch --verdict <proven|rejected>` CLI arg-parse's "did you
+    /// mean" hint on an unknown-tag miss, a future M4
+    /// `mesh.pleme.io/v1alpha1/ArchAudit` CR admission-webhook rejection
+    /// body enumerating accepted per-verdict wire-form slugs on an
+    /// unknown-tag miss, a future `feira arch` per-verdict histogram
+    /// column that walks the roster to render every arm's tally
+    /// including zero-count arms, a future
+    /// `tracing::field::valuable::Value::List` structured-log accepted-
+    /// verdict emit on the operator's per-verdict emission path) reaches
+    /// one lifted substrate-primitive roster rather than open-coding a
+    /// `["proven", "rejected"]` two-string array literal whose arm-set
+    /// has no compile-time link back to the typed [`ArchVerdict`] enum.
+    ///
+    /// Peer of the sibling closed-set fieldless typed enums'
+    /// [`caixa_core::CaixaKind::WIRE_NAMES`] (bd708bd) /
+    /// [`caixa_core::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`caixa_core::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194) /
+    /// [`caixa_core::render::PathShapeViolation::WIRE_NAMES`] (0330bd3) /
+    /// [`caixa_core::CaixaDialeto::WIRE_NAMES`] (0402726) /
+    /// [`crate::invariants::InvariantKind::WIRE_NAMES`] (78f5522)
+    /// rosters on the peer wire-side exhaustive-roster axes — the
+    /// second outside-`caixa-core` closed-set fieldless typed enum on
+    /// the caixa surface (and the second inside `caixa-arch`, after
+    /// [`crate::invariants::InvariantKind::WIRE_NAMES`]) to converge
+    /// onto the same one-canonical-arm-list-per-enum discipline. Order
+    /// matches variant declaration order verbatim (`Proven` →
+    /// `Rejected`) so the slice is the canonical verdict ordering every
+    /// listing / rendering consumer defers to.
+    ///
+    /// A future variant addition (a `PartiallyProven` tier the
+    /// `iac-forge` policy-engine grows for compliance-only violation
+    /// sets, an `Unknown` tier for the M4 admission-webhook's timeout-
+    /// during-check outcome — both trajectory items the sibling
+    /// [`ArchVerdict::ALL`] doc block already names) extends this
+    /// roster as a single edit and every consumer picks up the new
+    /// entry by construction; the paired
+    /// [`tests::arch_verdict_wire_names_covers_every_arm`] pin's
+    /// length / membership / declaration-order / round-trip gates
+    /// keep the roster, the emitter [`ArchVerdict::as_str`], and the
+    /// parser [`ArchVerdict::from_wire`] in structural lockstep by
+    /// construction.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        CAIXA_ARCH_VERDICT_WIRE_PROVEN,
+        CAIXA_ARCH_VERDICT_WIRE_REJECTED,
+    ];
+
     /// Substrate-canonical per-[`ArchVerdict`] lowercase-tag scalar
     /// accessor every consumer that renders the arch two-arm proof-
     /// outcome axis as user-facing text keys off — returns the per-arm
@@ -142,8 +236,8 @@ impl ArchVerdict {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Proven => "proven",
-            Self::Rejected => "rejected",
+            Self::Proven => CAIXA_ARCH_VERDICT_WIRE_PROVEN,
+            Self::Rejected => CAIXA_ARCH_VERDICT_WIRE_REJECTED,
         }
     }
 
@@ -200,8 +294,8 @@ impl ArchVerdict {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "proven" => Some(Self::Proven),
-            "rejected" => Some(Self::Rejected),
+            CAIXA_ARCH_VERDICT_WIRE_PROVEN => Some(Self::Proven),
+            CAIXA_ARCH_VERDICT_WIRE_REJECTED => Some(Self::Rejected),
             _ => None,
         }
     }
@@ -3329,5 +3423,171 @@ mod tests {
              `From<ArchVerdict> for std::sync::Arc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    fn arch_verdict_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::ArchVerdict::WIRE_NAMES`] exhaustive accept-set roster
+        // on the caixa-arch verdict-outcome lowercase wire-form axis:
+        // every variant of the sibling [`super::ArchVerdict::ALL`]
+        // exhaustive-iteration surface must project through
+        // [`super::ArchVerdict::as_str`] onto an entry the
+        // [`super::ArchVerdict::WIRE_NAMES`] roster carries, and the
+        // roster's length must byte-equal
+        // `super::ArchVerdict::ALL.len()` so a silent skew between the
+        // [`super::ArchVerdict::as_str`] match's arm-set and the roster's
+        // arm-set trips here at caixa-arch test time rather than at a
+        // downstream `feira arch --list-verdicts` per-arm listing / M4
+        // admission-webhook rejection-body accepted-tag enumeration miss
+        // / structured-log accepted-wire-form emit drift.
+        //
+        // A future arm addition (a `PartiallyProven` tier the
+        // `iac-forge` policy-engine grows for compliance-only violation
+        // sets, an `Unknown` tier for the M4 admission-webhook's
+        // timeout-during-check outcome — both trajectory items the
+        // sibling [`super::ArchVerdict::ALL`] doc block already names)
+        // extends [`super::ArchVerdict::ALL`] as a single edit and this
+        // pin sweeps the new arm by iteration; the paired
+        // [`super::ArchVerdict::WIRE_NAMES`] roster must grow in
+        // lockstep or this assertion trips. Every entry is further
+        // pinned to open with a lowercase ASCII byte (matching the
+        // substrate-wide lowercase-tag convention every peer closed-set
+        // enum whose canonical projection is a lowercase-tag byte-
+        // string carries), so a silent collapse of the caixa-arch
+        // verdict-outcome axis with any hypothetical PascalCase peer
+        // wire-form axis (an entry byte-identical to the pre-lift
+        // Debug-derived `"Proven"` / `"Rejected"` shapes that would let
+        // a wire-axis consumer accept the source-side variant
+        // identifier) trips here rather than at a downstream audit-
+        // report round-trip miss.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`caixa_core::kind::tests::caixa_kind_labels_covers_every_arm`]
+        // (427fe75) /
+        // [`caixa_core::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`caixa_core::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`caixa_core::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194) /
+        // [`caixa_core::aplicacao::tests::wit_shape_labels_covers_every_arm`]
+        // (9d9f585) /
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_suffixes_covers_every_arm`]
+        // (b553ec9) /
+        // [`caixa_core::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) /
+        // [`caixa_core::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) /
+        // [`caixa_core::dep::tests::dep_list_author_keys_covers_every_arm`]
+        // (af6ad3a) /
+        // [`caixa_core::render::tests::path_shape_violation_wire_names_covers_every_arm`]
+        // (0330bd3) /
+        // [`caixa_core::dialeto::tests::caixa_dialeto_wire_names_covers_every_arm`]
+        // (0402726) /
+        // [`crate::invariants::tests::invariant_kind_wire_names_covers_every_arm`]
+        // (78f5522) pins — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the *second outside*-
+        // caixa-core closed-set fieldless typed enum on the caixa
+        // surface (the caixa-arch verdict-outcome axis, and the second
+        // inside `caixa-arch` after the peer invariant-severity axis on
+        // [`crate::invariants::InvariantKind`]), the thirteenth
+        // substrate-side closed-set typed enum on the roster axis.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired `CAIXA_ARCH_VERDICT_WIRE_*` const family (e.g.
+        // rebranding `CAIXA_ARCH_VERDICT_WIRE_REJECTED` from
+        // `"rejected"` to `"refused"`) — the length pin still passes
+        // but the `contains` check fires on the mutated arm; and by
+        // shortening the roster to one entry — the length pin fires
+        // first.
+        assert_eq!(
+            super::ArchVerdict::WIRE_NAMES.len(),
+            super::ArchVerdict::ALL.len(),
+            "ArchVerdict::WIRE_NAMES.len() must byte-equal \
+             ArchVerdict::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers that \
+             fan through both will silently disagree on the accepted \
+             arm-set"
+        );
+        for &variant in super::ArchVerdict::ALL {
+            let wire = variant.as_str();
+            assert!(
+                super::ArchVerdict::WIRE_NAMES.contains(&wire),
+                "ArchVerdict::{variant:?}.as_str() = {wire:?} must be \
+                 a member of ArchVerdict::WIRE_NAMES — the emitter and \
+                 the roster have drifted out of lockstep"
+            );
+        }
+        for tag in super::ArchVerdict::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "ArchVerdict::WIRE_NAMES entry {tag:?} must be a \
+                     non-empty lowercase-tag byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "ArchVerdict::WIRE_NAMES entry {tag:?} must open with \
+                 a lowercase ASCII byte (matching the substrate-wide \
+                 lowercase-tag convention every peer closed-set enum \
+                 whose canonical projection is a lowercase-tag byte-\
+                 string carries) — an entry opening with an uppercase \
+                 byte would collide the roster with any hypothetical \
+                 peer PascalCase wire-form axis a downstream consumer \
+                 might disambiguate against (the pre-lift Debug-derived \
+                 `\"Proven\"` / `\"Rejected\"` shapes)"
+            );
+        }
+        // Pin the exact two-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `CAIXA_ARCH_VERDICT_WIRE_*` constants (a rebrand of the
+        // arm-tag mapping that leaves both the length pin and the
+        // membership pin passing on their own) trips at caixa-arch
+        // test time under `assert_eq!`. Order matches variant
+        // declaration order verbatim (`Proven` → `Rejected`) so the
+        // roster is the canonical verdict ordering every listing /
+        // rendering consumer defers to. Same declaration-order pin the
+        // sibling
+        // [`crate::invariants::tests::invariant_kind_wire_names_covers_every_arm`]
+        // (78f5522) closes on the peer caixa-arch invariant-severity
+        // axis.
+        assert_eq!(
+            super::ArchVerdict::WIRE_NAMES,
+            &[
+                super::CAIXA_ARCH_VERDICT_WIRE_PROVEN,
+                super::CAIXA_ARCH_VERDICT_WIRE_REJECTED,
+            ],
+            "ArchVerdict::WIRE_NAMES must enumerate every arm's wire-\
+             form tag exactly once, in variant declaration order \
+             (Proven → Rejected)"
+        );
+        // Byte-parity pin on the paired reverse projection: every entry
+        // in the roster must round-trip cleanly through
+        // [`super::ArchVerdict::from_wire`] back to the same arm the
+        // [`super::ArchVerdict::as_str`] emitter returned it for.
+        // Refuses any future de-lift that swaps the two consts through
+        // the reverse projection out of lockstep with the forward
+        // emitter (a mid-arm rebrand touching only `as_str` but not
+        // `from_wire`, an argument-ordering swap on one of the match
+        // arms, a stray `to_lowercase` normalization on either side
+        // that would silently pass the identity round-trip on the
+        // already-lowercase corpus but split the two projections on
+        // any future non-lowercase input).
+        for (&variant, tag) in super::ArchVerdict::ALL
+            .iter()
+            .zip(super::ArchVerdict::WIRE_NAMES)
+        {
+            assert_eq!(
+                super::ArchVerdict::from_wire(tag),
+                Some(variant),
+                "ArchVerdict::from_wire({tag:?}) must round-trip back \
+                 to ArchVerdict::{variant:?} — emitter and parser have \
+                 drifted off the paired CAIXA_ARCH_VERDICT_WIRE_* \
+                 const family"
+            );
+        }
     }
 }
