@@ -18,5 +18,7 @@ pub use invariants::{
     CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE, CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT,
     CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY, Invariant, InvariantKind, Violation, builtin_invariants,
 };
-pub use report::{ArchReport, ArchVerdict};
+pub use report::{
+    ArchReport, ArchVerdict, CAIXA_ARCH_VERDICT_WIRE_PROVEN, CAIXA_ARCH_VERDICT_WIRE_REJECTED,
+};
 pub use run::check_manifest;
