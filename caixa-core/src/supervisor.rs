@@ -1410,6 +1410,92 @@ impl RestartPolicy {
     /// restart-decision-policy axis on the same M2 `:supervisor` slot.
     pub const ALL: &'static [Self] = &[Self::Permanent, Self::Temporary, Self::Transient];
 
+    /// Substrate-canonical exhaustive accept-set on the [`RestartPolicy`]
+    /// `PascalCase` wire byte-string axis — the closed three-arm roster
+    /// of every byte-string [`Self::as_str`] returns, routed byte-for-byte
+    /// through the paired
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] lifted
+    /// `pub const` roster the [`Self::as_str`] emitter (and the
+    /// [`std::fmt::Display`] impl / `Serialize` derive routed through it)
+    /// walks — and byte-for-byte the same three strings the un-`rename`d
+    /// `Serialize` derive emits under the paired
+    /// [`crate::render::SUPERVISOR_CHILD_KEY_RESTART`] tag key on every
+    /// JSON / YAML CR round-trip.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::WIRE_NAMES`] (bd708bd)
+    /// roster on the top-level typed-kind discriminator's `PascalCase`
+    /// wire byte-string axis, the sibling
+    /// [`RestartStrategy::WIRE_NAMES`] (3033f45) roster on the per-
+    /// supervisor sibling-restart-strategy axis (the first M2 OTP-shape
+    /// closed-set typed enum to converge onto the paired-roster
+    /// discipline), the sibling
+    /// [`crate::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194)
+    /// roster on the first M3 mesh-shape distribution-strategy closed-
+    /// set typed enum, and the sibling
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e) /
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77)
+    /// rosters on the OTP-appup discriminator's two-axis roster split —
+    /// the same closed-set exhaustive-accept-set roster discipline
+    /// extended here onto the second and final M2 OTP-shape sibling-
+    /// enum on the caixa surface, closing the per-child restart-decision-
+    /// policy axis paired with the peer [`RestartStrategy::WIRE_NAMES`]
+    /// per-supervisor sibling-restart-strategy axis on the same M2
+    /// `:supervisor` slot.
+    ///
+    /// Downstream consumers of the closed accepted-wire-form set — a
+    /// future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR admission-
+    /// webhook rejection body enumerating the accepted JSON `:restart`
+    /// values verbatim (as distinct from the kebab-case dispatcher-
+    /// catalog enumeration [`Self::discriminant`] serves, whose per-arm
+    /// form `"permanent"` / `"temporary"` / `"transient"` structurally
+    /// disagrees with the wire byte-string these `PascalCase` entries
+    /// carry — the split the sibling
+    /// [`tests::restart_policy_display_matches_serialized_wire_byte_string`]
+    /// pin already makes load-bearing), a future `feira supervisor
+    /// --restart …` CLI-side "did you mean" hint whose candidate-list
+    /// must byte-match the wire form the operator's per-child dispatch
+    /// keys off, a future `feira app graph` per-child `:restart`-
+    /// histogram column that renders zero-count arms, a future
+    /// `caixa-operator` per-reconcile-step diagnostic log line
+    /// enumerating accepted wire forms on an unknown-policy rejection,
+    /// a future
+    /// `tracing::field::valuable::Value::List` structured-log accepted-
+    /// wire-form emit — now reach for one lifted substrate-primitive
+    /// roster rather than open-coding a three-string array-literal
+    /// (`["Permanent", "Temporary", "Transient"]`) whose arm-set has no
+    /// compile-time link back to the typed [`RestartPolicy`] enum. A
+    /// future arm addition (an OTP-`intrinsic` fourth arm the theory
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// might reach for once the three canonical OTP restart policies
+    /// stop covering the substrate's discovered load-shape) extends
+    /// this roster as a single edit — paired with the [`Self::as_str`]
+    /// match's compiler-checked exhaustiveness on the new arm — and
+    /// every consumer picks up the new wire form by construction rather
+    /// than a coordinated array-literal rewrite across every downstream
+    /// site.
+    ///
+    /// Length is pinned load-bearing at `RestartPolicy::ALL.len()`
+    /// (three) by
+    /// [`tests::restart_policy_wire_names_covers_every_arm`], every
+    /// variant's [`Self::as_str`] projection is pinned to a member of
+    /// the roster so a silent skew between the emitter's arm-set and
+    /// this const's arm-set trips at caixa-core test time rather than at
+    /// a downstream consumer's accepted-set enumeration miss, and every
+    /// entry is further pinned to open with an ASCII uppercase byte so
+    /// a silent collapse of the `PascalCase` wire-form axis with the
+    /// peer kebab-case dispatcher-catalog axis (an entry byte-identical
+    /// to a sibling [`Self::discriminant`] kebab byte-string that would
+    /// let a wire-axis consumer accept the dispatcher-catalog
+    /// vocabulary) trips here rather than at a downstream K8s-CR round-
+    /// trip miss.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+        crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
+        crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+    ];
+
     /// Canonical PascalCase discriminator scalar this variant serializes
     /// as under [`crate::render::SUPERVISOR_CHILD_KEY_RESTART`]. The three
     /// arms return the paired
@@ -11993,6 +12079,104 @@ mod tests {
                  addition that grows the enum but forgets to grow the ALL slice \
                  silently truncates every downstream consumer's accept-set at \
                  the pre-addition boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`RestartPolicy::WIRE_NAMES`] exhaustive accept-set roster on
+        // the `PascalCase` wire byte-string axis: every variant of the
+        // sibling [`RestartPolicy::ALL`] exhaustive-iteration surface
+        // must project through [`RestartPolicy::as_str`] onto an entry
+        // the [`RestartPolicy::WIRE_NAMES`] roster carries, and the
+        // roster's length must byte-equal `RestartPolicy::ALL.len()` so
+        // a silent skew between the [`RestartPolicy::as_str`] match's
+        // arm-set and the roster's arm-set trips here at caixa-core
+        // test time rather than at a downstream M4
+        // `mesh.pleme.io/v1alpha1/Supervisor` CR admission-webhook
+        // rejection body's wire-form `:restart` accepted-set
+        // enumeration miss / a `feira supervisor --restart …` "did you
+        // mean" hint drift / a future wasm-operator per-reconcile-step
+        // diagnostic log line's accepted-wire-form enumeration miss.
+        // A future arm addition (an OTP-`intrinsic` fourth arm the
+        // theory
+        // [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+        // might reach for once the three canonical OTP restart policies
+        // stop covering the substrate's discovered load-shape) extends
+        // [`RestartPolicy::ALL`] as a single edit and this pin sweeps
+        // the new arm by iteration; the paired
+        // [`RestartPolicy::WIRE_NAMES`] roster must grow in lockstep or
+        // this assertion trips. Every entry is further pinned to open
+        // with an ASCII uppercase byte so a silent collapse of the
+        // wire-form axis with the peer kebab-case dispatcher-catalog
+        // axis (an entry byte-identical to a sibling
+        // [`RestartPolicy::discriminant`] kebab byte-string that would
+        // let a wire-axis consumer accept the dispatcher-catalog
+        // vocabulary) trips here rather than at a downstream K8s-CR
+        // round-trip miss.
+        //
+        // Peer of the sibling
+        // [`restart_strategy_wire_names_covers_every_arm`] (3033f45)
+        // pin on the first M2 OTP-shape sibling-restart closed-set
+        // typed enum, the sibling
+        // [`crate::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194) pin on the first M3 mesh-shape distribution-strategy
+        // closed-set typed enum, the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) pin on the top-level typed-kind discriminator's
+        // `PascalCase` wire byte-string axis, and the sibling
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) /
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) pins on the OTP-appup discriminator's two-axis
+        // roster split — the same closed-set exhaustive-roster coverage
+        // discipline extended here onto the second and final M2
+        // OTP-shape sibling-enum on the caixa surface, closing the
+        // per-child restart-decision-policy axis paired with the peer
+        // per-supervisor sibling-restart-strategy axis on the same M2
+        // `:supervisor` slot.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`crate::render::SUPERVISOR_CHILD_RESTART_*`]
+        // const family (e.g. dropping the trailing `t` from
+        // `"Permanent"` → `"Permanen"`) — the length pin still passes
+        // but the `contains` check fires on the mutated arm; and by
+        // shortening the roster to two entries — the length pin fires
+        // first.
+        assert_eq!(
+            RestartPolicy::WIRE_NAMES.len(),
+            RestartPolicy::ALL.len(),
+            "RestartPolicy::WIRE_NAMES.len() must byte-equal \
+             RestartPolicy::ALL.len() — a mismatch means the roster \
+             and the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in RestartPolicy::ALL {
+            let wire = variant.as_str();
+            assert!(
+                RestartPolicy::WIRE_NAMES.contains(&wire),
+                "RestartPolicy::{variant:?}.as_str() = {wire:?} must \
+                 be a member of RestartPolicy::WIRE_NAMES — the \
+                 emitter and the roster have drifted out of lockstep"
+            );
+        }
+        for tag in RestartPolicy::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "RestartPolicy::WIRE_NAMES entry {tag:?} must be \
+                     a non-empty PascalCase byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_uppercase(),
+                "RestartPolicy::WIRE_NAMES entry {tag:?} must open \
+                 with an ASCII uppercase byte (PascalCase wire form) — \
+                 a lowercase entry would collide the wire-form axis \
+                 with the peer kebab-case dispatcher-catalog axis \
+                 [`RestartPolicy::discriminant`] serves"
             );
         }
     }
