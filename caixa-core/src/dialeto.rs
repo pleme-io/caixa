@@ -49,6 +49,76 @@
 
 use tatara_lisp::{Atom, Sexp};
 
+/// Canonical `PascalCase` variant-name byte-string the internal-
+/// classification [`CaixaDialeto::Pacote`] arm surfaces under — the
+/// per-arm `&'static str` payload every consumer that formats the
+/// dialect axis as census-facing text (the `feira dialeto` census
+/// counter output line, future `feira dialeto --list-dialects` /
+/// `--filter <Pacote|Molde|MoldePosicional|Desconhecido>` CLI-side
+/// enumerations, a future M4 `mesh.pleme.io/v1alpha1/Manifesto` CR
+/// materializer's admission-webhook rejection body naming the
+/// accepted-dialect set, structured-log `tracing::field::Value::Str`
+/// per-dialect emits on the caixa-build pipeline's per-file classify
+/// path) converges onto verbatim through the paired
+/// [`CaixaDialeto::as_str`] `pub const fn` accessor and the sibling
+/// [`CaixaDialeto::from_wire`] reverse-projection parser. Peer of
+/// [`CAIXA_DIALETO_WIRE_MOLDE`] / [`CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL`]
+/// / [`CAIXA_DIALETO_WIRE_DESCONHECIDO`] on the four-arm dialect-
+/// classification wire-form axis.
+///
+/// Same "one canonical byte-string per typed axis" discipline the
+/// peer [`crate::render::RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY`]
+/// (0330bd3) / [`crate::render::CAIXA_KIND_WIRE_BIBLIOTECA`] /
+/// [`crate::render::M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`]
+/// (36ffe65) / [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`]
+/// (be40492) / [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`]
+/// families established for the sibling render-side path-shape-
+/// diagnostic / M2 OTP-shape / supervisor / M3 mesh-shape closed-set
+/// typed-enum wire-form axes — extends the discipline onto the
+/// tatara-lisp dialect-classification axis, the eleventh substrate-
+/// side closed-set typed enum to converge onto it and the first
+/// dialect-classification axis (as distinct from the top-level
+/// manifest surface or a render-side path-shape-diagnostic surface)
+/// to reach it. Until this lift landed the byte-string sat twice
+/// inline in [`CaixaDialeto::as_str`] and [`CaixaDialeto::from_wire`]
+/// with no compile-time link between the emit and parse arms nor to
+/// any downstream roster; a future rebrand (a per-arm variant
+/// rename under an M4 vocabulary shift, an operator-vocabulary
+/// migration for a `feira dialeto --list-dialects` per-arm listing)
+/// would have desynchronized the paired arm-set until a downstream
+/// consumer surfaced the drift at runtime. Routing all halves
+/// (`as_str` + `from_wire` + the paired
+/// [`CaixaDialeto::WIRE_NAMES`] roster) through this const closes
+/// the drift structurally by construction. Pinned load-bearing by
+/// [`tests::caixa_dialeto_wire_names_covers_every_arm`] (paired
+/// roster / emitter round-trip).
+pub const CAIXA_DIALETO_WIRE_PACOTE: &str = "Pacote";
+
+/// Canonical `PascalCase` variant-name byte-string the internal-
+/// classification [`CaixaDialeto::Molde`] arm surfaces under. Peer of
+/// [`CAIXA_DIALETO_WIRE_PACOTE`] on the four-arm dialect-classification
+/// wire-form axis; see [`CAIXA_DIALETO_WIRE_PACOTE`] for the full lift
+/// rationale.
+pub const CAIXA_DIALETO_WIRE_MOLDE: &str = "Molde";
+
+/// Canonical `PascalCase` variant-name byte-string the internal-
+/// classification [`CaixaDialeto::MoldePosicional`] arm surfaces under.
+/// Peer of [`CAIXA_DIALETO_WIRE_PACOTE`] on the four-arm dialect-
+/// classification wire-form axis; see [`CAIXA_DIALETO_WIRE_PACOTE`] for
+/// the full lift rationale. The full-word (rather than abbreviated)
+/// spelling here is load-bearing — a `format!("{:?}", …).to_lowercase()`
+/// round-trip on the source-side `Debug` derive would collapse the
+/// multi-word arm to `"moldeposicional"` and desynchronize the tag
+/// from every peer substrate-side census-facing `PascalCase` axis.
+pub const CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL: &str = "MoldePosicional";
+
+/// Canonical `PascalCase` variant-name byte-string the internal-
+/// classification [`CaixaDialeto::Desconhecido`] arm surfaces under.
+/// Peer of [`CAIXA_DIALETO_WIRE_PACOTE`] on the four-arm dialect-
+/// classification wire-form axis; see [`CAIXA_DIALETO_WIRE_PACOTE`] for
+/// the full lift rationale.
+pub const CAIXA_DIALETO_WIRE_DESCONHECIDO: &str = "Desconhecido";
+
 /// Which `(defcaixa …)` declaration a source speaks.
 ///
 /// The [`gen_platform::IsVariant`] derive emits per-arm arm-discriminator
@@ -165,12 +235,107 @@ impl CaixaDialeto {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Pacote => "Pacote",
-            Self::Molde => "Molde",
-            Self::MoldePosicional => "MoldePosicional",
-            Self::Desconhecido => "Desconhecido",
+            Self::Pacote => CAIXA_DIALETO_WIRE_PACOTE,
+            Self::Molde => CAIXA_DIALETO_WIRE_MOLDE,
+            Self::MoldePosicional => CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL,
+            Self::Desconhecido => CAIXA_DIALETO_WIRE_DESCONHECIDO,
         }
     }
+
+    /// Substrate-canonical exhaustive accept-set on the
+    /// [`CaixaDialeto`] `PascalCase` variant-name wire-form byte-string
+    /// axis — the closed four-arm roster of every byte-string
+    /// [`Self::as_str`] returns, routed byte-for-byte through the paired
+    /// [`CAIXA_DIALETO_WIRE_PACOTE`] / [`CAIXA_DIALETO_WIRE_MOLDE`] /
+    /// [`CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL`] /
+    /// [`CAIXA_DIALETO_WIRE_DESCONHECIDO`] lifted `pub const` scalars the
+    /// [`Self::as_str`] emitter (and the [`std::fmt::Display`] /
+    /// [`AsRef<str>`] / `From<{Self,&Self}> for {&'static str, String,
+    /// Cow<'static, str>, Box<str>, Arc<str>}` trait triple + quintuple
+    /// routed through it) walks — and byte-for-byte the same four strings
+    /// the paired [`Self::from_wire`] and [`TryFrom<&str>`] reverse
+    /// projections accept.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::WIRE_NAMES`] (bd708bd) /
+    /// [`crate::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`crate::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`crate::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194) /
+    /// [`crate::render::PathShapeViolation::WIRE_NAMES`] (0330bd3)
+    /// rosters on the `PascalCase` / lowercase-kebab wire-form axes, the
+    /// sibling [`crate::CaixaKind::LABELS`] (427fe75) /
+    /// [`crate::aplicacao::WitShape::LABELS`] (9d9f585) rosters on the
+    /// lowercase-kebab census-label axis, the sibling
+    /// [`crate::aplicacao::RateLimitUnit::SUFFIXES`] (b553ec9) roster on
+    /// the single-char canonical-suffix axis, the sibling
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) /
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e)
+    /// rosters on the OTP-appup two-axis roster split, and the sibling
+    /// [`crate::dep::DepList::AUTHOR_KEYS`] (af6ad3a) roster on the
+    /// two-list dep-graph axis — the same closed-set exhaustive-accept-
+    /// set roster discipline extended here onto the tatara-lisp dialect-
+    /// classification closed-set typed enum, the eleventh substrate-side
+    /// closed-set typed enum on the roster axis and the first
+    /// dialect-classification axis (as distinct from the top-level
+    /// manifest surface or a render-side path-shape-diagnostic surface)
+    /// to converge onto the discipline. The sibling
+    /// [`crate::render::PathShapeViolation::WIRE_NAMES`] doc block's
+    /// closing sentence names this enum ("The sibling
+    /// [`crate::dialeto::CaixaDialeto`] closed-set typed enum on the
+    /// tatara-lisp dialect axis remains the next natural peer, still
+    /// carrying only [`crate::dialeto::CaixaDialeto::ALL`]") as the next
+    /// natural peer — this lift closes the naming.
+    ///
+    /// Downstream consumers of the closed accepted-wire-form set — a
+    /// future `feira dialeto --list-dialects` CLI-side enumeration of
+    /// the accepted dialect classifications whose candidate-list must
+    /// byte-match the wire byte-string [`Self::as_str`] emits (rather
+    /// than the source-side variant identifier), a future `feira dialeto
+    /// --filter <Pacote|Molde|MoldePosicional|Desconhecido>` CLI arg-
+    /// parse's "did you mean" hint that scans this slice rather than
+    /// open-coding the four literal `PascalCase` strings, a future M4
+    /// `mesh.pleme.io/v1alpha1/Manifesto` CR admission-webhook rejection
+    /// body enumerating accepted per-dialect wire-form slugs on an
+    /// unknown-tag miss, a future `feira dialeto` per-arm histogram
+    /// column that walks the roster to render every arm's tally
+    /// (including zero-count arms — a hand-rolled projection off
+    /// [`Self::ALL`] alone would need a companion per-variant-to-tag
+    /// map at every consumer; this roster closes the two-axis walk in
+    /// one lifted const), a future `tracing::field::valuable::Value::List`
+    /// structured-log accepted-dialect emit on the caixa-build
+    /// pipeline's per-file classify emission path — now reach for one
+    /// lifted substrate-primitive roster rather than open-coding a
+    /// `["Pacote", "Molde", "MoldePosicional", "Desconhecido"]` four-
+    /// string array literal whose arm-set has no compile-time link back
+    /// to the typed [`CaixaDialeto`] enum. A future arm addition (the
+    /// module doc's "third dialect" hazard actualising as a fifth arm —
+    /// a third arity variant, an alias-declaration family pleme-doc-gen
+    /// sharpens as its schema evolves) extends this roster as a single
+    /// edit — paired with the [`Self::as_str`] match's compiler-checked
+    /// exhaustiveness on the new arm — and every consumer picks up the
+    /// new wire form by construction.
+    ///
+    /// Length is pinned load-bearing at `CaixaDialeto::ALL.len()`
+    /// (four) by
+    /// [`tests::caixa_dialeto_wire_names_covers_every_arm`], every
+    /// variant's [`Self::as_str`] projection is pinned to a member of
+    /// the roster so a silent skew between the emitter's arm-set and
+    /// this const's arm-set trips at caixa-core test time rather than at
+    /// a downstream consumer's accepted-set enumeration miss, every
+    /// entry is pinned to open with an uppercase ASCII byte (matching
+    /// the substrate-wide `PascalCase` convention every peer closed-set
+    /// enum whose canonical projection is a `PascalCase` census-facing
+    /// name carries), and the roster's declaration order is pinned
+    /// byte-for-byte against the variant declaration order (`Pacote` →
+    /// `Molde` → `MoldePosicional` → `Desconhecido`) so a future arm-
+    /// swap on the roster or the paired `CAIXA_DIALETO_WIRE_*` constants
+    /// trips at caixa-core test time under `assert_eq!` rather than at
+    /// a downstream per-dialect ordering table's miss.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        CAIXA_DIALETO_WIRE_PACOTE,
+        CAIXA_DIALETO_WIRE_MOLDE,
+        CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL,
+        CAIXA_DIALETO_WIRE_DESCONHECIDO,
+    ];
 
     /// Substrate-canonical reverse projection on the [`CaixaDialeto`]
     /// closed-set dialect-classification axis — parses the `PascalCase`
@@ -222,10 +387,10 @@ impl CaixaDialeto {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "Pacote" => Some(Self::Pacote),
-            "Molde" => Some(Self::Molde),
-            "MoldePosicional" => Some(Self::MoldePosicional),
-            "Desconhecido" => Some(Self::Desconhecido),
+            CAIXA_DIALETO_WIRE_PACOTE => Some(Self::Pacote),
+            CAIXA_DIALETO_WIRE_MOLDE => Some(Self::Molde),
+            CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL => Some(Self::MoldePosicional),
+            CAIXA_DIALETO_WIRE_DESCONHECIDO => Some(Self::Desconhecido),
             _ => None,
         }
     }
@@ -1862,6 +2027,159 @@ mod tests {
                  canonical `PascalCase` variant-name byte-string; drift here \
                  splits the census-facing text from the substrate \
                  primitive every downstream consumer will read"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::CaixaDialeto::WIRE_NAMES`] exhaustive accept-set
+        // roster on the `PascalCase` variant-name wire-form axis: every
+        // variant of the sibling [`super::CaixaDialeto::ALL`] exhaustive-
+        // iteration surface must project through
+        // [`super::CaixaDialeto::as_str`] onto an entry the
+        // [`super::CaixaDialeto::WIRE_NAMES`] roster carries, and the
+        // roster's length must byte-equal `super::CaixaDialeto::ALL.len()`
+        // so a silent skew between the [`super::CaixaDialeto::as_str`]
+        // match's arm-set and the roster's arm-set trips here at
+        // caixa-core test time rather than at a downstream `feira dialeto
+        // --list-dialects` per-arm listing / M4 admission-webhook
+        // rejection-body accepted-tag enumeration miss / structured-log
+        // accepted-wire-form emit drift.
+        //
+        // A future arm addition (the module doc's "third dialect"
+        // hazard actualising as a fifth arm — a third arity variant, an
+        // alias-declaration family `pleme-doc-gen` sharpens as its
+        // schema evolves) extends [`super::CaixaDialeto::ALL`] as a
+        // single edit and this pin sweeps the new arm by iteration; the
+        // paired [`super::CaixaDialeto::WIRE_NAMES`] roster must grow in
+        // lockstep or this assertion trips. Every entry is further
+        // pinned to open with an uppercase ASCII byte (matching the
+        // substrate-wide `PascalCase` convention every peer closed-set
+        // enum whose canonical projection is a `PascalCase` census-
+        // facing name carries), so a silent collapse of the dialect-
+        // classification wire-form axis with any hypothetical lowercase-
+        // kebab peer wire-form axis (an entry byte-identical to a
+        // sibling lowercase-Portuguese label that would let a wire-axis
+        // consumer accept the diagnostic byte-string) trips here rather
+        // than at a downstream census-report round-trip miss.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`crate::kind::tests::caixa_kind_labels_covers_every_arm`]
+        // (427fe75) /
+        // [`crate::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`crate::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`crate::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194) /
+        // [`crate::aplicacao::tests::wit_shape_labels_covers_every_arm`]
+        // (9d9f585) /
+        // [`crate::aplicacao::tests::rate_limit_unit_suffixes_covers_every_arm`]
+        // (b553ec9) /
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) /
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) /
+        // [`crate::dep::tests::dep_list_author_keys_covers_every_arm`]
+        // (af6ad3a) /
+        // [`crate::render::tests::path_shape_violation_wire_names_covers_every_arm`]
+        // (0330bd3) pins — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the tatara-lisp
+        // dialect-classification closed-set typed enum, the eleventh
+        // substrate-side closed-set typed enum on the roster axis and
+        // the first dialect-classification axis to converge onto the
+        // discipline.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired `CAIXA_DIALETO_WIRE_*` const family (e.g.
+        // rebranding `CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL` from
+        // `"MoldePosicional"` to `"MoldePositional"`) — the length pin
+        // still passes but the `contains` check fires on the mutated
+        // arm; and by shortening the roster to three entries — the
+        // length pin fires first.
+        assert_eq!(
+            CaixaDialeto::WIRE_NAMES.len(),
+            CaixaDialeto::ALL.len(),
+            "CaixaDialeto::WIRE_NAMES.len() must byte-equal \
+             CaixaDialeto::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers that \
+             fan through both will silently disagree on the accepted \
+             arm-set"
+        );
+        for &variant in CaixaDialeto::ALL {
+            let wire = variant.as_str();
+            assert!(
+                CaixaDialeto::WIRE_NAMES.contains(&wire),
+                "CaixaDialeto::{variant:?}.as_str() = {wire:?} must be \
+                 a member of CaixaDialeto::WIRE_NAMES — the emitter and \
+                 the roster have drifted out of lockstep"
+            );
+        }
+        for tag in CaixaDialeto::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "CaixaDialeto::WIRE_NAMES entry {tag:?} must be a \
+                     non-empty `PascalCase` variant-name byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_uppercase(),
+                "CaixaDialeto::WIRE_NAMES entry {tag:?} must open with \
+                 an uppercase ASCII byte (matching the substrate-wide \
+                 `PascalCase` convention) — an entry opening with a \
+                 lowercase byte would collide the roster with any \
+                 hypothetical peer lowercase-kebab wire-form axis a \
+                 downstream consumer might disambiguate against"
+            );
+        }
+        // Pin the exact four-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `CAIXA_DIALETO_WIRE_*` constants (a rebrand of the arm-tag
+        // mapping that leaves both the length pin and the membership
+        // pin passing on their own) trips at caixa-core test time
+        // under `assert_eq!`. Order matches variant declaration order
+        // verbatim (`Pacote` → `Molde` → `MoldePosicional` →
+        // `Desconhecido`) so the roster is the canonical ordering
+        // every listing / rendering consumer defers to. Same
+        // declaration-order pin the sibling
+        // [`crate::render::tests::path_shape_violation_wire_names_covers_every_arm`]
+        // (0330bd3) closes on the render-side path-shape-diagnostic
+        // axis.
+        assert_eq!(
+            CaixaDialeto::WIRE_NAMES,
+            &[
+                CAIXA_DIALETO_WIRE_PACOTE,
+                CAIXA_DIALETO_WIRE_MOLDE,
+                CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL,
+                CAIXA_DIALETO_WIRE_DESCONHECIDO,
+            ],
+            "CaixaDialeto::WIRE_NAMES must enumerate every arm's wire-\
+             form tag exactly once, in variant declaration order \
+             (Pacote → Molde → MoldePosicional → Desconhecido)"
+        );
+        // Byte-parity pin on the paired reverse projection: every
+        // entry in the roster must round-trip cleanly through
+        // [`super::CaixaDialeto::from_wire`] back to the same arm the
+        // [`super::CaixaDialeto::as_str`] emitter returned it for.
+        // Refuses any future de-lift that swaps the four consts through
+        // the reverse projection out of lockstep with the forward
+        // emitter (a mid-arm rebrand touching only `as_str` but not
+        // `from_wire`, an argument-ordering swap on one of the match
+        // arms, a stray `to_lowercase` normalization on either side
+        // that would silently pass the identity round-trip on the
+        // already-PascalCase corpus but split the two projections on
+        // any future non-PascalCase input).
+        for (&variant, tag) in CaixaDialeto::ALL.iter().zip(CaixaDialeto::WIRE_NAMES) {
+            assert_eq!(
+                CaixaDialeto::from_wire(tag),
+                Some(variant),
+                "CaixaDialeto::from_wire({tag:?}) must round-trip back \
+                 to CaixaDialeto::{variant:?} — emitter and parser have \
+                 drifted off the paired CAIXA_DIALETO_WIRE_* const family"
             );
         }
     }

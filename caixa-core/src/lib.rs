@@ -36,7 +36,10 @@ pub use aplicacao::{
 };
 pub use behavior::{BehaviorError, BehaviorSpec};
 pub use dep::{Dep, DepError, DepList, DepSource};
-pub use dialeto::{CaixaDialeto, DialetoError, classify as classify_dialeto};
+pub use dialeto::{
+    CAIXA_DIALETO_WIRE_DESCONHECIDO, CAIXA_DIALETO_WIRE_MOLDE, CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL,
+    CAIXA_DIALETO_WIRE_PACOTE, CaixaDialeto, DialetoError, classify as classify_dialeto,
+};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{
