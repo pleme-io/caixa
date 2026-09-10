@@ -7,6 +7,66 @@
 use caixa_teia::{TeiaInstance, TeiaManifest, TeiaValue};
 use serde::{Deserialize, Serialize};
 
+/// Canonical lowercase wire-form byte-string the [`InvariantKind::Safety`]
+/// variant surfaces under — the per-arm `&'static str` payload every
+/// consumer that renders the three-arm caixa-arch invariant-severity axis
+/// as user-facing text (`{:?}`-derive-emit replacements, structured-log
+/// `tracing::field::Value::Str`-arm records, `feira tofu` per-violation
+/// render lines, future admission-webhook rejection bodies) converges onto
+/// verbatim through the paired [`InvariantKind::as_str`] `pub const fn`
+/// accessor and the sibling [`InvariantKind::from_wire`] reverse-projection
+/// parser. Peer of [`CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE`] /
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT`] on the three-arm caixa-arch
+/// invariant-severity wire-form axis.
+///
+/// Same "one canonical byte-string per typed axis" discipline the peer
+/// [`caixa_core::render::RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY`] (0330bd3
+/// — the render-side path-shape-diagnostic axis) /
+/// [`caixa_core::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] (be40492 —
+/// the M2 supervisor `:estrategia` axis) /
+/// `M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE` (18c7342 — the M3 mesh-shape
+/// axis) / `M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE` (36ffe65 — the M2
+/// OTP-appup axis) / `CAIXA_DIALETO_WIRE_PACOTE` (0402726 — the
+/// tatara-lisp dialect-classification axis) families established for the
+/// sibling caixa-core closed-set typed-enum wire-form axes — extends the
+/// discipline onto the first *outside*-caixa-core closed-set fieldless
+/// typed-enum wire-form axis (the caixa-arch invariant-severity axis).
+/// Until this lift landed the byte-string sat twice inline in
+/// [`InvariantKind::as_str`] and [`InvariantKind::from_wire`] with no
+/// compile-time link between the emit and parse arms nor to any
+/// downstream roster; a future rebrand (a per-arm slug tightening, an
+/// operator-vocabulary migration for a future `feira arch --list-severities`
+/// per-arm listing, an `iac-forge` policy-engine schema evolution that
+/// grows the severity axis) would have desynchronized the paired arm-set
+/// until a downstream consumer surfaced the drift at runtime. Routing
+/// all halves (`as_str` + `from_wire` + the paired
+/// [`InvariantKind::WIRE_NAMES`] roster) through this const closes the
+/// drift structurally by construction. Pinned load-bearing by
+/// [`tests::invariant_kind_wire_names_covers_every_arm`] (paired roster
+/// / emitter round-trip).
+pub const CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY: &str = "safety";
+
+/// Canonical lowercase wire-form byte-string the
+/// [`InvariantKind::Compliance`] variant surfaces under. Peer of
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] on the three-arm caixa-arch
+/// invariant-severity wire-form axis; see
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] for the full lift rationale.
+pub const CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE: &str = "compliance";
+
+/// Canonical lowercase wire-form byte-string the [`InvariantKind::Hint`]
+/// variant surfaces under. Peer of
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] on the three-arm caixa-arch
+/// invariant-severity wire-form axis. Byte-identical to the sibling
+/// `caixa_lint::Severity::as_str` `"hint"` arm and the peer
+/// `caixa_theme::Semantic::as_str` `"hint"` arm — a coincidence of
+/// lowercase-tag choice on the three axes, not a typed cross-axis
+/// promise, so the sibling [`InvariantKind::from_wire`] rejection-witness
+/// pin refuses the non-shared `caixa_lint::Severity::as_str` arms
+/// (`"error"` / `"warning"` / `"info"`) to prevent a silent accept-set
+/// collapse across the two axes; see
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] for the full lift rationale.
+pub const CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT: &str = "hint";
+
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, gen_platform::IsVariant,
 )]
@@ -108,12 +168,108 @@ impl InvariantKind {
     /// re-inlining. Named `as_str` (not `label` / `tag`) to match the
     /// sibling closed-set-enum `as_str` convention the substrate already
     /// carries verbatim across every peer typed enum.
+    /// Substrate-canonical exhaustive accept-set on the
+    /// [`InvariantKind`] lowercase wire-form byte-string axis — the closed
+    /// three-arm roster of every byte-string [`Self::as_str`] returns,
+    /// routed byte-for-byte through the paired
+    /// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] /
+    /// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE`] /
+    /// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT`] lifted `pub const` scalars
+    /// the [`Self::as_str`] emitter (and the [`std::fmt::Display`] /
+    /// [`AsRef<str>`] / `From<{Self,&Self}> for {&'static str, String,
+    /// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` trait triple +
+    /// quintuple routed through it) walks — and byte-for-byte the same
+    /// three strings the paired [`Self::from_wire`] and
+    /// [`TryFrom<&str>`] reverse projections accept.
+    ///
+    /// Peer of the sibling [`caixa_core::CaixaKind::WIRE_NAMES`] (bd708bd) /
+    /// [`caixa_core::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`caixa_core::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194) /
+    /// [`caixa_core::render::PathShapeViolation::WIRE_NAMES`] (0330bd3) /
+    /// [`caixa_core::CaixaDialeto::WIRE_NAMES`] (0402726) rosters on the
+    /// `PascalCase` / lowercase / lowercase-kebab wire-form axes, the
+    /// sibling [`caixa_core::CaixaKind::LABELS`] (427fe75) /
+    /// [`caixa_core::aplicacao::WitShape::LABELS`] (9d9f585) rosters on the
+    /// lowercase-kebab census-label axis, the sibling
+    /// [`caixa_core::aplicacao::RateLimitUnit::SUFFIXES`] (b553ec9) roster
+    /// on the single-char canonical-suffix axis, the sibling
+    /// [`caixa_core::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) /
+    /// [`caixa_core::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e)
+    /// rosters on the OTP-appup two-axis roster split, and the sibling
+    /// [`caixa_core::dep::DepList::AUTHOR_KEYS`] (af6ad3a) roster on the
+    /// two-list dep-graph axis — the same closed-set exhaustive-accept-set
+    /// roster discipline extended here onto the caixa-arch invariant-
+    /// severity closed-set typed enum, the twelfth substrate-side closed-
+    /// set typed enum on the roster axis and the *first outside*
+    /// [`caixa_core`] to converge onto the discipline (opening the roster
+    /// axis on the outside-caixa-core surface the sibling six outside-
+    /// caixa-core closed-set fieldless typed enums —
+    /// [`crate::report::ArchVerdict`],
+    /// `caixa_lint::diagnostic::Severity`,
+    /// `caixa_lint::diagnostic::FixSafety`,
+    /// `caixa_theme::style::Semantic`, and
+    /// `caixa_provedor::ferrite::FerriteRuntime` — remain the next natural
+    /// peers on, still carrying only their `ALL` exhaustive-iteration
+    /// surfaces).
+    ///
+    /// Downstream consumers of the closed accepted-wire-form set — a
+    /// future `feira arch --list-severities` CLI-side enumeration of the
+    /// accepted severity classifications whose candidate-list must
+    /// byte-match the wire byte-string [`Self::as_str`] emits (rather
+    /// than the source-side variant identifier), a future `feira arch
+    /// --severity <safety|compliance|hint>` CLI arg-parse's "did you
+    /// mean" hint that scans this slice rather than open-coding the
+    /// three literal lowercase strings, a future M4
+    /// `mesh.pleme.io/v1alpha1/ArchAudit` CR admission-webhook rejection
+    /// body enumerating accepted per-severity wire-form slugs on an
+    /// unknown-tag miss, a future `feira arch` per-severity histogram
+    /// column that walks the roster to render every arm's tally
+    /// (including zero-count arms — a hand-rolled projection off
+    /// [`Self::ALL`] alone would need a companion per-variant-to-tag map
+    /// at every consumer; this roster closes the two-axis walk in one
+    /// lifted const), a future `tracing::field::valuable::Value::List`
+    /// structured-log accepted-severity emit on the operator's per-
+    /// violation emission path — now reach for one lifted substrate-
+    /// primitive roster rather than open-coding a `["safety",
+    /// "compliance", "hint"]` three-string array literal whose arm-set
+    /// has no compile-time link back to the typed [`InvariantKind`] enum.
+    /// A future arm addition (a `Warning` tier between [`Self::Compliance`]
+    /// and [`Self::Hint`] the `iac-forge` policy-engine grows, a `Fatal`
+    /// tier above [`Self::Safety`] — both trajectory items the sibling
+    /// [`Self::ALL`] doc block already names) extends this roster as a
+    /// single edit — paired with the [`Self::as_str`] match's compiler-
+    /// checked exhaustiveness on the new arm — and every consumer picks
+    /// up the new wire form by construction.
+    ///
+    /// Length is pinned load-bearing at `InvariantKind::ALL.len()`
+    /// (three) by
+    /// [`tests::invariant_kind_wire_names_covers_every_arm`], every
+    /// variant's [`Self::as_str`] projection is pinned to a member of the
+    /// roster so a silent skew between the emitter's arm-set and this
+    /// const's arm-set trips at caixa-arch test time rather than at a
+    /// downstream consumer's accepted-set enumeration miss, every entry
+    /// is pinned to open with a lowercase ASCII byte (matching the
+    /// substrate-wide lowercase-tag convention every peer closed-set
+    /// enum whose canonical projection is a lowercase-tag byte-string
+    /// carries), and the roster's declaration order is pinned byte-for-
+    /// byte against the variant declaration order (`Safety` →
+    /// `Compliance` → `Hint`) so a future arm-swap on the roster or the
+    /// paired `CAIXA_ARCH_INVARIANT_KIND_WIRE_*` constants trips at
+    /// caixa-arch test time under `assert_eq!` rather than at a
+    /// downstream per-severity ordering table's miss.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY,
+        CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE,
+        CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT,
+    ];
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Safety => "safety",
-            Self::Compliance => "compliance",
-            Self::Hint => "hint",
+            Self::Safety => CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY,
+            Self::Compliance => CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE,
+            Self::Hint => CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT,
         }
     }
 
@@ -175,9 +331,9 @@ impl InvariantKind {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "safety" => Some(Self::Safety),
-            "compliance" => Some(Self::Compliance),
-            "hint" => Some(Self::Hint),
+            CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY => Some(Self::Safety),
+            CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE => Some(Self::Compliance),
+            CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT => Some(Self::Hint),
             _ => None,
         }
     }
@@ -3509,5 +3665,168 @@ mod tests {
              `From<InvariantKind> for std::sync::Arc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    fn invariant_kind_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::InvariantKind::WIRE_NAMES`] exhaustive accept-set roster
+        // on the caixa-arch invariant-severity lowercase wire-form axis:
+        // every variant of the sibling [`super::InvariantKind::ALL`]
+        // exhaustive-iteration surface must project through
+        // [`super::InvariantKind::as_str`] onto an entry the
+        // [`super::InvariantKind::WIRE_NAMES`] roster carries, and the
+        // roster's length must byte-equal `super::InvariantKind::ALL.len()`
+        // so a silent skew between the [`super::InvariantKind::as_str`]
+        // match's arm-set and the roster's arm-set trips here at
+        // caixa-arch test time rather than at a downstream `feira arch
+        // --list-severities` per-arm listing / M4 admission-webhook
+        // rejection-body accepted-tag enumeration miss / structured-log
+        // accepted-wire-form emit drift.
+        //
+        // A future arm addition (a `Warning` tier between
+        // [`super::InvariantKind::Compliance`] and
+        // [`super::InvariantKind::Hint`] the `iac-forge` policy-engine
+        // grows, a `Fatal` tier above [`super::InvariantKind::Safety`] —
+        // both trajectory items the sibling
+        // [`super::InvariantKind::ALL`] doc block already names) extends
+        // [`super::InvariantKind::ALL`] as a single edit and this pin
+        // sweeps the new arm by iteration; the paired
+        // [`super::InvariantKind::WIRE_NAMES`] roster must grow in
+        // lockstep or this assertion trips. Every entry is further pinned
+        // to open with a lowercase ASCII byte (matching the substrate-
+        // wide lowercase-tag convention every peer closed-set enum whose
+        // canonical projection is a lowercase-tag byte-string carries),
+        // so a silent collapse of the caixa-arch invariant-severity axis
+        // with any hypothetical PascalCase peer wire-form axis (an entry
+        // byte-identical to the pre-lift Debug-derived `"Safety"` /
+        // `"Compliance"` / `"Hint"` shapes that would let a wire-axis
+        // consumer accept the source-side variant identifier) trips
+        // here rather than at a downstream audit-report round-trip miss.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`caixa_core::kind::tests::caixa_kind_labels_covers_every_arm`]
+        // (427fe75) /
+        // [`caixa_core::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`caixa_core::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`caixa_core::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194) /
+        // [`caixa_core::aplicacao::tests::wit_shape_labels_covers_every_arm`]
+        // (9d9f585) /
+        // [`caixa_core::aplicacao::tests::rate_limit_unit_suffixes_covers_every_arm`]
+        // (b553ec9) /
+        // [`caixa_core::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) /
+        // [`caixa_core::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) /
+        // [`caixa_core::dep::tests::dep_list_author_keys_covers_every_arm`]
+        // (af6ad3a) /
+        // [`caixa_core::render::tests::path_shape_violation_wire_names_covers_every_arm`]
+        // (0330bd3) /
+        // [`caixa_core::dialeto::tests::caixa_dialeto_wire_names_covers_every_arm`]
+        // (0402726) pins — the same closed-set exhaustive-roster coverage
+        // discipline extended here onto the *first outside*-caixa-core
+        // closed-set fieldless typed enum on the caixa surface (the
+        // caixa-arch invariant-severity axis), the twelfth substrate-side
+        // closed-set typed enum on the roster axis.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm of
+        // the paired `CAIXA_ARCH_INVARIANT_KIND_WIRE_*` const family (e.g.
+        // rebranding `CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE` from
+        // `"compliance"` to `"compliant"`) — the length pin still passes
+        // but the `contains` check fires on the mutated arm; and by
+        // shortening the roster to two entries — the length pin fires
+        // first.
+        assert_eq!(
+            super::InvariantKind::WIRE_NAMES.len(),
+            super::InvariantKind::ALL.len(),
+            "InvariantKind::WIRE_NAMES.len() must byte-equal \
+             InvariantKind::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers that \
+             fan through both will silently disagree on the accepted \
+             arm-set"
+        );
+        for &variant in super::InvariantKind::ALL {
+            let wire = variant.as_str();
+            assert!(
+                super::InvariantKind::WIRE_NAMES.contains(&wire),
+                "InvariantKind::{variant:?}.as_str() = {wire:?} must be \
+                 a member of InvariantKind::WIRE_NAMES — the emitter and \
+                 the roster have drifted out of lockstep"
+            );
+        }
+        for tag in super::InvariantKind::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "InvariantKind::WIRE_NAMES entry {tag:?} must be a \
+                     non-empty lowercase-tag byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "InvariantKind::WIRE_NAMES entry {tag:?} must open with \
+                 a lowercase ASCII byte (matching the substrate-wide \
+                 lowercase-tag convention every peer closed-set enum \
+                 whose canonical projection is a lowercase-tag byte-\
+                 string carries) — an entry opening with an uppercase \
+                 byte would collide the roster with any hypothetical \
+                 peer PascalCase wire-form axis a downstream consumer \
+                 might disambiguate against (the pre-lift Debug-derived \
+                 `\"Safety\"` / `\"Compliance\"` / `\"Hint\"` shapes)"
+            );
+        }
+        // Pin the exact three-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `CAIXA_ARCH_INVARIANT_KIND_WIRE_*` constants (a rebrand of the
+        // arm-tag mapping that leaves both the length pin and the
+        // membership pin passing on their own) trips at caixa-arch test
+        // time under `assert_eq!`. Order matches variant declaration
+        // order verbatim (`Safety` → `Compliance` → `Hint`) so the
+        // roster is the canonical severity ordering every listing /
+        // rendering consumer defers to. Same declaration-order pin the
+        // sibling
+        // [`caixa_core::dialeto::tests::caixa_dialeto_wire_names_covers_every_arm`]
+        // (0402726) closes on the tatara-lisp dialect-classification
+        // axis.
+        assert_eq!(
+            super::InvariantKind::WIRE_NAMES,
+            &[
+                super::CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY,
+                super::CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE,
+                super::CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT,
+            ],
+            "InvariantKind::WIRE_NAMES must enumerate every arm's wire-\
+             form tag exactly once, in variant declaration order \
+             (Safety → Compliance → Hint)"
+        );
+        // Byte-parity pin on the paired reverse projection: every entry
+        // in the roster must round-trip cleanly through
+        // [`super::InvariantKind::from_wire`] back to the same arm the
+        // [`super::InvariantKind::as_str`] emitter returned it for.
+        // Refuses any future de-lift that swaps the three consts through
+        // the reverse projection out of lockstep with the forward emitter
+        // (a mid-arm rebrand touching only `as_str` but not `from_wire`,
+        // an argument-ordering swap on one of the match arms, a stray
+        // `to_lowercase` normalization on either side that would
+        // silently pass the identity round-trip on the already-lowercase
+        // corpus but split the two projections on any future non-
+        // lowercase input).
+        for (&variant, tag) in super::InvariantKind::ALL
+            .iter()
+            .zip(super::InvariantKind::WIRE_NAMES)
+        {
+            assert_eq!(
+                super::InvariantKind::from_wire(tag),
+                Some(variant),
+                "InvariantKind::from_wire({tag:?}) must round-trip back \
+                 to InvariantKind::{variant:?} — emitter and parser have \
+                 drifted off the paired CAIXA_ARCH_INVARIANT_KIND_WIRE_* \
+                 const family"
+            );
+        }
     }
 }
