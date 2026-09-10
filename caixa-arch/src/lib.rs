@@ -14,6 +14,9 @@ pub mod invariants;
 pub mod report;
 pub mod run;
 
-pub use invariants::{Invariant, InvariantKind, Violation, builtin_invariants};
+pub use invariants::{
+    CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE, CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT,
+    CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY, Invariant, InvariantKind, Violation, builtin_invariants,
+};
 pub use report::{ArchReport, ArchVerdict};
 pub use run::check_manifest;
