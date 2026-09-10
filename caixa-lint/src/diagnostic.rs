@@ -1435,6 +1435,42 @@ pub struct Fix {
     pub safety: FixSafety,
 }
 
+/// Substrate-canonical `"safe"` lowercase wire-form tag for
+/// [`FixSafety::Safe`] — the one canonical byte-string the paired
+/// forward emitter [`FixSafety::as_str`], the paired reverse parser
+/// [`FixSafety::from_wire`], and the paired exhaustive-roster
+/// [`FixSafety::WIRE_NAMES`] axis all route through, so a future
+/// rebrand of the tag (a `"mechanical"` operator-vocabulary migration
+/// for a future `feira lint --fix-safety=<tag>` per-arm listing, a
+/// per-tier slug tightening the rulebook grows) reaches every one of
+/// the sibling substrate-primitive dispatches through a single
+/// caixa-lint edit here — not an open-coded three-site
+/// parallel-maintained inline byte-string. Peer of
+/// [`CAIXA_LINT_FIX_SAFETY_WIRE_UNSAFE`] on the two-arm caixa-lint
+/// fix-safety-tier canonical-lowercase wire-form axis.
+///
+/// Same closed-set lifted-const discipline the paired caixa-lint
+/// diagnostic-severity axis'
+/// [`CAIXA_LINT_SEVERITY_WIRE_ERROR`] / [`CAIXA_LINT_SEVERITY_WIRE_WARNING`] /
+/// [`CAIXA_LINT_SEVERITY_WIRE_INFO`] / [`CAIXA_LINT_SEVERITY_WIRE_HINT`]
+/// (a199462) const family carries — extends the paired substrate-primitive
+/// wire-form lift onto the fourth outside-caixa-core closed-set fieldless
+/// typed enum on the caixa surface (the caixa-lint fix-safety-tier axis,
+/// and the second inside `caixa-lint` after [`Severity`]).
+///
+/// Pinned load-bearing at the substrate-primitive level by
+/// [`tests::fix_safety_wire_names_covers_every_arm`] (paired roster
+/// coverage pin closing this const family into
+/// [`FixSafety::WIRE_NAMES`]).
+pub const CAIXA_LINT_FIX_SAFETY_WIRE_SAFE: &str = "safe";
+
+/// Substrate-canonical `"unsafe"` lowercase wire-form tag for
+/// [`FixSafety::Unsafe`] — peer of [`CAIXA_LINT_FIX_SAFETY_WIRE_SAFE`]
+/// on the two-arm caixa-lint fix-safety-tier canonical-lowercase
+/// wire-form axis. See [`CAIXA_LINT_FIX_SAFETY_WIRE_SAFE`] for the full
+/// lift rationale.
+pub const CAIXA_LINT_FIX_SAFETY_WIRE_UNSAFE: &str = "unsafe";
+
 /// How safe is a fix to apply automatically?
 ///
 /// * `Safe` — mechanical, semantics-preserving for pure round-trips.
@@ -1496,6 +1532,57 @@ impl FixSafety {
     /// one-canonical-arm-list-per-enum discipline.
     pub const ALL: &'static [Self] = &[Self::Safe, Self::Unsafe];
 
+    /// Exhaustive accept-set roster on the [`FixSafety`] closed-set
+    /// enum's canonical-lowercase wire-form axis — the single slice
+    /// every consumer that enumerates the accepted fix-safety-tier
+    /// byte-strings dispatches through (a future `feira lint
+    /// --fix-safety=<safe|unsafe>` CLI arg-parse's "did you mean" hint
+    /// rendering the accepted-tag list, a future
+    /// `feira lint --list-fix-safeties` per-arm listing, a future M4
+    /// `mesh.pleme.io/v1alpha1/LintReport` CR admission-webhook
+    /// rejection body enumerating accepted per-tier wire-form slugs on
+    /// an unknown-tag miss, a `tracing::field::valuable::Value::List`
+    /// structured-log accepted-tier emit on the runner's per-fix
+    /// emission path). Routed byte-for-byte through the paired
+    /// [`CAIXA_LINT_FIX_SAFETY_WIRE_SAFE`] /
+    /// [`CAIXA_LINT_FIX_SAFETY_WIRE_UNSAFE`] lifted `pub const` scalars
+    /// in variant declaration order (`Safe` → `Unsafe`) so a future
+    /// arm rebrand touches one const rather than an open-coded two-site
+    /// parallel-maintained array literal.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`crate::Severity::WIRE_NAMES`] (a199462) on the paired caixa-lint
+    /// severity axis, [`caixa_core::CaixaKind::WIRE_NAMES`] (bd708bd),
+    /// [`caixa_core::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45),
+    /// [`caixa_core::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b),
+    /// [`caixa_core::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194),
+    /// [`caixa_core::render::PathShapeViolation::WIRE_NAMES`] (0330bd3),
+    /// [`caixa_core::CaixaDialeto::WIRE_NAMES`] (0402726),
+    /// `caixa_arch::invariants::InvariantKind::WIRE_NAMES` (78f5522), and
+    /// `caixa_arch::report::ArchVerdict::WIRE_NAMES` (ebddef0) rosters —
+    /// closes the paired exhaustive-roster axis onto the *fourth
+    /// outside*-caixa-core closed-set fieldless typed enum on the caixa
+    /// surface (the caixa-lint fix-safety-tier axis, and the second
+    /// inside `caixa-lint` after [`crate::Severity`]).
+    ///
+    /// A future variant addition (an `Experimental` tier between
+    /// [`Self::Safe`] and [`Self::Unsafe`] the M3-and-later lint
+    /// runner grows for AI-suggested rewrites that need explicit
+    /// review-and-accept, a trajectory item the sibling [`Self::ALL`]
+    /// doc block already names) extends this roster as a single edit —
+    /// the compiler-checked exhaustiveness on [`Self::as_str`]'s match
+    /// and the paired [`tests::fix_safety_wire_names_covers_every_arm`]
+    /// pin's length / membership / order / round-trip gates keep the
+    /// roster, the emitter [`Self::as_str`], and the parser
+    /// [`Self::from_wire`] in structural lockstep by construction.
+    ///
+    /// Pinned load-bearing by
+    /// [`tests::fix_safety_wire_names_covers_every_arm`].
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        CAIXA_LINT_FIX_SAFETY_WIRE_SAFE,
+        CAIXA_LINT_FIX_SAFETY_WIRE_UNSAFE,
+    ];
+
     /// Substrate-canonical per-[`FixSafety`] lowercase-tag scalar
     /// accessor every consumer that renders the fix-safety-tier axis
     /// as user-facing text keys off — returns the per-arm byte-string
@@ -1540,8 +1627,8 @@ impl FixSafety {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Safe => "safe",
-            Self::Unsafe => "unsafe",
+            Self::Safe => CAIXA_LINT_FIX_SAFETY_WIRE_SAFE,
+            Self::Unsafe => CAIXA_LINT_FIX_SAFETY_WIRE_UNSAFE,
         }
     }
 
@@ -1601,8 +1688,8 @@ impl FixSafety {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "safe" => Some(Self::Safe),
-            "unsafe" => Some(Self::Unsafe),
+            CAIXA_LINT_FIX_SAFETY_WIRE_SAFE => Some(Self::Safe),
+            CAIXA_LINT_FIX_SAFETY_WIRE_UNSAFE => Some(Self::Unsafe),
             _ => None,
         }
     }
@@ -7318,6 +7405,161 @@ mod tests {
                 "Severity::from_wire({tag:?}) must round-trip back to \
                  Severity::{variant:?} — emitter and parser have \
                  drifted off the paired CAIXA_LINT_SEVERITY_WIRE_* \
+                 const family"
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::FixSafety::WIRE_NAMES`] exhaustive accept-set roster
+        // on the caixa-lint fix-safety-tier lowercase wire-form axis:
+        // every variant of the sibling [`super::FixSafety::ALL`]
+        // exhaustive-iteration surface must project through
+        // [`super::FixSafety::as_str`] onto an entry the
+        // [`super::FixSafety::WIRE_NAMES`] roster carries, and the
+        // roster's length must byte-equal `super::FixSafety::ALL.len()`
+        // so a silent skew between the [`super::FixSafety::as_str`]
+        // match's arm-set and the roster's arm-set trips here at
+        // caixa-lint test time rather than at a downstream
+        // `feira lint --list-fix-safeties` per-arm listing / M4
+        // admission-webhook rejection-body accepted-tag enumeration
+        // miss / structured-log accepted-wire-form emit drift.
+        //
+        // A future arm addition (an `Experimental` tier between
+        // [`super::FixSafety::Safe`] and [`super::FixSafety::Unsafe`]
+        // the M3-and-later lint runner grows for AI-suggested rewrites
+        // that need explicit review-and-accept — a trajectory item the
+        // sibling [`super::FixSafety::ALL`] doc block already names)
+        // extends [`super::FixSafety::ALL`] as a single edit and this
+        // pin sweeps the new arm by iteration; the paired
+        // [`super::FixSafety::WIRE_NAMES`] roster must grow in lockstep
+        // or this assertion trips. Every entry is further pinned to
+        // open with a lowercase ASCII byte (matching the substrate-wide
+        // lowercase-tag convention every peer closed-set enum whose
+        // canonical projection is a lowercase-tag byte-string carries),
+        // so a silent collapse of the caixa-lint fix-safety-tier axis
+        // with any hypothetical PascalCase peer wire-form axis (an
+        // entry byte-identical to the pre-lift Debug-derived `"Safe"` /
+        // `"Unsafe"` shapes that would let a wire-axis consumer accept
+        // the source-side variant identifier) trips here rather than
+        // at a downstream lint-report round-trip miss.
+        //
+        // Peer of the sibling
+        // [`super::tests::severity_wire_names_covers_every_arm`]
+        // (a199462) on the paired caixa-lint diagnostic-severity axis,
+        // [`caixa_core::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd),
+        // [`caixa_core::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45),
+        // [`caixa_core::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b),
+        // [`caixa_core::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194),
+        // [`caixa_core::render::tests::path_shape_violation_wire_names_covers_every_arm`]
+        // (0330bd3),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_wire_names_covers_every_arm`]
+        // (0402726),
+        // `caixa_arch::invariants::tests::invariant_kind_wire_names_covers_every_arm`
+        // (78f5522),
+        // `caixa_arch::report::tests::arch_verdict_wire_names_covers_every_arm`
+        // (ebddef0) pins — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the *fourth outside*-
+        // caixa-core closed-set fieldless typed enum on the caixa
+        // surface (the caixa-lint fix-safety-tier axis, and the second
+        // inside `caixa-lint` after [`super::Severity`]).
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired `CAIXA_LINT_FIX_SAFETY_WIRE_*` const family
+        // (e.g. rebranding `CAIXA_LINT_FIX_SAFETY_WIRE_SAFE` from
+        // `"safe"` to `"mechanical"`) — the length pin still passes but
+        // the `contains` check fires on the mutated arm; and by
+        // shortening the roster to one entry — the length pin fires
+        // first.
+        assert_eq!(
+            super::FixSafety::WIRE_NAMES.len(),
+            super::FixSafety::ALL.len(),
+            "FixSafety::WIRE_NAMES.len() must byte-equal \
+             FixSafety::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in super::FixSafety::ALL {
+            let wire = variant.as_str();
+            assert!(
+                super::FixSafety::WIRE_NAMES.contains(&wire),
+                "FixSafety::{variant:?}.as_str() = {wire:?} must be a \
+                 member of FixSafety::WIRE_NAMES — the emitter and \
+                 the roster have drifted out of lockstep"
+            );
+        }
+        for tag in super::FixSafety::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "FixSafety::WIRE_NAMES entry {tag:?} must be a \
+                     non-empty lowercase-tag byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "FixSafety::WIRE_NAMES entry {tag:?} must open with a \
+                 lowercase ASCII byte (matching the substrate-wide \
+                 lowercase-tag convention every peer closed-set enum \
+                 whose canonical projection is a lowercase-tag byte-\
+                 string carries) — an entry opening with an uppercase \
+                 byte would collide the roster with any hypothetical \
+                 peer PascalCase wire-form axis a downstream consumer \
+                 might disambiguate against (the pre-lift Debug-\
+                 derived `\"Safe\"` / `\"Unsafe\"` shapes)"
+            );
+        }
+        // Pin the exact two-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `CAIXA_LINT_FIX_SAFETY_WIRE_*` constants (a rebrand of the
+        // arm-tag mapping that leaves both the length pin and the
+        // membership pin passing on their own) trips at caixa-lint
+        // test time under `assert_eq!`. Order matches variant
+        // declaration order verbatim (`Safe` → `Unsafe`) so the roster
+        // is the canonical fix-safety-tier ordering every listing /
+        // rendering consumer defers to. Same declaration-order pin the
+        // sibling
+        // [`super::tests::severity_wire_names_covers_every_arm`]
+        // (a199462) closes on the paired caixa-lint diagnostic-severity
+        // axis.
+        assert_eq!(
+            super::FixSafety::WIRE_NAMES,
+            &[
+                super::CAIXA_LINT_FIX_SAFETY_WIRE_SAFE,
+                super::CAIXA_LINT_FIX_SAFETY_WIRE_UNSAFE,
+            ],
+            "FixSafety::WIRE_NAMES must enumerate every arm's wire-form \
+             tag exactly once, in variant declaration order (Safe → \
+             Unsafe)"
+        );
+        // Byte-parity pin on the paired reverse projection: every
+        // entry in the roster must round-trip cleanly through
+        // [`super::FixSafety::from_wire`] back to the same arm the
+        // [`super::FixSafety::as_str`] emitter returned it for.
+        // Refuses any future de-lift that swaps the two consts through
+        // the reverse projection out of lockstep with the forward
+        // emitter (a mid-arm rebrand touching only `as_str` but not
+        // `from_wire`, an argument-ordering swap on one of the match
+        // arms, a stray `to_lowercase` normalization on either side
+        // that would silently pass the identity round-trip on the
+        // already-lowercase corpus but split the two projections on
+        // any future non-lowercase input).
+        for (&variant, tag) in super::FixSafety::ALL
+            .iter()
+            .zip(super::FixSafety::WIRE_NAMES)
+        {
+            assert_eq!(
+                super::FixSafety::from_wire(tag),
+                Some(variant),
+                "FixSafety::from_wire({tag:?}) must round-trip back to \
+                 FixSafety::{variant:?} — emitter and parser have \
+                 drifted off the paired CAIXA_LINT_FIX_SAFETY_WIRE_* \
                  const family"
             );
         }
