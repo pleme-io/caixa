@@ -4983,8 +4983,15 @@ mod tests {
 
     #[test]
     fn validate_one_for_one_requires_children() {
-        let mut s = SupervisorSpec::default();
-        s.children = vec![];
+        // Explicit-empty via struct-update rather than `let mut s = default(); s.children = vec![];`
+        // — the peer `validate_simple_one_for_one_forbids_static_children` below already uses
+        // struct-update to name the axis under test at construction, and this shape matches
+        // it. Also keeps the "empty children is the axis under test" intent visible at the
+        // binding site rather than one line down, and side-steps `clippy::field_reassign_with_default`.
+        let mut s = SupervisorSpec {
+            children: vec![],
+            ..SupervisorSpec::default()
+        };
         assert!(matches!(
             s.validate().unwrap_err(),
             SupervisorError::NoChildren { .. }
