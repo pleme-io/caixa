@@ -9354,6 +9354,77 @@ pub const M2_UPGRADE_INSTRUCTION_KIND_PURGE: &str = ":purge";
 /// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] for the full lift rationale.
 pub const M2_UPGRADE_INSTRUCTION_KIND_RESTART: &str = ":restart";
 
+/// Canonical un-prefixed kebab wire-form byte-string the M2
+/// `:upgrade-from :instructions` per-entry OTP-appup
+/// [`crate::UpgradeInstruction::LoadModule`] variant surfaces under —
+/// the value serde's `#[serde(tag = "kind", rename_all = "kebab-case")]`
+/// derive emits at the paired [`M2_UPGRADE_INSTRUCTION_KEY_KIND`] tag
+/// key on every JSON / YAML CR round-trip, byte-for-byte the same
+/// string the [`crate::UpgradeInstruction::as_str`] accessor,
+/// [`gen_platform::Discriminant`]-derived
+/// [`crate::UpgradeInstruction::discriminant`], and the fleet-wide
+/// dispatcher-catalog identity (registered under
+/// `"caixa.upgrade-instruction"`) converge onto. Peer of the sibling
+/// author-surface tatara-lisp form [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`]
+/// (with `:` prefix); the two-axis split is load-bearing — the
+/// `_KIND_*` family names the tatara-lisp author-surface form the
+/// caixa.lisp grep-and-fix workflow reaches for (`grep '(:load-module '`),
+/// and the `_WIRE_*` family lifted here names the un-prefixed kebab
+/// byte-string every serde-serialized CR / [`std::fmt::Display`]-
+/// formatted diagnostic / [`AsRef<str>`]-bound consumer converges
+/// onto. Same "one canonical byte-string per typed axis" discipline
+/// the peer [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] family (56120ef)
+/// established on the sibling `:` -prefixed lisp-form axis, extended
+/// here onto the un-prefixed wire-form axis so the
+/// [`crate::UpgradeInstruction::as_str`] production dispatch (currently
+/// carrying open-coded `"load-module"` etc. arm literals) routes
+/// through one lifted `pub const` per arm — a future per-arm kebab
+/// rebrand (`"load-module"` → `"load"` matching a hypothetical Erlang
+/// `code:load_module/1` collapse, `"state-change"` → `"code-change"`
+/// matching Erlang's own `code_change/3` callback name verbatim, an
+/// M4-side CR schema rename bringing the wire form into WASI
+/// component-model naming) lands at one const-edit per arm and reaches
+/// every downstream `as_str`-routed / serde-derived / discriminant-
+/// derived / fleet-catalog surface in lockstep by construction.
+///
+/// The [`crate::UpgradeInstruction::as_str`] match arm for
+/// [`crate::UpgradeInstruction::LoadModule`] threads through this
+/// const; the pin is enforced by
+/// [`crate::upgrade::tests::upgrade_instruction_as_str_routes_through_lifted_wire_consts`].
+pub const M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE: &str = "load-module";
+/// Canonical un-prefixed kebab wire-form byte-string the M2
+/// `:upgrade-from :instructions` per-entry
+/// [`crate::UpgradeInstruction::StateChange`] variant surfaces under.
+/// Peer of [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] on the sibling
+/// per-instruction-variant wire-tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] for the full lift
+/// rationale.
+pub const M2_UPGRADE_INSTRUCTION_WIRE_STATE_CHANGE: &str = "state-change";
+/// Canonical un-prefixed kebab wire-form byte-string the M2
+/// `:upgrade-from :instructions` per-entry
+/// [`crate::UpgradeInstruction::SoftPurge`] variant surfaces under.
+/// Peer of [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] on the sibling
+/// per-instruction-variant wire-tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] for the full lift
+/// rationale.
+pub const M2_UPGRADE_INSTRUCTION_WIRE_SOFT_PURGE: &str = "soft-purge";
+/// Canonical un-prefixed kebab wire-form byte-string the M2
+/// `:upgrade-from :instructions` per-entry
+/// [`crate::UpgradeInstruction::Purge`] variant surfaces under. Peer
+/// of [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] on the sibling
+/// per-instruction-variant wire-tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] for the full lift
+/// rationale.
+pub const M2_UPGRADE_INSTRUCTION_WIRE_PURGE: &str = "purge";
+/// Canonical un-prefixed kebab wire-form byte-string the M2
+/// `:upgrade-from :instructions` per-entry
+/// [`crate::UpgradeInstruction::Restart`] variant surfaces under.
+/// Peer of [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] on the sibling
+/// per-instruction-variant wire-tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] for the full lift
+/// rationale.
+pub const M2_UPGRADE_INSTRUCTION_WIRE_RESTART: &str = "restart";
+
 /// Canonical lowercase JSON/YAML discriminator-key the
 /// [`crate::dep::DepSource`] enum's `#[serde(tag = "tipo", rename_all
 /// = "lowercase")]` derive emits as the tag axis at each serialized
