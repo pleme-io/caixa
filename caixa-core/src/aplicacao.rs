@@ -113,6 +113,54 @@ pub const WIT_PUBSUB_SHAPE_PREFIXES: &[&str] = &["nats:", "kafka:"];
 /// HTTP constant's docstring for the full lift rationale.
 pub const WIT_STORE_SHAPE_PREFIXES: &[&str] = &["wasi:keyvalue/", "kv:"];
 
+/// Canonical census-label byte-string for the [`WitShape::Http`] arm —
+/// the paired output of [`WitShape::as_str`] on the `Http` variant, and
+/// the accepted input of [`WitShape::from_wire`] on the same arm. Peer
+/// of [`WIT_SHAPE_LABEL_PUBSUB`] / [`WIT_SHAPE_LABEL_STORE`] /
+/// [`WIT_SHAPE_LABEL_CAPABILITY`] on the four-arm census-label axis the
+/// paired [`WitShape::LABELS`] roster enumerates — the single source of
+/// truth every consumer that emits or parses the `Http` shape's census
+/// label reads, closing the prior open-coded `"http"` inline string
+/// literal against a future rebrand (a hypothetical `"http-server"`
+/// disambiguator once a peer `"http-client"` arm lands) that would
+/// otherwise silently split the emitter's byte-string from any peer
+/// consumer that hard-coded the pre-rebrand form. Same "one canonical
+/// lifted const per arm, every consumer routes through it" discipline
+/// the peer [`crate::render::CAIXA_KIND_LABEL_*`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_*`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_*`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`] lifted per-arm const
+/// families already establish on the sibling caixa-core closed-set
+/// typed-enum discriminator axes.
+pub const WIT_SHAPE_LABEL_HTTP: &str = "http";
+
+/// Canonical census-label byte-string for the [`WitShape::PubSub`] arm
+/// — the paired output of [`WitShape::as_str`] on the `PubSub` variant,
+/// and the accepted input of [`WitShape::from_wire`] on the same arm.
+/// Peer of [`WIT_SHAPE_LABEL_HTTP`] / [`WIT_SHAPE_LABEL_STORE`] /
+/// [`WIT_SHAPE_LABEL_CAPABILITY`] on the four-arm census-label axis the
+/// paired [`WitShape::LABELS`] roster enumerates; see the `_HTTP`
+/// constant's docstring for the full lift rationale.
+pub const WIT_SHAPE_LABEL_PUBSUB: &str = "pubsub";
+
+/// Canonical census-label byte-string for the [`WitShape::Store`] arm —
+/// the paired output of [`WitShape::as_str`] on the `Store` variant,
+/// and the accepted input of [`WitShape::from_wire`] on the same arm.
+/// Peer of [`WIT_SHAPE_LABEL_HTTP`] / [`WIT_SHAPE_LABEL_PUBSUB`] /
+/// [`WIT_SHAPE_LABEL_CAPABILITY`] on the four-arm census-label axis the
+/// paired [`WitShape::LABELS`] roster enumerates; see the `_HTTP`
+/// constant's docstring for the full lift rationale.
+pub const WIT_SHAPE_LABEL_STORE: &str = "store";
+
+/// Canonical census-label byte-string for the [`WitShape::Capability`]
+/// arm — the paired output of [`WitShape::as_str`] on the `Capability`
+/// variant, and the accepted input of [`WitShape::from_wire`] on the
+/// same arm. Peer of [`WIT_SHAPE_LABEL_HTTP`] /
+/// [`WIT_SHAPE_LABEL_PUBSUB`] / [`WIT_SHAPE_LABEL_STORE`] on the four-arm
+/// census-label axis the paired [`WitShape::LABELS`] roster enumerates;
+/// see the `_HTTP` constant's docstring for the full lift rationale.
+pub const WIT_SHAPE_LABEL_CAPABILITY: &str = "capability";
+
 /// True when `wit` — a raw `:contratos :wit` value — starts with any
 /// entry in the `prefixes` accept-set. The single canonical
 /// prefix-driven WIT-shape classification combinator every peer
@@ -552,12 +600,98 @@ impl WitShape {
         }
     }
 
+    /// Substrate-canonical exhaustive accept-set on the [`WitShape`]
+    /// lowercase kebab census-label byte-string axis — the closed
+    /// four-arm roster of every byte-string [`Self::as_str`] returns,
+    /// routed byte-for-byte through the paired [`WIT_SHAPE_LABEL_HTTP`] /
+    /// [`WIT_SHAPE_LABEL_PUBSUB`] / [`WIT_SHAPE_LABEL_STORE`] /
+    /// [`WIT_SHAPE_LABEL_CAPABILITY`] lifted `pub const` roster the
+    /// [`Self::as_str`] emitter (and the [`std::fmt::Display`] /
+    /// [`AsRef<str>`] / `From<{Self,&Self}> for {&'static str, String,
+    /// Cow<'static, str>, Box<str>, Arc<str>}` trait triple + quintuple
+    /// routed through it) walks, and the same four strings the paired
+    /// [`Self::from_wire`] reverse projection accepts.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::LABELS`] (427fe75) roster
+    /// on the top-level typed-kind discriminator's lowercase-Portuguese
+    /// label axis, the sibling [`crate::CaixaKind::WIRE_NAMES`] (bd708bd)
+    /// / [`crate::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`crate::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`PlacementStrategy::WIRE_NAMES`] (3e5b194) rosters on the
+    /// `PascalCase` wire byte-string axis, and the sibling
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) /
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e)
+    /// rosters on the OTP-appup discriminator's two-axis roster split —
+    /// the same closed-set exhaustive-accept-set roster discipline
+    /// extended here onto the first `:contratos :wit` raw-classification
+    /// closed-set typed enum on the caixa surface, closing the seventh
+    /// substrate-side closed-set typed enum on the roster-discipline
+    /// axis and the second M3 mesh-shape closed-set typed enum
+    /// (alongside the peer [`PlacementStrategy::WIRE_NAMES`] on the
+    /// `:placement :estrategia` axis) to converge onto the discipline.
+    ///
+    /// Downstream consumers of the closed accepted-label set — a future
+    /// `feira app graph --by-wit-shape` histogram column whose
+    /// per-arm-header emission walks every arm's canonical label to
+    /// render zero-count arms as well as present arms, a future M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook rejection
+    /// body enumerating the accepted-shape census labels verbatim, a
+    /// future `feira app census` per-Aplicacao `:contratos :wit`
+    /// histogram whose accept-set enumeration reads the roster verbatim,
+    /// a future `tracing::field::valuable::Value::List` structured-log
+    /// accepted-label emit, any future round-trip fuzz harness that
+    /// sweeps every arm's canonical label — now reach for one lifted
+    /// substrate-primitive roster rather than open-coding a four-string
+    /// array-literal (`["http", "pubsub", "store", "capability"]`) whose
+    /// arm-set has no compile-time link back to the typed [`WitShape`]
+    /// enum. A future arm addition (a hypothetical `wasi:sockets/*`
+    /// transport-layer shape, an `oci:*` capability-import carrier per
+    /// the sibling [`wit_shape_matches`] docstring's trajectory bullet)
+    /// extends this roster as a single edit — paired with the
+    /// [`Self::as_str`] match's compiler-checked exhaustiveness on the
+    /// new arm — and every consumer picks up the new census label by
+    /// construction rather than a coordinated array-literal rewrite
+    /// across every downstream site.
+    ///
+    /// Length is pinned load-bearing at `WitShape::ALL.len()` (four) by
+    /// [`tests::wit_shape_labels_covers_every_arm`], every variant's
+    /// [`Self::as_str`] projection is pinned to a member of the roster
+    /// so a silent skew between the emitter's arm-set and this const's
+    /// arm-set trips at caixa-core test time rather than at a downstream
+    /// consumer's accepted-set enumeration miss, and every entry is
+    /// further pinned to open with an ASCII lowercase byte so a silent
+    /// collapse of the census-label axis with any hypothetical peer
+    /// `PascalCase` discriminator axis (an entry byte-identical to a
+    /// sibling variant's `Debug`-derived `PascalCase` byte-string that
+    /// would let a label-axis consumer accept the discriminator
+    /// vocabulary) trips here rather than at a downstream K8s-CR
+    /// round-trip miss.
+    pub const LABELS: &'static [&'static str] = &[
+        WIT_SHAPE_LABEL_HTTP,
+        WIT_SHAPE_LABEL_PUBSUB,
+        WIT_SHAPE_LABEL_STORE,
+        WIT_SHAPE_LABEL_CAPABILITY,
+    ];
+
     /// Canonical short kebab byte-string every consumer that formats a
     /// [`WitShape`] as census-facing text lands on — returns
     /// `"http"` / `"pubsub"` / `"store"` / `"capability"`, the same
     /// byte-strings the [`std::fmt::Display`] and [`AsRef<str>`] impls
     /// route through and every future histogram-column /
     /// audit-report / admission-rejection-body reader reads.
+    ///
+    /// The four arms return the paired [`WIT_SHAPE_LABEL_HTTP`] /
+    /// [`WIT_SHAPE_LABEL_PUBSUB`] / [`WIT_SHAPE_LABEL_STORE`] /
+    /// [`WIT_SHAPE_LABEL_CAPABILITY`] lifted constants so every
+    /// substrate consumer that dispatches on the shape's census label
+    /// reads the same byte-string the paired [`Self::from_wire`]
+    /// reverse projection accepts and the sibling [`Self::LABELS`]
+    /// roster enumerates — a future rebrand of the label byte-strings
+    /// reaches this emitter, the paired reverse projection, the roster,
+    /// and every trait impl routed through the emitter through one
+    /// caixa-core edit rather than a coordinated per-arm inline-literal
+    /// rewrite that would silently split the surfaces on any missed
+    /// site.
     ///
     /// Peer of the sibling closed-set typed enums'
     /// [`crate::CaixaKind::as_str`] /
@@ -571,10 +705,10 @@ impl WitShape {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Http => "http",
-            Self::PubSub => "pubsub",
-            Self::Store => "store",
-            Self::Capability => "capability",
+            Self::Http => WIT_SHAPE_LABEL_HTTP,
+            Self::PubSub => WIT_SHAPE_LABEL_PUBSUB,
+            Self::Store => WIT_SHAPE_LABEL_STORE,
+            Self::Capability => WIT_SHAPE_LABEL_CAPABILITY,
         }
     }
 
@@ -662,10 +796,10 @@ impl WitShape {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "http" => Some(Self::Http),
-            "pubsub" => Some(Self::PubSub),
-            "store" => Some(Self::Store),
-            "capability" => Some(Self::Capability),
+            WIT_SHAPE_LABEL_HTTP => Some(Self::Http),
+            WIT_SHAPE_LABEL_PUBSUB => Some(Self::PubSub),
+            WIT_SHAPE_LABEL_STORE => Some(Self::Store),
+            WIT_SHAPE_LABEL_CAPABILITY => Some(Self::Capability),
             _ => None,
         }
     }
@@ -17547,6 +17681,124 @@ mod tests {
                 WitShape::Http | WitShape::PubSub | WitShape::Store | WitShape::Capability => {}
             }
         }
+    }
+
+    #[test]
+    fn wit_shape_labels_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical [`WitShape::LABELS`]
+        // exhaustive accept-set roster on the lowercase kebab census-label
+        // byte-string axis: every variant of the sibling [`WitShape::ALL`]
+        // exhaustive-iteration surface must project through
+        // [`WitShape::as_str`] onto an entry the [`WitShape::LABELS`]
+        // roster carries, and the roster's length must byte-equal
+        // `WitShape::ALL.len()` so a silent skew between the
+        // [`WitShape::as_str`] match's arm-set and the roster's arm-set
+        // trips here at caixa-core test time rather than at a downstream
+        // `feira app graph --by-wit-shape` histogram column's zero-count-
+        // arm miss / a future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+        // admission-webhook rejection body's accepted-shape enumeration
+        // miss / a `tracing::field::valuable::Value::List` structured-log
+        // accepted-label emit's drift. A future arm addition (a
+        // hypothetical `wasi:sockets/*` transport-layer shape, an
+        // `oci:*` capability-import carrier per the sibling
+        // [`wit_shape_matches`] docstring's trajectory bullet) extends
+        // [`WitShape::ALL`] as a single edit and this pin sweeps the
+        // new arm by iteration; the paired [`WitShape::LABELS`] roster
+        // must grow in lockstep or this assertion trips. Every entry is
+        // further pinned to open with an ASCII lowercase byte so a silent
+        // collapse of the census-label axis with any hypothetical peer
+        // PascalCase discriminator axis (an entry byte-identical to a
+        // sibling variant's `Debug`-derived PascalCase byte-string that
+        // would let a label-axis consumer accept the discriminator
+        // vocabulary) trips here rather than at a downstream consumer's
+        // vocabulary-collision miss.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_labels_covers_every_arm`]
+        // (427fe75) pin on the top-level typed-kind discriminator's
+        // lowercase-Portuguese human-readable label axis, the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`crate::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`crate::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`placement_strategy_wire_names_covers_every_arm`] (3e5b194)
+        // pins on the `PascalCase` wire byte-string axes, and the
+        // sibling
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) /
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) pins on the OTP-appup discriminator's two-axis
+        // roster split — the same closed-set exhaustive-roster coverage
+        // discipline extended here onto the first `:contratos :wit`
+        // raw-classification closed-set typed enum, the seventh
+        // substrate-side closed-set typed enum on the roster axis and
+        // the second M3 mesh-shape closed-set typed enum (alongside the
+        // peer [`PlacementStrategy::WIRE_NAMES`] on the `:placement
+        // :estrategia` axis) to converge onto the discipline.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`WIT_SHAPE_LABEL_*`] const family (e.g.
+        // dropping the trailing `p` from `"pubsub"` → `"pubsu"`) — the
+        // length pin still passes but the `contains` check fires on the
+        // mutated arm; and by shortening the roster to three entries —
+        // the length pin fires first.
+        assert_eq!(
+            WitShape::LABELS.len(),
+            WitShape::ALL.len(),
+            "WitShape::LABELS.len() must byte-equal \
+             WitShape::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in WitShape::ALL {
+            let label = variant.as_str();
+            assert!(
+                WitShape::LABELS.contains(&label),
+                "WitShape::{variant:?}.as_str() = {label:?} must be \
+                 a member of WitShape::LABELS — the emitter and the \
+                 roster have drifted out of lockstep"
+            );
+        }
+        for tag in WitShape::LABELS {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "WitShape::LABELS entry {tag:?} must be a \
+                     non-empty lowercase kebab census-label byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "WitShape::LABELS entry {tag:?} must open with an \
+                 ASCII lowercase byte (lowercase kebab census-label \
+                 form) — an uppercase entry would collide the roster \
+                 with any hypothetical peer PascalCase discriminator \
+                 axis a downstream consumer might disambiguate against"
+            );
+        }
+        // Pin the exact four-arm roster in declaration order so a
+        // silent reorder of the roster (that would still satisfy the
+        // length + membership + case-shape probes above) splits the
+        // paired [`WitShape::ALL`] iteration order from every consumer
+        // that walks LABELS in lockstep. Compared against literal
+        // byte-strings (not through the [`WIT_SHAPE_LABEL_*`] const
+        // indirection) so a future rebrand of any per-arm const surfaces
+        // at this pin as well — a rebrand that flips only the const's
+        // definition without a paired literal edit here trips the
+        // assertion, closing the sibling-test drift-detection posture
+        // (the [`wit_shape_from_wire_accepts_every_as_str_output`] and
+        // [`wit_shape_as_str_display_and_asref_route_through_one_source`]
+        // pins on the peer surfaces) with a same-test byte-value witness.
+        assert_eq!(
+            WitShape::LABELS,
+            &["http", "pubsub", "store", "capability"],
+            "WitShape::LABELS must enumerate the census-label byte-strings \
+             in declaration order — a silent reorder or rebrand splits \
+             the paired [`WitShape::ALL`] iteration order from every \
+             consumer that walks LABELS in lockstep"
+        );
     }
 
     #[test]
