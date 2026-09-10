@@ -7157,6 +7157,64 @@ pub fn is_chart_keyword_shape(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Canonical lowercase-kebab wire-form byte-string the render-side
+/// [`PathShapeViolation::Empty`] variant surfaces under — the
+/// per-arm `&'static str` payload every consumer that renders the
+/// three-arm path-shape violation axis as user-facing text
+/// (`{:?}`-derive-emit replacements, structured-log
+/// `tracing::field::Value::Str`-arm records, `feira lint` per-arm
+/// listings, future admission-webhook rejection bodies) converges
+/// onto verbatim through the paired
+/// [`PathShapeViolation::as_str`] `pub const fn` accessor and the
+/// sibling [`PathShapeViolation::from_wire`] reverse-projection
+/// parser. Peer of [`RENDER_PATH_SHAPE_VIOLATION_WIRE_ABSOLUTE`] /
+/// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE`] on the
+/// three-arm render-side path-shape-diagnostic wire-form axis.
+///
+/// Same "one canonical byte-string per typed axis" discipline the
+/// peer [`M2_UPGRADE_INSTRUCTION_WIRE_LOAD_MODULE`] (36ffe65) /
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] (be40492) /
+/// [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] families established for
+/// the sibling M2 OTP-shape / supervisor / M3 mesh-shape closed-set
+/// typed-enum wire-form axes — extends the discipline onto the
+/// render-side path-shape-diagnostic axis, the first render-side
+/// closed-set typed enum to converge onto it. Until this lift
+/// landed the byte-string sat twice inline in
+/// [`PathShapeViolation::as_str`] and [`PathShapeViolation::from_wire`]
+/// with no compile-time link between the emit and parse arms nor
+/// to any downstream roster; a future rebrand (a per-arm slug
+/// tightening, an operator-vocabulary migration for a
+/// `feira lint --explain-path-shape=<axis>` per-arm listing) would
+/// have desynchronized the paired arm-set until a downstream
+/// consumer surfaced the drift at runtime. Routing all halves
+/// (`as_str` + `from_wire` + the paired
+/// [`PathShapeViolation::WIRE_NAMES`] roster) through this const
+/// closes the drift structurally by construction. Pinned load-
+/// bearing by
+/// [`tests::path_shape_violation_wire_names_covers_every_arm`]
+/// (paired roster / emitter round-trip).
+pub const RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY: &str = "empty";
+
+/// Canonical lowercase-kebab wire-form byte-string the render-side
+/// [`PathShapeViolation::Absolute`] variant surfaces under. Peer of
+/// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY`] on the three-arm
+/// render-side path-shape-diagnostic wire-form axis; see
+/// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY`] for the full lift
+/// rationale.
+pub const RENDER_PATH_SHAPE_VIOLATION_WIRE_ABSOLUTE: &str = "absolute";
+
+/// Canonical lowercase-kebab wire-form byte-string the render-side
+/// [`PathShapeViolation::ParentEscape`] variant surfaces under. Peer of
+/// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY`] on the three-arm
+/// render-side path-shape-diagnostic wire-form axis. The kebab-case
+/// spelling here is load-bearing — a `format!("{:?}", …).to_lowercase()`
+/// round-trip on the source-side `Debug` derive would collapse the
+/// multi-word arm to `"parentescape"` and desynchronize the tag from
+/// every peer substrate-side kebab-slug axis; see
+/// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY`] for the full lift
+/// rationale.
+pub const RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE: &str = "parent-escape";
+
 /// Tagged reason a caixa-author-supplied path can fail the
 /// sandboxed-relative shape gate every callback / script path must
 /// pass for the layout checker's `root.join(p)` to stay inside the
@@ -7333,11 +7391,101 @@ impl PathShapeViolation {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Empty => "empty",
-            Self::Absolute => "absolute",
-            Self::ParentEscape => "parent-escape",
+            Self::Empty => RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY,
+            Self::Absolute => RENDER_PATH_SHAPE_VIOLATION_WIRE_ABSOLUTE,
+            Self::ParentEscape => RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE,
         }
     }
+
+    /// Substrate-canonical exhaustive accept-set on the
+    /// [`PathShapeViolation`] lowercase-kebab wire-form byte-string axis
+    /// — the closed three-arm roster of every byte-string [`Self::as_str`]
+    /// returns, routed byte-for-byte through the paired
+    /// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY`] /
+    /// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_ABSOLUTE`] /
+    /// [`RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE`] lifted
+    /// `pub const` scalars the [`Self::as_str`] emitter (and the
+    /// [`std::fmt::Display`] / [`AsRef<str>`] /
+    /// `From<{Self,&Self}> for {&'static str, String, Cow<'static, str>,
+    /// Box<str>, Arc<str>}` trait triple + quintuple routed through it)
+    /// walks — and byte-for-byte the same three strings the paired
+    /// [`Self::from_wire`] and [`TryFrom<&str>`] reverse projections accept.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::WIRE_NAMES`] (bd708bd) /
+    /// [`crate::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`crate::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`crate::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194)
+    /// rosters on the `PascalCase` wire byte-string axis, the sibling
+    /// [`crate::CaixaKind::LABELS`] (427fe75) /
+    /// [`crate::aplicacao::WitShape::LABELS`] (9d9f585) rosters on the
+    /// lowercase-kebab census-label axis, the sibling
+    /// [`crate::aplicacao::RateLimitUnit::SUFFIXES`] (b553ec9) roster on
+    /// the single-char canonical-suffix axis, the sibling
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) /
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e)
+    /// rosters on the OTP-appup two-axis roster split, and the sibling
+    /// [`crate::dep::DepList::AUTHOR_KEYS`] (af6ad3a) roster on the
+    /// two-list dep-graph axis — the same closed-set exhaustive-accept-
+    /// set roster discipline extended here onto the first render-side
+    /// path-shape-diagnostic closed-set typed enum, the tenth
+    /// substrate-side closed-set typed enum on the roster axis and the
+    /// first *outside* the top-level manifest surface to converge onto
+    /// the discipline. The sibling [`crate::dialeto::CaixaDialeto`]
+    /// closed-set typed enum on the tatara-lisp dialect axis remains the
+    /// next natural peer, still carrying only [`crate::dialeto::CaixaDialeto::ALL`].
+    ///
+    /// Downstream consumers of the closed accepted-wire-form set — a
+    /// future `feira lint --explain-path-shape=<empty|absolute|parent-escape>`
+    /// CLI-side "did you mean" hint whose candidate-list must byte-match
+    /// the wire byte-string [`Self::as_str`] emits (rather than the
+    /// `PascalCase` source-side variant name), a future M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection
+    /// body's per-slot path-gate enumeration of the accepted-violation-
+    /// tag set on an unknown-slug miss, a future `feira lint --explain
+    /// path-shape` per-arm listing whose per-slot histogram column
+    /// walks the roster to render every arm's tally (including
+    /// zero-count arms — a hand-rolled projection off [`Self::ALL`]
+    /// alone would need a companion per-variant-to-tag map at every
+    /// consumer; this roster closes the two-axis walk in one lifted
+    /// const), a future `tracing::field::valuable::Value::List`
+    /// structured-log accepted-wire-form emit on the caixa-build
+    /// pipeline's per-slot path-gate emission path — now reach for one
+    /// lifted substrate-primitive roster rather than open-coding a
+    /// three-string array literal (`["empty", "absolute", "parent-escape"]`)
+    /// whose arm-set has no compile-time link back to the typed
+    /// [`PathShapeViolation`] enum. A future arm addition (a
+    /// `Symlink` arm the future symlink-escape gate would carry once
+    /// [`std::path::Path::is_symlink`] becomes part of the sandbox
+    /// contract, a `TrailingSpace` arm a future authoring-side
+    /// whitespace-hygiene gate would raise for `"lib/init.lisp "`
+    /// shapes — both trajectory items the sibling [`Self::ALL`] and
+    /// [`Self::from_wire`] doc blocks already name) extends this
+    /// roster as a single edit — paired with the [`Self::as_str`]
+    /// match's compiler-checked exhaustiveness on the new arm — and
+    /// every consumer picks up the new wire form by construction.
+    ///
+    /// Length is pinned load-bearing at `PathShapeViolation::ALL.len()`
+    /// (three) by
+    /// [`tests::path_shape_violation_wire_names_covers_every_arm`],
+    /// every variant's [`Self::as_str`] projection is pinned to a
+    /// member of the roster so a silent skew between the emitter's
+    /// arm-set and this const's arm-set trips at caixa-core test time
+    /// rather than at a downstream consumer's accepted-set enumeration
+    /// miss, every entry is pinned to open with a lowercase ASCII byte
+    /// (matching the substrate-wide kebab-slug convention every peer
+    /// closed-set enum whose canonical projection is a lowercase-kebab
+    /// tag carries), and the roster's declaration order is pinned
+    /// byte-for-byte against the variant declaration order (`Empty` →
+    /// `Absolute` → `ParentEscape`) so a future arm-swap on the roster
+    /// or the paired `RENDER_PATH_SHAPE_VIOLATION_WIRE_*` constants
+    /// trips at caixa-core test time under `assert_eq!` rather than at
+    /// a downstream per-slot diagnostic-precedence table's ordering
+    /// miss.
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY,
+        RENDER_PATH_SHAPE_VIOLATION_WIRE_ABSOLUTE,
+        RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE,
+    ];
 
     /// Substrate-canonical reverse projection on the
     /// [`PathShapeViolation`] closed-set render-side path-shape-diagnostic
@@ -7405,9 +7553,9 @@ impl PathShapeViolation {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "empty" => Some(Self::Empty),
-            "absolute" => Some(Self::Absolute),
-            "parent-escape" => Some(Self::ParentEscape),
+            RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY => Some(Self::Empty),
+            RENDER_PATH_SHAPE_VIOLATION_WIRE_ABSOLUTE => Some(Self::Absolute),
+            RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE => Some(Self::ParentEscape),
             _ => None,
         }
     }
@@ -41628,6 +41776,168 @@ mod tests {
                 "PathShapeViolation::{variant:?} is_* predicates must \
                  partition the arm set (empty, absolute, parent_escape); \
                  got {observed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::PathShapeViolation::WIRE_NAMES`] exhaustive accept-set
+        // roster on the lowercase-kebab wire-form axis: every variant of
+        // the sibling [`super::PathShapeViolation::ALL`] exhaustive-
+        // iteration surface must project through
+        // [`super::PathShapeViolation::as_str`] onto an entry the
+        // [`super::PathShapeViolation::WIRE_NAMES`] roster carries, and
+        // the roster's length must byte-equal
+        // `super::PathShapeViolation::ALL.len()` so a silent skew between
+        // the [`super::PathShapeViolation::as_str`] match's arm-set and
+        // the roster's arm-set trips here at caixa-core test time rather
+        // than at a downstream `feira lint --explain-path-shape=<axis>`
+        // per-arm listing / M4 admission-webhook rejection-body
+        // accepted-tag enumeration miss / structured-log
+        // accepted-wire-form emit drift.
+        //
+        // A future arm addition (a `Symlink` arm the future
+        // symlink-escape gate would carry once
+        // [`std::path::Path::is_symlink`] becomes part of the sandbox
+        // contract, a `TrailingSpace` arm a future authoring-side
+        // whitespace-hygiene gate would raise for `"lib/init.lisp "`
+        // shapes — both trajectory items the sibling
+        // [`super::PathShapeViolation::from_wire`] doc block already
+        // names) extends [`super::PathShapeViolation::ALL`] as a single
+        // edit and this pin sweeps the new arm by iteration; the paired
+        // [`super::PathShapeViolation::WIRE_NAMES`] roster must grow in
+        // lockstep or this assertion trips. Every entry is further
+        // pinned to open with a lowercase ASCII byte (matching the
+        // substrate-wide kebab-slug convention every peer closed-set
+        // enum whose canonical projection is a lowercase-kebab tag
+        // carries), so a silent collapse of the render-side path-shape-
+        // diagnostic wire-form axis with any hypothetical PascalCase
+        // peer wire-form axis (an entry byte-identical to a sibling
+        // PascalCase enum-variant name that would let a wire-axis
+        // consumer accept the PascalCase source-side vocabulary) trips
+        // here rather than at a downstream K8s-CR round-trip miss.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`crate::kind::tests::caixa_kind_labels_covers_every_arm`]
+        // (427fe75) /
+        // [`crate::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`crate::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`crate::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194) /
+        // [`crate::aplicacao::tests::wit_shape_labels_covers_every_arm`]
+        // (9d9f585) /
+        // [`crate::aplicacao::tests::rate_limit_unit_suffixes_covers_every_arm`]
+        // (b553ec9) /
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) /
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) /
+        // [`crate::dep::tests::dep_list_author_keys_covers_every_arm`]
+        // (af6ad3a) pins — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the first render-side
+        // path-shape-diagnostic closed-set typed enum, the tenth
+        // substrate-side closed-set typed enum on the roster axis and
+        // the first *outside* the top-level manifest surface to
+        // converge onto the discipline.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`super::RENDER_PATH_SHAPE_VIOLATION_WIRE_*`]
+        // const family (e.g. rebranding
+        // `RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE` from
+        // `"parent-escape"` to `"parent_escape"`) — the length pin
+        // still passes but the `contains` check fires on the mutated
+        // arm; and by shortening the roster to two entries — the
+        // length pin fires first.
+        assert_eq!(
+            super::PathShapeViolation::WIRE_NAMES.len(),
+            super::PathShapeViolation::ALL.len(),
+            "PathShapeViolation::WIRE_NAMES.len() must byte-equal \
+             PathShapeViolation::ALL.len() — a mismatch means the \
+             roster and the enum's arm-set have drifted; downstream \
+             consumers that fan through both will silently disagree \
+             on the accepted arm-set"
+        );
+        for &variant in super::PathShapeViolation::ALL {
+            let wire = variant.as_str();
+            assert!(
+                super::PathShapeViolation::WIRE_NAMES.contains(&wire),
+                "PathShapeViolation::{variant:?}.as_str() = {wire:?} \
+                 must be a member of PathShapeViolation::WIRE_NAMES — \
+                 the emitter and the roster have drifted out of \
+                 lockstep"
+            );
+        }
+        for tag in super::PathShapeViolation::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "PathShapeViolation::WIRE_NAMES entry {tag:?} \
+                     must be a non-empty lowercase-kebab wire-form \
+                     byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "PathShapeViolation::WIRE_NAMES entry {tag:?} must \
+                 open with a lowercase ASCII byte (matching the \
+                 substrate-wide kebab-slug convention) — an entry \
+                 opening with an uppercase byte would collide the \
+                 roster with any hypothetical peer PascalCase \
+                 wire-form axis a downstream consumer might \
+                 disambiguate against"
+            );
+        }
+        // Pin the exact three-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `RENDER_PATH_SHAPE_VIOLATION_WIRE_*` constants (a rebrand of
+        // the arm-tag mapping that leaves both the length pin and the
+        // membership pin passing on their own) trips at caixa-core
+        // test time under `assert_eq!`. Order matches variant
+        // declaration order verbatim (`Empty` → `Absolute` →
+        // `ParentEscape`) so the roster is the canonical ordering
+        // every listing / rendering consumer defers to. Same
+        // declaration-order pin the sibling
+        // [`crate::dep::tests::dep_list_author_keys_covers_every_arm`]
+        // (af6ad3a) closes on the two-list dep-graph axis.
+        assert_eq!(
+            super::PathShapeViolation::WIRE_NAMES,
+            &[
+                super::RENDER_PATH_SHAPE_VIOLATION_WIRE_EMPTY,
+                super::RENDER_PATH_SHAPE_VIOLATION_WIRE_ABSOLUTE,
+                super::RENDER_PATH_SHAPE_VIOLATION_WIRE_PARENT_ESCAPE,
+            ],
+            "PathShapeViolation::WIRE_NAMES must enumerate every \
+             arm's wire-form tag exactly once, in variant declaration \
+             order (Empty → Absolute → ParentEscape)"
+        );
+        // Byte-parity pin on the paired reverse projection: every
+        // entry in the roster must round-trip cleanly through
+        // [`super::PathShapeViolation::from_wire`] back to the same
+        // arm the [`super::PathShapeViolation::as_str`] emitter
+        // returned it for. Refuses any future de-lift that swaps the
+        // three consts through the reverse projection out of lockstep
+        // with the forward emitter (a mid-arm rebrand touching only
+        // `as_str` but not `from_wire`, an argument-ordering swap on
+        // one of the match arms, a stray `to_lowercase` normalization
+        // on either side that would silently pass the identity
+        // round-trip on the already-lowercase corpus but split the
+        // two projections on any future uppercase input).
+        for (&variant, tag) in super::PathShapeViolation::ALL
+            .iter()
+            .zip(super::PathShapeViolation::WIRE_NAMES)
+        {
+            assert_eq!(
+                super::PathShapeViolation::from_wire(tag),
+                Some(variant),
+                "PathShapeViolation::from_wire({tag:?}) must \
+                 round-trip back to PathShapeViolation::{variant:?} — \
+                 emitter and parser have drifted off the paired \
+                 RENDER_PATH_SHAPE_VIOLATION_WIRE_* const family"
             );
         }
     }
