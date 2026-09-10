@@ -8426,6 +8426,138 @@ impl From<&PathShapeViolation> for Box<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the render-side sandbox-escape three-arm path-shape-
+/// diagnostic [`PathShapeViolation`] closed-set typed enum. Routes byte-
+/// for-byte through the substrate-primitive [`PathShapeViolation::as_str`]
+/// `pub const fn` accessor via [`std::sync::Arc::<str>::from`] on the
+/// returned `&'static str`, so every consumer that binds a
+/// `let key: std::sync::Arc<str> = violation.into();`-shaped call site
+/// reaches the same three-arm `"empty"` / `"absolute"` / `"parent-escape"`
+/// canonical-lowercase-kebab byte-strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for std::sync::Arc<str>`
+/// and `impl From<String> for std::sync::Arc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::sync::Arc<str>` (nor an
+/// `impl<T: fmt::Display> From<T> for std::sync::Arc<str>`), so this axis is
+/// a distinct trait-idiomatic surface that a
+/// `let key: std::sync::Arc<str> = violation.into();`-shaped call site
+/// reaches through this impl and no other — a paired
+/// `std::sync::Arc::<str>::from(violation.as_str())` open-code has no
+/// compile-time link back to the substrate primitive, and a two-step
+/// `std::sync::Arc::<str>::from(String::from(violation))` composition
+/// through the owned-`String` axis allocates twice (once into the
+/// intermediate `String`, once into the [`std::sync::Arc<str>`] on the
+/// `From<String>` conversion) where the single-step trait impl allocates
+/// once. The shared-ownership + [`Sync`] + [`Send`] contract
+/// [`std::sync::Arc<str>`] provides is the distinct value the sibling
+/// [`Box<str>`] axis's owned-move return-shape cannot provide — a per-
+/// path-shape-violation diagnostic tag reachable from multiple concurrent
+/// per-Caixa layout-check tasks through the same three lowercase-kebab
+/// byte-strings, without a `.clone()`-per-task materialization the owned-
+/// move [`Box<str>`] axis would force.
+///
+/// Closes the caixa-core-internal tier of the substrate-wide trait-
+/// idiomatic [`std::sync::Arc<str>`] forward-projection campaign on the
+/// last remaining caixa-core-internal closed-set fieldless typed enum
+/// peer — after [`crate::CaixaKind`] (c17be64 opened + closed both
+/// corners), [`crate::dep::DepList`] (d8a4652), and
+/// [`crate::dialeto::CaixaDialeto`] (ac65d87), this impl paired with the
+/// sibling borrowed-input [`From<&PathShapeViolation> for std::sync::Arc<str>`]
+/// impl one commit below completes the caixa-core-internal Arc<str> tier
+/// uniformly across all four caixa-core-internal peers on both
+/// `{Self, &Self}` input-shape corners.
+///
+/// A future variant addition (a `Symlink` arm the future symlink-escape
+/// gate would carry once [`std::path::Path::is_symlink`] becomes part of
+/// the sandbox contract, a `TrailingSpace` arm a future authoring-side
+/// whitespace-hygiene gate would raise for `"lib/init.lisp "` shapes)
+/// reaches the paired [`std::sync::Arc<str>`] output axis through one
+/// match-arm edit on the [`PathShapeViolation::as_str`] `pub const fn`
+/// accessor, not a coordinated rewrite of every downstream
+/// `std::sync::Arc::<str>::from(violation.as_str())` open-code.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::as_str`] across the
+/// three-arm [`PathShapeViolation::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness and cross-axis
+/// byte-parity pins against the sibling owned-input
+/// `{&'static str, String, Cow<'static, str>, Box<str>}` return-shape axes).
+impl From<PathShapeViolation> for std::sync::Arc<str> {
+    fn from(violation: PathShapeViolation) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(violation.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<str>`] output* forward
+/// projection on the render-side sandbox-escape three-arm path-shape-
+/// diagnostic [`PathShapeViolation`] closed-set typed enum — the
+/// borrowed-input companion to the paired owned-input
+/// [`From<PathShapeViolation> for std::sync::Arc<str>`] impl one commit
+/// above that closes the caixa-core-internal tier of the substrate-wide
+/// trait-idiomatic [`std::sync::Arc<str>`] forward-projection campaign.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`PathShapeViolation::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<str>::from`] on the returned `&'static str`, so
+/// every consumer that binds a
+/// `let key: std::sync::Arc<str> = (&violation).into();`-shaped call site
+/// or a `PathShapeViolation::ALL.iter().map(std::sync::Arc::<str>::from)`-
+/// shaped pipe (whose iterator over `&'static [PathShapeViolation]` yields
+/// `&PathShapeViolation` by construction) reaches the same three-arm
+/// `"empty"` / `"absolute"` / `"parent-escape"` canonical-lowercase-kebab
+/// byte-strings the paired owned-input
+/// [`From<PathShapeViolation> for std::sync::Arc<str>`] and the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>}`
+/// forward-projection corner already return.
+///
+/// Rust's standard library carries `impl From<&str> for std::sync::Arc<str>`
+/// and `impl From<String> for std::sync::Arc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`PathShapeViolation::ALL`]`.iter().map(std::sync::Arc::<str>::from)`
+/// reaches through this impl and no other — without it, the same pipe
+/// would force a spurious [`Copy`] deref
+/// (`std::sync::Arc::<str>::from((*violation).as_str())`) or a
+/// `.copied()` restatement whose type bounds have no compile-time link
+/// back to the substrate primitive, and a `let key: std::sync::Arc<str> =
+/// (&violation).into();`-shaped call site would force an explicit `Copy`
+/// deref (`std::sync::Arc::<str>::from(*violation)`) or a
+/// `std::sync::Arc::<str>::from(violation.as_str())` open-code with the
+/// same defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the caixa-core-
+/// internal tier of the substrate-wide trait-idiomatic
+/// [`std::sync::Arc<str>`] forward-projection campaign for the last
+/// remaining caixa-core-internal closed-set fieldless typed enum peer —
+/// matching the `{Self, &Self} × {&'static str, String, Cow<'static, str>,
+/// Box<str>}` 2×4 forward-projection matrix the peer projection surfaces
+/// already close on this same enum, and completing the caixa-core-
+/// internal Arc<str> tier uniformly across all four caixa-core-internal
+/// peers ([`crate::CaixaKind`], [`crate::dep::DepList`],
+/// [`crate::dialeto::CaixaDialeto`], and this
+/// [`crate::render::PathShapeViolation`]) on both input-shape corners.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_borrowed_into_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::as_str`] across the
+/// three-arm [`PathShapeViolation::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness, a cross-axis
+/// partition pin against the paired owned-input
+/// [`From<PathShapeViolation> for std::sync::Arc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>}`
+/// return-shape axes, and a `.iter().map(std::sync::Arc::<str>::from)`
+/// pipe witness over [`PathShapeViolation::ALL`] that resolves through
+/// the borrowed-input axis without a spurious [`Copy`] deref).
+impl From<&PathShapeViolation> for std::sync::Arc<str> {
+    fn from(violation: &PathShapeViolation) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(violation.as_str())
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -43278,6 +43410,302 @@ mod tests {
                  silently detoured off the substrate-primitive accessor"
             );
         }
+    }
+
+    #[test]
+    fn path_shape_violation_from_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PathShapeViolation> for std::sync::Arc<str>` —
+        // asserts the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::PathShapeViolation::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm
+        // canonical-lowercase kebab emit-set (`"empty"` / `"absolute"` /
+        // `"parent-escape"`) across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Closes the
+        // caixa-core-internal tier of the substrate-wide
+        // [`std::sync::Arc<str>`] forward-projection campaign on the last
+        // remaining caixa-core-internal closed-set fieldless typed enum
+        // peer — after the caixa-core-internal Arc<str> tier already
+        // closed on [`super::super::CaixaKind`] (c17be64),
+        // [`super::super::dep::DepList`] (d8a4652), and
+        // [`super::super::dialeto::CaixaDialeto`] (ac65d87) — the M2 OTP-
+        // shape supervisor tier ([`super::super::supervisor::RestartStrategy`],
+        // [`super::super::supervisor::RestartPolicy`]), the M3 mesh-shape
+        // aplicacao tier ([`super::super::aplicacao::PlacementStrategy`],
+        // [`super::super::aplicacao::WitShape`],
+        // [`super::super::aplicacao::RateLimitUnit`]), and the outside-
+        // `caixa-core` tier (`InvariantKind`, `ArchVerdict`, `Severity`,
+        // `FixSafety`, `Semantic`, `FerriteRuntime`) already closed
+        // several axes prior.
+        //
+        // Rust's standard library carries `impl From<&str> for
+        // std::sync::Arc<str>` and `impl From<String> for
+        // std::sync::Arc<str>` but no blanket `impl<T: AsRef<str>>
+        // From<T> for std::sync::Arc<str>` (nor an `impl<T: fmt::Display>
+        // From<T> for std::sync::Arc<str>`), so this axis is a distinct
+        // trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = violation.into();`-shaped call
+        // site reaches through this impl and no other — a paired
+        // `std::sync::Arc::<str>::from(violation.as_str())` open-code has
+        // no compile-time link back to the substrate primitive, and a
+        // two-step `std::sync::Arc::<str>::from(String::from(violation))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`std::sync::Arc<str>`] on the `From<String>` conversion) where
+        // the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-input
+        // `{&'static str, String, Cow<'static, str>, Box<str>}` return-
+        // shape axes — locking the five return-shape paths on the owned-
+        // input surface together by construction so any future detour off
+        // the substrate-primitive [`super::PathShapeViolation::as_str`]
+        // accessor trips at caixa-core test time.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::PathShapeViolation>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<PathShapeViolation> for std::sync::Arc<str> impl \
+                 must round-trip PathShapeViolation::{variant:?} to the \
+                 same canonical-lowercase kebab byte-string \
+                 PathShapeViolation::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on \
+                 PathShapeViolation::{variant:?} must byte-equal \
+                 PathShapeViolation::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str =
+                <&'static str as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<PathShapeViolation> for std::sync::Arc<str> and \
+                 From<PathShapeViolation> for &'static str must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<PathShapeViolation> for std::sync::Arc<str> and \
+                 From<PathShapeViolation> for String must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and owned-`String` return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<PathShapeViolation> for std::sync::Arc<str> and \
+                 From<PathShapeViolation> for Cow<'static, str> must \
+                 resolve identically on PathShapeViolation::{variant:?} \
+                 — divergence signals the owned-input \
+                 std::sync::Arc<str> and Cow<'static, str> return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<PathShapeViolation> for std::sync::Arc<str> and \
+                 From<PathShapeViolation> for Box<str> must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the owned-input std::sync::Arc<str> \
+                 and Box<str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds four borrowed-input \
+                  return-shape paths (&'static str, String, Cow<'static, \
+                  str>, Box<str>) plus the paired owned-input Arc<str> \
+                  witness and the .iter().map(std::sync::Arc::<str>::from) \
+                  pipe witness into one exhaustive round-trip over \
+                  PathShapeViolation::ALL — the accepted line-count cost \
+                  of keying the whole borrowed-input Arc<str> corner to \
+                  the substrate-primitive as_str accessor at the same \
+                  test-site"
+    )]
+    fn path_shape_violation_from_borrowed_into_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&PathShapeViolation> for std::sync::Arc<str>` —
+        // asserts the borrowed-input standard-library trait impl and the
+        // substrate-primitive [`super::PathShapeViolation::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm
+        // canonical-lowercase kebab emit-set across every arm the
+        // exhaustive [`super::PathShapeViolation::ALL`] slice enumerates.
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::sync::Arc<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `std::sync::Arc<str>` forward-projection
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: std::sync::Arc<str> = (&violation).into();`-shaped
+        // call site or a
+        // `PathShapeViolation::ALL.iter().map(std::sync::Arc::<str>::from)`-
+        // shaped pipe reaches through this impl and no other — the paired
+        // owned-input `From<PathShapeViolation> for std::sync::Arc<str>`
+        // impl alone would force every borrowed-input call site through
+        // a spurious `Copy` deref
+        // (`std::sync::Arc::<str>::from((*violation).as_str())`) or a
+        // `.copied()` restatement whose type bounds have no compile-time
+        // link back to the substrate primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the caixa-
+        // core-internal tier of the substrate-wide trait-idiomatic
+        // [`std::sync::Arc<str>`] forward-projection campaign for the
+        // last remaining caixa-core-internal closed-set fieldless typed
+        // enum peer, matching the `{Self, &Self} × {&'static str, String,
+        // Cow<'static, str>, Box<str>}` 2×4 forward-projection matrix the
+        // peer projection surfaces already close on this same enum, and
+        // completing the caixa-core-internal Arc<str> tier uniformly
+        // across all four caixa-core-internal peers on both input-shape
+        // corners.
+        //
+        // Cross-axis partition pin against the paired owned-input
+        // [`From<PathShapeViolation> for std::sync::Arc<str>`] and the
+        // sibling borrowed-input `{&'static str, String, Cow<'static,
+        // str>, Box<str>}` return-shape axes — locking the five return-
+        // shape × input-shape paths on the borrowed-input surface
+        // together by construction so any future detour off the
+        // substrate-primitive accessor trips at caixa-core test time.
+        // Then a `.iter().map(std::sync::Arc::<str>::from)` pipe witness
+        // over [`super::PathShapeViolation::ALL`] — whose iterator yields
+        // `&PathShapeViolation` by construction, so the borrowed-input
+        // [`std::sync::Arc<str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::PathShapeViolation::as_str`]
+        // accessor without a spurious [`Copy`] deref (which would only be
+        // reachable through the owned-input
+        // [`From<PathShapeViolation> for std::sync::Arc<str>`] axis by
+        // first calling `.copied()` on the iterator).
+        for &variant in super::PathShapeViolation::ALL {
+            let via_trait: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&super::PathShapeViolation>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&PathShapeViolation> for std::sync::Arc<str> impl \
+                 must round-trip &PathShapeViolation::{variant:?} to the \
+                 same canonical-lowercase kebab byte-string \
+                 PathShapeViolation::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::sync::Arc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::sync::Arc<str>>::into on \
+                 &PathShapeViolation::{variant:?} must byte-equal \
+                 PathShapeViolation::as_str on the same input — the \
+                 blanket-derived Into shape on the borrowed-input surface \
+                 must resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait, owned_arc,
+                "From<&PathShapeViolation> for std::sync::Arc<str> and \
+                 From<PathShapeViolation> for std::sync::Arc<str> must \
+                 resolve identically on PathShapeViolation::{variant:?} \
+                 — divergence signals the borrowed-input and owned-input \
+                 std::sync::Arc<str> forward-projection input-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::PathShapeViolation>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&PathShapeViolation> for std::sync::Arc<str> and \
+                 From<&PathShapeViolation> for &'static str must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::sync::Arc<str> and &'static str return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_string: String =
+                <String as From<&super::PathShapeViolation>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&PathShapeViolation> for std::sync::Arc<str> and \
+                 From<&PathShapeViolation> for String must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::sync::Arc<str> and owned-`String` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::PathShapeViolation>>::from(
+                    &variant,
+                );
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&PathShapeViolation> for std::sync::Arc<str> and \
+                 From<&PathShapeViolation> for Cow<'static, str> must \
+                 resolve identically on PathShapeViolation::{variant:?} \
+                 — divergence signals the borrowed-input \
+                 std::sync::Arc<str> and Cow<'static, str> return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_box: Box<str> =
+                <Box<str> as From<&super::PathShapeViolation>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&PathShapeViolation> for std::sync::Arc<str> and \
+                 From<&PathShapeViolation> for Box<str> must resolve \
+                 identically on PathShapeViolation::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::sync::Arc<str> and Box<str> return-shape paths have \
+                 drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::sync::Arc<str>> = super::PathShapeViolation::ALL
+            .iter()
+            .map(std::sync::Arc::<str>::from)
+            .collect();
+        let via_method: Vec<std::sync::Arc<str>> = super::PathShapeViolation::ALL
+            .iter()
+            .map(|v| std::sync::Arc::<str>::from(v.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::sync::Arc::<str>::from)` over \
+             PathShapeViolation::ALL — a call site whose iteration axis \
+             holds `&PathShapeViolation` by construction — must byte-\
+             equal `.iter().map(|v| std::sync::Arc::<str>::from(v.\
+             as_str()))` on every arm — the borrowed-input \
+             std::sync::Arc<str> `From<&PathShapeViolation> for \
+             std::sync::Arc<str>` axis is what makes the \
+             `std::sync::Arc::<str>::from` composition route through the \
+             substrate-primitive `PathShapeViolation::as_str` accessor \
+             without a spurious `Copy` deref (which would only be \
+             reachable through the owned-input \
+             `From<PathShapeViolation> for std::sync::Arc<str>` axis by \
+             first calling `.copied()` on the iterator)"
+        );
     }
 
     // ── is_lisp_extension — `:behavior :on-*` + `:upgrade-from ───────────
