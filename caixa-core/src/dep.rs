@@ -3219,6 +3219,95 @@ impl DepList {
     /// arms is the build-time guarantee that no arm forgets to grow.
     pub const ALL: &'static [Self] = &[Self::Prod, Self::Dev];
 
+    /// Substrate-canonical exhaustive accept-set on the [`DepList`]
+    /// `:`-prefixed kebab-case tatara-lisp author-surface key axis —
+    /// the closed two-arm roster of every byte-string [`Self::as_str`]
+    /// returns, routed byte-for-byte through the paired
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] lifted `pub const`
+    /// scalars the [`Self::as_str`] emitter (and the
+    /// [`std::fmt::Display`] / [`AsRef<str>`] / `From<{Self,&Self}> for
+    /// {&'static str, String, Cow<'static, str>, Box<str>, Arc<str>}`
+    /// trait triple + quintuple routed through it) walks, and the same
+    /// two strings the paired [`Self::from_wire`] reverse projection
+    /// accepts.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::WIRE_NAMES`] (bd708bd) /
+    /// [`crate::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45) /
+    /// [`crate::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b) /
+    /// [`crate::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194)
+    /// rosters on the `PascalCase` wire byte-string axis, the sibling
+    /// [`crate::CaixaKind::LABELS`] (427fe75) /
+    /// [`crate::aplicacao::WitShape::LABELS`] (9d9f585) rosters on the
+    /// lowercase kebab census-label byte-string axis, the sibling
+    /// [`crate::aplicacao::RateLimitUnit::SUFFIXES`] (b553ec9) roster
+    /// on the single-char canonical-suffix axis, and the sibling
+    /// [`crate::upgrade::UpgradeInstruction::LISP_FORMS`] (1898d77) /
+    /// [`crate::upgrade::UpgradeInstruction::WIRE_FORMS`] (cc42c0e)
+    /// rosters on the OTP-appup discriminator's two-axis roster split
+    /// — the same closed-set exhaustive-accept-set roster discipline
+    /// extended here onto the outer-`Caixa` two-list dep-graph
+    /// closed-set typed enum, the ninth substrate-side closed-set
+    /// typed enum on the roster-discipline axis and the last unlifted
+    /// `&'static str`-carrying closed-set typed enum on the top-level
+    /// manifest surface (the sibling `AsRef<str>` doc block at
+    /// [`AsRef<str>`] already names the two-list dep-graph as "the
+    /// seventh (and last unlifted) closed-set typed enum on the caixa
+    /// surface" for the trait-idiomatic projection family — the same
+    /// closure applies here on the exhaustive-roster family).
+    ///
+    /// Downstream consumers of the closed accepted-key set — a future
+    /// `feira dep --list <deps|deps-dev>` CLI arg-parse's "did you
+    /// mean" hint that scans this slice rather than open-coding a
+    /// two-string array literal, a future M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection
+    /// body enumerating the accepted `:deps` / `:deps-dev` author-
+    /// surface keys verbatim on an unknown-key miss, a future
+    /// `feira dep census` per-Caixa `:deps` / `:deps-dev` histogram
+    /// column that walks the roster to render every arm's tally
+    /// (including zero-count arms — a hand-rolled projection off
+    /// [`Self::ALL`] alone would need a companion per-variant-to-key
+    /// map at every consumer; this roster closes the two-axis walk in
+    /// one lifted const), any future K8s CRD generation tool that
+    /// emits the accepted-key enum on the Caixa CR schema, a future
+    /// [`DepError`] widening that promotes the two `list: &'static
+    /// str` fields to a typed `list: DepList` carry so downstream
+    /// consumers dispatch on the enum rather than string-comparing
+    /// the wire scalar — every consumer that wants to enumerate the
+    /// closed dep-list author-key set outside caixa-core now reaches
+    /// for one lifted substrate-primitive roster rather than open-
+    /// coding a `[":deps", ":deps-dev"]` array-literal whose arm-set
+    /// has no compile-time link back to the typed [`DepList`] enum.
+    /// A future arm addition (a `:build-dep` third list once the
+    /// substrate grows Cargo-style split-graphs, a `:tool-dep` for
+    /// build-time-only tooling per the peer Cargo
+    /// `[build-dependencies]` / `[target.<cfg>.dev-dependencies]`
+    /// future admission surface — both trajectory items the sibling
+    /// [`Self::from_wire`] doc block already names) extends this
+    /// roster as a single edit — paired with the [`Self::as_str`]
+    /// match's compiler-checked exhaustiveness on the new arm — and
+    /// every consumer picks up the new key by construction rather
+    /// than a coordinated array-literal rewrite across every
+    /// downstream site.
+    ///
+    /// Length is pinned load-bearing at `DepList::ALL.len()` (two) by
+    /// [`tests::dep_list_author_keys_covers_every_arm`], every
+    /// variant's [`Self::as_str`] projection is pinned to a member of
+    /// the roster on every arm so a silent skew between the emitter's
+    /// arm-set and this const's arm-set trips at caixa-core test time
+    /// rather than at a downstream consumer's accepted-set enumeration
+    /// miss, and every entry is further pinned to open with the ASCII
+    /// `:` byte (the tatara-lisp author-surface keyword marker) so a
+    /// silent collapse with any hypothetical peer un-prefixed wire-form
+    /// axis (an entry byte-identical to a sibling `deps` / `deps-dev`
+    /// bare-kebab byte-string that would let an author-key-axis
+    /// consumer accept the un-prefixed vocabulary) trips here rather
+    /// than at a downstream K8s-CR round-trip miss.
+    pub const AUTHOR_KEYS: &'static [&'static str] = &[
+        crate::render::DEP_AUTHOR_KEY_DEPS,
+        crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+    ];
+
     /// Canonical author-surface tag every substrate consumer that
     /// names the offending dep-list in a diagnostic reaches for —
     /// [`crate::render::DEP_AUTHOR_KEY_DEPS`] for [`Self::Prod`] and
@@ -19738,6 +19827,133 @@ mod tests {
              only be reachable through the owned-input \
              `From<DepList> for std::sync::Arc<str>` axis by first \
              calling `.copied()` on the iterator)"
+        );
+    }
+
+    #[test]
+    fn dep_list_author_keys_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::DepList::AUTHOR_KEYS`] exhaustive accept-set roster
+        // on the `:`-prefixed kebab-case tatara-lisp author-surface
+        // key axis: every variant of the sibling
+        // [`super::DepList::ALL`] exhaustive-iteration surface must
+        // project through [`super::DepList::as_str`] onto an entry the
+        // [`super::DepList::AUTHOR_KEYS`] roster carries, and the
+        // roster's length must byte-equal `super::DepList::ALL.len()`
+        // so a silent skew between the [`super::DepList::as_str`]
+        // match's arm-set and the roster's arm-set trips here at
+        // caixa-core test time rather than at a downstream M4
+        // `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection
+        // body's `:deps` / `:deps-dev` accepted-key enumeration miss /
+        // a `feira dep --list …` "did you mean" hint drift / a
+        // downstream [`super::DepError`] widening's typed `list:
+        // DepList` carry that fans on the enum through a stale
+        // accepted-set. A future arm addition (a `:build-dep` or
+        // `:tool-dep` third list once the substrate grows Cargo-style
+        // split-graphs — both trajectory items the sibling
+        // [`super::DepList::from_wire`] doc block already names)
+        // extends [`super::DepList::ALL`] as a single edit and this
+        // pin sweeps the new arm by iteration; the paired
+        // [`super::DepList::AUTHOR_KEYS`] roster must grow in lockstep
+        // or this assertion trips. Every entry is further pinned to
+        // open with the ASCII `:` byte (the tatara-lisp author-surface
+        // keyword marker) so a silent collapse of the author-key axis
+        // with any hypothetical peer un-prefixed wire-form axis (an
+        // entry byte-identical to a sibling `deps` / `deps-dev`
+        // bare-kebab byte-string that would let an author-key-axis
+        // consumer accept the un-prefixed vocabulary) trips here
+        // rather than at a downstream consumer's
+        // vocabulary-collision miss.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd) /
+        // [`crate::kind::tests::caixa_kind_labels_covers_every_arm`]
+        // (427fe75) /
+        // [`crate::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45) /
+        // [`crate::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b) /
+        // [`crate::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194) /
+        // [`crate::aplicacao::tests::wit_shape_labels_covers_every_arm`]
+        // (9d9f585) /
+        // [`crate::aplicacao::tests::rate_limit_unit_suffixes_covers_every_arm`]
+        // (b553ec9) /
+        // [`crate::upgrade::tests::upgrade_instruction_lisp_forms_covers_every_arm`]
+        // (1898d77) /
+        // [`crate::upgrade::tests::upgrade_instruction_wire_forms_covers_every_arm`]
+        // (cc42c0e) pins — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the two-list dep-graph
+        // closed-set typed enum, the ninth substrate-side closed-set
+        // typed enum on the roster axis and the last unlifted
+        // `&'static str`-carrying closed-set typed enum on the top-
+        // level manifest surface to converge onto the discipline.
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired [`crate::render::DEP_AUTHOR_KEY_*`] const
+        // family (e.g. rebranding `DEP_AUTHOR_KEY_DEPS_DEV` from
+        // `":deps-dev"` to `":deps_dev"`) — the length pin still
+        // passes but the `contains` check fires on the mutated arm;
+        // and by shortening the roster to one entry — the length pin
+        // fires first.
+        assert_eq!(
+            super::DepList::AUTHOR_KEYS.len(),
+            super::DepList::ALL.len(),
+            "DepList::AUTHOR_KEYS.len() must byte-equal \
+             DepList::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in super::DepList::ALL {
+            let key = variant.as_str();
+            assert!(
+                super::DepList::AUTHOR_KEYS.contains(&key),
+                "DepList::{variant:?}.as_str() = {key:?} must be a \
+                 member of DepList::AUTHOR_KEYS — the emitter and the \
+                 roster have drifted out of lockstep"
+            );
+        }
+        for tag in super::DepList::AUTHOR_KEYS {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "DepList::AUTHOR_KEYS entry {tag:?} must be a \
+                     non-empty `:`-prefixed kebab-case tatara-lisp \
+                     author-surface key byte-string"
+                )
+            });
+            assert_eq!(
+                first, ':',
+                "DepList::AUTHOR_KEYS entry {tag:?} must open with \
+                 the ASCII `:` byte (tatara-lisp author-surface \
+                 keyword marker) — an un-prefixed entry would \
+                 collide the roster with any hypothetical peer bare-\
+                 kebab wire-form axis a downstream consumer might \
+                 disambiguate against"
+            );
+        }
+        // Pin the exact two-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `render::DEP_AUTHOR_KEY_*` constants (a rebrand of the
+        // arm-key mapping that leaves both the length pin and the
+        // membership pin passing on their own) trips at caixa-core
+        // test time under `assert_eq!`. Order matches variant
+        // declaration order verbatim (`Prod` → `Dev`) so the roster
+        // is the canonical ordering every listing / rendering
+        // consumer defers to. Same declaration-order pin the sibling
+        // [`crate::aplicacao::tests::rate_limit_unit_suffixes_covers_every_arm`]
+        // (b553ec9) closes on the M3 `:politicas :rate-limit`
+        // canonical-suffix axis.
+        assert_eq!(
+            super::DepList::AUTHOR_KEYS,
+            &[
+                crate::render::DEP_AUTHOR_KEY_DEPS,
+                crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+            ],
+            "DepList::AUTHOR_KEYS must enumerate every arm's \
+             author-surface key exactly once, in variant declaration \
+             order (Prod → Dev)"
         );
     }
 }
