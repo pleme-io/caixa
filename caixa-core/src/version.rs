@@ -223,6 +223,151 @@ impl From<&CaixaVersion> for String {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, str>`]
+/// output* reverse projection on the [`CaixaVersion`] newtype
+/// primitive — the [`Cow<'static, str>`] companion to the paired
+/// owned-input [`From<CaixaVersion> for String`] impl (999a310) on
+/// the same primitive. Routes through
+/// [`std::borrow::Cow::Owned`]`(v.0)`, moving the wrapper's own heap
+/// allocation through verbatim (no re-copy of the per-instance version
+/// body's bytes, no allocating detour through
+/// [`CaixaVersion::as_str`] + [`str::to_owned`]) — so every consumer
+/// that binds a [`CaixaVersion`] through the standard-library `.into()`
+/// / [`From<Self> for Cow<'static, str>`] axis reaches the wrapped
+/// byte-string through one substrate-primitive dispatch on the exact
+/// same heap allocation the manifest-parse forward
+/// [`From<String> for CaixaVersion`] constructor accepted.
+///
+/// A future consumer that wants a [`Cow<'static, str>`]-typed handle
+/// on a [`CaixaVersion`] — a
+/// `metric_label: Cow<'static, str> = versao.into()` structured-log
+/// key on a future per-caixa `caixa-operator` reconciliation counter
+/// (whose emit surface types metric keys as `Cow<'static, str>` so
+/// static compile-time literals and dynamic version bodies share the
+/// same key-slot without an unconditional heap allocation on the
+/// literal path), a future
+/// `HashMap::<Cow<'static, str>, _>::from_iter([(versao.into(), _)])`
+/// per-versao lookup where the map's key type is
+/// [`Cow<'static, str>`] rather than owned [`String`] so
+/// literal-lifetime keys can share the same map without wrapping in an
+/// extra [`String`] allocation, a future M4 admission-webhook
+/// rejection body whose per-arm error message composes through
+/// `format!("{}", Cow::<'static, str>::from(caixa.versao))` where the
+/// [`Cow<'static, str>`] intermediate is what the sibling error-frame
+/// composer accepts — reaches the wrapped byte-string through this
+/// one dispatch, without the pre-lift `.to_string().into()` /
+/// `Cow::Owned(String::from(v))` double-hop that would allocate a
+/// fresh intermediary [`String`] on the way to the same
+/// [`Cow::Owned`] arm.
+///
+/// Deliberately returns [`std::borrow::Cow::Owned`] rather than
+/// [`std::borrow::Cow::Borrowed`] — the substrate-primitive
+/// [`CaixaVersion::as_str`] accessor's return does not carry the
+/// `&'static str` lifetime by construction (the wrapped [`String`]
+/// storage is a runtime heap allocation, not a compile-time literal),
+/// so the [`Cow<'static, str>`] output shape rules out the borrowed
+/// arm and the owned arm is the type-correct projection. Peer of the
+/// paired owned-input [`From<CaixaVersion> for String`] impl on the
+/// same primitive — both route through the wrapper's own heap
+/// allocation via a move on `v.0`, preserving the zero-copy
+/// discipline the substrate opens on its String-wrapper newtype
+/// primitive.
+///
+/// Opens the trait-idiomatic *owned-input, [`Cow<'static, str>`]*
+/// reverse-projection axis on the substrate's core String-wrapper
+/// newtype primitive [`CaixaVersion`], mirroring the paired
+/// [`Cow<'static, str>`] *forward*-projection family the sibling
+/// closed-set fieldless typed enums (via
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`], and the remaining twelve
+/// closed-set enums) already carry — on the enum peers, the paired
+/// axis returns [`Cow::Borrowed`] because the accessor returns
+/// `&'static str`; on this newtype the paired axis returns
+/// [`Cow::Owned`] because the wrapped storage is runtime-allocated.
+/// Rust's standard library does not derive `From<Self> for
+/// Cow<'static, str>` from `From<Self> for String` (nor derive
+/// `From<&Self>` from `From<Self>`), so every newtype that carries a
+/// reverse `From<Self> for String` unwrap axis but not the paired
+/// [`Cow<'static, str>`] axis forces every
+/// [`Cow<'static, str>`]-typed call site through a `.to_string().into()`
+/// double-allocation detour that heap-allocates a fresh intermediary
+/// [`String`] between the wrapper and the [`Cow::Owned`] arm.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_from_into_owned_cow_str_returns_owned_wrapped_body`]
+/// (byte-parity + [`Cow::Owned`]-arm pin against
+/// [`CaixaVersion::as_str`] on the same instance, plus a round-trip
+/// witness through the paired [`From<String> for CaixaVersion`]
+/// constructor) and
+/// [`tests::caixa_version_from_into_owned_cow_str_and_string_agree_on_every_shape`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<CaixaVersion> for String`] impl on the same instance,
+/// closing the "owned-input into [`String`] vs. owned-input into
+/// [`Cow<'static, str>`]" bifurcation on the same wrapped body).
+impl From<CaixaVersion> for std::borrow::Cow<'static, str> {
+    fn from(v: CaixaVersion) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Owned(v.0)
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, str>`]
+/// output* reverse projection on the [`CaixaVersion`] newtype
+/// primitive — the borrowed-input companion to the paired owned-input
+/// [`From<CaixaVersion> for std::borrow::Cow<'static, str>`] impl
+/// immediately above. Routes byte-for-byte through the
+/// substrate-primitive [`CaixaVersion::as_str`] `pub const fn`
+/// accessor (via [`str::to_owned`] wrapped in
+/// [`std::borrow::Cow::Owned`]) so every consumer that holds a
+/// borrowed [`&CaixaVersion`] and needs a [`Cow<'static, str>`] —
+/// a `[…].iter().map(Cow::<'static, str>::from).collect::<Vec<_>>()`
+/// per-instance materializer over `&[CaixaVersion]` (whose iterator
+/// yields `&CaixaVersion`, not `CaixaVersion`, so the paired
+/// owned-input [`From<CaixaVersion> for Cow<'static, str>`] axis
+/// alone forces every call site through an explicit `.clone()` /
+/// dereference restatement), a future
+/// `HashMap::<Cow<'static, str>, _>::from_iter` that keys off a
+/// borrowed-iteration axis where cloning the wrapper would allocate
+/// one [`String`] beyond the eventual [`Cow::Owned`] arm's own, a
+/// future generic
+/// `<T: for<'a> Into<Cow<'static, str>>>`-bound emitter on a
+/// per-caixa diagnostic column that walks the
+/// `iter().map(Into::into)` shape verbatim — reaches the wrapped
+/// byte-string through this one dispatch on the substrate primitive.
+///
+/// Deliberately returns [`std::borrow::Cow::Owned`] rather than
+/// [`std::borrow::Cow::Borrowed`] — the substrate-primitive
+/// [`CaixaVersion::as_str`] accessor's return does not carry the
+/// `&'static str` lifetime by construction, so the
+/// [`Cow<'static, str>`] output shape rules out the borrowed arm and
+/// the owned arm is the type-correct projection (mirroring the paired
+/// owned-input impl's own [`Cow::Owned`] discipline). Second corner
+/// on the `{Self, &Self} → Cow<'static, str>` reverse-projection
+/// family opened on the paired owned-input impl immediately above.
+/// Rust's `From` trait does not derive the `From<&Self>` sibling from
+/// a `From<Self>` impl (the blanket
+/// `impl<T, U> From<&T> for U where T: Clone, U: From<T>` does not
+/// exist in `core`), so every newtype that carries the owned-input
+/// reverse [`Cow<'static, str>`] axis but not the borrowed-input axis
+/// forces every borrowed call site through a `.clone()` /
+/// `<Cow<'static, str>>::from(v.clone())` detour whose type bounds
+/// have no compile-time link back to the newtype.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_from_borrowed_into_owned_cow_str_routes_through_as_str_accessor`]
+/// (byte-parity + [`Cow::Owned`]-arm pin against
+/// [`CaixaVersion::as_str`] via a borrowed input, plus a
+/// source-survival witness against silent move-out) and
+/// [`tests::caixa_version_from_owned_and_borrowed_into_cow_str_agree_on_every_shape`]
+/// (cross-axis partition pin against the paired owned-input impl on
+/// the same instance, closing the "owned-input move vs. borrowed-input
+/// clone" bifurcation on the same wrapped body through the
+/// [`Cow<'static, str>`] axis).
+impl From<&CaixaVersion> for std::borrow::Cow<'static, str> {
+    fn from(v: &CaixaVersion) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Owned(v.as_str().to_owned())
+    }
+}
+
 /// Canonical Zig-style git-tag prefix every `feira publish` run writes
 /// and every downstream consumer of a published caixa reads. A caixa
 /// published at `:versao "0.1.0"` lands as a git tag `v0.1.0` on the
@@ -1032,6 +1177,145 @@ mod tests {
             let via_owned: String = String::from(v.clone());
             assert_eq!(via_owned, via_borrowed);
             assert_eq!(via_borrowed, versao);
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_into_owned_cow_str_returns_owned_wrapped_body() {
+        // Fail-before-pass-after byte-parity + [`Cow::Owned`]-arm pin
+        // on the lifted `impl From<CaixaVersion> for
+        // std::borrow::Cow<'static, str>` — asserts the owned-input
+        // reverse projection routes the wrapper's own heap allocation
+        // through `Cow::Owned(v.0)` verbatim (no re-copy, no
+        // normalization detour, no `Cow::Borrowed` misclassification
+        // that would demand a `&'static str` the runtime wrapper cannot
+        // carry), so the emitted [`Cow`] byte-equals the substrate-
+        // primitive [`CaixaVersion::as_str`] accessor on the same
+        // instance and round-trips byte-equal through the paired
+        // forward [`From<String> for CaixaVersion`] constructor.
+        // Refuses any future silent detour: a swap of the move on
+        // `v.0` for an allocating `.as_str().to_owned()` cascade (the
+        // pre-lift compose shape would double-allocate a fresh
+        // intermediary [`String`] on the way to the same
+        // [`Cow::Owned`] arm), a stray `.trim().to_owned()`
+        // normalization, or a mis-routing through
+        // [`Cow::Borrowed`] on a non-`'static` byte-string that would
+        // not type-check.
+        use std::borrow::Cow;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let expected = v.as_str().to_owned();
+            let cow: Cow<'static, str> = Cow::from(v.clone());
+            assert!(
+                matches!(cow, Cow::Owned(_)),
+                "From<CaixaVersion> for Cow<'static, str> must land on \
+                 the Cow::Owned arm — a runtime String wrapper cannot \
+                 promise the 'static lifetime the Cow::Borrowed arm \
+                 requires",
+            );
+            assert_eq!(
+                cow.as_ref(),
+                expected,
+                "Cow::from(v) must return the wrapper's own bytes verbatim",
+            );
+            let round_trip: CaixaVersion = cow.into_owned().into();
+            assert_eq!(
+                round_trip, v,
+                "Cow::from(v).into_owned() must round-trip byte-equal \
+                 through the From<String> constructor",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_into_owned_cow_str_and_string_agree_on_every_shape() {
+        // Fail-before-pass-after cross-axis partition pin: the owned-
+        // input [`From<CaixaVersion> for Cow<'static, str>`] reverse
+        // projection and the paired owned-input
+        // [`From<CaixaVersion> for String`] reverse projection resolve
+        // to the same bytes on every instance, and both agree with the
+        // borrowed [`AsRef<str>`] surface on the same wrapped body.
+        // Refuses any future silent split between the two owned-input
+        // reverse-projection axes (a stray normalization on one path
+        // only, a divergent routing that would let
+        // `Cow::from(v.clone())` and `String::from(v.clone())` disagree
+        // on the same body) that would silently split the same-shape
+        // owned-move discipline across the two reverse-projection
+        // targets.
+        use std::borrow::Cow;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_string: String = String::from(v.clone());
+            let via_cow: Cow<'static, str> = Cow::from(v.clone());
+            let via_as_ref: &str = <CaixaVersion as AsRef<str>>::as_ref(&v);
+            assert_eq!(via_cow.as_ref(), via_string.as_str());
+            assert_eq!(via_cow.as_ref(), via_as_ref);
+            assert_eq!(via_cow.as_ref(), versao);
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_borrowed_into_owned_cow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity + [`Cow::Owned`]-arm pin
+        // on the lifted `impl From<&CaixaVersion> for
+        // std::borrow::Cow<'static, str>` — asserts the borrowed-input
+        // reverse projection allocates a fresh [`Cow::Owned`] whose
+        // bytes byte-equal the substrate-primitive
+        // [`CaixaVersion::as_str`] accessor on the same instance,
+        // preserving the source [`CaixaVersion`] intact (no move-out).
+        // Refuses any future silent detour that would route the impl
+        // through a divergent projection (a stray normalization step,
+        // a mis-routing onto [`Cow::Borrowed`] on a non-`'static`
+        // byte-string that would not type-check, a re-inlining that
+        // dereferences `&self.0` outside the shared accessor).
+        use std::borrow::Cow;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_borrowed: Cow<'static, str> = Cow::from(&v);
+            assert!(
+                matches!(via_borrowed, Cow::Owned(_)),
+                "From<&CaixaVersion> for Cow<'static, str> must land on \
+                 the Cow::Owned arm — a runtime String wrapper cannot \
+                 promise the 'static lifetime the Cow::Borrowed arm \
+                 requires",
+            );
+            assert_eq!(
+                via_borrowed.as_ref(),
+                v.as_str(),
+                "Cow::from(&v) must byte-equal CaixaVersion::as_str",
+            );
+            // The borrowed-input impl must not move out of the source.
+            assert_eq!(
+                v.as_str(),
+                versao,
+                "source CaixaVersion must survive borrowed-input projection",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_owned_and_borrowed_into_cow_str_agree_on_every_shape() {
+        // Fail-before-pass-after cross-axis partition pin: the paired
+        // owned-input [`From<CaixaVersion> for Cow<'static, str>`] and
+        // borrowed-input [`From<&CaixaVersion> for Cow<'static, str>`]
+        // impls resolve to the same bytes on every instance, closing
+        // the "owned-input move vs. borrowed-input clone" bifurcation
+        // on the same wrapped body through the [`Cow<'static, str>`]
+        // axis. Refuses any future silent split between the two
+        // corners (a normalization on one path only, a divergent
+        // routing that would let `Cow::from(v.clone())` and
+        // `Cow::from(&v)` disagree on the same body). Both corners
+        // must land on [`Cow::Owned`] — the runtime wrapper's storage
+        // rules out the borrowed arm on both input shapes alike.
+        use std::borrow::Cow;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_borrowed: Cow<'static, str> = Cow::from(&v);
+            let via_owned: Cow<'static, str> = Cow::from(v.clone());
+            assert!(matches!(via_borrowed, Cow::Owned(_)));
+            assert!(matches!(via_owned, Cow::Owned(_)));
+            assert_eq!(via_owned.as_ref(), via_borrowed.as_ref());
+            assert_eq!(via_borrowed.as_ref(), versao);
         }
     }
 }
