@@ -9017,6 +9017,64 @@ impl TryFrom<&str> for PlacementStrategy {
     }
 }
 
+/// Trait-idiomatic [`std::str::FromStr`] parse axis on the first
+/// M3-mesh-primitive-defining [`PlacementStrategy`] closed-set typed
+/// enum — routes byte-for-byte through the paired
+/// [`TryFrom<&str> for PlacementStrategy`] impl (which in turn routes
+/// through the substrate-primitive [`PlacementStrategy::from_wire`]
+/// `Option<Self>` accessor), so `"...".parse::<PlacementStrategy>()` /
+/// `<PlacementStrategy as FromStr>::from_str(…)` reaches the same three-
+/// arm accept-set the sibling method-named
+/// [`PlacementStrategy::from_wire`] resolver and the paired
+/// [`TryFrom<&str>`] impl already resolve against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`crate::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum, then
+/// extended onto the structurally most fundamental closed-set typed
+/// enum via [`crate::CaixaKind`] (9867432) — onto the first M3-mesh-
+/// primitive-defining slot enum on the caixa surface, the closed-set
+/// `:placement :estrategia` axis the [`crate::caixa-mesh`] renderer
+/// keys off end-to-end. [`FromStr`] is the canonical Rust-idiomatic
+/// parse-set entry point every stdlib-shaped consumer reaches for —
+/// [`str::parse::<T>()`] is a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting [`FromStr`]
+/// onto the closed-set enum unlocks the `.parse::<PlacementStrategy>()`
+/// short-form on every consumer (a future `feira app placement --set
+/// <SingleNode|Replicated|Sharded>` clap-style arg-parse composes
+/// `arg.parse::<PlacementStrategy>()`; a `serde` string-tagged
+/// deserializer routes through the same `FromStr` bound; the future
+/// M4 `mesh.pleme.io/v1alpha1/Aplicacao` admission webhook's
+/// `Deserialize` derive reaches the enum through its `FromStr` impl
+/// via `serde_with::DisplayFromStr` when the field carries a plain
+/// `PascalCase` string rather than the current serde-derived tagged
+/// form).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] —
+/// same `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`) resolve
+/// to the same three-arm accept-set by construction. A future accept-
+/// set widening (an `Anycast` mesh-anycast arm the MESH-COMPOSITION
+/// §II.5 hint names as a trajectory item, a kebab-case rebrand alias)
+/// reaches every parse path through one edit on the substrate-
+/// primitive [`PlacementStrategy::from_wire`] accessor, not a
+/// coordinated rewrite across the two reverse-projection trait impls.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the three-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::placement_strategy_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for PlacementStrategy {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Trait-idiomatic forward projection on the M3-mesh-primitive-defining
 /// [`PlacementStrategy`] closed-set typed enum — routes byte-for-byte
 /// through the paired substrate-primitive [`PlacementStrategy::as_str`]
@@ -26080,6 +26138,139 @@ mod tests {
                  non-wire byte-string {input:?} — silent acceptance signals \
                  an accept-set widening off the paired \
                  PlacementStrategy::from_wire resolver"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for PlacementStrategy` — asserts the
+        // standard-library `.parse()` parse-axis entry point and the
+        // paired [`super::PlacementStrategy::try_from`] `TryFrom<&str>`
+        // impl (which in turn routes through the substrate-primitive
+        // [`super::PlacementStrategy::from_wire`] `Option<Self>` accessor)
+        // resolve to the same three-arm accept-set across every arm the
+        // exhaustive [`super::PlacementStrategy::ALL`] slice enumerates.
+        // Extends the substrate-wide `FromStr` parse-axis campaign —
+        // opened on [`crate::dep::DepList`] via 6167092 as first-mover,
+        // extended onto [`crate::CaixaKind`] via 9867432 — onto the first
+        // M3-mesh-primitive-defining slot enum on the caixa surface. The
+        // peer method-named `from_wire` accessor and the paired
+        // `TryFrom<&str>` trait impl fix the three-arm `PascalCase` wire
+        // accept-set; this pin locks the `FromStr::from_str` trait entry
+        // point onto the same set so any future divergence (a stray per-
+        // arm `match s` re-inlining that opens a compile-time link to an
+        // un-lifted arm-literal outside the paired
+        // `crate::render::M3_PLACEMENT_ESTRATEGIA_*` consts, a swap onto
+        // a hand-rolled parser that widens the accept-set past those
+        // three wire constants) trips at caixa-core test time.
+        use std::str::FromStr;
+        for &variant in PlacementStrategy::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <PlacementStrategy as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on PlacementStrategy must round-trip \
+                 PlacementStrategy::{variant:?}.as_str() = {wire:?} back \
+                 to Ok(PlacementStrategy::{variant:?}) — divergence from \
+                 PlacementStrategy::try_from signals a silent detour off \
+                 the paired reverse-projection trait impl"
+            );
+            assert_eq!(
+                <PlacementStrategy as FromStr>::from_str(wire).ok(),
+                PlacementStrategy::from_wire(wire),
+                "FromStr ok()-projection on {wire:?} must byte-equal \
+                 PlacementStrategy::from_wire on the same input — \
+                 divergence signals the two reverse-projection trait \
+                 paths have drifted off the substrate-primitive accessor"
+            );
+            // `.parse::<PlacementStrategy>()` short-form witness — the
+            // stdlib consumer surface that reaches the enum through the
+            // `T: FromStr` bound, not through `TryFrom<&str>`.
+            let via_parse: Result<PlacementStrategy, ()> = wire.parse();
+            assert_eq!(
+                via_parse,
+                Ok(variant),
+                "`{wire:?}`.parse::<PlacementStrategy>() must resolve to \
+                 Ok(PlacementStrategy::{variant:?}) — divergence signals \
+                 the stdlib `.parse()` short-form has drifted from the \
+                 lifted `FromStr::from_str` impl"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl FromStr for PlacementStrategy` —
+        // sweeps candidate byte-strings outside the three-arm
+        // `PascalCase` wire accept-set the sibling
+        // [`super::PlacementStrategy::as_str`] emits and asserts every
+        // one lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray case-fold path, a silent
+        // inclusion of a kebab-case rebrand of the wire byte-string that
+        // would collide the two-axis split the sibling
+        // `placement_strategy_from_wire_rejects_unknown_byte_strings` pin
+        // makes load-bearing) trips at caixa-core test time. Peer of the
+        // sibling
+        // `placement_strategy_try_from_str_rejects_unknown_byte_strings`
+        // rejection witness — the two pins together bracket both
+        // reverse-projection trait impls against the same rejected set.
+        // The candidate set mirrors the sibling `TryFrom<&str>` rejection
+        // sweep (empty, whitespace-only, kebab-case rebrand, snake_case
+        // rebrand, uppercase rebrand, whitespace-padded canonical
+        // scalars, trailing-newline shape, English-rebrand candidates,
+        // the residual `"?"` sentinel, and JSON-quoted-scalar shapes).
+        use std::str::FromStr;
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "\n",
+            "\t",
+            "single-node",
+            "singlenode",
+            "SingleNodes",
+            "single_node",
+            "single node",
+            "SINGLENODE",
+            "SingleNode ",
+            " SingleNode",
+            " Sharded ",
+            "Sharded\n",
+            "replicated ",
+            "sharded",
+            "REPLICATED",
+            "Anycast",
+            "Global",
+            "?",
+            "\"Sharded\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <PlacementStrategy as FromStr>::from_str(input),
+                Err(()),
+                "FromStr impl on PlacementStrategy must reject unknown \
+                 byte-string {input:?} — divergence from \
+                 PlacementStrategy::from_wire on the same input signals \
+                 a silent accept-set widening past the three lifted \
+                 crate::render::M3_PLACEMENT_ESTRATEGIA_* wire constants"
+            );
+            assert_eq!(
+                <PlacementStrategy as FromStr>::from_str(input).ok(),
+                PlacementStrategy::from_wire(input),
+                "FromStr ok()-projection on {input:?} must byte-equal \
+                 PlacementStrategy::from_wire on the same input — \
+                 divergence signals the FromStr trait path has drifted \
+                 off the substrate-primitive accessor"
+            );
+            let via_parse: Result<PlacementStrategy, ()> = input.parse();
+            assert_eq!(
+                via_parse,
+                Err(()),
+                "`{input:?}`.parse::<PlacementStrategy>() must reject the \
+                 unknown byte-string — divergence signals the stdlib \
+                 `.parse()` short-form has drifted from the lifted \
+                 `FromStr::from_str` impl"
             );
         }
     }
