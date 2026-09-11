@@ -480,6 +480,87 @@ impl TryFrom<&str> for InvariantKind {
     }
 }
 
+/// Trait-idiomatic [`std::str::FromStr`] parse axis on the
+/// [`InvariantKind`] closed-set caixa-arch invariant-severity typed enum
+/// — routes byte-for-byte through the paired
+/// [`TryFrom<&str> for InvariantKind`] impl (which in turn routes
+/// through the substrate-primitive [`InvariantKind::from_wire`]
+/// `Option<Self>` accessor), so `"...".parse::<InvariantKind>()` /
+/// `<InvariantKind as FromStr>::from_str(…)` reaches the same three-arm
+/// canonical-lowercase `"safety"` / `"compliance"` / `"hint"` accept-set
+/// the sibling method-named [`InvariantKind::from_wire`] resolver and
+/// the paired [`TryFrom<&str>`] impl already resolve against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`caixa_core::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum, then
+/// extended onto the structurally most fundamental closed-set typed
+/// enum via [`caixa_core::CaixaKind`] (9867432), then onto the first
+/// M3-mesh-primitive-defining slot enum via
+/// [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a), then onto
+/// the dialect-classification axis via [`caixa_core::CaixaDialeto`]
+/// (ff01b2f) — onto the *first outside-caixa-core* closed-set fieldless
+/// typed enum on the caixa surface: the caixa-arch invariant-severity
+/// three-arm accept-set every `feira arch` / `feira tofu` per-violation
+/// render site and every future M4 admission-webhook / policy-engine
+/// audit-loader dispatches through. Coherent by construction on this
+/// enum specifically: [`InvariantKind`] carries exactly one canonical
+/// lowercase wire axis (`safety` / `compliance` / `hint`) with no
+/// paired secondary parse surface, so — unlike the peer
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] (whose paired
+/// [`gen_platform::FromStrKind`]-derived kebab-case `FromStr` on the
+/// dispatcher-catalog axis rules a second `FromStr` impl out by
+/// coherence) and unlike the peer
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] (whose two-axis splits
+/// motivate deliberate deferral of the `FromStr` axis so a plain
+/// `s.parse::<T>()` cannot obscure which axis the caller reaches),
+/// lifting [`FromStr`] onto [`InvariantKind`] cannot collide with a
+/// second parse axis it does not carry.
+///
+/// [`FromStr`] is the canonical Rust-idiomatic parse-set entry point
+/// every stdlib-shaped consumer reaches for — [`str::parse::<T>()`] is
+/// a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting [`FromStr`]
+/// onto the closed-set enum unlocks the `.parse::<InvariantKind>()`
+/// short-form on every consumer (a future `feira arch --severity
+/// <safety|compliance|hint>` clap-style arg-parse composes
+/// `arg.parse::<InvariantKind>()`; a `serde` string-tagged deserializer
+/// with a `#[serde(with = "serde_with::DisplayFromStr")]` shim routes
+/// through the same `FromStr` bound; a future M4
+/// `mesh.pleme.io/v1alpha1/ArchAudit` CR admission-webhook body reloader
+/// that walks a `Vec<String>` of prior `InvariantKind::as_str` outputs
+/// reaches the typed enum through `line.parse::<InvariantKind>()`
+/// without a per-consumer `TryFrom<&str>` restatement).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] — same
+/// `type Err = ()` deliberate-deferral shape the sibling reverse-
+/// projection trait carries — so both trait-idiomatic parse-axis paths
+/// (`TryFrom<&str>` and `FromStr::from_str`) resolve to the same
+/// three-arm accept-set by construction. A future accept-set widening
+/// (a `Warning` tier between [`Self::Compliance`] and [`Self::Hint`]
+/// the `iac-forge` policy-engine grows, a `Fatal` tier above
+/// [`Self::Safety`] — both trajectory items the sibling
+/// [`InvariantKind::ALL`] doc block already names) reaches every parse
+/// path through one edit on the substrate-primitive
+/// [`InvariantKind::from_wire`] accessor, not a coordinated rewrite
+/// across the two reverse-projection trait impls.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the three-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::invariant_kind_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for InvariantKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Standard-library trait-idiomatic forward projection on the
 /// [`InvariantKind`] closed-set caixa-arch invariant-severity axis.
 /// Routes byte-for-byte through the paired substrate-primitive
@@ -2097,6 +2178,153 @@ mod tests {
                 InvariantKind::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for InvariantKind` — asserts the
+        // standard-library `.parse()` parse-axis entry point and the
+        // paired [`super::InvariantKind::try_from`] `TryFrom<&str>` impl
+        // (which in turn routes through the substrate-primitive
+        // [`super::InvariantKind::from_wire`] `Option<Self>` accessor)
+        // resolve to the same three-arm canonical-lowercase accept-set
+        // across every arm the exhaustive [`super::InvariantKind::ALL`]
+        // slice enumerates. Extends the substrate-wide `FromStr`
+        // parse-axis campaign — opened on
+        // [`caixa_core::dep::DepList`] via 6167092, then
+        // [`caixa_core::CaixaKind`] (9867432),
+        // [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a) and
+        // [`caixa_core::CaixaDialeto`] (ff01b2f) — onto the *first
+        // outside-caixa-core* closed-set fieldless typed enum on the
+        // caixa surface: the caixa-arch invariant-severity axis every
+        // [`crate::run::check_manifest`] verdict-summary aggregation
+        // reads out. The peer method-named `from_wire` accessor and
+        // the paired `TryFrom<&str>` trait impl fix the three-arm
+        // canonical-lowercase accept-set; this pin locks the
+        // `FromStr::from_str` trait entry point onto the same set so
+        // any future divergence (a stray per-arm `match s` re-inlining
+        // that opens a compile-time link to an un-lifted arm-literal,
+        // a swap onto a hand-rolled parser that widens the accept-set
+        // past the three lifted
+        // [`super::CAIXA_ARCH_INVARIANT_KIND_WIRE_*`] consts) trips at
+        // caixa-arch test time. Also covers the stdlib `.parse()`
+        // short-form witness: `.parse::<InvariantKind>()` is the
+        // `T: FromStr`-bounded generic every clap-style arg-parser,
+        // `serde` string-tagged deserializer, and generic
+        // `<T: FromStr>`-bound loader reaches for — the pin asserts
+        // both `<T as FromStr>::from_str` and `.parse::<T>()` resolve
+        // to the same three-arm accept-set.
+        use std::str::FromStr;
+        for &variant in InvariantKind::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <InvariantKind as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on InvariantKind must round-trip \
+                 InvariantKind::{variant:?}.as_str() = {wire:?} back \
+                 to Ok(InvariantKind::{variant:?}) — divergence from \
+                 the paired TryFrom<&str> impl / \
+                 InvariantKind::from_wire signals a silent detour off \
+                 the substrate-primitive accessor",
+            );
+            assert_eq!(
+                wire.parse::<InvariantKind>(),
+                Ok(variant),
+                "stdlib .parse::<InvariantKind>() short-form on \
+                 InvariantKind::{variant:?}.as_str() = {wire:?} must \
+                 route through the lifted FromStr impl and reach \
+                 Ok(InvariantKind::{variant:?})",
+            );
+            assert_eq!(
+                <InvariantKind as FromStr>::from_str(wire).ok(),
+                InvariantKind::from_wire(wire),
+                "FromStr::from_str ok()-projection on {wire:?} must \
+                 byte-equal InvariantKind::from_wire on the same input \
+                 — the two reverse-projection axes must resolve to the \
+                 same three-arm canonical-lowercase accept-set",
+            );
+            assert_eq!(
+                <InvariantKind as FromStr>::from_str(wire),
+                <InvariantKind as TryFrom<&str>>::try_from(wire),
+                "FromStr::from_str and TryFrom<&str>::try_from must \
+                 byte-equal on every arm — FromStr delegates to \
+                 TryFrom<&str> by construction; divergence signals a \
+                 stray reroute onto a hand-rolled parser",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl std::str::FromStr for
+        // InvariantKind` — sweeps a candidate set of byte-strings
+        // outside the three-arm canonical-lowercase wire accept-set
+        // the sibling [`super::InvariantKind::as_str`] emits and
+        // asserts every one lands on `Err(())`, so a future accidental
+        // widening of the trait impl's accept-set (a stray
+        // case-fold that admits the pre-lift PascalCase Debug-derived
+        // shapes `"Safety"` / `"Compliance"` / `"Hint"` on the wire
+        // axis, a silent acceptance of the peer
+        // [`caixa_lint::Severity`] four-arm severity axis's non-shared
+        // `"error"` / `"warning"` / `"info"` arms — accepting those
+        // would silently split this axis's parser from the emitter's
+        // arm-set, and misclassify a lint-severity-shaped byte-string
+        // as a caixa-arch invariant severity, the exact drift the
+        // module-doc-block naming the two axes' shared `"hint"` arm as
+        // "a coincidence of lowercase-tag choice, not a typed cross-
+        // axis promise" warns against) trips at caixa-arch test time.
+        // The candidate set spans the empty string, whitespace-only
+        // padding, uppercase / mixed-case rebrand candidates,
+        // Levenshtein-neighbor typos, sibling closed-set-enum
+        // canonical tags on the peer [`caixa_core::CaixaKind`] six-arm
+        // axis, and trailing/leading-whitespace-padded canonical tags.
+        // Pairs the `<T as FromStr>::from_str` and stdlib `.parse()`
+        // short-form witnesses so a future divergence between the two
+        // parse-axis entry points (a hand-rolled `.parse` override
+        // that bypasses the delegated `FromStr` impl) trips here.
+        use std::str::FromStr;
+        for bad in [
+            "",
+            " ",
+            "Safety",
+            "SAFETY",
+            "Compliance",
+            "COMPLIANCE",
+            "Hint",
+            "HINT",
+            "safey",
+            "hnt",
+            "warning",
+            "error",
+            "info",
+            "fatal",
+            "biblioteca",
+            "servico",
+            "one-for-one",
+            "empty",
+            "safety ",
+            " safety",
+            "safety\n",
+            "safety\t",
+        ] {
+            assert_eq!(
+                <InvariantKind as FromStr>::from_str(bad),
+                Err(()),
+                "FromStr for InvariantKind({bad:?}) must return \
+                 Err(()) — the trait impl's accept-set is exactly the \
+                 three InvariantKind::as_str outputs; a widening would \
+                 silently split the FromStr impl's accept-set from the \
+                 emitter's arm-set",
+            );
+            assert_eq!(
+                bad.parse::<InvariantKind>(),
+                Err(()),
+                "stdlib .parse::<InvariantKind>() short-form on \
+                 {bad:?} must route through the lifted FromStr impl \
+                 and reject with Err(())",
             );
         }
     }
