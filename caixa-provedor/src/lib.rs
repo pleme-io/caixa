@@ -24,4 +24,7 @@ pub mod ferrite;
 pub mod imports;
 
 pub use backend::FerriteTofuBackend;
-pub use ferrite::{ferrite_rt_import, ferrite_runtime_variant};
+pub use ferrite::{
+    CAIXA_PROVEDOR_FERRITE_RUNTIME_WIRE_ARENA, CAIXA_PROVEDOR_FERRITE_RUNTIME_WIRE_SAFE,
+    ferrite_rt_import, ferrite_runtime_variant,
+};
