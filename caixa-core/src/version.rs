@@ -107,6 +107,98 @@ impl AsRef<str> for CaixaVersion {
     }
 }
 
+/// Trait-idiomatic *HashMap-key-shaped* borrow projection on the
+/// [`CaixaVersion`] newtype primitive — the standard-library
+/// [`std::borrow::Borrow<str>`] companion to the paired sibling
+/// [`AsRef<str>`] impl (a086 lift) on the same borrow-projection axis of
+/// this primitive. Routes byte-for-byte through the substrate-primitive
+/// [`CaixaVersion::as_str`] `pub const fn` accessor — the same accessor
+/// the paired [`AsRef<str>`] and [`fmt::Display`] impls already delegate
+/// through — so every consumer that binds a [`CaixaVersion`] through the
+/// standard-library `Borrow<str>` bound reaches the wrapped byte-string
+/// through one substrate-primitive dispatch rather than through a
+/// pre-lift `.as_str()` open-coded projection at every wire-up.
+///
+/// A future consumer that wants to key a map or set by
+/// [`CaixaVersion`] and look up entries by a borrowed [`&str`] — a
+/// per-`:versao` compatibility matrix `HashMap<CaixaVersion, PolicyRow>`
+/// where the reconciliation loop's per-cycle `.get(current_versao_str)`
+/// probes the map with the raw `&str` view of the current cluster
+/// snapshot's version body (the `HashMap::get<Q: ?Sized>` signature is
+/// `where K: Borrow<Q>, Q: Hash + Eq`; without this impl the caller must
+/// wrap the borrowed `&str` in a fresh [`CaixaVersion`] allocation on
+/// every probe), a future `BTreeMap<CaixaVersion, _>::range(..)` sweep
+/// over a per-versao index that accepts a borrowed `&str` range bound
+/// through the same `Borrow<str>` bound, a
+/// `HashSet<CaixaVersion>::contains(&str)` membership probe on a
+/// per-versao denylist keyed by owned [`CaixaVersion`] but queried by
+/// the borrowed view — reaches the wrapped byte-string through this one
+/// dispatch on the substrate primitive, without the pre-lift
+/// `CaixaVersion::from(<&str>)` per-probe allocation the paired forward
+/// [`From<&str> for CaixaVersion`] constructor would otherwise force at
+/// every lookup site.
+///
+/// Peer of the sibling [`AsRef<str>`] impl on the same borrow-projection
+/// axis — both project a borrowed `&self` binding onto a borrowed `&str`
+/// via the shared substrate-primitive [`CaixaVersion::as_str`] accessor.
+/// Rust's standard library deliberately splits the two trait axes on the
+/// two bounds they carry: [`AsRef<str>`] is the *conversion* bound used
+/// by APIs that accept `impl AsRef<str>` and view the input as a `&str`
+/// projection (the [`std::path::Path::new`] / [`std::fs`] interop
+/// surface, [`std::process::Command::arg`], [`clap`]-side
+/// `value_parser!` folds), while [`std::borrow::Borrow<str>`] is the
+/// stricter *identity* bound the collection APIs
+/// ([`std::collections::HashMap`], [`std::collections::BTreeMap`],
+/// [`std::collections::HashSet`], [`std::collections::BTreeSet`]) key
+/// their lookup surfaces off — [`std::borrow::Borrow`] additionally
+/// promises that a borrowed view produced through [`Borrow::borrow`]
+/// hashes and compares byte-identically to the owned form, which is the
+/// contract [`std::collections::HashMap::get`] relies on when it hashes
+/// the query key through `Q` (`str`) and matches against slot keys
+/// hashed through `K` ([`CaixaVersion`]). The [`CaixaVersion`] newtype
+/// meets that contract by construction: the derived [`Hash`] impl hashes
+/// the wrapped [`String`] field, which (through the standard-library
+/// `impl Hash for String { fn hash(...) { (**self).hash(...) } }`
+/// pass-through) dispatches to [`str::hash`] on the raw bytes — the same
+/// dispatch a direct `.hash()` on the `&str` returned by
+/// [`Self::borrow`] would take. The derived [`PartialEq`] and [`Eq`]
+/// impls compare field-wise (byte-equal on the wrapped [`String`]), so
+/// `cv1 == cv2` reduces to `cv1.borrow() == cv2.borrow()` at the
+/// `&str`-projection axis. Both invariants — hash-agrees and
+/// eq-agrees — hold structurally, so this impl is sound under the
+/// [`std::borrow::Borrow`] documented safety contract.
+///
+/// Same "one substrate-primitive dispatch, one shared accessor" discipline
+/// the paired [`AsRef<str>`] impl on this primitive already carries —
+/// extends it onto the [`std::borrow::Borrow<str>`] projection axis the
+/// standard-library collection APIs key their `.get::<Q>` /
+/// `.contains::<Q>` / `.range::<R, T>` / `.remove::<Q>` lookup surfaces
+/// off. Rust's standard library mirrors this exact pairing on its own
+/// [`String`] primitive (`impl AsRef<str> for String` +
+/// `impl Borrow<str> for String`), so a newtype that carries one axis
+/// but not the other splits off the convention that lets every
+/// [`String`]-shaped consumer swap the newtype in without re-shaping
+/// its bounds.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_borrow_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaVersion::as_str`] on the same
+/// instance),
+/// [`tests::caixa_version_borrow_str_and_as_ref_str_agree_on_every_shape`]
+/// (cross-axis partition pin against the paired [`AsRef<str>`] impl,
+/// closing the "borrow-axis two-corner split" bifurcation on the same
+/// wrapped body), and
+/// [`tests::caixa_version_borrow_str_enables_hashmap_lookup_by_borrowed_key`]
+/// (contract-witness pin routing a [`std::collections::HashMap::get`]
+/// probe against a `&str` key through the `Borrow<str>` bound on a map
+/// keyed by owned [`CaixaVersion`], asserting the collection APIs reach
+/// the same slot the borrowed and owned forms compose the same hash for).
+impl std::borrow::Borrow<str> for CaixaVersion {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Trait-idiomatic *owned-`String`* reverse projection on the
 /// [`CaixaVersion`] newtype primitive — the owned-heap-string inverse
 /// of the pre-existing [`From<String> for CaixaVersion`] /
@@ -1336,6 +1428,125 @@ mod tests {
             assert_eq!(via_display, via_accessor);
             assert_eq!(via_as_ref, via_display.as_str());
         }
+    }
+
+    #[test]
+    fn caixa_version_borrow_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl std::borrow::Borrow<str> for CaixaVersion` — asserts the
+        // standard-library trait impl and the substrate-primitive
+        // [`CaixaVersion::as_str`] `pub const fn` accessor resolve to
+        // the same `&str` per instance, so any future silent detour
+        // that routes the impl through a divergent projection (a
+        // `Cow<'_, str>` intermediate, a stray `.to_lowercase()`
+        // normalization, a swap onto a per-arm inline `&self.0.as_str()`
+        // re-inlining that bypasses the shared accessor) trips at
+        // caixa-core test time under `PartialEq` rather than at a
+        // downstream `Borrow<str>`-bound collection API's silent
+        // hash-mismatch on the load-bearing HashMap-key axis. Peer of
+        // the sibling
+        // [`caixa_version_as_ref_str_routes_through_as_str_accessor`]
+        // byte-parity pin on the paired [`AsRef<str>`] impl — both cover
+        // the borrow-projection axis of the same substrate primitive.
+        use std::borrow::Borrow;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            assert_eq!(
+                <CaixaVersion as Borrow<str>>::borrow(&v),
+                v.as_str(),
+                "Borrow<str> impl must byte-equal CaixaVersion::as_str \
+                 on the same instance — divergence signals a silent \
+                 detour off the substrate-primitive accessor",
+            );
+            assert_eq!(
+                <CaixaVersion as Borrow<str>>::borrow(&v),
+                versao,
+                "Borrow<str> impl must byte-equal the pre-lift wrapped \
+                 String storage on round-trip through the From<&str> \
+                 constructor",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_version_borrow_str_and_as_ref_str_agree_on_every_shape() {
+        // Fail-before-pass-after cross-axis partition pin on the two
+        // trait impls on the same borrow-projection axis: the lifted
+        // [`std::borrow::Borrow<str>`] impl (this commit) and the paired
+        // [`AsRef<str>`] impl (a086 lift) must resolve to the same `&str`
+        // per instance, both routing through the shared substrate-
+        // primitive [`CaixaVersion::as_str`] accessor. Refuses any future
+        // silent split between the two trait impls (a stray
+        // [`AsRef::as_ref`] rewrite that inlines `&self.0.as_str()` on
+        // the wrapped [`String`] directly, bypassing the shared
+        // accessor; a hypothetical [`Borrow::borrow`] rewrite that
+        // inlines the same `&self.0` field-access) that would silently
+        // split the two projection paths of the same typed newtype and
+        // break the [`std::borrow::Borrow`] safety contract's
+        // "hash-agrees on the borrowed view" invariant the collection
+        // APIs rely on. Mirrors the sibling three-path convergence
+        // discipline the peer
+        // [`caixa_version_as_ref_str_routes_through_display_via_shared_accessor`]
+        // pin carries on the `AsRef<str>` / `Display` / `as_str` triple.
+        use std::borrow::Borrow;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_borrow: &str = <CaixaVersion as Borrow<str>>::borrow(&v);
+            let via_as_ref: &str = <CaixaVersion as AsRef<str>>::as_ref(&v);
+            let via_accessor: &str = v.as_str();
+            assert_eq!(via_borrow, via_accessor);
+            assert_eq!(via_as_ref, via_accessor);
+            assert_eq!(via_borrow, via_as_ref);
+        }
+    }
+
+    #[test]
+    fn caixa_version_borrow_str_enables_hashmap_lookup_by_borrowed_key() {
+        // Fail-before-pass-after contract-witness pin on the
+        // [`std::borrow::Borrow<str>`] safety contract: a
+        // [`std::collections::HashMap`] keyed by owned [`CaixaVersion`]
+        // must resolve `.get::<str>("<versao>")` probes through the
+        // borrowed `&str` view of a stored key to the same slot, and
+        // (`String::hash` calls `str::hash` on bytes, and the
+        // [`CaixaVersion`] derived [`Hash`] impl hashes the wrapped
+        // [`String`] field) the borrowed and owned hash must agree on
+        // every fixture. Refuses any future silent regression that would
+        // break the hash-agrees invariant (a
+        // [`Hash for CaixaVersion`] hand-written impl that diverges from
+        // the derived shape, a [`Borrow<str>::borrow`] rewrite that
+        // routes through a normalization detour, an `Eq` hand-written
+        // impl that diverges from field-wise equality) —
+        // [`HashMap::get<Q>`] would return [`None`] on a key that
+        // structurally lives in the map, which is the exact silent
+        // failure the [`std::borrow::Borrow`] documented safety contract
+        // rules out. The load-bearing use-case this impl was added for:
+        // per-`:versao` collection APIs must be probed by borrowed
+        // `&str` without a per-probe [`CaixaVersion::from(&str)`]
+        // allocation.
+        use std::collections::HashMap;
+        let mut map: HashMap<CaixaVersion, u32> = HashMap::new();
+        for (i, versao) in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""].iter().enumerate() {
+            let key: CaixaVersion = (*versao).into();
+            map.insert(key, u32::try_from(i).unwrap());
+        }
+        for (i, versao) in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""].iter().enumerate() {
+            let hit = map.get(*versao).unwrap_or_else(|| {
+                panic!(
+                    "HashMap<CaixaVersion, _>::get(&str) must reach the \
+                     slot inserted under CaixaVersion::from({versao:?}) \
+                     through the Borrow<str> bound — a miss signals the \
+                     borrowed-vs-owned hash-agrees invariant broke",
+                )
+            });
+            assert_eq!(*hit, u32::try_from(i).unwrap());
+        }
+        assert!(
+            !map.contains_key("does-not-exist"),
+            "HashMap<CaixaVersion, _>::contains_key(&str) on an absent \
+             key must return false, not accidentally hash-collide onto \
+             a stored slot — the miss path must respect the same \
+             invariant as the hit path",
+        );
     }
 
     #[test]
