@@ -425,8 +425,10 @@ impl From<&CaixaVersion> for std::borrow::Cow<'static, str> {
 /// newtype primitive [`CaixaVersion`], extending the reverse-projection
 /// matrix from the two axes already opened on this primitive (999a310
 /// on the [`String`] axis, 55532e5 on the [`Cow<'static, str>`] axis)
-/// onto the third. The one remaining axis on the matrix ([`Arc<str>`])
-/// becomes the natural next-run target on the same primitive.
+/// onto the third. The fourth and final axis on the matrix
+/// ([`std::sync::Arc<str>`]) is closed by the sibling paired
+/// [`From<CaixaVersion> for std::sync::Arc<str>`] +
+/// [`From<&CaixaVersion> for std::sync::Arc<str>`] impls immediately below.
 ///
 /// Pinned load-bearing by
 /// [`tests::caixa_version_from_into_owned_box_str_returns_wrapped_body`]
@@ -491,6 +493,138 @@ impl From<CaixaVersion> for Box<str> {
 impl From<&CaixaVersion> for Box<str> {
     fn from(v: &CaixaVersion) -> Box<str> {
         Box::<str>::from(v.as_str())
+    }
+}
+
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<str>`] output* reverse
+/// projection on the [`CaixaVersion`] newtype primitive — the
+/// [`std::sync::Arc<str>`] companion to the paired owned-input
+/// [`From<CaixaVersion> for String`] (999a310),
+/// [`From<CaixaVersion> for std::borrow::Cow<'static, str>`] (55532e5),
+/// and [`From<CaixaVersion> for Box<str>`] (32d861a) impls on the same
+/// primitive. Routes through [`std::sync::Arc::<str>::from`]`(v.0)`,
+/// which allocates a fresh atomically-refcounted heap slab whose data
+/// slot byte-equals the wrapper's own [`String`] storage — the wrapped
+/// bytes move through by value into the `Arc<str>` layout in one heap
+/// allocation (the [`std::sync::Arc<str>`] layout carries a strong
+/// count + weak count header ahead of the byte slice, so a copy is
+/// required regardless of the input axis; no intermediary [`String`]
+/// or [`Box<str>`] is materialized on the owned-input path).
+///
+/// A future consumer that wants a [`std::sync::Arc<str>`]-typed handle
+/// on a [`CaixaVersion`] — a share-through-clone version body held
+/// across a per-caixa `caixa-operator` reconcile task where every
+/// spawn point wants a cheap `.clone()` on the version handle without
+/// each task re-allocating its own [`String`] copy (the
+/// [`std::sync::Arc::clone`] path bumps the atomic refcount in place
+/// and returns a pointer-width handle), a future
+/// `HashMap::<std::sync::Arc<str>, _>::from_iter` per-versao lookup
+/// where the map's key type is [`std::sync::Arc<str>`] so the same
+/// version-body pointer can key both the map and the payload without a
+/// second heap allocation, a future M4 admission-webhook decoder that
+/// materializes decoded version strings as [`std::sync::Arc<str>`]
+/// slices so downstream verdict-composer tasks running on separate
+/// worker threads can share the immutable body without a
+/// per-consumer [`String::clone`] — reaches the wrapped byte-string
+/// through this one dispatch, without the pre-lift
+/// `.to_string().into::<std::sync::Arc<str>>()` double-hop that would
+/// still allocate the same [`Arc<str>`] slab plus one intermediary
+/// [`String`] between the wrapper and the [`std::sync::Arc<str>`] slot.
+///
+/// Peer of the paired owned-input [`From<CaixaVersion> for String`]
+/// (999a310), [`From<CaixaVersion> for Cow<'static, str>`] (55532e5),
+/// and [`From<CaixaVersion> for Box<str>`] (32d861a) impls on the same
+/// primitive — all four route through `v.0` (the [`String`] axis
+/// returns the wrapped buffer verbatim; the [`Cow<'static, str>`] axis
+/// wraps it in [`Cow::Owned`]; the [`Box<str>`] axis shrinks it to a
+/// fit-to-length boxed slice; this axis copies the bytes into a fresh
+/// atomically-refcounted slab whose header carries the atomic strong +
+/// weak counters the [`std::sync::Arc<str>`] layout requires),
+/// preserving the substrate's single-dispatch reverse-projection
+/// discipline across the four axes. Rust's standard library does not
+/// derive `From<Self> for Arc<str>` from `From<Self> for String` (nor
+/// from `From<Self> for Box<str>` or `From<Self> for Cow<'static, str>`),
+/// so every newtype that carries the paired reverse `From<Self> for
+/// String` / `Box<str>` / `Cow<'static, str>` axes but not the paired
+/// [`std::sync::Arc<str>`] axis forces every
+/// [`std::sync::Arc<str>`]-typed call site through a
+/// `.to_string().into()` / `Arc::<str>::from(v.to_string())`
+/// double-allocation detour that heap-allocates a fresh intermediary
+/// [`String`] between the wrapper and the [`std::sync::Arc<str>`] slot.
+///
+/// Closes the trait-idiomatic *owned-input, [`std::sync::Arc<str>`]*
+/// reverse-projection axis on the substrate's core String-wrapper
+/// newtype primitive [`CaixaVersion`], completing the reverse-projection
+/// matrix on this primitive across the full `{String, Cow<'static, str>,
+/// Box<str>, Arc<str>}` roster — the fourth and final axis (999a310 on
+/// the [`String`] axis, 55532e5 on the [`Cow<'static, str>`] axis,
+/// 32d861a on the [`Box<str>`] axis, this axis on the
+/// [`std::sync::Arc<str>`] axis).
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_from_into_owned_arc_str_returns_wrapped_body`]
+/// (byte-parity pin against [`CaixaVersion::as_str`] on the same
+/// instance, plus a round-trip witness through the paired
+/// [`From<String> for CaixaVersion`] constructor closing the two-way
+/// `Self → Arc<str> → Self` cycle by construction) and
+/// [`tests::caixa_version_from_into_owned_arc_str_and_string_agree_on_every_shape`]
+/// (cross-axis partition pin against the paired owned-input
+/// [`From<CaixaVersion> for String`], [`From<CaixaVersion> for Cow<'static, str>`],
+/// and [`From<CaixaVersion> for Box<str>`] impls on the same instance,
+/// closing the four-corner "owned-input into `String` vs. `Cow<'static, str>`
+/// vs. `Box<str>` vs. `Arc<str>`" partition on the same wrapped body).
+impl From<CaixaVersion> for std::sync::Arc<str> {
+    fn from(v: CaixaVersion) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(v.0)
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<str>`] output*
+/// reverse projection on the [`CaixaVersion`] newtype primitive — the
+/// borrowed-input companion to the paired owned-input
+/// [`From<CaixaVersion> for std::sync::Arc<str>`] impl immediately
+/// above. Routes byte-for-byte through the substrate-primitive
+/// [`CaixaVersion::as_str`] `pub const fn` accessor (via
+/// [`std::sync::Arc::<str>::from`]`(&str)`, which allocates a fresh
+/// atomically-refcounted heap slab from the borrowed `&str` in one
+/// heap allocation without an intermediary [`String`] or [`Box<str>`])
+/// so every consumer that holds a borrowed [`&CaixaVersion`] and needs
+/// a [`std::sync::Arc<str>`] — a
+/// `[…].iter().map(std::sync::Arc::<str>::from).collect::<Vec<_>>()`
+/// per-instance materializer over `&[CaixaVersion]` (whose iterator
+/// yields `&CaixaVersion`, not `CaixaVersion`, so the paired
+/// owned-input [`From<CaixaVersion> for std::sync::Arc<str>`] axis
+/// alone forces every call site through an explicit `.clone()` /
+/// dereference restatement), a future
+/// `HashMap::<std::sync::Arc<str>, _>::from_iter` that keys off a
+/// borrowed-iteration axis, a future generic
+/// `<T: for<'a> Into<std::sync::Arc<str>>>`-bound emitter on a
+/// per-caixa diagnostic column that walks the
+/// `iter().map(Into::into)` shape verbatim — reaches the wrapped
+/// byte-string through this one dispatch on the substrate primitive.
+///
+/// Second corner on the `{Self, &Self} → std::sync::Arc<str>`
+/// reverse-projection family opened on the paired owned-input impl
+/// immediately above. Rust's `From` trait does not derive the
+/// `From<&Self>` sibling from a `From<Self>` impl (the blanket
+/// `impl<T, U> From<&T> for U where T: Clone, U: From<T>` does not
+/// exist in `core`), so every newtype that carries the owned-input
+/// reverse [`std::sync::Arc<str>`] axis but not the borrowed-input
+/// axis forces every borrowed call site through a `.clone()` /
+/// `<std::sync::Arc<str>>::from(v.clone())` detour whose type bounds
+/// have no compile-time link back to the newtype.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_from_borrowed_into_owned_arc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaVersion::as_str`] via a borrowed
+/// input, plus a source-survival witness against silent move-out) and
+/// [`tests::caixa_version_from_owned_and_borrowed_into_arc_str_agree_on_every_shape`]
+/// (cross-corner partition pin between owned-input move and
+/// borrowed-input clone on the same wrapped body through the
+/// [`std::sync::Arc<str>`] axis).
+impl From<&CaixaVersion> for std::sync::Arc<str> {
+    fn from(v: &CaixaVersion) -> std::sync::Arc<str> {
+        std::sync::Arc::<str>::from(v.as_str())
     }
 }
 
@@ -1561,6 +1695,134 @@ mod tests {
             let v: CaixaVersion = versao.into();
             let via_borrowed: Box<str> = Box::<str>::from(&v);
             let via_owned: Box<str> = Box::<str>::from(v.clone());
+            assert_eq!(via_owned.as_ref(), via_borrowed.as_ref());
+            assert_eq!(via_borrowed.as_ref(), versao);
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_into_owned_arc_str_returns_wrapped_body() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl From<CaixaVersion> for std::sync::Arc<str>` — asserts
+        // the owned-input reverse projection routes the wrapper's own
+        // [`String`] body through [`std::sync::Arc::<str>::from`]
+        // verbatim (one heap allocation of the atomically-refcounted
+        // slab, no intermediary [`String`] or [`Box<str>`] on the
+        // owned-input path), so `Arc::<str>::from(v)` returns the same
+        // bytes `v.as_str()` borrows and round-trips byte-equal through
+        // the paired forward [`From<String> for CaixaVersion`]
+        // constructor closing the two-way `Self → Arc<str> → Self`
+        // cycle by construction. Refuses any future silent detour that
+        // would swap `Arc::<str>::from(v.0)` for an allocating
+        // `.as_str().to_owned().into()` cascade (the pre-lift compose
+        // shape would double-allocate a fresh intermediary [`String`]
+        // on the way to the same [`Arc<str>`] slot), a stray
+        // `.trim().to_owned().into()` normalization, or a routing
+        // through the sibling [`fmt::Display`] emitter that would
+        // introduce a formatter round-trip.
+        use std::sync::Arc;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let expected = v.as_str().to_owned();
+            let arced: Arc<str> = Arc::<str>::from(v.clone());
+            assert_eq!(
+                arced.as_ref(),
+                expected.as_str(),
+                "Arc::<str>::from(v) must return the wrapper's own bytes verbatim",
+            );
+            let round_trip: CaixaVersion = arced.as_ref().to_owned().into();
+            assert_eq!(
+                round_trip, v,
+                "Arc::<str>::from(v) must round-trip byte-equal through \
+                 the From<String> constructor",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_into_owned_arc_str_and_string_agree_on_every_shape() {
+        // Fail-before-pass-after cross-axis partition pin: the owned-
+        // input [`From<CaixaVersion> for std::sync::Arc<str>`] reverse
+        // projection and the paired owned-input
+        // [`From<CaixaVersion> for String`],
+        // [`From<CaixaVersion> for Cow<'static, str>`], and
+        // [`From<CaixaVersion> for Box<str>`] reverse projections
+        // resolve to the same bytes on every instance, and all four
+        // agree with the borrowed [`AsRef<str>`] surface on the same
+        // wrapped body. Refuses any future silent split between the
+        // four owned-input reverse-projection axes (a stray
+        // normalization on one path only, a divergent routing that
+        // would let `Arc::<str>::from(v.clone())`,
+        // `Box::<str>::from(v.clone())`, `String::from(v.clone())`,
+        // and `Cow::from(v.clone())` disagree on the same body) that
+        // would silently split the same-shape owned-move discipline
+        // across the four reverse-projection targets.
+        use std::borrow::Cow;
+        use std::sync::Arc;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_string: String = String::from(v.clone());
+            let via_cow: Cow<'static, str> = Cow::from(v.clone());
+            let via_box: Box<str> = Box::<str>::from(v.clone());
+            let via_arc: Arc<str> = Arc::<str>::from(v.clone());
+            let via_as_ref: &str = <CaixaVersion as AsRef<str>>::as_ref(&v);
+            assert_eq!(via_arc.as_ref(), via_string.as_str());
+            assert_eq!(via_arc.as_ref(), via_cow.as_ref());
+            assert_eq!(via_arc.as_ref(), via_box.as_ref());
+            assert_eq!(via_arc.as_ref(), via_as_ref);
+            assert_eq!(via_arc.as_ref(), versao);
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_borrowed_into_owned_arc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl From<&CaixaVersion> for std::sync::Arc<str>` — asserts
+        // the borrowed-input reverse projection allocates a fresh
+        // [`std::sync::Arc<str>`] whose bytes byte-equal the
+        // substrate-primitive [`CaixaVersion::as_str`] accessor on the
+        // same instance, preserving the source [`CaixaVersion`] intact
+        // (no move-out). Refuses any future silent detour that would
+        // route the impl through a divergent projection (a stray
+        // normalization step, a swap onto the sibling [`fmt::Display`]-
+        // routed [`ToString::to_string`] surface followed by
+        // `.into()`, a re-inlining that dereferences `&self.0` outside
+        // the shared accessor).
+        use std::sync::Arc;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_borrowed: Arc<str> = Arc::<str>::from(&v);
+            assert_eq!(
+                via_borrowed.as_ref(),
+                v.as_str(),
+                "Arc::<str>::from(&v) must byte-equal CaixaVersion::as_str",
+            );
+            // The borrowed-input impl must not move out of the source.
+            assert_eq!(
+                v.as_str(),
+                versao,
+                "source CaixaVersion must survive borrowed-input projection",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_owned_and_borrowed_into_arc_str_agree_on_every_shape() {
+        // Fail-before-pass-after cross-corner partition pin: the paired
+        // owned-input [`From<CaixaVersion> for std::sync::Arc<str>`]
+        // and borrowed-input [`From<&CaixaVersion> for std::sync::Arc<str>`]
+        // impls resolve to the same bytes on every instance, closing
+        // the "owned-input move vs. borrowed-input clone" bifurcation
+        // on the same wrapped body through the [`std::sync::Arc<str>`]
+        // axis. Refuses any future silent split between the two
+        // corners (a normalization on one path only, a divergent
+        // routing that would let `Arc::<str>::from(v.clone())` and
+        // `Arc::<str>::from(&v)` disagree on the same body).
+        use std::sync::Arc;
+        for versao in ["0.1.0", "1.2.3-alpha.1", "0.0.0", ""] {
+            let v: CaixaVersion = versao.into();
+            let via_borrowed: Arc<str> = Arc::<str>::from(&v);
+            let via_owned: Arc<str> = Arc::<str>::from(v.clone());
             assert_eq!(via_owned.as_ref(), via_borrowed.as_ref());
             assert_eq!(via_borrowed.as_ref(), versao);
         }
