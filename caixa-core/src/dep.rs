@@ -4308,6 +4308,61 @@ impl From<&DepList> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic [`std::str::FromStr`] parse axis on the two-list
+/// dep-graph [`DepList`] closed-set typed enum — routes byte-for-byte
+/// through the paired [`TryFrom<&str> for DepList`] impl (which in
+/// turn routes through the substrate-primitive [`DepList::from_wire`]
+/// `Option<Self>` accessor), so `"...".parse::<DepList>()` /
+/// `<DepList as FromStr>::from_str(…)` reaches the same two-arm
+/// accept-set the sibling method-named [`DepList::from_wire`]
+/// resolver and the paired [`TryFrom<&str>`] impl already resolve
+/// against.
+///
+/// Opens the trait-idiomatic `str::parse`-axis campaign on the
+/// substrate-wide closed-set fieldless typed-enum surface. The
+/// substrate already carries three peers per enum on the projection
+/// star: the method-named substrate-primitive pair
+/// ([`DepList::as_str`] `pub const fn` accessor + [`DepList::from_wire`]
+/// `Option<Self>` resolver), the emit-set trait pair
+/// ([`std::fmt::Display`], [`AsRef<str>`], the owned-input +
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` `From<{Self,&Self}>` return-shape matrix),
+/// and the parse-set `TryFrom<&str>` reverse trait. [`FromStr`] is the
+/// canonical Rust-idiomatic parse-set entry point every stdlib-shaped
+/// consumer reaches for — [`str::parse::<T>()`] is a
+/// `T: FromStr`-bounded generic, not a `T: for<'a> TryFrom<&'a str>`-
+/// bounded one — so lifting [`FromStr`] onto the closed-set enum
+/// unlocks the `.parse::<DepList>()` short-form on every consumer
+/// (a future `feira dep --list <deps|deps-dev>` clap-style arg-parse
+/// composes `arg.parse::<DepList>()`; a `serde` string-tagged
+/// deserializer routes through the same `FromStr` bound; the future
+/// M4 admission webhook's `Deserialize` derive reaches the enum
+/// through its `FromStr` impl via `serde_with::DisplayFromStr`).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] —
+/// same `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`) resolve
+/// to the same two-arm accept-set by construction. A future accept-set
+/// widening (a `":packages"` rebrand, a `":dev-deps"` alias) reaches
+/// every parse path through one edit on the substrate-primitive
+/// [`DepList::from_wire`] accessor, not a coordinated rewrite across
+/// the two reverse-projection trait impls.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the two-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::dep_list_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for DepList {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -19955,6 +20010,131 @@ mod tests {
              author-surface key exactly once, in variant declaration \
              order (Prod → Dev)"
         );
+    }
+
+    #[test]
+    fn dep_list_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for DepList` — asserts the standard-
+        // library `.parse()` parse-axis entry point and the paired
+        // [`super::DepList::try_from`] `TryFrom<&str>` impl (which in
+        // turn routes through the substrate-primitive
+        // [`super::DepList::from_wire`] `Option<Self>` accessor)
+        // resolve to the same two-arm accept-set across every arm the
+        // exhaustive [`super::DepList::ALL`] slice enumerates. First-
+        // mover on the substrate-wide `FromStr` parse-axis campaign —
+        // the peer method-named `from_wire` accessor and the paired
+        // `TryFrom<&str>` trait impl fix the two-arm accept set; this
+        // pin locks the `FromStr::from_str` trait entry point onto the
+        // same set so any future divergence (a stray per-arm `match s`
+        // re-inlining that opens a compile-time link to an un-lifted
+        // arm-literal, a swap onto a hand-rolled parser that widens
+        // the accept-set past the two wire-format consts) trips at
+        // caixa-core test time.
+        use std::str::FromStr;
+        for &list in super::DepList::ALL {
+            let wire = list.as_str();
+            assert_eq!(
+                <super::DepList as FromStr>::from_str(wire),
+                Ok(list),
+                "FromStr impl on DepList must round-trip \
+                 DepList::{list:?}.as_str() = {wire:?} back to \
+                 Ok(DepList::{list:?}) — divergence from \
+                 DepList::try_from signals a silent detour off the \
+                 paired reverse-projection trait impl"
+            );
+            assert_eq!(
+                <super::DepList as FromStr>::from_str(wire).ok(),
+                super::DepList::from_wire(wire),
+                "FromStr ok()-projection on {wire:?} must byte-equal \
+                 DepList::from_wire on the same input — divergence \
+                 signals the two reverse-projection trait paths have \
+                 drifted off the substrate-primitive accessor"
+            );
+            // `.parse::<DepList>()` short-form witness — the stdlib
+            // consumer surface that reaches the enum through the
+            // `T: FromStr` bound, not through `TryFrom<&str>`.
+            let via_parse: Result<super::DepList, ()> = wire.parse();
+            assert_eq!(
+                via_parse,
+                Ok(list),
+                "`{wire:?}`.parse::<DepList>() must resolve to \
+                 Ok(DepList::{list:?}) — divergence signals the \
+                 stdlib `.parse()` short-form has drifted from the \
+                 lifted `FromStr::from_str` impl"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl FromStr for DepList` —
+        // sweeps candidate byte-strings outside the two-arm accept-set
+        // the sibling [`super::DepList::as_str`] emits (`:deps` /
+        // `:deps-dev`) and asserts every one lands on `Err(())`, so a
+        // future accidental widening of the trait impl's accept-set (a
+        // stray case-fold path, a silent inclusion of a rebrand alias
+        // like `":packages"`, an English rebrand `":dev-deps"` in
+        // reverse arm-order that would silently swap the two arms) trips
+        // at caixa-core test time. Peer of the sibling
+        // `dep_list_try_from_str_rejects_unknown_byte_strings` rejection
+        // witness — the two pins together bracket both reverse-projection
+        // trait impls against the same rejected set.
+        use std::str::FromStr;
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "\t",
+            "\n",
+            ":deps ",
+            " :deps",
+            ":DEPS",
+            ":Deps",
+            ":Deps-Dev",
+            ":deps_dev",
+            ":deps-development",
+            ":dev-deps",
+            ":packages",
+            ":packages-dev",
+            "deps",
+            "deps-dev",
+            "Prod",
+            "Dev",
+            "prod",
+            "dev",
+            "\":deps\"",
+            "\":deps-dev\"",
+            ":deps\n",
+            ":deps-dev\n",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <super::DepList as FromStr>::from_str(input),
+                Err(()),
+                "FromStr impl on DepList must reject unknown \
+                 byte-string {input:?} — divergence from \
+                 DepList::from_wire on the same input signals a silent \
+                 accept-set widening past the two lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* wire constants"
+            );
+            assert_eq!(
+                <super::DepList as FromStr>::from_str(input).ok(),
+                super::DepList::from_wire(input),
+                "FromStr ok()-projection on {input:?} must byte-equal \
+                 DepList::from_wire on the same input — divergence \
+                 signals the FromStr trait path has drifted off the \
+                 substrate-primitive accessor"
+            );
+            let via_parse: Result<super::DepList, ()> = input.parse();
+            assert_eq!(
+                via_parse,
+                Err(()),
+                "`{input:?}`.parse::<DepList>() must reject the \
+                 unknown byte-string — divergence signals the stdlib \
+                 `.parse()` short-form has drifted from the lifted \
+                 `FromStr::from_str` impl"
+            );
+        }
     }
 }
 
