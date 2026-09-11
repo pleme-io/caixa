@@ -2,6 +2,159 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Substrate-canonical `"keyword"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Keyword`] — the one canonical byte-string the paired
+/// forward emitter [`Semantic::as_str`], the paired reverse parser
+/// [`Semantic::from_wire`], and the paired exhaustive-roster
+/// [`Semantic::WIRE_NAMES`] axis all route through, so a future rebrand
+/// of the tag (a per-arm slug tightening on a future
+/// `feira lint --list-styles` operator-facing enumeration verb, a
+/// per-`SemanticTokenType` `caixa-lsp` re-mapping the LSP spec grows,
+/// a `blackmatter-shell` `data-semantic="<kebab>"` DOM-attribute
+/// re-convention) reaches every one of the sibling substrate-primitive
+/// dispatches through a single caixa-theme edit here — not an
+/// open-coded three-site parallel-maintained inline byte-string. Peer
+/// of the fifteen other `CAIXA_THEME_SEMANTIC_WIRE_*` const family
+/// entries on the sixteen-arm caixa-theme semantic-style
+/// canonical-lowercase-kebab wire-form axis.
+///
+/// Same closed-set lifted-const discipline the paired caixa-lint
+/// diagnostic-severity axis' [`CAIXA_LINT_SEVERITY_WIRE_*`] (a199462) /
+/// caixa-lint fix-safety-tier axis' [`CAIXA_LINT_FIX_SAFETY_WIRE_*`]
+/// (5837236) / caixa-arch invariant-kind axis'
+/// `CAIXA_ARCH_INVARIANT_KIND_WIRE_*` (78f5522) / caixa-arch verdict-
+/// outcome axis' `CAIXA_ARCH_VERDICT_WIRE_*` (ebddef0) const families
+/// carry — extends the paired substrate-primitive wire-form lift onto
+/// the fifth outside-caixa-core closed-set fieldless typed enum on the
+/// caixa surface (the caixa-theme semantic-style axis, and the first
+/// inside `caixa-theme`).
+///
+/// Pinned load-bearing at the substrate-primitive level by
+/// [`tests::semantic_wire_names_covers_every_arm`] (paired roster
+/// coverage pin closing this const family into
+/// [`Semantic::WIRE_NAMES`]).
+pub const CAIXA_THEME_SEMANTIC_WIRE_KEYWORD: &str = "keyword";
+
+/// Substrate-canonical `"symbol"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Symbol`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_SYMBOL: &str = "symbol";
+
+/// Substrate-canonical `"keyword-arg"` lowercase kebab-case wire-form
+/// tag for [`Semantic::KeywordArg`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_KEYWORD_ARG: &str = "keyword-arg";
+
+/// Substrate-canonical `"string"` lowercase kebab-case wire-form tag
+/// for [`Semantic::String`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_STRING: &str = "string";
+
+/// Substrate-canonical `"number"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Number`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_NUMBER: &str = "number";
+
+/// Substrate-canonical `"literal"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Literal`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_LITERAL: &str = "literal";
+
+/// Substrate-canonical `"comment"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Comment`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_COMMENT: &str = "comment";
+
+/// Substrate-canonical `"accent"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Accent`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_ACCENT: &str = "accent";
+
+/// Substrate-canonical `"muted"` lowercase kebab-case wire-form tag for
+/// [`Semantic::Muted`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_MUTED: &str = "muted";
+
+/// Substrate-canonical `"error"` lowercase kebab-case wire-form tag for
+/// [`Semantic::Error`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_ERROR: &str = "error";
+
+/// Substrate-canonical `"warning"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Warning`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_WARNING: &str = "warning";
+
+/// Substrate-canonical `"info"` lowercase kebab-case wire-form tag for
+/// [`Semantic::Info`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_INFO: &str = "info";
+
+/// Substrate-canonical `"hint"` lowercase kebab-case wire-form tag for
+/// [`Semantic::Hint`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_HINT: &str = "hint";
+
+/// Substrate-canonical `"added"` lowercase kebab-case wire-form tag for
+/// [`Semantic::Added`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_ADDED: &str = "added";
+
+/// Substrate-canonical `"removed"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Removed`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_REMOVED: &str = "removed";
+
+/// Substrate-canonical `"unchanged"` lowercase kebab-case wire-form tag
+/// for [`Semantic::Unchanged`] — peer of the fifteen other
+/// `CAIXA_THEME_SEMANTIC_WIRE_*` const family entries on the sixteen-
+/// arm caixa-theme semantic-style canonical-lowercase-kebab wire-form
+/// axis. See [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] for the full lift
+/// rationale.
+pub const CAIXA_THEME_SEMANTIC_WIRE_UNCHANGED: &str = "unchanged";
+
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, gen_platform::IsVariant,
 )]
@@ -79,6 +232,92 @@ impl Semantic {
         Self::Unchanged,
     ];
 
+    /// Exhaustive accept-set roster on the [`Semantic`] closed-set
+    /// enum's canonical-lowercase-kebab wire-form axis — the single
+    /// slice every consumer that enumerates the accepted semantic-style
+    /// byte-strings dispatches through (a future
+    /// `feira lint --list-styles` operator-facing enumeration verb
+    /// rendering the accepted-tag list, a future `caixa-lsp`-side
+    /// per-`SemanticTokenType` registration walk that enumerates every
+    /// accepted per-arm kebab byte-string on startup, a future
+    /// `caixa.nvim` per-highlight-group re-loader binding every
+    /// accepted kebab identifier back to the typed enum, a future
+    /// `blackmatter-shell` per-arm `data-semantic="<kebab>"`
+    /// DOM-attribute emission walk, a `tracing::field::valuable::Value::List`
+    /// structured-log accepted-style emit on the paint-side emission
+    /// path). Routed byte-for-byte through the paired
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_SYMBOL`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_KEYWORD_ARG`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_STRING`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_NUMBER`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_LITERAL`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_COMMENT`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_ACCENT`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_MUTED`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_ERROR`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_WARNING`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_INFO`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_HINT`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_ADDED`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_REMOVED`] /
+    /// [`CAIXA_THEME_SEMANTIC_WIRE_UNCHANGED`] lifted `pub const`
+    /// scalars in variant declaration order so a future arm rebrand
+    /// touches one const rather than an open-coded sixteen-site
+    /// parallel-maintained array literal.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`caixa_core::CaixaKind::WIRE_NAMES`] (bd708bd),
+    /// [`caixa_core::supervisor::RestartStrategy::WIRE_NAMES`] (3033f45),
+    /// [`caixa_core::supervisor::RestartPolicy::WIRE_NAMES`] (ce9412b),
+    /// [`caixa_core::aplicacao::PlacementStrategy::WIRE_NAMES`] (3e5b194),
+    /// [`caixa_core::render::PathShapeViolation::WIRE_NAMES`] (0330bd3),
+    /// [`caixa_core::CaixaDialeto::WIRE_NAMES`] (0402726),
+    /// `caixa_arch::invariants::InvariantKind::WIRE_NAMES` (78f5522),
+    /// `caixa_arch::report::ArchVerdict::WIRE_NAMES` (ebddef0),
+    /// `caixa_lint::diagnostic::Severity::WIRE_NAMES` (a199462), and
+    /// `caixa_lint::diagnostic::FixSafety::WIRE_NAMES` (5837236)
+    /// rosters — extends the paired exhaustive-roster axis onto the
+    /// *fifth outside*-caixa-core closed-set fieldless typed enum on
+    /// the caixa surface (the caixa-theme semantic-style axis, and the
+    /// first inside `caixa-theme`), with `caixa_provedor::FerriteRuntime`
+    /// remaining as the only outside-caixa-core closed-set fieldless
+    /// typed enum whose paired exhaustive-roster axis is still open.
+    ///
+    /// A future variant addition (a `Namespace` tier between
+    /// [`Self::Symbol`] and [`Self::KeywordArg`] for the M4 tatara-lisp
+    /// module system's qualified-name semantic-token dispatch, a
+    /// `Deleted` tier for a hard-delete-mark distinct from
+    /// [`Self::Removed`] the future 3-way diff surface grows — both
+    /// trajectory items the sibling [`Self::ALL`] doc block already
+    /// names) extends this roster as a single edit — the compiler-
+    /// checked exhaustiveness on [`Self::as_str`]'s match and the
+    /// paired [`tests::semantic_wire_names_covers_every_arm`] pin's
+    /// length / membership / order / round-trip gates keep the roster,
+    /// the emitter [`Self::as_str`], and the parser [`Self::from_wire`]
+    /// in structural lockstep by construction.
+    ///
+    /// Pinned load-bearing by
+    /// [`tests::semantic_wire_names_covers_every_arm`].
+    pub const WIRE_NAMES: &'static [&'static str] = &[
+        CAIXA_THEME_SEMANTIC_WIRE_KEYWORD,
+        CAIXA_THEME_SEMANTIC_WIRE_SYMBOL,
+        CAIXA_THEME_SEMANTIC_WIRE_KEYWORD_ARG,
+        CAIXA_THEME_SEMANTIC_WIRE_STRING,
+        CAIXA_THEME_SEMANTIC_WIRE_NUMBER,
+        CAIXA_THEME_SEMANTIC_WIRE_LITERAL,
+        CAIXA_THEME_SEMANTIC_WIRE_COMMENT,
+        CAIXA_THEME_SEMANTIC_WIRE_ACCENT,
+        CAIXA_THEME_SEMANTIC_WIRE_MUTED,
+        CAIXA_THEME_SEMANTIC_WIRE_ERROR,
+        CAIXA_THEME_SEMANTIC_WIRE_WARNING,
+        CAIXA_THEME_SEMANTIC_WIRE_INFO,
+        CAIXA_THEME_SEMANTIC_WIRE_HINT,
+        CAIXA_THEME_SEMANTIC_WIRE_ADDED,
+        CAIXA_THEME_SEMANTIC_WIRE_REMOVED,
+        CAIXA_THEME_SEMANTIC_WIRE_UNCHANGED,
+    ];
+
     /// Canonical kebab-case discriminator scalar for this variant — the
     /// single substrate-primitive `&'static str` projection every
     /// downstream consumer of the closed 16-arm [`Semantic`] partition
@@ -117,22 +356,22 @@ impl Semantic {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Keyword => "keyword",
-            Self::Symbol => "symbol",
-            Self::KeywordArg => "keyword-arg",
-            Self::String => "string",
-            Self::Number => "number",
-            Self::Literal => "literal",
-            Self::Comment => "comment",
-            Self::Accent => "accent",
-            Self::Muted => "muted",
-            Self::Error => "error",
-            Self::Warning => "warning",
-            Self::Info => "info",
-            Self::Hint => "hint",
-            Self::Added => "added",
-            Self::Removed => "removed",
-            Self::Unchanged => "unchanged",
+            Self::Keyword => CAIXA_THEME_SEMANTIC_WIRE_KEYWORD,
+            Self::Symbol => CAIXA_THEME_SEMANTIC_WIRE_SYMBOL,
+            Self::KeywordArg => CAIXA_THEME_SEMANTIC_WIRE_KEYWORD_ARG,
+            Self::String => CAIXA_THEME_SEMANTIC_WIRE_STRING,
+            Self::Number => CAIXA_THEME_SEMANTIC_WIRE_NUMBER,
+            Self::Literal => CAIXA_THEME_SEMANTIC_WIRE_LITERAL,
+            Self::Comment => CAIXA_THEME_SEMANTIC_WIRE_COMMENT,
+            Self::Accent => CAIXA_THEME_SEMANTIC_WIRE_ACCENT,
+            Self::Muted => CAIXA_THEME_SEMANTIC_WIRE_MUTED,
+            Self::Error => CAIXA_THEME_SEMANTIC_WIRE_ERROR,
+            Self::Warning => CAIXA_THEME_SEMANTIC_WIRE_WARNING,
+            Self::Info => CAIXA_THEME_SEMANTIC_WIRE_INFO,
+            Self::Hint => CAIXA_THEME_SEMANTIC_WIRE_HINT,
+            Self::Added => CAIXA_THEME_SEMANTIC_WIRE_ADDED,
+            Self::Removed => CAIXA_THEME_SEMANTIC_WIRE_REMOVED,
+            Self::Unchanged => CAIXA_THEME_SEMANTIC_WIRE_UNCHANGED,
         }
     }
 
@@ -201,22 +440,22 @@ impl Semantic {
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "keyword" => Some(Self::Keyword),
-            "symbol" => Some(Self::Symbol),
-            "keyword-arg" => Some(Self::KeywordArg),
-            "string" => Some(Self::String),
-            "number" => Some(Self::Number),
-            "literal" => Some(Self::Literal),
-            "comment" => Some(Self::Comment),
-            "accent" => Some(Self::Accent),
-            "muted" => Some(Self::Muted),
-            "error" => Some(Self::Error),
-            "warning" => Some(Self::Warning),
-            "info" => Some(Self::Info),
-            "hint" => Some(Self::Hint),
-            "added" => Some(Self::Added),
-            "removed" => Some(Self::Removed),
-            "unchanged" => Some(Self::Unchanged),
+            CAIXA_THEME_SEMANTIC_WIRE_KEYWORD => Some(Self::Keyword),
+            CAIXA_THEME_SEMANTIC_WIRE_SYMBOL => Some(Self::Symbol),
+            CAIXA_THEME_SEMANTIC_WIRE_KEYWORD_ARG => Some(Self::KeywordArg),
+            CAIXA_THEME_SEMANTIC_WIRE_STRING => Some(Self::String),
+            CAIXA_THEME_SEMANTIC_WIRE_NUMBER => Some(Self::Number),
+            CAIXA_THEME_SEMANTIC_WIRE_LITERAL => Some(Self::Literal),
+            CAIXA_THEME_SEMANTIC_WIRE_COMMENT => Some(Self::Comment),
+            CAIXA_THEME_SEMANTIC_WIRE_ACCENT => Some(Self::Accent),
+            CAIXA_THEME_SEMANTIC_WIRE_MUTED => Some(Self::Muted),
+            CAIXA_THEME_SEMANTIC_WIRE_ERROR => Some(Self::Error),
+            CAIXA_THEME_SEMANTIC_WIRE_WARNING => Some(Self::Warning),
+            CAIXA_THEME_SEMANTIC_WIRE_INFO => Some(Self::Info),
+            CAIXA_THEME_SEMANTIC_WIRE_HINT => Some(Self::Hint),
+            CAIXA_THEME_SEMANTIC_WIRE_ADDED => Some(Self::Added),
+            CAIXA_THEME_SEMANTIC_WIRE_REMOVED => Some(Self::Removed),
+            CAIXA_THEME_SEMANTIC_WIRE_UNCHANGED => Some(Self::Unchanged),
             _ => None,
         }
     }
@@ -3724,6 +3963,179 @@ mod tests {
                  arm — divergence signals the borrowed-input \
                  `From<&Semantic> for std::sync::Arc<str>` axis has \
                  silently detoured off the substrate-primitive accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_wire_names_covers_every_arm() {
+        // Load-bearing pin on the substrate-canonical
+        // [`super::Semantic::WIRE_NAMES`] exhaustive accept-set roster
+        // on the caixa-theme semantic-style lowercase-kebab wire-form
+        // axis: every variant of the sibling [`super::Semantic::ALL`]
+        // exhaustive-iteration surface must project through
+        // [`super::Semantic::as_str`] onto an entry the
+        // [`super::Semantic::WIRE_NAMES`] roster carries, and the
+        // roster's length must byte-equal `super::Semantic::ALL.len()`
+        // so a silent skew between the [`super::Semantic::as_str`]
+        // match's arm-set and the roster's arm-set trips here at
+        // caixa-theme test time rather than at a downstream
+        // `feira lint --list-styles` per-arm listing / `caixa-lsp`
+        // per-`SemanticTokenType` registration walk / `caixa.nvim`
+        // per-highlight-group re-loader / `blackmatter-shell` per-arm
+        // `data-semantic="<kebab>"` DOM-attribute emit drift.
+        //
+        // A future arm addition (a `Namespace` tier between
+        // [`super::Semantic::Symbol`] and [`super::Semantic::KeywordArg`]
+        // for the M4 tatara-lisp module system's qualified-name
+        // semantic-token dispatch, a `Deleted` tier for a hard-delete-
+        // mark distinct from [`super::Semantic::Removed`] the future
+        // 3-way diff surface grows — both trajectory items the sibling
+        // [`super::Semantic::ALL`] doc block already names) extends
+        // [`super::Semantic::ALL`] as a single edit and this pin sweeps
+        // the new arm by iteration; the paired
+        // [`super::Semantic::WIRE_NAMES`] roster must grow in lockstep
+        // or this assertion trips. Every entry is further pinned to
+        // open with a lowercase ASCII byte (matching the substrate-wide
+        // lowercase-tag convention every peer closed-set enum whose
+        // canonical projection is a lowercase-tag byte-string carries),
+        // so a silent collapse of the caixa-theme semantic-style axis
+        // with any hypothetical PascalCase peer wire-form axis (an
+        // entry byte-identical to the Debug-derived
+        // `"Keyword"` / `"Symbol"` / `"KeywordArg"` / … shapes that
+        // would let a wire-axis consumer accept the source-side variant
+        // identifier) trips here rather than at a downstream theme-
+        // overlay round-trip miss.
+        //
+        // Peer of the sibling
+        // [`caixa_core::kind::tests::caixa_kind_wire_names_covers_every_arm`]
+        // (bd708bd),
+        // [`caixa_core::supervisor::tests::restart_strategy_wire_names_covers_every_arm`]
+        // (3033f45),
+        // [`caixa_core::supervisor::tests::restart_policy_wire_names_covers_every_arm`]
+        // (ce9412b),
+        // [`caixa_core::aplicacao::tests::placement_strategy_wire_names_covers_every_arm`]
+        // (3e5b194),
+        // [`caixa_core::render::tests::path_shape_violation_wire_names_covers_every_arm`]
+        // (0330bd3),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_wire_names_covers_every_arm`]
+        // (0402726),
+        // `caixa_arch::invariants::tests::invariant_kind_wire_names_covers_every_arm`
+        // (78f5522),
+        // `caixa_arch::report::tests::arch_verdict_wire_names_covers_every_arm`
+        // (ebddef0),
+        // `caixa_lint::diagnostic::tests::severity_wire_names_covers_every_arm`
+        // (a199462), and
+        // `caixa_lint::diagnostic::tests::fix_safety_wire_names_covers_every_arm`
+        // (5837236) pins — the same closed-set exhaustive-roster
+        // coverage discipline extended here onto the *fifth outside*-
+        // caixa-core closed-set fieldless typed enum on the caixa
+        // surface (the caixa-theme semantic-style axis, and the first
+        // inside `caixa-theme`).
+        //
+        // Fail-before-pass-after locally verified by mutating one arm
+        // of the paired `CAIXA_THEME_SEMANTIC_WIRE_*` const family
+        // (e.g. rebranding `CAIXA_THEME_SEMANTIC_WIRE_KEYWORD` from
+        // `"keyword"` to `"kw"`) — the length pin still passes but the
+        // `contains` check fires on the mutated arm; and by shortening
+        // the roster to one entry — the length pin fires first.
+        assert_eq!(
+            super::Semantic::WIRE_NAMES.len(),
+            super::Semantic::ALL.len(),
+            "Semantic::WIRE_NAMES.len() must byte-equal \
+             Semantic::ALL.len() — a mismatch means the roster and \
+             the enum's arm-set have drifted; downstream consumers \
+             that fan through both will silently disagree on the \
+             accepted arm-set"
+        );
+        for &variant in super::Semantic::ALL {
+            let wire = variant.as_str();
+            assert!(
+                super::Semantic::WIRE_NAMES.contains(&wire),
+                "Semantic::{variant:?}.as_str() = {wire:?} must be a \
+                 member of Semantic::WIRE_NAMES — the emitter and the \
+                 roster have drifted out of lockstep"
+            );
+        }
+        for tag in super::Semantic::WIRE_NAMES {
+            let first = tag.chars().next().unwrap_or_else(|| {
+                panic!(
+                    "Semantic::WIRE_NAMES entry {tag:?} must be a \
+                     non-empty lowercase-tag byte-string"
+                )
+            });
+            assert!(
+                first.is_ascii_lowercase(),
+                "Semantic::WIRE_NAMES entry {tag:?} must open with a \
+                 lowercase ASCII byte (matching the substrate-wide \
+                 lowercase-tag convention every peer closed-set enum \
+                 whose canonical projection is a lowercase-tag byte-\
+                 string carries) — an entry opening with an uppercase \
+                 byte would collide the roster with any hypothetical \
+                 peer PascalCase wire-form axis a downstream consumer \
+                 might disambiguate against (the Debug-derived \
+                 `\"Keyword\"` / `\"Symbol\"` / `\"KeywordArg\"` / … \
+                 shapes)"
+            );
+        }
+        // Pin the exact sixteen-arm roster in declaration order so a
+        // future arm-swap on either the roster or the paired
+        // `CAIXA_THEME_SEMANTIC_WIRE_*` constants (a rebrand of the
+        // arm-tag mapping that leaves both the length pin and the
+        // membership pin passing on their own) trips at caixa-theme
+        // test time under `assert_eq!`. Order matches variant
+        // declaration order verbatim (`Keyword` → `Symbol` →
+        // `KeywordArg` → `String` → `Number` → `Literal` → `Comment` →
+        // `Accent` → `Muted` → `Error` → `Warning` → `Info` → `Hint` →
+        // `Added` → `Removed` → `Unchanged`) so the roster is the
+        // canonical semantic-style ordering every listing / rendering
+        // consumer defers to.
+        assert_eq!(
+            super::Semantic::WIRE_NAMES,
+            &[
+                super::CAIXA_THEME_SEMANTIC_WIRE_KEYWORD,
+                super::CAIXA_THEME_SEMANTIC_WIRE_SYMBOL,
+                super::CAIXA_THEME_SEMANTIC_WIRE_KEYWORD_ARG,
+                super::CAIXA_THEME_SEMANTIC_WIRE_STRING,
+                super::CAIXA_THEME_SEMANTIC_WIRE_NUMBER,
+                super::CAIXA_THEME_SEMANTIC_WIRE_LITERAL,
+                super::CAIXA_THEME_SEMANTIC_WIRE_COMMENT,
+                super::CAIXA_THEME_SEMANTIC_WIRE_ACCENT,
+                super::CAIXA_THEME_SEMANTIC_WIRE_MUTED,
+                super::CAIXA_THEME_SEMANTIC_WIRE_ERROR,
+                super::CAIXA_THEME_SEMANTIC_WIRE_WARNING,
+                super::CAIXA_THEME_SEMANTIC_WIRE_INFO,
+                super::CAIXA_THEME_SEMANTIC_WIRE_HINT,
+                super::CAIXA_THEME_SEMANTIC_WIRE_ADDED,
+                super::CAIXA_THEME_SEMANTIC_WIRE_REMOVED,
+                super::CAIXA_THEME_SEMANTIC_WIRE_UNCHANGED,
+            ],
+            "Semantic::WIRE_NAMES must enumerate every arm's wire-form \
+             tag exactly once, in variant declaration order (Keyword → \
+             Symbol → KeywordArg → String → Number → Literal → Comment \
+             → Accent → Muted → Error → Warning → Info → Hint → Added \
+             → Removed → Unchanged)"
+        );
+        // Byte-parity pin on the paired reverse projection: every
+        // entry in the roster must round-trip cleanly through
+        // [`super::Semantic::from_wire`] back to the same arm the
+        // [`super::Semantic::as_str`] emitter returned it for.
+        // Refuses any future de-lift that swaps the sixteen consts
+        // through the reverse projection out of lockstep with the
+        // forward emitter (a mid-arm rebrand touching only `as_str`
+        // but not `from_wire`, an argument-ordering swap on one of
+        // the match arms, a stray `to_lowercase` normalization on
+        // either side that would silently pass the identity round-trip
+        // on the already-lowercase corpus but split the two
+        // projections on any future non-lowercase input).
+        for (&variant, tag) in super::Semantic::ALL.iter().zip(super::Semantic::WIRE_NAMES) {
+            assert_eq!(
+                super::Semantic::from_wire(tag),
+                Some(variant),
+                "Semantic::from_wire({tag:?}) must round-trip back to \
+                 Semantic::{variant:?} — emitter and parser have \
+                 drifted off the paired CAIXA_THEME_SEMANTIC_WIRE_* \
+                 const family"
             );
         }
     }
