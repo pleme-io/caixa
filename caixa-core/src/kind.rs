@@ -1470,6 +1470,61 @@ impl From<&CaixaKind> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic [`std::str::FromStr`] parse axis on the
+/// structurally most fundamental closed-set typed enum on the caixa
+/// surface — every [`crate::Caixa`] carries a `:kind` — routes
+/// byte-for-byte through the paired [`TryFrom<&str> for CaixaKind`]
+/// impl (which in turn routes through the substrate-primitive
+/// [`CaixaKind::from_wire`] `Option<Self>` accessor), so
+/// `"...".parse::<CaixaKind>()` /
+/// `<CaixaKind as FromStr>::from_str(…)` reaches the same six-arm
+/// `PascalCase` wire accept-set the sibling method-named
+/// [`CaixaKind::from_wire`] resolver and the paired
+/// [`TryFrom<&str>`] impl already resolve against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`crate::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum —
+/// onto the structurally most fundamental closed-set typed enum on
+/// the caixa surface. [`FromStr`] is the canonical Rust-idiomatic
+/// parse-set entry point every stdlib-shaped consumer reaches for —
+/// [`str::parse::<T>()`] is a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting
+/// [`FromStr`] onto the closed-set enum unlocks the
+/// `.parse::<CaixaKind>()` short-form on every consumer (a future
+/// `feira kind <Biblioteca|…>` clap-style arg-parse composes
+/// `arg.parse::<CaixaKind>()`; a `serde` string-tagged deserializer
+/// routes through the same `FromStr` bound; the future M4 admission
+/// webhook's `Deserialize` derive reaches the enum through its
+/// `FromStr` impl via `serde_with::DisplayFromStr` when the field
+/// carries a plain `PascalCase` string rather than the current
+/// serde-derived tagged form).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] —
+/// same `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`)
+/// resolve to the same six-arm accept-set by construction. A future
+/// accept-set widening (a case-fold path, a Portuguese-rebrand
+/// alias) reaches every parse path through one edit on the
+/// substrate-primitive [`CaixaKind::from_wire`] accessor, not a
+/// coordinated rewrite across the two reverse-projection trait
+/// impls.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the six-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::caixa_kind_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for CaixaKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2349,6 +2404,142 @@ mod tests {
                 "TryFrom<&str> and from_wire must resolve identically \
                  on input {input:?} — divergence signals the two reverse-\
                  projection paths have drifted onto different accept-sets"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for CaixaKind` — asserts the
+        // standard-library `.parse()` parse-axis entry point and the
+        // paired [`super::CaixaKind::try_from`] `TryFrom<&str>` impl
+        // (which in turn routes through the substrate-primitive
+        // [`super::CaixaKind::from_wire`] `Option<Self>` accessor)
+        // resolve to the same six-arm accept-set across every arm the
+        // exhaustive [`super::CaixaKind::ALL`] slice enumerates.
+        // Extends the substrate-wide `FromStr` parse-axis campaign —
+        // opened on [`crate::dep::DepList`] via 6167092 as first-
+        // mover — onto the structurally most fundamental closed-set
+        // typed enum. The peer method-named `from_wire` accessor and
+        // the paired `TryFrom<&str>` trait impl fix the six-arm
+        // PascalCase wire accept-set; this pin locks the
+        // `FromStr::from_str` trait entry point onto the same set so
+        // any future divergence (a stray per-arm `match s`
+        // re-inlining that opens a compile-time link to an un-lifted
+        // arm-literal, a swap onto a hand-rolled parser that widens
+        // the accept-set past the six lifted
+        // [`crate::render::CAIXA_KIND_WIRE_*`] consts) trips at
+        // caixa-core test time.
+        use std::str::FromStr;
+        for &variant in CaixaKind::ALL {
+            let wire = variant.wire_name();
+            assert_eq!(
+                <CaixaKind as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on CaixaKind must round-trip \
+                 CaixaKind::{variant:?}.wire_name() = {wire:?} back to \
+                 Ok(CaixaKind::{variant:?}) — divergence from \
+                 CaixaKind::try_from signals a silent detour off the \
+                 paired reverse-projection trait impl"
+            );
+            assert_eq!(
+                <CaixaKind as FromStr>::from_str(wire).ok(),
+                CaixaKind::from_wire(wire),
+                "FromStr ok()-projection on {wire:?} must byte-equal \
+                 CaixaKind::from_wire on the same input — divergence \
+                 signals the two reverse-projection trait paths have \
+                 drifted off the substrate-primitive accessor"
+            );
+            // `.parse::<CaixaKind>()` short-form witness — the stdlib
+            // consumer surface that reaches the enum through the
+            // `T: FromStr` bound, not through `TryFrom<&str>`.
+            let via_parse: Result<CaixaKind, ()> = wire.parse();
+            assert_eq!(
+                via_parse,
+                Ok(variant),
+                "`{wire:?}`.parse::<CaixaKind>() must resolve to \
+                 Ok(CaixaKind::{variant:?}) — divergence signals the \
+                 stdlib `.parse()` short-form has drifted from the \
+                 lifted `FromStr::from_str` impl"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl FromStr for CaixaKind` —
+        // sweeps candidate byte-strings outside the six-arm PascalCase
+        // wire accept-set the sibling [`super::CaixaKind::wire_name`]
+        // emits and asserts every one lands on `Err(())`, so a future
+        // accidental widening of the trait impl's accept-set (a stray
+        // case-fold path, a silent inclusion of the lowercase
+        // Portuguese [`super::CaixaKind::as_str`] surface onto the
+        // wire axis that would collide the two-axis split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin makes load-bearing) trips at caixa-core test time. Peer
+        // of the sibling
+        // `caixa_kind_try_from_str_rejects_unknown_byte_strings`
+        // rejection witness — the two pins together bracket both
+        // reverse-projection trait impls against the same rejected
+        // set. The candidate set includes the empty string, the six-
+        // arm lowercase Portuguese diagnostic byte-strings the peer
+        // `CaixaKind::as_str` axis emits, a lowercase / mixed-case
+        // fold of each PascalCase arm, and a small residual set of
+        // plausible-but-wrong English rebrand candidates.
+        use std::str::FromStr;
+        let rejected: &[&str] = &[
+            "",
+            "biblioteca",
+            "binario",
+            "servico",
+            "supervisor",
+            "aplicacao",
+            "acao",
+            "BIBLIOTECA",
+            "BINARIO",
+            "SERVICO",
+            "SUPERVISOR",
+            "APLICACAO",
+            "ACAO",
+            "biBlioteca",
+            "Bibliotecas",
+            "Servicos",
+            "library",
+            "binary",
+            "service",
+            "application",
+            " Biblioteca",
+            "Biblioteca ",
+            "Biblioteca\n",
+            "\"Biblioteca\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <CaixaKind as FromStr>::from_str(input),
+                Err(()),
+                "FromStr impl on CaixaKind must reject unknown \
+                 byte-string {input:?} — divergence from \
+                 CaixaKind::from_wire on the same input signals a \
+                 silent accept-set widening past the six lifted \
+                 crate::render::CAIXA_KIND_WIRE_* wire constants"
+            );
+            assert_eq!(
+                <CaixaKind as FromStr>::from_str(input).ok(),
+                CaixaKind::from_wire(input),
+                "FromStr ok()-projection on {input:?} must byte-equal \
+                 CaixaKind::from_wire on the same input — divergence \
+                 signals the FromStr trait path has drifted off the \
+                 substrate-primitive accessor"
+            );
+            let via_parse: Result<CaixaKind, ()> = input.parse();
+            assert_eq!(
+                via_parse,
+                Err(()),
+                "`{input:?}`.parse::<CaixaKind>() must reject the \
+                 unknown byte-string — divergence signals the stdlib \
+                 `.parse()` short-form has drifted from the lifted \
+                 `FromStr::from_str` impl"
             );
         }
     }
