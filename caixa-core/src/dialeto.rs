@@ -687,6 +687,86 @@ impl TryFrom<&str> for CaixaDialeto {
     }
 }
 
+/// Trait-idiomatic [`std::str::FromStr`] parse axis on the
+/// [`CaixaDialeto`] closed-set dialect-classification typed enum —
+/// routes byte-for-byte through the paired
+/// [`TryFrom<&str> for CaixaDialeto`] impl (which in turn routes
+/// through the substrate-primitive [`CaixaDialeto::from_wire`]
+/// `Option<Self>` accessor), so `"...".parse::<CaixaDialeto>()` /
+/// `<CaixaDialeto as FromStr>::from_str(…)` reaches the same four-arm
+/// `PascalCase` accept-set the sibling method-named
+/// [`CaixaDialeto::from_wire`] resolver and the paired
+/// [`TryFrom<&str>`] impl already resolve against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`crate::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum, then
+/// extended onto the structurally most fundamental closed-set typed
+/// enum via [`crate::CaixaKind`] (9867432), then onto the first
+/// M3-mesh-primitive-defining slot enum via
+/// [`crate::aplicacao::PlacementStrategy`] (62ef49a) — onto the
+/// dialect-classification axis every [`crate::Caixa`] carries through
+/// its parsed manifest form. Unlike the peer
+/// [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] enums (which carry a
+/// [`gen_platform::FromStrKind`]-derived `FromStr` on a paired
+/// *kebab-case dispatcher-catalog* axis and therefore rule the
+/// `PascalCase` wire axis out of a second `FromStr` impl by
+/// coherence), and unlike the peer
+/// [`crate::aplicacao::WitShape`] /
+/// [`crate::aplicacao::RateLimitUnit`] enums (whose two-axis splits
+/// [`WitShape::from_wire`] + [`WitShape::classify`] and
+/// [`RateLimitUnit::from_suffix`] + [`RateLimitUnit::from_window`]
+/// motivate deliberate deferral of the `FromStr` axis so a plain
+/// `s.parse::<T>()` cannot obscure which axis the caller reaches),
+/// [`CaixaDialeto`] carries exactly one census-facing `PascalCase`
+/// axis (the module doc block above the [`CaixaDialeto::as_str`]
+/// accessor names this out: "an internal classification with no wire
+/// surface — the `PascalCase` variant name is the census-facing form
+/// every consumer reads, so `as_str` suffices without a paired
+/// `wire_name` axis"), so lifting [`FromStr`] onto it is coherent by
+/// construction.
+///
+/// [`FromStr`] is the canonical Rust-idiomatic parse-set entry point
+/// every stdlib-shaped consumer reaches for — [`str::parse::<T>()`]
+/// is a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting [`FromStr`]
+/// onto the closed-set enum unlocks the `.parse::<CaixaDialeto>()`
+/// short-form on every consumer (a future `feira dialeto --filter
+/// <Pacote|Molde|MoldePosicional|Desconhecido>` clap-style arg-parse
+/// composes `arg.parse::<CaixaDialeto>()`; a `serde` string-tagged
+/// deserializer routes through the same `FromStr` bound; a future
+/// dialect-partitioned census-column loader that walks a
+/// `Vec<String>` of prior `CaixaDialeto::as_str` outputs reaches the
+/// typed enum through `line.parse::<CaixaDialeto>()` without a
+/// per-consumer `TryFrom<&str>` restatement).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] —
+/// same `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`)
+/// resolve to the same four-arm accept-set by construction. A
+/// future accept-set widening (the module doc's "third dialect"
+/// hazard actualising as a fifth arm belonging to the `defmolde`
+/// family or a wholly new declaration) reaches every parse path
+/// through one edit on the substrate-primitive
+/// [`CaixaDialeto::from_wire`] accessor, not a coordinated rewrite
+/// across the two reverse-projection trait impls.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the four-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::caixa_dialeto_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for CaixaDialeto {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Trait-idiomatic forward projection on the [`CaixaDialeto`] closed-set
 /// dialect-classification typed enum — routes byte-for-byte through the
 /// sibling substrate-primitive [`CaixaDialeto::as_str`] `pub const fn`
@@ -3069,6 +3149,139 @@ mod tests {
                  CaixaDialeto::as_str outputs; a widening would silently \
                  split the trait-idiomatic reverse-projection axis from the \
                  sibling from_wire resolver's arm-set"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for CaixaDialeto` — asserts the
+        // standard-library `.parse()` parse-axis entry point and the
+        // paired [`super::CaixaDialeto::try_from`] `TryFrom<&str>` impl
+        // (which in turn routes through the substrate-primitive
+        // [`super::CaixaDialeto::from_wire`] `Option<Self>` accessor)
+        // resolve to the same four-arm accept-set across every arm the
+        // exhaustive [`super::CaixaDialeto::ALL`] slice enumerates.
+        // Extends the substrate-wide `FromStr` parse-axis campaign —
+        // opened on [`crate::dep::DepList`] via 6167092 as first-
+        // mover, extended onto the structurally most fundamental
+        // closed-set typed enum via [`crate::CaixaKind`] (9867432),
+        // then onto the first M3-mesh-primitive-defining slot enum
+        // via [`crate::aplicacao::PlacementStrategy`] (62ef49a) —
+        // onto the dialect-classification axis every [`crate::Caixa`]
+        // carries through its parsed manifest form. The peer
+        // method-named `from_wire` accessor and the paired
+        // `TryFrom<&str>` trait impl fix the four-arm PascalCase
+        // accept-set; this pin locks the `FromStr::from_str` trait
+        // entry point onto the same set so any future divergence (a
+        // stray per-arm `match s` re-inlining that opens a compile-
+        // time link to an un-lifted arm-literal, a swap onto a hand-
+        // rolled parser that widens the accept-set past the four
+        // lifted [`crate::render::CAIXA_DIALETO_WIRE_*`] consts) trips
+        // at caixa-core test time.
+        use std::str::FromStr;
+        for &variant in CaixaDialeto::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <CaixaDialeto as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on CaixaDialeto must round-trip \
+                 CaixaDialeto::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(CaixaDialeto::{variant:?}) — divergence from \
+                 CaixaDialeto::try_from signals a silent detour off the \
+                 paired reverse-projection trait impl"
+            );
+            assert_eq!(
+                <CaixaDialeto as FromStr>::from_str(wire).ok(),
+                CaixaDialeto::from_wire(wire),
+                "FromStr ok()-projection on {wire:?} must byte-equal \
+                 CaixaDialeto::from_wire on the same input — divergence \
+                 signals the two reverse-projection trait paths have \
+                 drifted off the substrate-primitive accessor"
+            );
+            // `.parse::<CaixaDialeto>()` short-form witness — the
+            // stdlib consumer surface that reaches the enum through
+            // the `T: FromStr` bound, not through `TryFrom<&str>`.
+            let via_parse: Result<CaixaDialeto, ()> = wire.parse();
+            assert_eq!(
+                via_parse,
+                Ok(variant),
+                "`{wire:?}`.parse::<CaixaDialeto>() must resolve to \
+                 Ok(CaixaDialeto::{variant:?}) — divergence signals \
+                 the stdlib `.parse()` short-form has drifted from the \
+                 lifted `FromStr::from_str` impl"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl FromStr for CaixaDialeto` —
+        // sweeps candidate byte-strings outside the four-arm
+        // PascalCase accept-set the sibling
+        // [`super::CaixaDialeto::as_str`] emits and asserts every one
+        // lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray case-fold path, a silent
+        // acceptance of the sibling [`CaixaDialeto::palavra_canonica`]
+        // `"defcaixa"` / `"defmolde"` byte-shapes on this axis, a
+        // swap onto the [`CaixaDialeto::consumidor`] /
+        // [`CaixaDialeto::descricao`] axes' byte-shapes) trips at
+        // caixa-core test time. Peer of the sibling
+        // [`caixa_dialeto_try_from_str_rejects_unknown_byte_strings`]
+        // rejection witness — the two pins together bracket both
+        // reverse-projection trait impls against the same rejected
+        // set. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_from_str_rejects_unknown_byte_strings`]
+        // (9867432) rejection witness on the top-level
+        // [`crate::CaixaKind`] closed-set discriminator's trait-
+        // idiomatic `FromStr` parse axis.
+        use std::str::FromStr;
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "pacote",
+            "PACOTE",
+            "molde",
+            "MoldePositional",
+            "desconhecido",
+            "Unknown",
+            "defcaixa",
+            "defmolde",
+            "?",
+            "caixa-core / feira",
+            "pleme-doc-gen",
+            "nobody known",
+            "Pacote ",
+            " Pacote",
+            "Pacote\n",
+            "\"Pacote\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <CaixaDialeto as FromStr>::from_str(input),
+                Err(()),
+                "FromStr impl on CaixaDialeto must reject unknown \
+                 byte-string {input:?} — divergence signals a silent \
+                 accept-set widening past the four lifted \
+                 crate::render::CAIXA_DIALETO_WIRE_* wire constants"
+            );
+            assert_eq!(
+                <CaixaDialeto as FromStr>::from_str(input).ok(),
+                CaixaDialeto::from_wire(input),
+                "FromStr ok()-projection on {input:?} must byte-equal \
+                 CaixaDialeto::from_wire on the same input — \
+                 divergence signals the FromStr trait path has drifted \
+                 off the substrate-primitive accessor"
+            );
+            let via_parse: Result<CaixaDialeto, ()> = input.parse();
+            assert_eq!(
+                via_parse,
+                Err(()),
+                "`{input:?}`.parse::<CaixaDialeto>() must reject the \
+                 unknown byte-string — divergence signals the stdlib \
+                 `.parse()` short-form has drifted from the lifted \
+                 `FromStr::from_str` impl"
             );
         }
     }
