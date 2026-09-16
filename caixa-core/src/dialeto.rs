@@ -1638,6 +1638,136 @@ impl From<&CaixaDialeto> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the outside-M3 caixa-core dialect-classification
+/// [`CaixaDialeto`] closed-set fieldless typed enum — the single-threaded
+/// shared-ownership companion to the paired atomically-refcounted
+/// [`From<CaixaDialeto> for std::sync::Arc<str>`] impl one commit above.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`CaixaDialeto::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so every
+/// consumer that binds a `let key: std::rc::Rc<str> = dialeto.into();`-
+/// shaped call site reaches the same four `"Pacote"` / `"Molde"` /
+/// `"MoldePosicional"` / `"Desconhecido"` byte-strings the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` forward-projection corner already returns.
+///
+/// Rust's standard library carries `impl From<&str> for std::rc::Rc<str>`
+/// and `impl From<String> for std::rc::Rc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor an
+/// `impl<T: fmt::Display> From<T> for std::rc::Rc<str>`), and — critically
+/// — the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`] layouts share
+/// the same on-disk shape but the trait tables are disjoint (no blanket
+/// `impl<T> From<T> for std::rc::Rc<str> where std::sync::Arc<str>: From<T>`
+/// exists in `core`), so a closed-set enum that carries the paired
+/// [`std::sync::Arc<str>`] axis but not the paired [`std::rc::Rc<str>`]
+/// axis forces every single-threaded [`std::rc::Rc<str>`]-typed call site
+/// through an [`std::rc::Rc::<str>::from`]`(dialeto.as_str())` open-code
+/// (no compile-time link back to the substrate primitive) or a
+/// [`std::rc::Rc::<str>::from`]`(String::from(dialeto))` two-step
+/// composition through the owned-`String` axis that allocates twice
+/// (once into the intermediate [`String`], once into the
+/// [`std::rc::Rc<str>`] on the `From<String>` conversion) where the
+/// single-step trait impl allocates once. The single-threaded shared-
+/// ownership contract [`std::rc::Rc<str>`] provides — the non-atomic
+/// strong-and-weak refcount header, cheaper `Clone` than the paired
+/// atomically-refcounted [`std::sync::Arc<str>`] axis by a measurable
+/// margin on hot single-threaded call sites — is the distinct value the
+/// sibling [`std::sync::Arc<str>`] axis's [`Send`] and [`Sync`] return-
+/// shape cannot provide without paying the atomic-increment cost on
+/// every clone: a single-threaded `feira dialeto` census pipeline whose
+/// per-file classify path composes a [`std::rc::Rc<str>`] label into a
+/// per-arm counter reaches through this axis and not the atomic sibling;
+/// a single-threaded `HashMap::<std::rc::Rc<str>, _>::from_iter` per-
+/// dialect lookup where the map's key type is [`std::rc::Rc<str>`] so
+/// the same dialect-label pointer can key both the map and the payload
+/// without a second heap allocation reaches through this axis.
+///
+/// Extends the caixa-core-internal tier of the substrate-wide trait-
+/// idiomatic [`std::rc::Rc<str>`] forward-projection campaign onto the
+/// second caixa-core-internal peer, after the structurally most
+/// fundamental [`crate::CaixaKind`] pair (4fdfa37, both corners in one
+/// axis) opened the campaign on the closed-set fieldless typed-enum
+/// family. Same `{Self, &Self} × {&'static str, String, Cow<'static, str>,
+/// Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}` 2×6 forward-
+/// projection matrix the sibling projection surfaces already carry —
+/// this impl extends the sixth column onto the dialect-classification
+/// enum's owned-input row.
+///
+/// A future arm addition (the module doc's "third dialect" hazard
+/// actualising as a fifth arm) reaches the paired [`std::rc::Rc<str>`]
+/// output axis through one match-arm edit on the [`CaixaDialeto::as_str`]
+/// `pub const fn` accessor, not a coordinated rewrite of every downstream
+/// `std::rc::Rc::<str>::from(dialeto.as_str())` open-code.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`] across the four-arm
+/// [`CaixaDialeto::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness and cross-axis byte-parity pins
+/// against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` return-shape axes).
+impl From<CaixaDialeto> for std::rc::Rc<str> {
+    fn from(dialeto: CaixaDialeto) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(dialeto.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the outside-M3 caixa-core dialect-classification
+/// [`CaixaDialeto`] closed-set fieldless typed enum — the borrowed-input
+/// companion to the paired owned-input
+/// [`From<CaixaDialeto> for std::rc::Rc<str>`] impl immediately above.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`CaixaDialeto::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so a
+/// `CaixaDialeto::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped pipe
+/// (whose iterator over `&'static [CaixaDialeto]` yields `&CaixaDialeto`
+/// by construction) reaches the same four `"Pacote"` / `"Molde"` /
+/// `"MoldePosicional"` / `"Desconhecido"` byte-strings the paired owned-
+/// input axis and the sibling `{Self, &Self} × {&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` forward-projection
+/// corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`CaixaDialeto::ALL`]`.iter().map(std::rc::Rc::<str>::from)` reaches
+/// through this impl and no other — without it, the same pipe would
+/// force a spurious [`Copy`] deref
+/// (`std::rc::Rc::<str>::from((*dialeto).as_str())`) or a `.copied()`
+/// restatement whose type bounds have no compile-time link back to the
+/// substrate primitive.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the second caixa-
+/// core-internal closed-set fieldless typed enum peer of the substrate-
+/// wide trait-idiomatic [`std::rc::Rc<str>`] forward-projection campaign,
+/// matching the trajectory the paired structurally most fundamental
+/// [`crate::CaixaKind`] pair (4fdfa37, both corners in one axis) walked
+/// before it on the caixa-core-internal tier of the same axis. Same
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>, std::rc::Rc<str>}` 2×6 forward-projection matrix
+/// the peer projection surfaces already close on this same enum.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_borrowed_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`] across the four-arm
+/// [`CaixaDialeto::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, a cross-axis partition pin
+/// against the paired owned-input
+/// [`From<CaixaDialeto> for std::rc::Rc<str>`] and the sibling borrowed-
+/// input `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes, and a
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe witness over
+/// [`CaixaDialeto::ALL`] that resolves through the borrowed-input axis
+/// without a spurious [`Copy`] deref).
+impl From<&CaixaDialeto> for std::rc::Rc<str> {
+    fn from(dialeto: &CaixaDialeto) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(dialeto.as_str())
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -4845,6 +4975,275 @@ mod tests {
              accessor without a spurious `Copy` deref (which would only \
              be reachable through the owned-input \
              `From<CaixaDialeto> for std::sync::Arc<str>` axis by first \
+             calling `.copied()` on the iterator)"
+        );
+    }
+
+    #[test]
+    fn caixa_dialeto_from_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<CaixaDialeto> for std::rc::Rc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::CaixaDialeto::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm PascalCase emit-set across every
+        // arm the exhaustive [`super::CaixaDialeto::ALL`] slice enumerates.
+        // Extends the caixa-core-internal tier of the substrate-wide
+        // [`std::rc::Rc<str>`] forward-projection campaign onto the second
+        // caixa-core-internal peer, after the structurally most
+        // fundamental [`super::super::CaixaKind`] pair (4fdfa37, both
+        // corners in one axis) opened the campaign. Rust's standard
+        // library carries `impl From<&str> for std::rc::Rc<str>` and
+        // `impl From<String> for std::rc::Rc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor an
+        // `impl<T: fmt::Display> From<T> for std::rc::Rc<str>`), and — the
+        // `std::sync::Arc<str>` and `std::rc::Rc<str>` trait tables are
+        // disjoint — so this axis is a distinct trait-idiomatic surface
+        // that a `let key: std::rc::Rc<str> = dialeto.into();`-shaped
+        // call site reaches through this impl and no other.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-input
+        // `{&'static str, String, Cow<'static, str>, Box<str>,
+        // std::sync::Arc<str>}` return-shape axes — locking the six
+        // return-shape paths on the owned-input surface together by
+        // construction so any future detour off the substrate-primitive
+        // [`super::CaixaDialeto::as_str`] accessor trips at caixa-core
+        // test time.
+        for &variant in CaixaDialeto::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<CaixaDialeto>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<CaixaDialeto> for std::rc::Rc<str> impl must \
+                 round-trip CaixaDialeto::{variant:?} to the same \
+                 PascalCase byte-string CaixaDialeto::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on CaixaDialeto::\
+                 {variant:?} must byte-equal CaixaDialeto::as_str on the \
+                 same input — the blanket-derived Into shape must resolve \
+                 to the same as_str dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<CaixaDialeto> for std::rc::Rc<str> and \
+                 From<CaixaDialeto> for &'static str must resolve \
+                 identically on CaixaDialeto::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<CaixaDialeto> for std::rc::Rc<str> and \
+                 From<CaixaDialeto> for String must resolve identically \
+                 on CaixaDialeto::{variant:?} — divergence signals the \
+                 owned-input std::rc::Rc<str> and owned-`String` \
+                 return-shape paths have drifted onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<CaixaDialeto> for std::rc::Rc<str> and \
+                 From<CaixaDialeto> for Cow<'static, str> must resolve \
+                 identically on CaixaDialeto::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<CaixaDialeto> for std::rc::Rc<str> and \
+                 From<CaixaDialeto> for Box<str> must resolve identically \
+                 on CaixaDialeto::{variant:?} — divergence signals the \
+                 owned-input std::rc::Rc<str> and Box<str> return-\
+                 shape paths have drifted onto different emit-sets"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<CaixaDialeto> for std::rc::Rc<str> and \
+                 From<CaixaDialeto> for std::sync::Arc<str> must resolve \
+                 identically on CaixaDialeto::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and \
+                 std::sync::Arc<str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds five borrowed-input \
+                  return-shape paths (&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>) plus the paired \
+                  owned-input Rc<str> witness and the \
+                  .iter().map(std::rc::Rc::<str>::from) pipe witness into \
+                  one exhaustive round-trip over CaixaDialeto::ALL — the \
+                  accepted line-count cost of keying the whole borrowed-\
+                  input Rc<str> corner to the substrate-primitive as_str \
+                  accessor at the same test-site"
+    )]
+    fn caixa_dialeto_from_borrowed_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&CaixaDialeto> for std::rc::Rc<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::CaixaDialeto::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm PascalCase emit-set across every
+        // arm the exhaustive [`super::CaixaDialeto::ALL`] slice enumerates.
+        // Rust's standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `std::rc::Rc<str>` forward-projection axis is
+        // a distinct trait-idiomatic surface that a
+        // `let key: std::rc::Rc<str> = (&dialeto).into();`-shaped call
+        // site or a
+        // `CaixaDialeto::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped
+        // pipe reaches through this impl and no other.
+        //
+        // Cross-axis partition pin against the paired owned-input
+        // [`From<CaixaDialeto> for std::rc::Rc<str>`] and the sibling
+        // borrowed-input `{&'static str, String, Cow<'static, str>,
+        // Box<str>, std::sync::Arc<str>}` return-shape axes — locking the
+        // six return-shape × input-shape paths on the borrowed-input
+        // surface together by construction so any future detour off the
+        // substrate-primitive accessor trips at caixa-core test time.
+        // Then a `.iter().map(std::rc::Rc::<str>::from)` pipe witness
+        // over [`super::CaixaDialeto::ALL`] — whose iterator yields
+        // `&CaixaDialeto` by construction, so the borrowed-input
+        // [`std::rc::Rc<str>`] axis is what routes the pipe through the
+        // substrate-primitive [`super::CaixaDialeto::as_str`] accessor
+        // without a spurious [`Copy`] deref.
+        for &variant in CaixaDialeto::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<&CaixaDialeto>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&CaixaDialeto> for std::rc::Rc<str> impl must \
+                 round-trip &CaixaDialeto::{variant:?} to the same \
+                 PascalCase byte-string CaixaDialeto::as_str returns — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on &CaixaDialeto::\
+                 {variant:?} must byte-equal CaixaDialeto::as_str on the \
+                 same input — the blanket-derived Into shape on the \
+                 borrowed-input surface must resolve to the same as_str \
+                 dispatch as the explicit From impl"
+            );
+            let owned_rc: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&CaixaDialeto> for std::rc::Rc<str> and \
+                 From<CaixaDialeto> for std::rc::Rc<str> must resolve \
+                 identically on CaixaDialeto::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 std::rc::Rc<str> forward-projection input-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&CaixaDialeto>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&CaixaDialeto> for std::rc::Rc<str> and \
+                 From<&CaixaDialeto> for &'static str must resolve \
+                 identically on CaixaDialeto::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&CaixaDialeto>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&CaixaDialeto> for std::rc::Rc<str> and \
+                 From<&CaixaDialeto> for String must resolve identically \
+                 on CaixaDialeto::{variant:?} — divergence signals the \
+                 borrowed-input std::rc::Rc<str> and owned-`String` \
+                 return-shape paths have drifted onto different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&CaixaDialeto>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&CaixaDialeto> for std::rc::Rc<str> and \
+                 From<&CaixaDialeto> for Cow<'static, str> must resolve \
+                 identically on CaixaDialeto::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&CaixaDialeto>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&CaixaDialeto> for std::rc::Rc<str> and \
+                 From<&CaixaDialeto> for Box<str> must resolve \
+                 identically on CaixaDialeto::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 Box<str> return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&CaixaDialeto>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&CaixaDialeto> for std::rc::Rc<str> and \
+                 From<&CaixaDialeto> for std::sync::Arc<str> must \
+                 resolve identically on CaixaDialeto::{variant:?} — \
+                 divergence signals the borrowed-input std::rc::Rc<str> \
+                 and std::sync::Arc<str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::rc::Rc<str>> = CaixaDialeto::ALL
+            .iter()
+            .map(std::rc::Rc::<str>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<str>> = CaixaDialeto::ALL
+            .iter()
+            .map(|d| std::rc::Rc::<str>::from(d.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over \
+             CaixaDialeto::ALL — a call site whose iteration axis holds \
+             `&CaixaDialeto` by construction — must byte-equal \
+             `.iter().map(|d| std::rc::Rc::<str>::from(d.as_str()))` \
+             on every arm — the borrowed-input std::rc::Rc<str> \
+             `From<&CaixaDialeto> for std::rc::Rc<str>` axis is what \
+             makes the `std::rc::Rc::<str>::from` composition route \
+             through the substrate-primitive `CaixaDialeto::as_str` \
+             accessor without a spurious `Copy` deref (which would only \
+             be reachable through the owned-input \
+             `From<CaixaDialeto> for std::rc::Rc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
     }
