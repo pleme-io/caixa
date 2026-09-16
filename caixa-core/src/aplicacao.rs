@@ -10004,6 +10004,110 @@ impl From<&PlacementStrategy> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:placement :estrategia`
+/// distribution-strategy [`PlacementStrategy`] closed-set fieldless typed
+/// enum — the single-threaded reference-counted peer of the paired owned-
+/// input [`From<PlacementStrategy> for std::sync::Arc<str>`] impl (977d577)
+/// on the sibling atomically-reference-counted [`std::sync::Arc<str>`]
+/// axis. Routes byte-for-byte through the substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`.
+///
+/// Rust's standard library carries `impl From<&str> for std::rc::Rc<str>`
+/// and `impl From<String> for std::rc::Rc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor a `From<&T>`
+/// blanket), and — the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`]
+/// trait tables are disjoint — so this axis is a distinct trait-idiomatic
+/// surface a `let key: std::rc::Rc<str> = strategy.into();`-shaped call
+/// site reaches through this impl and no other. A single-threaded caixa-
+/// mesh renderer pass whose per-Aplicacao `placement.strategy` label is
+/// cloned across intra-render tree nodes via [`std::rc::Rc::clone`] (its
+/// cheaper non-atomic refcount bump the [`std::sync::Arc<str>`] axis's
+/// atomically-reference-counted return-shape cannot provide within a
+/// single-threaded render pass) reaches the substrate-primitive
+/// [`PlacementStrategy::as_str`] accessor through this impl and no other.
+///
+/// Extends the trait-idiomatic [`std::rc::Rc<str>`] forward-projection
+/// axis onto the first M3-mesh-primitive-defining slot enum, after the
+/// axis opened on the structurally most fundamental
+/// [`crate::CaixaKind`] pair (4fdfa37, both corners in one axis) and
+/// widened onto the second caixa-core-internal peer
+/// [`crate::CaixaDialeto`] (c884517). Matches the trajectory the sibling
+/// atomically-reference-counted [`std::sync::Arc<str>`] axis walked
+/// before it onto this same enum (977d577 owned-input + immediately-
+/// following borrowed-input closure) after opening on
+/// [`crate::supervisor::RestartStrategy`] / closing on
+/// [`crate::supervisor::RestartPolicy`] at the M2 OTP-shape tier.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm [`PlacementStrategy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness and cross-axis
+/// byte-parity pins against the sibling owned-input `{&'static str,
+/// String, Cow<'static, str>, Box<str>, std::sync::Arc<str>}` return-
+/// shape axes).
+impl From<PlacementStrategy> for std::rc::Rc<str> {
+    fn from(strategy: PlacementStrategy) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(strategy.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:placement :estrategia`
+/// distribution-strategy [`PlacementStrategy`] closed-set fieldless typed
+/// enum — the borrowed-input companion to the paired owned-input
+/// [`From<PlacementStrategy> for std::rc::Rc<str>`] impl immediately
+/// above, closing the `{Self, &Self}` input-shape corner of the
+/// [`std::rc::Rc<str>`] axis on the first M3-mesh-primitive-defining
+/// slot enum. Routes byte-for-byte through the substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so a
+/// `PlacementStrategy::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped
+/// pipe (whose iterator over `&'static [PlacementStrategy]` yields
+/// `&PlacementStrategy` by construction) reaches the same three
+/// `"SingleNode"` / `"Replicated"` / `"Sharded"` byte-strings the paired
+/// owned-input axis and the sibling `{Self, &Self} × {&'static str,
+/// String, Cow<'static, str>, Box<str>, std::sync::Arc<str>}` forward-
+/// projection corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`PlacementStrategy::ALL`]`.iter().map(std::rc::Rc::<str>::from)`
+/// reaches through this impl and no other — without it, the same pipe
+/// would force a spurious [`Copy`] deref
+/// (`std::rc::Rc::<str>::from((*strategy).as_str())`) or a `.copied()`
+/// restatement whose type bounds have no compile-time link back to the
+/// substrate primitive.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the first M3-mesh-
+/// primitive-defining slot enum of the substrate-wide trait-idiomatic
+/// [`std::rc::Rc<str>`] forward-projection campaign, matching the
+/// trajectory the paired [`crate::CaixaKind`] (4fdfa37) and
+/// [`crate::CaixaDialeto`] (c884517) pairs walked before it on the
+/// caixa-core-internal tier of the same axis.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_borrowed_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm [`PlacementStrategy::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness, a cross-axis
+/// partition pin against the paired owned-input
+/// [`From<PlacementStrategy> for std::rc::Rc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes, and a
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe witness over
+/// [`PlacementStrategy::ALL`] that resolves through the borrowed-input
+/// axis without a spurious [`Copy`] deref).
+impl From<&PlacementStrategy> for std::rc::Rc<str> {
+    fn from(strategy: &PlacementStrategy) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(strategy.as_str())
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -27860,6 +27964,295 @@ mod tests {
              owned-input `From<PlacementStrategy> for \
              std::sync::Arc<str>` axis by first calling `.copied()` \
              on the iterator)"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn placement_strategy_from_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for std::rc::Rc<str>` — asserts
+        // the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::PlacementStrategy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::PlacementStrategy::ALL`] slice enumerates. Extends
+        // the substrate-wide [`std::rc::Rc<str>`] forward-projection
+        // campaign onto the first M3-mesh-primitive-defining slot enum,
+        // after the axis opened on the structurally most fundamental
+        // [`super::super::CaixaKind`] pair (4fdfa37) and widened onto
+        // the second caixa-core-internal peer
+        // [`super::super::CaixaDialeto`] (c884517). Rust's standard
+        // library carries `impl From<&str> for std::rc::Rc<str>` and
+        // `impl From<String> for std::rc::Rc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor an
+        // `impl<T: fmt::Display> From<T> for std::rc::Rc<str>`), and
+        // the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`] trait
+        // tables are disjoint, so this axis is a distinct trait-
+        // idiomatic surface that a
+        // `let key: std::rc::Rc<str> = strategy.into();`-shaped call
+        // site reaches through this impl and no other.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>,
+        // std::sync::Arc<str>}` return-shape axes — locking the six
+        // return-shape paths on the owned-input surface together by
+        // construction so any future detour off the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] accessor trips at caixa-
+        // core test time.
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<PlacementStrategy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<PlacementStrategy> for std::rc::Rc<str> impl must \
+                 round-trip PlacementStrategy::{variant:?} to the same \
+                 lifted M3_PLACEMENT_ESTRATEGIA_* const \
+                 PlacementStrategy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on PlacementStrategy::\
+                 {variant:?} must byte-equal PlacementStrategy::as_str \
+                 on the same input — the blanket-derived Into shape \
+                 must resolve to the same as_str dispatch as the \
+                 explicit From impl"
+            );
+            let owned_static: &'static str =
+                <&'static str as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<PlacementStrategy> for std::rc::Rc<str> and \
+                 From<PlacementStrategy> for &'static str must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input std::rc::Rc<str> \
+                 and &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<PlacementStrategy> for std::rc::Rc<str> and \
+                 From<PlacementStrategy> for String must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input std::rc::Rc<str> \
+                 and owned-`String` return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<PlacementStrategy> for std::rc::Rc<str> and \
+                 From<PlacementStrategy> for Cow<'static, str> must \
+                 resolve identically on PlacementStrategy::{variant:?} \
+                 — divergence signals the owned-input std::rc::Rc<str> \
+                 and Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<PlacementStrategy> for std::rc::Rc<str> and \
+                 From<PlacementStrategy> for Box<str> must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input std::rc::Rc<str> \
+                 and Box<str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<PlacementStrategy> for std::rc::Rc<str> and \
+                 From<PlacementStrategy> for std::sync::Arc<str> must \
+                 resolve identically on PlacementStrategy::{variant:?} \
+                 — divergence signals the owned-input std::rc::Rc<str> \
+                 and std::sync::Arc<str> return-shape paths have \
+                 drifted onto different emit-sets"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds five borrowed-input \
+                  return-shape paths (&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>) plus the paired \
+                  owned-input Rc<str> witness and the \
+                  .iter().map(std::rc::Rc::<str>::from) pipe witness \
+                  into one exhaustive round-trip over \
+                  PlacementStrategy::ALL — the accepted line-count cost \
+                  of keying the whole borrowed-input Rc<str> corner to \
+                  the substrate-primitive as_str accessor at the same \
+                  test-site"
+    )]
+    fn placement_strategy_from_borrowed_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&PlacementStrategy> for std::rc::Rc<str>` —
+        // asserts the borrowed-input standard-library trait impl and
+        // the substrate-primitive [`super::PlacementStrategy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::PlacementStrategy::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `std::rc::Rc<str>` forward-projection axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: std::rc::Rc<str> = (&strategy).into();`-shaped call
+        // site or a
+        // `PlacementStrategy::ALL.iter().map(std::rc::Rc::<str>::from)`-
+        // shaped pipe reaches through this impl and no other.
+        //
+        // Closes the `{Self, &Self}` input-shape corner of the
+        // [`std::rc::Rc<str>`] axis on the first M3-mesh-primitive-
+        // defining slot enum, matching the trajectory the paired
+        // caixa-core-internal [`super::super::CaixaKind`] (4fdfa37) and
+        // [`super::super::CaixaDialeto`] (c884517) pairs walked before
+        // it on the same axis.
+        //
+        // Cross-axis partition pin against the paired owned-input
+        // [`From<PlacementStrategy> for std::rc::Rc<str>`] and the
+        // sibling borrowed-input `{&'static str, String, Cow<'static,
+        // str>, Box<str>, std::sync::Arc<str>}` return-shape axes —
+        // locking the six return-shape × input-shape paths on the
+        // borrowed-input surface together by construction so any future
+        // detour off the substrate-primitive accessor trips at caixa-
+        // core test time. Then a
+        // `.iter().map(std::rc::Rc::<str>::from)` pipe witness over
+        // [`super::PlacementStrategy::ALL`] — whose iterator yields
+        // `&PlacementStrategy` by construction, so the borrowed-input
+        // [`std::rc::Rc<str>`] axis is what routes the pipe through the
+        // substrate-primitive [`super::PlacementStrategy::as_str`]
+        // accessor without a spurious [`Copy`] deref.
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<&PlacementStrategy>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&PlacementStrategy> for std::rc::Rc<str> impl \
+                 must round-trip &PlacementStrategy::{variant:?} to the \
+                 same lifted M3_PLACEMENT_ESTRATEGIA_* const \
+                 PlacementStrategy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on &PlacementStrategy::\
+                 {variant:?} must byte-equal PlacementStrategy::as_str \
+                 on the same input — the blanket-derived Into shape on \
+                 the borrowed-input surface must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_rc: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&PlacementStrategy> for std::rc::Rc<str> and \
+                 From<PlacementStrategy> for std::rc::Rc<str> must \
+                 resolve identically on PlacementStrategy::{variant:?} \
+                 — divergence signals the borrowed-input and owned-\
+                 input std::rc::Rc<str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&PlacementStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&PlacementStrategy> for std::rc::Rc<str> and \
+                 From<&PlacementStrategy> for &'static str must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::rc::Rc<str> and &'static str return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&PlacementStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&PlacementStrategy> for std::rc::Rc<str> and \
+                 From<&PlacementStrategy> for String must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::rc::Rc<str> and owned-`String` return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&PlacementStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&PlacementStrategy> for std::rc::Rc<str> and \
+                 From<&PlacementStrategy> for Cow<'static, str> must \
+                 resolve identically on PlacementStrategy::{variant:?} \
+                 — divergence signals the borrowed-input \
+                 std::rc::Rc<str> and Cow<'static, str> return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&PlacementStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&PlacementStrategy> for std::rc::Rc<str> and \
+                 From<&PlacementStrategy> for Box<str> must resolve \
+                 identically on PlacementStrategy::{variant:?} — \
+                 divergence signals the borrowed-input \
+                 std::rc::Rc<str> and Box<str> return-shape paths have \
+                 drifted onto different emit-sets"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&PlacementStrategy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&PlacementStrategy> for std::rc::Rc<str> and \
+                 From<&PlacementStrategy> for std::sync::Arc<str> must \
+                 resolve identically on PlacementStrategy::{variant:?} \
+                 — divergence signals the borrowed-input \
+                 std::rc::Rc<str> and std::sync::Arc<str> return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+        }
+        let via_iter: Vec<std::rc::Rc<str>> = PlacementStrategy::ALL
+            .iter()
+            .map(std::rc::Rc::<str>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<str>> = PlacementStrategy::ALL
+            .iter()
+            .map(|p| std::rc::Rc::<str>::from(p.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over \
+             PlacementStrategy::ALL — a call site whose iteration axis \
+             holds `&PlacementStrategy` by construction — must byte-\
+             equal `.iter().map(|p| std::rc::Rc::<str>::from(p.as_str()))` \
+             on every arm — the borrowed-input std::rc::Rc<str> \
+             `From<&PlacementStrategy> for std::rc::Rc<str>` axis is \
+             what makes the `std::rc::Rc::<str>::from` composition \
+             route through the substrate-primitive \
+             `PlacementStrategy::as_str` accessor without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<PlacementStrategy> for \
+             std::rc::Rc<str>` axis by first calling `.copied()` on \
+             the iterator)"
         );
     }
 
