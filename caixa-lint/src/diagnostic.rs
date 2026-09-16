@@ -456,6 +456,100 @@ impl TryFrom<&str> for Severity {
     }
 }
 
+/// Trait-idiomatic [`std::str::FromStr`] parse axis on the
+/// [`Severity`] closed-set caixa-lint diagnostic-severity typed enum —
+/// routes byte-for-byte through the paired
+/// [`TryFrom<&str> for Severity`] impl (which in turn routes through
+/// the substrate-primitive [`Severity::from_wire`] `Option<Self>`
+/// accessor), so `"...".parse::<Severity>()` /
+/// `<Severity as FromStr>::from_str(…)` reaches the same four-arm
+/// canonical-lowercase `"error"` / `"warning"` / `"info"` / `"hint"`
+/// accept-set the sibling method-named [`Severity::from_wire`]
+/// resolver and the paired [`TryFrom<&str>`] impl already resolve
+/// against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`caixa_core::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum, then
+/// extended onto the structurally most fundamental closed-set typed
+/// enum via [`caixa_core::CaixaKind`] (9867432), then onto the first
+/// M3-mesh-primitive-defining slot enum via
+/// [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a), then onto
+/// the dialect-classification axis via [`caixa_core::CaixaDialeto`]
+/// (ff01b2f), then onto the *first outside-caixa-core* closed-set
+/// fieldless typed enum via
+/// [`caixa_arch::invariants::InvariantKind`] (fb16072), then onto the
+/// caixa-arch verdict-outcome axis via
+/// [`caixa_arch::report::ArchVerdict`] (40e9dfd) — onto the *third
+/// outside-caixa-core* closed-set fieldless typed enum on the caixa
+/// surface (and the first inside `caixa-lint`): the diagnostic-
+/// severity four-arm accept-set every `feira lint` per-diagnostic
+/// render site, every `caixa-lsp`-side per-severity
+/// `DiagnosticSeverity` mapping, and every future M4 admission-
+/// webhook / lint-report re-loader dispatches through. Coherent by
+/// construction on this enum specifically: [`Severity`] carries
+/// exactly one canonical lowercase wire axis (`error` / `warning` /
+/// `info` / `hint`) with no paired secondary parse surface, so —
+/// unlike the peer [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] (whose paired
+/// [`gen_platform::FromStrKind`]-derived kebab-case `FromStr` on the
+/// dispatcher-catalog axis rules a second `FromStr` impl out by
+/// coherence) and unlike the peer
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] (whose two-axis splits
+/// motivate deliberate deferral of the `FromStr` axis so a plain
+/// `s.parse::<T>()` cannot obscure which axis the caller reaches),
+/// lifting [`FromStr`] onto [`Severity`] cannot collide with a
+/// second parse axis it does not carry.
+///
+/// [`FromStr`] is the canonical Rust-idiomatic parse-set entry point
+/// every stdlib-shaped consumer reaches for — [`str::parse::<T>()`]
+/// is a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting [`FromStr`]
+/// onto the closed-set enum unlocks the `.parse::<Severity>()`
+/// short-form on every consumer (a future `feira lint --severity
+/// <error|warning|info|hint>` clap-style arg-parse composes
+/// `arg.parse::<Severity>()`; a `serde` string-tagged deserializer
+/// with a `#[serde(with = "serde_with::DisplayFromStr")]` shim routes
+/// through the same `FromStr` bound; a future M4
+/// `mesh.pleme.io/v1alpha1/LintReport` CR admission-webhook body
+/// reloader that walks a `Vec<String>` of prior
+/// [`Severity::as_str`] outputs reaches the typed enum through
+/// `line.parse::<Severity>()` without a per-consumer
+/// `TryFrom<&str>` restatement; a `tracing::field::Value::Str`-arm
+/// structured-log re-loader binding a prior emission's
+/// [`Severity::as_str`] output back to the typed enum for cross-run
+/// severity-histogram diff reaches the same axis through the stdlib
+/// `.parse()` short-form).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] —
+/// same `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`)
+/// resolve to the same four-arm accept-set by construction. A future
+/// arm addition (a `Debug` tier below [`Self::Hint`] once verbose
+/// per-node lint traces enter scope, a `Critical` tier above
+/// [`Self::Error`] the M3-and-later LSP surfaces for build-halting
+/// failures — both trajectory items the sibling [`Severity::ALL`]
+/// doc block already names) reaches every parse path through one
+/// edit on the substrate-primitive [`Severity::from_wire`] accessor,
+/// not a coordinated rewrite across the two reverse-projection trait
+/// impls.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the four-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::severity_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for Severity {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Standard-library trait-idiomatic forward projection on the
 /// [`Severity`] closed-set caixa-lint diagnostic-severity axis.
 /// Routes byte-for-byte through the paired substrate-primitive
@@ -3705,6 +3799,178 @@ mod tests {
                 Severity::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for Severity` — asserts the standard-
+        // library `.parse()` parse-axis entry point and the paired
+        // [`super::Severity::try_from`] `TryFrom<&str>` impl (which in
+        // turn routes through the substrate-primitive
+        // [`super::Severity::from_wire`] `Option<Self>` accessor)
+        // resolve to the same four-arm canonical-lowercase accept-set
+        // across every arm the exhaustive [`super::Severity::ALL`]
+        // slice enumerates. Extends the substrate-wide `FromStr`
+        // parse-axis campaign — opened on
+        // [`caixa_core::dep::DepList`] via 6167092, then
+        // [`caixa_core::CaixaKind`] (9867432),
+        // [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a),
+        // [`caixa_core::CaixaDialeto`] (ff01b2f),
+        // [`caixa_arch::invariants::InvariantKind`] (fb16072), and
+        // [`caixa_arch::report::ArchVerdict`] (40e9dfd) — onto the
+        // *third outside-caixa-core* closed-set fieldless typed enum
+        // on the caixa surface (and the first inside `caixa-lint`):
+        // the diagnostic-severity four-arm accept-set every `feira
+        // lint` per-diagnostic render site, every `caixa-lsp`-side
+        // per-severity `DiagnosticSeverity` mapping, and every future
+        // M4 admission-webhook / lint-report re-loader dispatches
+        // through. The peer method-named `from_wire` accessor and the
+        // paired `TryFrom<&str>` trait impl fix the four-arm
+        // canonical-lowercase accept-set; this pin locks the
+        // `FromStr::from_str` trait entry point onto the same set so
+        // any future divergence (a stray per-arm `match s` re-inlining
+        // that opens a compile-time link to an un-lifted arm-literal,
+        // a swap onto a hand-rolled parser that widens the accept-set
+        // past the four lifted
+        // [`super::CAIXA_LINT_SEVERITY_WIRE_*`] consts) trips at
+        // caixa-lint test time. Also covers the stdlib `.parse()`
+        // short-form witness: `.parse::<Severity>()` is the
+        // `T: FromStr`-bounded generic every clap-style arg-parser,
+        // `serde` string-tagged deserializer, and generic
+        // `<T: FromStr>`-bound loader reaches for — the pin asserts
+        // both `<T as FromStr>::from_str` and `.parse::<T>()` resolve
+        // to the same four-arm accept-set.
+        use std::str::FromStr;
+        for &variant in Severity::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <Severity as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on Severity must round-trip \
+                 Severity::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(Severity::{variant:?}) — divergence from the \
+                 paired TryFrom<&str> impl / Severity::from_wire \
+                 signals a silent detour off the substrate-primitive \
+                 accessor",
+            );
+            assert_eq!(
+                wire.parse::<Severity>(),
+                Ok(variant),
+                "stdlib .parse::<Severity>() short-form on \
+                 Severity::{variant:?}.as_str() = {wire:?} must route \
+                 through the lifted FromStr impl and reach \
+                 Ok(Severity::{variant:?})",
+            );
+            assert_eq!(
+                <Severity as FromStr>::from_str(wire).ok(),
+                Severity::from_wire(wire),
+                "FromStr::from_str ok()-projection on {wire:?} must \
+                 byte-equal Severity::from_wire on the same input — \
+                 the two reverse-projection axes must resolve to the \
+                 same four-arm canonical-lowercase accept-set",
+            );
+            assert_eq!(
+                <Severity as FromStr>::from_str(wire),
+                <Severity as TryFrom<&str>>::try_from(wire),
+                "FromStr::from_str and TryFrom<&str>::try_from must \
+                 byte-equal on every arm — FromStr delegates to \
+                 TryFrom<&str> by construction; divergence signals a \
+                 stray reroute onto a hand-rolled parser",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl std::str::FromStr for
+        // Severity` — sweeps a candidate set of byte-strings outside
+        // the four-arm canonical-lowercase wire accept-set the sibling
+        // [`super::Severity::as_str`] emits and asserts every one
+        // lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray case-fold that admits the
+        // pre-lift PascalCase Debug-derived shapes `"Error"` /
+        // `"Warning"` / `"Info"` / `"Hint"` on the wire axis, a
+        // Levenshtein-forgiving arm-lookup that admits `"eror"` /
+        // `"warn"` typos — the exact form a
+        // `format!("{:?}", …).to_lowercase()` round-trip on the
+        // paired [`std::fmt::Debug`] derive would otherwise land on,
+        // the drift footgun the emitter's documentation explicitly
+        // names as the reason the substrate-canonical lowercase
+        // `"error"` / `"warning"` / `"info"` / `"hint"` slug set
+        // exists) trips at caixa-lint test time. The candidate set
+        // spans the empty string, whitespace-only padding, uppercase
+        // / mixed-case rebrand candidates, Levenshtein-neighbor typos,
+        // sibling closed-set-enum canonical tags on the peer
+        // [`super::FixSafety::as_str`] two-arm accept-set (`"safe"` /
+        // `"unsafe"`) and the peer
+        // `caixa_arch::invariants::InvariantKind::as_str` three-arm
+        // arch-severity set (`"safety"` / `"compliance"` — non-shared
+        // with this axis's four-arm severity set; the shared `"hint"`
+        // arm between this axis and the arch-severity axis is a
+        // coincidence of lowercase-tag choice, not a typed cross-axis
+        // promise, but the two axes' `"hint"` arm DOES belong to this
+        // axis, so `"hint"` is deliberately excluded from the
+        // rejection set), the peer arch-verdict two-arm accept-set
+        // (`"proven"` / `"rejected"`), and trailing/leading-whitespace-
+        // padded canonical tags. Pairs the `<T as FromStr>::from_str`
+        // and stdlib `.parse()` short-form witnesses so a future
+        // divergence between the two parse-axis entry points (a
+        // hand-rolled `.parse` override that bypasses the delegated
+        // `FromStr` impl) trips here.
+        use std::str::FromStr;
+        for bad in [
+            "",
+            " ",
+            "Error",
+            "ERROR",
+            "Warning",
+            "WARNING",
+            "Info",
+            "INFO",
+            "Hint",
+            "HINT",
+            "eror",
+            "warn",
+            "informational",
+            "hnt",
+            "safe",
+            "unsafe",
+            "safety",
+            "compliance",
+            "proven",
+            "rejected",
+            "fatal",
+            "debug",
+            "critical",
+            "error ",
+            " error",
+            "error\n",
+            "error\t",
+            "warning ",
+            " warning",
+            "info ",
+            " info",
+            "hint ",
+            " hint",
+        ] {
+            assert_eq!(
+                <Severity as FromStr>::from_str(bad),
+                Err(()),
+                "FromStr for Severity({bad:?}) must return Err(()) — \
+                 the trait impl's accept-set is exactly the four \
+                 Severity::as_str outputs; a widening would silently \
+                 split the FromStr impl's accept-set from the \
+                 emitter's arm-set",
+            );
+            assert_eq!(
+                bad.parse::<Severity>(),
+                Err(()),
+                "stdlib .parse::<Severity>() short-form on {bad:?} \
+                 must route through the lifted FromStr impl and \
+                 reject with Err(())",
             );
         }
     }
