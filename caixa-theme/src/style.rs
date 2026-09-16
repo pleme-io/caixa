@@ -633,6 +633,100 @@ impl TryFrom<&str> for Semantic {
     }
 }
 
+/// Standard-library trait-idiomatic [`std::str::FromStr`] impl on the
+/// [`Semantic`] closed-set caixa-theme semantic-style typed enum —
+/// routes byte-for-byte through the paired
+/// [`TryFrom<&str> for Semantic`] impl (which in turn routes through
+/// the substrate-primitive [`Semantic::from_wire`] `Option<Self>`
+/// accessor), so `"...".parse::<Semantic>()` /
+/// `<Semantic as FromStr>::from_str(…)` reaches the same 16-arm
+/// canonical-lowercase-kebab accept-set the sibling method-named
+/// [`Semantic::from_wire`] resolver and the paired [`TryFrom<&str>`]
+/// impl already resolve against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`caixa_core::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum, then
+/// extended onto [`caixa_core::CaixaKind`] (9867432),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a),
+/// [`caixa_core::CaixaDialeto`] (ff01b2f),
+/// [`caixa_arch::invariants::InvariantKind`] (fb16072),
+/// [`caixa_arch::report::ArchVerdict`] (40e9dfd),
+/// `caixa_lint::diagnostic::Severity` (6b0a08c),
+/// `caixa_lint::diagnostic::FixSafety` (eb6942b), and
+/// [`caixa_core::render::PathShapeViolation`] (b0b578c) — onto the
+/// *first* closed-set fieldless typed enum on the caixa-theme surface:
+/// the 16-arm semantic-style accept-set every per-`Semantic` paint
+/// dispatch, every future `caixa-lsp`-side per-`SemanticTokenType`
+/// wire-up, every future `caixa.nvim` per-highlight-group re-loader,
+/// and every future `blackmatter-shell` per-arm
+/// `data-semantic="<kebab>"` DOM-attribute emission dispatches through.
+/// Coherent by construction on this enum specifically: [`Semantic`]
+/// carries exactly one canonical-lowercase-kebab wire axis with no
+/// paired secondary parse surface, so — unlike the peer
+/// [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] (whose paired
+/// [`gen_platform::FromStrKind`]-derived kebab-case `FromStr` on the
+/// dispatcher-catalog axis rules a second `FromStr` impl out by
+/// coherence) and unlike the peer
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] (whose two-axis splits
+/// motivate deliberate deferral of the `FromStr` axis so a plain
+/// `s.parse::<T>()` cannot obscure which axis the caller reaches),
+/// lifting [`FromStr`] onto [`Semantic`] cannot collide with a second
+/// parse axis it does not carry.
+///
+/// [`FromStr`] is the canonical Rust-idiomatic parse-set entry point
+/// every stdlib-shaped consumer reaches for — [`str::parse::<T>()`]
+/// is a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting [`FromStr`]
+/// onto the closed-set enum unlocks the `.parse::<Semantic>()`
+/// short-form on every consumer (a future
+/// `feira lint --list-styles=<semantic>` clap-style arg-parse composes
+/// `arg.parse::<Semantic>()`; a `serde` string-tagged deserializer with
+/// a `#[serde(with = "serde_with::DisplayFromStr")]` shim routes
+/// through the same `FromStr` bound; a future `caixa-lsp`-side
+/// per-`SemanticTokenType` startup registration walk that reads a
+/// declaration-order kebab list from configuration reaches the typed
+/// enum through `line.parse::<Semantic>()` without a per-consumer
+/// [`TryFrom<&str>`] restatement; a `caixa.nvim`-side
+/// per-highlight-group re-loader binding a prior emission's
+/// [`Semantic::as_str`] output back to the typed enum for cross-run
+/// palette-histogram diff reaches the same axis through the stdlib
+/// `.parse()` short-form; a future `blackmatter-shell`
+/// `data-semantic="<kebab>"` DOM-attribute round-trip that walks
+/// `element.dataset.semantic.parse::<Semantic>()` on the client-side
+/// paint dispatch reaches the same axis through the stdlib
+/// short-form).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] — same
+/// `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`) resolve
+/// to the same 16-arm accept-set by construction. A future arm
+/// addition (a `Deprecated` decoration between [`Self::Removed`] and
+/// [`Self::Unchanged`] the future formatter-preview grows to mark
+/// soft-delete regions distinct from hard-delete [`Self::Removed`] the
+/// future 3-way diff surface grows — the trajectory item the sibling
+/// [`Semantic::ALL`] doc block already names) reaches every parse path
+/// through one caixa-theme edit on the substrate-primitive
+/// [`Semantic::from_wire`] accessor, not a coordinated rewrite across
+/// the two reverse-projection trait impls.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the 16-arm accept-set + delegated
+/// `.parse()`-projection witness) and
+/// [`tests::semantic_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for Semantic {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Standard-library trait-idiomatic forward projection on the
 /// [`Semantic`] closed 16-arm caixa-theme semantic-style axis. Routes
 /// byte-for-byte through the paired substrate-primitive
@@ -2349,6 +2443,183 @@ mod tests {
                 Semantic::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for Semantic` — asserts the standard-
+        // library `.parse()` parse-axis entry point and the paired
+        // [`super::Semantic::try_from`] `TryFrom<&str>` impl (which in
+        // turn routes through the substrate-primitive
+        // [`super::Semantic::from_wire`] `Option<Self>` accessor)
+        // resolve to the same 16-arm canonical-lowercase-kebab accept-
+        // set across every arm the exhaustive [`super::Semantic::ALL`]
+        // slice enumerates. Extends the substrate-wide `FromStr`
+        // parse-axis campaign — opened on
+        // [`caixa_core::dep::DepList`] via 6167092, then
+        // [`caixa_core::CaixaKind`] (9867432),
+        // [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a),
+        // [`caixa_core::CaixaDialeto`] (ff01b2f),
+        // [`caixa_arch::invariants::InvariantKind`] (fb16072),
+        // [`caixa_arch::report::ArchVerdict`] (40e9dfd),
+        // `caixa_lint::diagnostic::Severity` (6b0a08c),
+        // `caixa_lint::diagnostic::FixSafety` (eb6942b), and
+        // [`caixa_core::render::PathShapeViolation`] (b0b578c) — onto
+        // the *first* closed-set fieldless typed enum on the caixa-
+        // theme surface: the 16-arm semantic-style accept-set every
+        // per-`Semantic` paint dispatch, every future `caixa-lsp`-side
+        // per-`SemanticTokenType` wire-up, every future `caixa.nvim`
+        // per-highlight-group re-loader, and every future `blackmatter-
+        // shell` per-arm `data-semantic="<kebab>"` DOM-attribute
+        // emission dispatches through. The peer method-named
+        // `from_wire` accessor and the paired `TryFrom<&str>` trait
+        // impl fix the 16-arm canonical-lowercase-kebab accept-set;
+        // this pin locks the `FromStr::from_str` trait entry point
+        // onto the same set so any future divergence (a stray per-arm
+        // `match s` re-inlining that opens a compile-time link to an
+        // un-lifted arm-literal outside the paired
+        // [`super::CAIXA_THEME_SEMANTIC_WIRE_*`] consts, a swap onto a
+        // hand-rolled parser that widens the accept-set past those 16
+        // wire constants) trips at caixa-theme test time. Also covers
+        // the stdlib `.parse()` short-form witness:
+        // `.parse::<Semantic>()` is the `T: FromStr`-bounded generic
+        // every clap-style arg-parser, `serde` string-tagged
+        // deserializer, and generic `<T: FromStr>`-bound loader reaches
+        // for — the pin asserts both `<T as FromStr>::from_str` and
+        // `.parse::<T>()` resolve to the same 16-arm accept-set.
+        use std::str::FromStr;
+        for &variant in Semantic::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <Semantic as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on Semantic must round-trip \
+                 Semantic::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(Semantic::{variant:?}) — divergence from the paired \
+                 TryFrom<&str> impl / Semantic::from_wire signals a \
+                 silent detour off the substrate-primitive accessor",
+            );
+            assert_eq!(
+                wire.parse::<Semantic>(),
+                Ok(variant),
+                "stdlib .parse::<Semantic>() short-form on \
+                 Semantic::{variant:?}.as_str() = {wire:?} must route \
+                 through the lifted FromStr impl and reach \
+                 Ok(Semantic::{variant:?})",
+            );
+            assert_eq!(
+                <Semantic as FromStr>::from_str(wire).ok(),
+                Semantic::from_wire(wire),
+                "FromStr::from_str ok()-projection on {wire:?} must \
+                 byte-equal Semantic::from_wire on the same input — \
+                 the two reverse-projection axes must resolve to the \
+                 same 16-arm canonical-lowercase-kebab accept-set",
+            );
+            assert_eq!(
+                <Semantic as FromStr>::from_str(wire),
+                <Semantic as TryFrom<&str>>::try_from(wire),
+                "FromStr::from_str and TryFrom<&str>::try_from must \
+                 byte-equal on every arm — FromStr delegates to \
+                 TryFrom<&str> by construction; divergence signals a \
+                 stray reroute onto a hand-rolled parser",
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl std::str::FromStr for
+        // Semantic` — sweeps a candidate set of byte-strings outside
+        // the 16-arm canonical-lowercase-kebab wire accept-set the
+        // sibling [`super::Semantic::as_str`] emits and asserts every
+        // one lands on `Err(())`, so a future accidental widening of
+        // the trait impl's accept-set (a stray case-fold that admits
+        // the pre-lift PascalCase Debug-derived shapes `"Keyword"` /
+        // `"KeywordArg"` / … on the wire axis, an underscore-tolerant
+        // arm-lookup that admits `"keyword_arg"` — the exact drift
+        // form a `format!("{:?}", …).to_lowercase()` round-trip on the
+        // paired [`std::fmt::Debug`] derive or a
+        // `#[serde(rename_all = "snake_case")]` drift would land on,
+        // the drift footgun the emitter's documentation explicitly
+        // names as the reason the substrate-canonical
+        // lowercase-kebab tag set exists) trips at caixa-theme test
+        // time. The candidate set spans the empty string, whitespace-
+        // only padding, uppercase / PascalCase rebrand candidates,
+        // Levenshtein-neighbor typos, snake_case rebrand candidates,
+        // sibling closed-set-enum canonical tags that do *not* overlap
+        // the Semantic accept-set (the `"error"` / `"warning"` /
+        // `"info"` / `"hint"` peer
+        // `caixa_lint::diagnostic::Severity::as_str` four-arm set is
+        // deliberately excluded from the rejection sweep because those
+        // four tags coincide byte-for-byte with the Semantic axis'
+        // diagnostic-severity paint arms and therefore *must* be
+        // accepted by construction — the accepted-set witness above
+        // covers them), the peer
+        // `caixa_lint::diagnostic::FixSafety::as_str` two-arm set
+        // (`"safe"` / `"unsafe"`), the peer
+        // `caixa_arch::invariants::InvariantKind::as_str` three-arm
+        // set (`"safety"` / `"compliance"` / `"performance"`), the
+        // peer arch-verdict two-arm accept-set (`"proven"` /
+        // `"rejected"`), cross-crate kind / strategy tags, and
+        // trailing/leading-whitespace-padded canonical tags. Pairs the
+        // `<T as FromStr>::from_str` and stdlib `.parse()` short-form
+        // witnesses so a future divergence between the two parse-axis
+        // entry points (a hand-rolled `.parse` override that bypasses
+        // the delegated `FromStr` impl) trips here.
+        use std::str::FromStr;
+        for bad in [
+            "",
+            " ",
+            "\t",
+            "\n",
+            "Keyword",
+            "KEYWORD",
+            "KeywordArg",
+            "keyword_arg",
+            "keyword arg",
+            "keywordarg",
+            "keywor",
+            "Symbol",
+            "SYMBOL",
+            "Comment",
+            "unknown",
+            "biblioteca",
+            "servico",
+            "safety",
+            "compliance",
+            "performance",
+            "proven",
+            "rejected",
+            "safe",
+            "unsafe",
+            "one-for-one",
+            "empty",
+            "absolute",
+            "parent-escape",
+            "keyword ",
+            " keyword",
+            "keyword\n",
+            "keyword\t",
+            "\"keyword\"",
+        ] {
+            assert_eq!(
+                <Semantic as FromStr>::from_str(bad),
+                Err(()),
+                "FromStr for Semantic({bad:?}) must return Err(()) — \
+                 the trait impl's accept-set is exactly the 16 \
+                 Semantic::as_str outputs; a widening would silently \
+                 split the FromStr impl's accept-set from the \
+                 emitter's arm-set",
+            );
+            assert_eq!(
+                bad.parse::<Semantic>(),
+                Err(()),
+                "stdlib .parse::<Semantic>() short-form on {bad:?} \
+                 must route through the lifted FromStr impl and \
+                 reject with Err(())",
             );
         }
     }
