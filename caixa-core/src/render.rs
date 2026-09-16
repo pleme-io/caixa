@@ -7729,6 +7729,93 @@ impl TryFrom<&str> for PathShapeViolation {
     }
 }
 
+/// Trait-idiomatic [`std::str::FromStr`] parse axis on the
+/// [`PathShapeViolation`] closed-set render-side path-shape-diagnostic
+/// axis — routes byte-for-byte through the paired
+/// [`TryFrom<&str> for PathShapeViolation`] impl (which in turn routes
+/// through the substrate-primitive [`PathShapeViolation::from_wire`]
+/// `Option<Self>` accessor), so `"...".parse::<PathShapeViolation>()`
+/// / `<PathShapeViolation as FromStr>::from_str(…)` reaches the same
+/// three-arm `"empty"` / `"absolute"` / `"parent-escape"` canonical-
+/// kebab wire accept-set the sibling method-named
+/// [`PathShapeViolation::from_wire`] resolver and the paired
+/// [`TryFrom<&str>`] impl already resolve against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`crate::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum,
+/// extended onto [`crate::CaixaKind`] via 9867432,
+/// [`crate::aplicacao::PlacementStrategy`] via 62ef49a,
+/// [`crate::CaixaDialeto`] via ff01b2f,
+/// [`caixa_arch::invariants::InvariantKind`] via fb16072,
+/// [`caixa_arch::report::ArchVerdict`] via 40e9dfd,
+/// [`caixa_lint::diagnostic::Severity`] via 6b0a08c, and
+/// [`caixa_lint::diagnostic::FixSafety`] via eb6942b — onto the first
+/// render-side path-shape-diagnostic closed-set enum on the caixa-core
+/// surface. Coherent by construction on this enum specifically:
+/// [`PathShapeViolation`] carries exactly one canonical-kebab wire
+/// axis (`"empty"` / `"absolute"` / `"parent-escape"`) with no paired
+/// secondary parse surface — unlike the peer
+/// [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] (whose paired
+/// [`gen_platform::FromStrKind`]-derived kebab-case `FromStr` on the
+/// dispatcher-catalog axis rules a second `FromStr` impl out by
+/// coherence) and unlike the peer [`crate::aplicacao::WitShape`] /
+/// [`crate::aplicacao::RateLimitUnit`] (whose two-axis splits motivate
+/// deliberate deferral of the `FromStr` axis so a plain
+/// `s.parse::<T>()` cannot obscure which axis the caller reaches) —
+/// lifting [`FromStr`] onto [`PathShapeViolation`] cannot collide with
+/// a second parse axis it does not carry.
+///
+/// [`FromStr`] is the canonical Rust-idiomatic parse-set entry point
+/// every stdlib-shaped consumer reaches for — [`str::parse::<T>()`]
+/// is a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting [`FromStr`]
+/// onto the closed-set enum unlocks the
+/// `.parse::<PathShapeViolation>()` short-form on every consumer (a
+/// future `feira lint --explain-path-shape=<empty|absolute|parent-escape>`
+/// clap-style arg-parse composes `arg.parse::<PathShapeViolation>()`;
+/// a `serde` string-tagged deserializer routes through the same
+/// [`FromStr`] bound via `serde_with::DisplayFromStr`; a future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook rejection-body
+/// reloader that walks a `Vec<String>` of prior
+/// [`PathShapeViolation::as_str`] outputs reaches the typed enum
+/// through `line.parse::<PathShapeViolation>()` without a per-consumer
+/// [`TryFrom<&str>`] restatement; a `tracing::field::Value::Str`-arm
+/// structured-log re-loader binding a prior emission's
+/// [`PathShapeViolation::as_str`] output back to the typed enum for
+/// cross-run path-gate-histogram diff reaches the same axis through
+/// the stdlib `.parse()` short-form).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] —
+/// same `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`) resolve
+/// to the same three-arm accept-set by construction. A future arm
+/// addition (a `Symlink` arm the future symlink-escape gate would
+/// carry once [`std::path::Path::is_symlink`] becomes part of the
+/// sandbox contract, a `TrailingSpace` arm a future authoring-side
+/// whitespace-hygiene gate would raise for `"lib/init.lisp "` shapes
+/// — both trajectory items the sibling [`PathShapeViolation::ALL`]
+/// doc block already names) reaches every parse path through one
+/// caixa-core edit on the substrate-primitive
+/// [`PathShapeViolation::from_wire`] accessor, not a coordinated
+/// rewrite across the two reverse-projection trait impls.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the three-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::path_shape_violation_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for PathShapeViolation {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Standard-library trait-idiomatic forward projection on the
 /// [`PathShapeViolation`] closed-set typed enum. Routes byte-for-byte
 /// through the paired substrate-primitive [`PathShapeViolation::as_str`]
@@ -42325,6 +42412,162 @@ mod tests {
                 PathShapeViolation::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for PathShapeViolation` — asserts the
+        // standard-library `.parse()` parse-axis entry point and the
+        // paired [`super::PathShapeViolation::try_from`] `TryFrom<&str>`
+        // impl (which in turn routes through the substrate-primitive
+        // [`super::PathShapeViolation::from_wire`] `Option<Self>`
+        // accessor) resolve to the same three-arm canonical-kebab wire
+        // accept-set across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Extends
+        // the substrate-wide `FromStr` parse-axis campaign — opened on
+        // [`crate::dep::DepList`] via 6167092 as first-mover, extended
+        // onto [`crate::CaixaKind`] via 9867432,
+        // [`crate::aplicacao::PlacementStrategy`] via 62ef49a,
+        // [`crate::CaixaDialeto`] via ff01b2f,
+        // [`caixa_arch::invariants::InvariantKind`] via fb16072,
+        // [`caixa_arch::report::ArchVerdict`] via 40e9dfd,
+        // [`caixa_lint::diagnostic::Severity`] via 6b0a08c, and
+        // [`caixa_lint::diagnostic::FixSafety`] via eb6942b — onto the
+        // first render-side path-shape-diagnostic closed-set enum on
+        // the caixa-core surface. The peer method-named `from_wire`
+        // accessor and the paired `TryFrom<&str>` trait impl fix the
+        // three-arm canonical-kebab wire accept-set; this pin locks
+        // the `FromStr::from_str` trait entry point onto the same set
+        // so any future divergence (a stray per-arm `match s`
+        // re-inlining that opens a compile-time link to an un-lifted
+        // arm-literal outside the paired
+        // `crate::render::RENDER_PATH_SHAPE_VIOLATION_WIRE_*` consts, a
+        // swap onto a hand-rolled parser that widens the accept-set
+        // past those three wire constants) trips at caixa-core test
+        // time.
+        use std::str::FromStr;
+        for &variant in PathShapeViolation::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <PathShapeViolation as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on PathShapeViolation must round-trip \
+                 PathShapeViolation::{variant:?}.as_str() = {wire:?} \
+                 back to Ok(PathShapeViolation::{variant:?}) — \
+                 divergence from PathShapeViolation::try_from signals \
+                 a silent detour off the paired reverse-projection \
+                 trait impl",
+            );
+            assert_eq!(
+                <PathShapeViolation as FromStr>::from_str(wire).ok(),
+                PathShapeViolation::from_wire(wire),
+                "FromStr ok()-projection on {wire:?} must byte-equal \
+                 PathShapeViolation::from_wire on the same input — \
+                 divergence signals the two reverse-projection trait \
+                 paths have drifted off the substrate-primitive \
+                 accessor",
+            );
+            // `.parse::<PathShapeViolation>()` short-form witness —
+            // the stdlib consumer surface that reaches the enum
+            // through the `T: FromStr` bound, not through
+            // `TryFrom<&str>`.
+            let via_parse: Result<PathShapeViolation, ()> = wire.parse();
+            assert_eq!(
+                via_parse,
+                Ok(variant),
+                "`{wire:?}`.parse::<PathShapeViolation>() must resolve \
+                 to Ok(PathShapeViolation::{variant:?}) — divergence \
+                 signals the stdlib `.parse()` short-form has drifted \
+                 from the lifted `FromStr::from_str` impl",
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl FromStr for PathShapeViolation`
+        // — sweeps candidate byte-strings outside the three-arm
+        // canonical-kebab wire accept-set the sibling
+        // [`super::PathShapeViolation::as_str`] emits and asserts every
+        // one lands on `Err(())`, so a future accidental widening of
+        // the trait impl's accept-set (a stray case-fold path, a
+        // silent acceptance of the pre-lift PascalCase Debug-derived
+        // shapes `"Empty"` / `"Absolute"` / `"ParentEscape"` on the
+        // wire axis, a Levenshtein-forgiving arm-lookup that admits
+        // `"parentescape"` typos — the exact form a
+        // `format!("{:?}", …).to_lowercase()` round-trip on the paired
+        // [`std::fmt::Debug`] derive would otherwise land on, the
+        // drift footgun the emitter's documentation explicitly names
+        // as the reason the substrate-canonical kebab-case
+        // `"parent-escape"` slug exists) trips at caixa-core test
+        // time. Peer of the sibling
+        // `path_shape_violation_try_from_str_rejects_unknown_byte_strings`
+        // rejection witness — the two pins together bracket both
+        // reverse-projection trait impls against the same rejected
+        // set. The candidate set mirrors the sibling `TryFrom<&str>`
+        // rejection sweep (empty, whitespace-only, uppercase rebrand,
+        // underscored / space-separated rebrand, Levenshtein-neighbor
+        // typos, sibling closed-set-enum canonical tags that must NOT
+        // bleed across enum accept-sets under a shared generic loader,
+        // whitespace-padded canonical scalars, trailing-newline shape,
+        // and JSON-quoted-scalar shapes).
+        use std::str::FromStr;
+        let rejected: &[&str] = &[
+            "",
+            " ",
+            "\n",
+            "\t",
+            "Empty",
+            "EMPTY",
+            "Absolute",
+            "ABSOLUTE",
+            "ParentEscape",
+            "PARENTESCAPE",
+            "parentescape",
+            "parent_escape",
+            "parent escape",
+            "parent-escap",
+            "biblioteca",
+            "servico",
+            "safety",
+            "hint",
+            "one-for-one",
+            "empty ",
+            " empty",
+            "empty\n",
+            "empty\t",
+            "\"empty\"",
+        ];
+        for &input in rejected {
+            assert_eq!(
+                <PathShapeViolation as FromStr>::from_str(input),
+                Err(()),
+                "FromStr impl on PathShapeViolation must reject \
+                 unknown byte-string {input:?} — divergence from \
+                 PathShapeViolation::from_wire on the same input \
+                 signals a silent accept-set widening past the three \
+                 lifted crate::render::RENDER_PATH_SHAPE_VIOLATION_WIRE_* \
+                 wire constants",
+            );
+            assert_eq!(
+                <PathShapeViolation as FromStr>::from_str(input).ok(),
+                PathShapeViolation::from_wire(input),
+                "FromStr ok()-projection on {input:?} must byte-equal \
+                 PathShapeViolation::from_wire on the same input — \
+                 divergence signals the FromStr trait path has drifted \
+                 off the substrate-primitive accessor",
+            );
+            let via_parse: Result<PathShapeViolation, ()> = input.parse();
+            assert_eq!(
+                via_parse,
+                Err(()),
+                "`{input:?}`.parse::<PathShapeViolation>() must reject \
+                 the unknown byte-string — divergence signals the \
+                 stdlib `.parse()` short-form has drifted from the \
+                 lifted `FromStr::from_str` impl",
             );
         }
     }
