@@ -1768,6 +1768,126 @@ impl From<&CaixaDialeto> for std::rc::Rc<str> {
     }
 }
 
+/// Substrate-canonical [`AsRef<[u8]>`] byte-view projection on the
+/// caixa-core-internal dialect-classification [`CaixaDialeto`] closed-set
+/// fieldless typed enum — routes byte-for-byte through the substrate-
+/// primitive [`CaixaDialeto::as_str`] `pub const fn` accessor via
+/// [`str::as_bytes`] on the returned `&'static str`, so any future
+/// consumer that binds a [`CaixaDialeto`] through a standard-library
+/// `<T: AsRef<[u8]>>` trait bound reaches the same lifted
+/// [`CAIXA_DIALETO_WIRE_PACOTE`] / [`CAIXA_DIALETO_WIRE_MOLDE`] /
+/// [`CAIXA_DIALETO_WIRE_MOLDE_POSICIONAL`] /
+/// [`CAIXA_DIALETO_WIRE_DESCONHECIDO`] `pub const &str` roster the paired
+/// sibling [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`CaixaDialeto::as_str`] / `{Self, &Self} × {&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}`
+/// str-view + reverse-projection surfaces already return — through the
+/// byte-view axis, which the str-view axes cannot express.
+///
+/// Unlike the sibling top-level [`crate::CaixaKind`] enum — which
+/// carries a two-axis split ([`crate::CaixaKind::as_str`] returning
+/// lowercase-Portuguese diagnostic form vs
+/// [`crate::CaixaKind::wire_name`] returning `PascalCase` tatara-lisp
+/// author-surface bytes) — [`CaixaDialeto`] is an internal
+/// classification with no wire-surface split (see the
+/// [`CaixaDialeto::as_str`] docstring: "the `PascalCase` variant name
+/// is the census-facing form every consumer reads, so `as_str`
+/// suffices without a paired `wire_name` axis"). The byte-view axis
+/// therefore lands on the same `PascalCase` census-facing byte-string
+/// every str-view and reverse-projection axis on this enum already
+/// returns, and no wire-axis cross-witness applies.
+///
+/// The primary compounding target is the same [`crate`]-adjacent
+/// [`caixa-lacre`](../../caixa-lacre/) BLAKE3 content-address closure
+/// the peer [`crate::CaixaKind`] `AsRef<[u8]>` impl (69d8d86) opens
+/// onto: [`blake3::hash`] and [`blake3::Hasher::update`] both bind
+/// their input through `impl AsRef<[u8]>`, so any future per-caixa
+/// content-address tag that folds a `:dialect` classification-byte
+/// into the [`crate::Lacre`] closure (a hypothetical
+/// `hasher.update(dialeto);`-shape composition on the per-caixa
+/// BLAKE3 closure builder that keys off the caixa source's dialect
+/// classification) reaches the substrate-primitive
+/// [`CaixaDialeto::as_str`] accessor through this impl and no other —
+/// without it, every such call site opens the two-hop composition
+/// `dialeto.as_str().as_bytes()` whose byte-tail has no compile-time
+/// link back to the byte-projection axis. Peer consumer paths on the
+/// byte-view axis: any future [`std::io::Write::write_all`]-bound
+/// structured-log dialect-column emitter (whose input binds through
+/// `impl AsRef<[u8]>`), any future byte-keyed
+/// [`std::collections::HashMap`] `<K: AsRef<[u8]>, V>` per-dialect
+/// tally lookup whose entry-key trait bound rules out the sibling
+/// [`AsRef<str>`] str-view projection, and any future
+/// `ring::digest::Context::update` / `sha2::Sha256::update` /
+/// `blake3::Hasher::update` byte-input surface on any future per-
+/// dialect content-address digest.
+///
+/// Rust's standard library carries `impl AsRef<[u8]> for str` and
+/// `impl AsRef<[u8]> for String`, so the two-hop composition
+/// `dialeto.as_str().as_bytes()` (or, equivalently,
+/// `AsRef::<str>::as_ref(&dialeto).as_bytes()`) is reachable through
+/// the pre-existing str-view axis alone. But that two-hop shape has
+/// no compile-time link back to the byte-projection axis, forces
+/// every downstream `<T: AsRef<[u8]>>`-bound consumer to open-code
+/// the two-hop composition at every call site rather than pass a
+/// [`CaixaDialeto`] through the trait bound directly, and admits a
+/// silent split whenever a future call site takes the sibling
+/// [`std::fmt::Display`] or [`From<Self> for String`] axis (whose
+/// `.as_bytes()` byte-tails byte-equal `as_str`'s by construction
+/// but carry no compile-time byte-view surface, since `Display`
+/// returns a formatter and `String` allocates). The lifted single-
+/// hop impl closes the byte-view axis so every future
+/// `<T: AsRef<[u8]>>`-bound consumer reaches the substrate primitive
+/// through one trait dispatch, and every future arm addition (the
+/// module doc's "third dialect" hazard actualising as a fifth arm)
+/// grows the byte-view axis through one edit on the substrate-
+/// primitive `as_str` accessor, not a coordinated rewrite across
+/// every future `<T: AsRef<[u8]>>`-bound consumer's arm-set.
+///
+/// Extends the trait-idiomatic *byte-view* axis onto the second
+/// closed-set fieldless typed-enum peer on the substrate — the
+/// caixa-core-internal dialect-classification enum — matching the
+/// trajectory the sibling [`crate::CaixaKind`] first-mover
+/// [`AsRef<[u8]>`] impl (69d8d86) walked before it on the caixa-core
+/// tier of the byte-view axis, and matching the discipline the
+/// paired sibling closed-set fieldless typed enums already carry on
+/// the peer str-view ([`AsRef<str>`]), parse
+/// ([`std::str::FromStr`]), and reverse-projection
+/// (`{Self, &Self} × {&'static str, String, Cow<'static, str>,
+/// Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}`) axes on this
+/// same enum.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_as_ref_bytes_routes_through_as_str_accessor`]
+/// (fail-before-pass-after byte-parity pin against
+/// [`CaixaDialeto::as_str`] `.as_bytes()` across the four-arm
+/// [`CaixaDialeto::ALL`] emit-set, cross-axis witness against the
+/// paired str-view [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`CaixaDialeto::as_str`] axes' `.as_bytes()` byte-tails, cross-
+/// axis witness against the paired reverse-projection
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>, std::rc::Rc<str>}` return-shape axes'
+/// `.as_bytes()` byte-tails, a `<T: AsRef<[u8]>>`-bound-consumer
+/// witness that a generic byte-input function accepts a
+/// [`CaixaDialeto`] directly through the trait bound on both owned
+/// and borrowed input shapes, and a `blake3::Hasher::update`-shape
+/// byte-input surface witness routed through the
+/// `<T: AsRef<[u8]>>`-bound consumer axis to reach the caixa-lacre
+/// compounding target on both owned and borrowed input shapes). Any
+/// future silent detour that routes the byte-view impl off the
+/// substrate-primitive [`CaixaDialeto::as_str`] accessor (a per-arm
+/// inline `b"Pacote".as_slice()`-shaped re-inlining that opens a
+/// compile-time link to the un-lifted arm-literal, a swap onto the
+/// sibling [`CaixaDialeto::palavra_canonica`] /
+/// [`CaixaDialeto::consumidor`] / [`CaixaDialeto::descricao`]
+/// accessors that carry distinct byte-shapes per axis) trips at
+/// caixa-core test time rather than at a downstream byte-consumer's
+/// silent split.
+impl AsRef<[u8]> for CaixaDialeto {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -5246,5 +5366,252 @@ mod tests {
              `From<CaixaDialeto> for std::rc::Rc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds the substrate-primitive \
+                  as_str accessor's `.as_bytes()` byte-tail plus the \
+                  paired str-view (AsRef<str>, Display, as_str) and \
+                  reverse-projection ({&'static str, String, \
+                  Cow<'static, str>, Box<str>, std::sync::Arc<str>, \
+                  std::rc::Rc<str>}) return-shape axes' `.as_bytes()` \
+                  byte-tails plus a <T: AsRef<[u8]>>-bound-consumer \
+                  witness plus a blake3::Hasher::update-shape byte-\
+                  input surface witness into one exhaustive round-trip \
+                  over CaixaDialeto::ALL — the accepted line-count cost \
+                  of opening the byte-view axis keyed to the substrate-\
+                  primitive as_str accessor at the same test-site"
+    )]
+    #[allow(
+        clippy::needless_borrows_for_generic_args,
+        reason = "the borrowed-input surface (&variant) is exercised \
+                  deliberately: the `<T: AsRef<[u8]>>`-bound consumer \
+                  and the `blake3::Hasher::update`-shape byte-input \
+                  surface both accept either owned or borrowed input \
+                  through the standard-library blanket \
+                  `impl<T: ?Sized + AsRef<[u8]>> AsRef<[u8]> for &T`, \
+                  and this pin round-trips both input shapes to lock \
+                  the borrowed-input path load-bearing against a \
+                  future silent regression"
+    )]
+    fn caixa_dialeto_as_ref_bytes_routes_through_as_str_accessor() {
+        // `<T: AsRef<[u8]>>`-bound-consumer witness helper: a generic
+        // byte-input function accepts a [`super::CaixaDialeto`]
+        // directly through the trait bound, without the caller open-
+        // coding the two-hop `dialeto.as_str().as_bytes()`
+        // composition. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock:
+        // mirrors `blake3::Hasher::update` / `ring::digest::Context::
+        // update` / `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound
+        // `update` signature so a per-caixa BLAKE3 content-address
+        // closure that composes `hasher.update(dialeto)` on the
+        // [`crate::Lacre`] closure builder reaches the substrate-
+        // primitive `as_str` accessor through the
+        // [`super::CaixaDialeto`] `AsRef<[u8]>` axis and no other.
+        // Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for CaixaDialeto` — asserts the trait-
+        // idiomatic byte-view standard-library impl and the substrate-
+        // primitive [`super::CaixaDialeto::as_str`] `pub const fn`
+        // accessor's `.as_bytes()` byte-tail resolve to the same
+        // four-arm PascalCase-byte-string emit-set across every arm
+        // the exhaustive [`super::CaixaDialeto::ALL`] slice enumerates.
+        // Extends the substrate-wide trait-idiomatic byte-view axis
+        // onto the second closed-set fieldless typed enum on the
+        // caixa-core-internal tier — matching the trajectory the
+        // sibling [`super::CaixaKind`] first-mover
+        // [`AsRef<[u8]>`] impl (69d8d86) walked before it.
+        for &variant in CaixaDialeto::ALL {
+            let via_trait: &[u8] = <CaixaDialeto as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for CaixaDialeto impl must byte-equal \
+                 CaixaDialeto::as_str().as_bytes() on CaixaDialeto::\
+                 {variant:?} — divergence signals a silent detour off \
+                 the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: [`AsRef<str>`] /
+            // [`std::fmt::Display`] / [`super::CaixaDialeto::as_str`]
+            // all resolve to the same lifted `CAIXA_DIALETO_WIRE_*`
+            // const roster, and the byte-view axis must byte-equal
+            // each of their `.as_bytes()` byte-tails by construction
+            // — locking the str-view and byte-view axes together at
+            // the substrate-primitive accessor.
+            let str_view_ref: &str = <CaixaDialeto as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                str_view_ref.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and AsRef<str> for \
+                 CaixaDialeto must resolve to byte-equal byte-tails \
+                 on CaixaDialeto::{variant:?} — divergence signals \
+                 the byte-view and str-view axes have drifted off the \
+                 same substrate-primitive as_str accessor"
+            );
+            let display_bytes = variant.to_string();
+            assert_eq!(
+                via_trait,
+                display_bytes.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and \
+                 <CaixaDialeto as std::fmt::Display>::to_string must \
+                 resolve to byte-equal byte-tails on CaixaDialeto::\
+                 {variant:?} — divergence signals the byte-view axis \
+                 and the Display formatter axis have drifted off the \
+                 same substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired reverse-
+            // projection axes' `.as_bytes()` byte-tails: every one of
+            // `{&'static str, String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>, std::rc::Rc<str>}` allocates (or
+            // borrows) the same PascalCase byte-string the substrate-
+            // primitive accessor emits, so the byte-view axis must
+            // byte-equal each of their `.as_bytes()` byte-tails by
+            // construction.
+            let owned_static: &'static str = <&'static str as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_static.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and From<CaixaDialeto> \
+                 for &'static str must resolve to byte-equal byte-\
+                 tails on CaixaDialeto::{variant:?}"
+            );
+            let owned_string: String = <String as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_string.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and From<CaixaDialeto> \
+                 for String must resolve to byte-equal byte-tails on \
+                 CaixaDialeto::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_cow.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and From<CaixaDialeto> \
+                 for Cow<'static, str> must resolve to byte-equal \
+                 byte-tails on CaixaDialeto::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_box.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and From<CaixaDialeto> \
+                 for Box<str> must resolve to byte-equal byte-tails \
+                 on CaixaDialeto::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_arc.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and From<CaixaDialeto> \
+                 for std::sync::Arc<str> must resolve to byte-equal \
+                 byte-tails on CaixaDialeto::{variant:?}"
+            );
+            let owned_rc_str: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_rc_str.as_bytes(),
+                "AsRef<[u8]> for CaixaDialeto and From<CaixaDialeto> \
+                 for std::rc::Rc<str> must resolve to byte-equal \
+                 byte-tails on CaixaDialeto::{variant:?}"
+            );
+        }
+        // `<T: AsRef<[u8]>>`-bound-consumer witness: the generic byte-
+        // input function `generic_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::CaixaDialeto`] directly through the trait bound,
+        // without the caller open-coding the two-hop
+        // `dialeto.as_str().as_bytes()` composition. This is the
+        // shape that reaches the caixa-lacre BLAKE3 content-address
+        // closure's `blake3::Hasher::update(impl AsRef<[u8]>)` byte-
+        // input surface through this impl and no other. Exercised on
+        // both owned and borrowed input surfaces via the standard-
+        // library blanket `impl<T: ?Sized + AsRef<[u8]>>
+        // AsRef<[u8]> for &T`.
+        for &variant in CaixaDialeto::ALL {
+            let via_generic = generic_bytes_sink(variant);
+            let via_borrowed_generic = generic_bytes_sink(&variant);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 CaixaDialeto::{variant:?} must yield the same byte-\
+                 tail CaixaDialeto::as_str().as_bytes() returns — \
+                 divergence signals the byte-view axis fails to \
+                 bridge a generic byte-input trait bound to the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 &CaixaDialeto::{variant:?} must yield the same byte-\
+                 tail CaixaDialeto::as_str().as_bytes() returns — the \
+                 borrowed-input surface must resolve to the same \
+                 as_str dispatch"
+            );
+        }
+        // `blake3::Hasher::update`-shape byte-input surface witness
+        // on the caixa-lacre compounding target: the `MockHasher`
+        // (lifted above per `clippy::items_after_statements`) mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound update
+        // signature and accepts a [`super::CaixaDialeto`] directly,
+        // routing its byte-tail through the substrate-primitive
+        // `as_str` accessor — the shape a future per-caixa BLAKE3
+        // content-address closure composes to fold a `:dialect`
+        // classification byte-tag into the [`crate::Lacre`] closure
+        // body.
+        for &variant in CaixaDialeto::ALL {
+            let mut owned_hasher = MockHasher::new();
+            owned_hasher.update(variant);
+            let owned_folded = owned_hasher.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(dialeto)`-shape composition on \
+                 CaixaDialeto::{variant:?} must fold the same byte-\
+                 tail CaixaDialeto::as_str().as_bytes() returns — the \
+                 shape a future per-caixa BLAKE3 content-address \
+                 closure composes to fold a `:dialect` classification \
+                 byte-tag into the Lacre closure body"
+            );
+            let mut borrowed_hasher = MockHasher::new();
+            borrowed_hasher.update(&variant);
+            let borrowed_folded = borrowed_hasher.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(&dialeto)`-shape composition on \
+                 &CaixaDialeto::{variant:?} must fold the same byte-\
+                 tail CaixaDialeto::as_str().as_bytes() returns — the \
+                 borrowed-input surface must resolve to the same \
+                 as_str dispatch"
+            );
+        }
     }
 }
