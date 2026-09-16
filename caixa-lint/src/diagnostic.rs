@@ -3138,6 +3138,130 @@ impl From<&FixSafety> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the caixa-lint fix-safety-tier two-arm closed-set
+/// fieldless typed enum [`FixSafety`] — the single-threaded reference-
+/// counted peer of the paired owned-input
+/// [`From<FixSafety> for std::sync::Arc<str>`] impl immediately above on
+/// the sibling atomically-reference-counted [`std::sync::Arc<str>`]
+/// axis. Routes byte-for-byte through the substrate-primitive
+/// [`FixSafety::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`.
+///
+/// Rust's standard library carries `impl From<&str> for std::rc::Rc<str>`
+/// and `impl From<String> for std::rc::Rc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor a `From<&T>`
+/// blanket), and — the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`]
+/// trait tables are disjoint — so this axis is a distinct trait-
+/// idiomatic surface a `let key: std::rc::Rc<str> = safety.into();`-
+/// shaped call site reaches through this impl and no other. A single-
+/// threaded `feira lint`-side per-fix safety-tier renderer whose per-
+/// diagnostic safety label is cloned across intra-report tree nodes via
+/// [`std::rc::Rc::clone`] (its cheaper non-atomic refcount bump the
+/// [`std::sync::Arc<str>`] axis's atomically-reference-counted return-
+/// shape cannot provide within a single-threaded lint pass), a future
+/// `feira lint --by-safety` single-threaded per-arm histogram-column
+/// emitter keyed on a shared-ownership per-arm bucket key, a future
+/// `caixa-lsp`-side per-fix `CodeActionKind::QuickFix` policy-panel
+/// composer holding a shared per-arm canonical tag across intra-file
+/// lint tree nodes without atomic contention — reaches the substrate-
+/// primitive [`FixSafety::as_str`] accessor through this impl and no
+/// other.
+///
+/// Extends the outside-`caixa-core` tier of the trait-idiomatic
+/// [`std::rc::Rc<str>`] forward-projection axis onto its fourth peer,
+/// following the first-mover [`caixa_arch::invariants::InvariantKind`]
+/// pair (c71818b `{Self, &Self}` corner) that opened the tier, second-
+/// peer [`caixa_arch::report::ArchVerdict`] pair (cc759ef `{Self,
+/// &Self}` corner), and third-peer [`Severity`] pair (d7c58b6 `{Self,
+/// &Self}` corner) — after the axis opened on the structurally most
+/// fundamental caixa-core-internal [`caixa_core::CaixaKind`] pair
+/// (e04aff0), widened onto the second caixa-core-internal peer
+/// [`caixa_core::CaixaDialeto`] (c5595e5), and extended onto the first
+/// M3-mesh-primitive-defining slot enum
+/// [`caixa_core::aplicacao::PlacementStrategy`] (91b4c92). Matches the
+/// trajectory the sibling atomically-reference-counted
+/// [`std::sync::Arc<str>`] axis walked before it onto this same enum
+/// (the paired `impl From<FixSafety> for std::sync::Arc<str>` /
+/// `impl From<&FixSafety> for std::sync::Arc<str>` pair immediately
+/// above).
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_from_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`FixSafety::as_str`] across the two-arm
+/// [`FixSafety::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` return-shape
+/// axes).
+impl From<FixSafety> for std::rc::Rc<str> {
+    fn from(safety: FixSafety) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(safety.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the caixa-lint fix-safety-tier two-arm closed-set
+/// fieldless typed enum [`FixSafety`] — the borrowed-input companion to
+/// the paired owned-input [`From<FixSafety> for std::rc::Rc<str>`] impl
+/// immediately above, closing the `{Self, &Self}` input-shape corner of
+/// the outside-`caixa-core` tier of the [`std::rc::Rc<str>`] axis on
+/// the fourth peer. Routes byte-for-byte through the substrate-primitive
+/// [`FixSafety::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so a
+/// `FixSafety::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped pipe
+/// (whose iterator over `&'static [FixSafety]` yields `&FixSafety` by
+/// construction) reaches the same two `"safe"` / `"unsafe"` canonical-
+/// lowercase byte-strings the paired owned-input axis and the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` forward-projection corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`FixSafety::ALL`]`.iter().map(std::rc::Rc::<str>::from)` reaches
+/// through this impl and no other — without it, the same pipe would
+/// force a spurious [`Copy`] deref
+/// (`std::rc::Rc::<str>::from((*safety).as_str())`) or a `.copied()`
+/// restatement whose type bounds have no compile-time link back to the
+/// substrate primitive.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the fourth peer of
+/// the outside-`caixa-core` tier of the substrate-wide trait-idiomatic
+/// [`std::rc::Rc<str>`] forward-projection campaign, matching the
+/// trajectory the paired [`caixa_core::CaixaKind`] (e04aff0),
+/// [`caixa_core::CaixaDialeto`] (c5595e5),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (91b4c92),
+/// [`caixa_arch::invariants::InvariantKind`] (c71818b),
+/// [`caixa_arch::report::ArchVerdict`] (cc759ef), and [`Severity`]
+/// (d7c58b6) pairs walked before it on the caixa-core-internal, M3-
+/// mesh-primitive-defining, and outside-`caixa-core` tiers of the same
+/// axis. Leaves the remaining outside-`caixa-core` closed-set fieldless
+/// typed enum peers ([`crate::diagnostic::PathShapeViolation`],
+/// [`caixa_theme::Semantic`], [`caixa_provedor::FerriteRuntime`]) as
+/// the campaign's next multi-peer targets — this commit gives them a
+/// four-peer `{Self, &Self}` corner template to converge onto on the
+/// outside-`caixa-core` tier of the [`std::rc::Rc<str>`] axis.
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_from_borrowed_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`FixSafety::as_str`] across the two-arm
+/// [`FixSafety::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, a cross-axis partition pin
+/// against the paired owned-input
+/// [`From<FixSafety> for std::rc::Rc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes, and a
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe witness over
+/// [`FixSafety::ALL`] that resolves through the borrowed-input axis
+/// without a spurious [`Copy`] deref).
+impl From<&FixSafety> for std::rc::Rc<str> {
+    fn from(safety: &FixSafety) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(safety.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: &'static str,
@@ -6526,6 +6650,324 @@ mod tests {
                  accessor"
             );
         }
+    }
+
+    #[test]
+    fn fix_safety_from_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<FixSafety> for std::rc::Rc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::FixSafety::as_str`] `pub const fn` accessor
+        // resolve to the same two-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`super::FixSafety::ALL`]
+        // slice enumerates. Extends the outside-`caixa-core` tier of
+        // the substrate-wide [`std::rc::Rc<str>`] forward-projection
+        // campaign onto its fourth peer — the caixa-lint fix-safety-
+        // tier two-arm closed-set fieldless typed enum — following the
+        // first-mover [`caixa_arch::invariants::InvariantKind`] pair
+        // (c71818b), second-peer [`caixa_arch::report::ArchVerdict`]
+        // pair (cc759ef), and third-peer [`super::Severity`] pair
+        // (d7c58b6) that landed the tier on the two caixa-arch enums
+        // and the paired caixa-lint severity axis.
+        //
+        // Rust's standard library carries `impl From<&str> for
+        // std::rc::Rc<str>` and `impl From<String> for std::rc::Rc<str>`
+        // but no blanket `impl<T: AsRef<str>> From<T> for
+        // std::rc::Rc<str>`, and the [`std::sync::Arc<str>`] and
+        // [`std::rc::Rc<str>`] trait tables are disjoint, so this axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: std::rc::Rc<str> = safety.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `std::rc::Rc::<str>::from(safety.as_str())` open-code has
+        // no compile-time link back to the substrate primitive, and a
+        // two-step `std::rc::Rc::<str>::from(String::from(safety))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`std::rc::Rc<str>`] on the `From<String>` conversion) where
+        // the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>,
+        // std::sync::Arc<str>}` return-shape axes — locking the six
+        // return-shape paths on the owned-input surface together by
+        // construction so any future detour off the substrate-
+        // primitive [`super::FixSafety::as_str`] accessor trips at
+        // caixa-lint test time.
+        for &variant in FixSafety::ALL {
+            let via_trait: std::rc::Rc<str> = <std::rc::Rc<str> as From<FixSafety>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<FixSafety> for std::rc::Rc<str> impl must \
+                 round-trip FixSafety::{variant:?} to the same \
+                 canonical-lowercase byte-string FixSafety::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on FixSafety::\
+                 {variant:?} must byte-equal FixSafety::as_str on \
+                 the same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<FixSafety>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<FixSafety> for std::rc::Rc<str> and \
+                 From<FixSafety> for &'static str must resolve \
+                 identically on FixSafety::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<FixSafety>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<FixSafety> for std::rc::Rc<str> and \
+                 From<FixSafety> for String must resolve identically \
+                 on FixSafety::{variant:?} — divergence signals the \
+                 owned-input std::rc::Rc<str> and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<FixSafety>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<FixSafety> for std::rc::Rc<str> and \
+                 From<FixSafety> for Cow<'static, str> must resolve \
+                 identically on FixSafety::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and \
+                 Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<FixSafety>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<FixSafety> for std::rc::Rc<str> and \
+                 From<FixSafety> for Box<str> must resolve identically \
+                 on FixSafety::{variant:?} — divergence signals the \
+                 owned-input std::rc::Rc<str> and Box<str> \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<FixSafety>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<FixSafety> for std::rc::Rc<str> and \
+                 From<FixSafety> for std::sync::Arc<str> must \
+                 resolve identically on FixSafety::{variant:?} — \
+                 divergence signals the owned-input std::rc::Rc<str> \
+                 and std::sync::Arc<str> return-shape paths have \
+                 drifted onto different emit-sets (the two disjoint \
+                 reference-counted trait tables have desynchronized \
+                 on the caixa-lint fix-safety-tier axis)"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds five borrowed-input \
+                  return-shape paths (&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>) plus the paired \
+                  owned-input Rc<str> witness and the \
+                  .iter().map(std::rc::Rc::<str>::from) pipe witness into \
+                  one exhaustive round-trip over FixSafety::ALL — the \
+                  accepted line-count cost of keying the whole borrowed-\
+                  input Rc<str> corner to the substrate-primitive as_str \
+                  accessor at the same test-site"
+    )]
+    fn fix_safety_from_borrowed_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&FixSafety> for std::rc::Rc<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::FixSafety::as_str`] `pub const fn` accessor
+        // resolve to the same two-arm canonical-lowercase emit-set
+        // across every arm the exhaustive [`super::FixSafety::ALL`]
+        // slice enumerates. Rust's standard library does not carry a
+        // blanket `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>`
+        // (nor a `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`),
+        // so the borrowed-input `std::rc::Rc<str>` forward-projection
+        // axis is a distinct trait-idiomatic surface that a
+        // `let key: std::rc::Rc<str> = (&safety).into();`-shaped call
+        // site or a
+        // `FixSafety::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped
+        // pipe reaches through this impl and no other — the paired
+        // owned-input `From<FixSafety> for std::rc::Rc<str>` impl forces
+        // every borrowed-input call site through an explicit `Copy`
+        // deref (`std::rc::Rc::<str>::from((*safety).as_str())`) or a
+        // `std::rc::Rc::<str>::from(safety.as_str())` open-code whose
+        // type bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the fourth
+        // peer of the outside-`caixa-core` tier of the substrate-wide
+        // trait-idiomatic [`std::rc::Rc<str>`] forward-projection
+        // campaign, matching the trajectory the paired
+        // [`caixa_core::CaixaKind`] (e04aff0),
+        // [`caixa_core::CaixaDialeto`] (c5595e5),
+        // [`caixa_core::aplicacao::PlacementStrategy`] (91b4c92),
+        // [`caixa_arch::invariants::InvariantKind`] (c71818b),
+        // [`caixa_arch::report::ArchVerdict`] (cc759ef), and
+        // [`super::Severity`] (d7c58b6) pairs walked before it on the
+        // caixa-core-internal, M3-mesh-primitive-defining, and outside-
+        // `caixa-core` tiers of the same axis.
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<FixSafety> for std::rc::Rc<str>`] and the sibling
+        // borrowed-input [`From<&FixSafety> for &'static str`],
+        // [`From<&FixSafety> for String`],
+        // [`From<&FixSafety> for Cow<'static, str>`],
+        // [`From<&FixSafety> for Box<str>`], and
+        // [`From<&FixSafety> for std::sync::Arc<str>`] return-shape
+        // axes — locking the six return-shape × input-shape paths
+        // together by construction so any future detour off the
+        // substrate-primitive accessor trips at caixa-lint test time.
+        // Then a `.iter().map(std::rc::Rc::<str>::from)` pipe witness
+        // over [`super::FixSafety::ALL`] — whose iterator yields
+        // `&FixSafety` by construction, so the borrowed-input
+        // [`std::rc::Rc<str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::FixSafety::as_str`] accessor
+        // without a spurious [`Copy`] deref.
+        for &variant in FixSafety::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<&FixSafety>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&FixSafety> for std::rc::Rc<str> impl must \
+                 round-trip &FixSafety::{variant:?} to the same \
+                 canonical-lowercase byte-string FixSafety::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on &FixSafety::\
+                 {variant:?} must byte-equal FixSafety::as_str on the \
+                 same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_rc: std::rc::Rc<str> = <std::rc::Rc<str> as From<FixSafety>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&FixSafety> for std::rc::Rc<str> and \
+                 From<FixSafety> for std::rc::Rc<str> must resolve \
+                 identically on FixSafety::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 std::rc::Rc<str> forward-projection input-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str = <&'static str as From<&FixSafety>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&FixSafety> for std::rc::Rc<str> and \
+                 From<&FixSafety> for &'static str must resolve \
+                 identically on FixSafety::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&FixSafety>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&FixSafety> for std::rc::Rc<str> and \
+                 From<&FixSafety> for String must resolve identically \
+                 on FixSafety::{variant:?} — divergence signals the \
+                 borrowed-input std::rc::Rc<str> and owned-`String` \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&FixSafety>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&FixSafety> for std::rc::Rc<str> and \
+                 From<&FixSafety> for Cow<'static, str> must resolve \
+                 identically on FixSafety::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 Cow<'static, str> return-shape paths have drifted \
+                 onto different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&FixSafety>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&FixSafety> for std::rc::Rc<str> and \
+                 From<&FixSafety> for Box<str> must resolve identically \
+                 on FixSafety::{variant:?} — divergence signals the \
+                 borrowed-input std::rc::Rc<str> and Box<str> \
+                 return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&FixSafety>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&FixSafety> for std::rc::Rc<str> and \
+                 From<&FixSafety> for std::sync::Arc<str> must resolve \
+                 identically on FixSafety::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 std::sync::Arc<str> return-shape paths have drifted \
+                 onto different emit-sets (the two disjoint \
+                 reference-counted trait tables have desynchronized \
+                 on the caixa-lint fix-safety-tier axis under the \
+                 borrowed-input corner)"
+            );
+        }
+        // Pipe witness — the distinguishing shape that forces the
+        // borrowed-input axis to be independent of the owned-input
+        // peer. `FixSafety::ALL.iter()` yields `&FixSafety` by
+        // construction, so `.map(std::rc::Rc::<str>::from)` resolves
+        // through the borrowed-input
+        // `From<&FixSafety> for std::rc::Rc<str>` impl and no other —
+        // without this axis, the same pipe would force an explicit
+        // `.copied()` restatement whose type bounds bypass the
+        // substrate primitive.
+        let via_iter: Vec<std::rc::Rc<str>> = FixSafety::ALL
+            .iter()
+            .map(std::rc::Rc::<str>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<str>> = FixSafety::ALL
+            .iter()
+            .map(|s| std::rc::Rc::<str>::from(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over \
+             FixSafety::ALL — a call site whose iteration axis holds \
+             `&FixSafety` by construction — must byte-equal \
+             `.iter().map(|s| std::rc::Rc::<str>::from(s.as_str()))` \
+             on every arm — the borrowed-input std::rc::Rc<str> \
+             `From<&FixSafety> for std::rc::Rc<str>` axis is what \
+             makes the `std::rc::Rc::<str>::from` composition route \
+             through the substrate-primitive `FixSafety::as_str` \
+             accessor without a spurious `Copy` deref (which would \
+             only be reachable through the owned-input \
+             `From<FixSafety> for std::rc::Rc<str>` axis by first \
+             calling `.copied()` on the iterator)"
+        );
     }
 
     #[test]
