@@ -7182,6 +7182,78 @@ impl std::str::FromStr for RateLimitUnit {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:politicas :rate-limit`
+/// canonical-suffix [`RateLimitUnit`] closed-set fieldless typed enum —
+/// the single-threaded reference-counted peer of the paired owned-input
+/// [`From<RateLimitUnit> for std::sync::Arc<str>`] impl on the sibling
+/// atomically-reference-counted [`std::sync::Arc<str>`] axis. Routes
+/// byte-for-byte through the substrate-primitive
+/// [`RateLimitUnit::as_suffix`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`.
+///
+/// Rust's standard library carries `impl From<&str> for std::rc::Rc<str>`
+/// and `impl From<String> for std::rc::Rc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor a `From<&T>`
+/// blanket), and the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`]
+/// trait tables are disjoint — so a single-threaded caixa-mesh render
+/// pass that shares the `:politicas :rate-limit` canonical-suffix label
+/// across intra-render tree nodes through the cheaper non-atomic
+/// [`std::rc::Rc<str>`] refcount (the atomically-reference-counted
+/// [`std::sync::Arc<str>`] return-shape cannot provide within a single-
+/// threaded render pass) reaches the substrate primitive through this
+/// impl and no other.
+///
+/// Extends the trait-idiomatic [`std::rc::Rc<str>`] forward-projection
+/// axis onto the third M3-mesh-primitive-defining slot enum, after
+/// opening on [`PlacementStrategy`] (91b4c92) as the first M3-mesh peer
+/// and walking through the caixa-core-internal
+/// [`crate::CaixaKind`] / [`crate::CaixaDialeto`] tier and the outside-
+/// caixa-core `{InvariantKind, ArchVerdict, Severity, FixSafety,
+/// PathShapeViolation, Semantic, FerriteRuntime}` sweep.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_into_rc_str_routes_through_as_suffix_accessor`].
+impl From<RateLimitUnit> for std::rc::Rc<str> {
+    fn from(unit: RateLimitUnit) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(unit.as_suffix())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:politicas :rate-limit`
+/// canonical-suffix [`RateLimitUnit`] closed-set fieldless typed enum —
+/// the borrowed-input companion to the paired owned-input
+/// [`From<RateLimitUnit> for std::rc::Rc<str>`] impl immediately above,
+/// closing the `{Self, &Self}` input-shape corner of the
+/// [`std::rc::Rc<str>`] axis on this enum. Routes byte-for-byte through
+/// the substrate-primitive [`RateLimitUnit::as_suffix`] `pub const fn`
+/// accessor via [`std::rc::Rc::<str>::from`] on the returned
+/// `&'static str`, so a
+/// `RateLimitUnit::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped pipe
+/// (whose iterator over `&'static [RateLimitUnit]` yields
+/// `&RateLimitUnit` by construction) reaches the same three
+/// `"s"` / `"m"` / `"h"` canonical-suffix byte-strings the paired owned-
+/// input axis and the sibling `{Self, &Self} × {&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` forward-projection
+/// corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface — without it, the
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe would force a spurious
+/// [`Copy`] deref or a `.copied()` restatement whose type bounds have
+/// no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_borrowed_into_rc_str_routes_through_as_suffix_accessor`].
+impl From<&RateLimitUnit> for std::rc::Rc<str> {
+    fn from(unit: &RateLimitUnit) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(unit.as_suffix())
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -31709,6 +31781,190 @@ mod tests {
              `Copy` deref (which would only be reachable through the \
              owned-input `From<RateLimitUnit> for std::sync::Arc<str>` \
              axis by first calling `.copied()` on the iterator)"
+        );
+    }
+
+    #[test]
+    fn rate_limit_unit_from_into_rc_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RateLimitUnit> for std::rc::Rc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::RateLimitUnit::as_suffix`] `pub const fn`
+        // accessor resolve to the same three-arm emit-set across every
+        // arm the exhaustive [`super::RateLimitUnit::ALL`] slice
+        // enumerates, and cross-witness against every sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>,
+        // std::sync::Arc<str>}` return-shape axis so the six return-
+        // shape paths on the owned-input surface lock together by
+        // construction.
+        for &variant in super::RateLimitUnit::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::RateLimitUnit>>::from(variant);
+            let via_method: &'static str = variant.as_suffix();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RateLimitUnit> for std::rc::Rc<str> impl must \
+                 round-trip RateLimitUnit::{variant:?} to the same \
+                 canonical-suffix byte-string RateLimitUnit::as_suffix \
+                 returns"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on RateLimitUnit::\
+                 {variant:?} must byte-equal RateLimitUnit::as_suffix on \
+                 the same input"
+            );
+            let owned_static: &'static str =
+                <&'static str as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<RateLimitUnit> for std::rc::Rc<str> and \
+                 From<RateLimitUnit> for &'static str must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let owned_string: String = <String as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<RateLimitUnit> for std::rc::Rc<str> and \
+                 From<RateLimitUnit> for String must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<RateLimitUnit> for std::rc::Rc<str> and \
+                 From<RateLimitUnit> for Cow<'static, str> must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<RateLimitUnit> for std::rc::Rc<str> and \
+                 From<RateLimitUnit> for Box<str> must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<RateLimitUnit> for std::rc::Rc<str> and \
+                 From<RateLimitUnit> for std::sync::Arc<str> must \
+                 resolve identically on RateLimitUnit::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_borrowed_into_rc_str_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RateLimitUnit> for std::rc::Rc<str>` — asserts
+        // the borrowed-input standard-library trait impl and the
+        // substrate-primitive [`super::RateLimitUnit::as_suffix`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RateLimitUnit::ALL`] slice enumerates. Closes the
+        // `{Self, &Self}` input-shape corner of the [`std::rc::Rc<str>`]
+        // axis on this enum, cross-witnesses against the paired owned-
+        // input axis and every sibling borrowed-input return-shape axis,
+        // and locks the `.iter().map(std::rc::Rc::<str>::from)` pipe
+        // over [`super::RateLimitUnit::ALL`] to the substrate-primitive
+        // accessor without a spurious [`Copy`] deref.
+        for &variant in super::RateLimitUnit::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<&super::RateLimitUnit>>::from(&variant);
+            let via_method: &'static str = variant.as_suffix();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RateLimitUnit> for std::rc::Rc<str> impl must \
+                 round-trip &RateLimitUnit::{variant:?} to the same \
+                 canonical-suffix byte-string RateLimitUnit::as_suffix \
+                 returns"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on &RateLimitUnit::\
+                 {variant:?} must byte-equal RateLimitUnit::as_suffix on \
+                 the same input"
+            );
+            let owned_rc: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&RateLimitUnit> for std::rc::Rc<str> and \
+                 From<RateLimitUnit> for std::rc::Rc<str> must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&RateLimitUnit> for std::rc::Rc<str> and \
+                 From<&RateLimitUnit> for &'static str must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let borrowed_string: String = <String as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RateLimitUnit> for std::rc::Rc<str> and \
+                 From<&RateLimitUnit> for String must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&RateLimitUnit> for std::rc::Rc<str> and \
+                 From<&RateLimitUnit> for Cow<'static, str> must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&RateLimitUnit> for std::rc::Rc<str> and \
+                 From<&RateLimitUnit> for Box<str> must resolve \
+                 identically on RateLimitUnit::{variant:?}"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&RateLimitUnit> for std::rc::Rc<str> and \
+                 From<&RateLimitUnit> for std::sync::Arc<str> must \
+                 resolve identically on RateLimitUnit::{variant:?}"
+            );
+        }
+        let via_iter: Vec<std::rc::Rc<str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(std::rc::Rc::<str>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<str>> = super::RateLimitUnit::ALL
+            .iter()
+            .map(|u| std::rc::Rc::<str>::from(u.as_suffix()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over \
+             RateLimitUnit::ALL — a call site whose iteration axis \
+             holds `&RateLimitUnit` by construction — must byte-equal \
+             `.iter().map(|u| std::rc::Rc::<str>::from(u.as_suffix()))` \
+             on every arm"
         );
     }
 
