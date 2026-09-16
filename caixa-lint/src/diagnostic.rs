@@ -1924,6 +1924,93 @@ impl TryFrom<&str> for FixSafety {
     }
 }
 
+/// Standard-library trait-idiomatic [`std::str::FromStr`] impl on the
+/// [`FixSafety`] closed-set caixa-lint fix-safety-tier typed enum —
+/// routes byte-for-byte through the paired
+/// [`TryFrom<&str> for FixSafety`] impl (which in turn routes through
+/// the substrate-primitive [`FixSafety::from_wire`] `Option<Self>`
+/// accessor), so `"...".parse::<FixSafety>()` /
+/// `<FixSafety as FromStr>::from_str(…)` reaches the same two-arm
+/// canonical-lowercase `"safe"` / `"unsafe"` accept-set the sibling
+/// method-named [`FixSafety::from_wire`] resolver and the paired
+/// [`TryFrom<&str>`] impl already resolve against.
+///
+/// Extends the substrate-wide trait-idiomatic `str::parse`-axis
+/// campaign — opened on [`caixa_core::dep::DepList`] via 6167092 as
+/// first-mover on the two-list dep-graph closed-set typed enum, then
+/// extended onto [`caixa_core::CaixaKind`] (9867432),
+/// [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a),
+/// [`caixa_core::CaixaDialeto`] (ff01b2f),
+/// [`caixa_arch::invariants::InvariantKind`] (fb16072),
+/// [`caixa_arch::report::ArchVerdict`] (40e9dfd), and the sibling
+/// [`Severity`] (6b0a08c) — onto the *second (and last)* closed-set
+/// fieldless typed enum on the caixa-lint surface: the fix-safety-tier
+/// two-arm accept-set every `feira lint --fix` per-fix dispatch, every
+/// `caixa-lsp`-side per-fix `CodeActionKind::QuickFix` policy dispatch,
+/// and every future M4 admission-webhook / lint-report re-loader
+/// dispatches through. Coherent by construction on this enum
+/// specifically: [`FixSafety`] carries exactly one canonical lowercase
+/// wire axis (`safe` / `unsafe`) with no paired secondary parse
+/// surface, so — unlike the peer [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`] (whose paired
+/// [`gen_platform::FromStrKind`]-derived kebab-case `FromStr` on the
+/// dispatcher-catalog axis rules a second `FromStr` impl out by
+/// coherence) and unlike the peer
+/// [`caixa_core::aplicacao::WitShape`] /
+/// [`caixa_core::aplicacao::RateLimitUnit`] (whose two-axis splits
+/// motivate deliberate deferral of the `FromStr` axis so a plain
+/// `s.parse::<T>()` cannot obscure which axis the caller reaches),
+/// lifting [`FromStr`] onto [`FixSafety`] cannot collide with a
+/// second parse axis it does not carry.
+///
+/// [`FromStr`] is the canonical Rust-idiomatic parse-set entry point
+/// every stdlib-shaped consumer reaches for — [`str::parse::<T>()`]
+/// is a `T: FromStr`-bounded generic, not a
+/// `T: for<'a> TryFrom<&'a str>`-bounded one — so lifting [`FromStr`]
+/// onto the closed-set enum unlocks the `.parse::<FixSafety>()`
+/// short-form on every consumer (a future `feira lint --fix-safety
+/// <safe|unsafe>` clap-style arg-parse composes
+/// `arg.parse::<FixSafety>()`; a `serde` string-tagged deserializer
+/// with a `#[serde(with = "serde_with::DisplayFromStr")]` shim routes
+/// through the same `FromStr` bound; a future M4
+/// `mesh.pleme.io/v1alpha1/LintReport` CR admission-webhook body
+/// reloader that walks a `Vec<String>` of prior
+/// [`FixSafety::as_str`] outputs reaches the typed enum through
+/// `line.parse::<FixSafety>()` without a per-consumer
+/// `TryFrom<&str>` restatement; a `tracing::field::Value::Str`-arm
+/// structured-log re-loader binding a prior emission's
+/// [`FixSafety::as_str`] output back to the typed enum for cross-run
+/// fix-tier-histogram diff reaches the same axis through the stdlib
+/// `.parse()` short-form).
+///
+/// The impl trivially delegates to the paired [`TryFrom<&str>`] —
+/// same `type Err = ()` deliberate-deferral shape the sibling
+/// reverse-projection trait carries — so both trait-idiomatic
+/// parse-axis paths (`TryFrom<&str>` and `FromStr::from_str`)
+/// resolve to the same two-arm accept-set by construction. A future
+/// arm addition (an `Experimental` tier between [`Self::Safe`] and
+/// [`Self::Unsafe`] the M3-and-later lint runner grows for
+/// AI-suggested rewrites that need explicit review-and-accept — the
+/// trajectory item the sibling [`FixSafety::ALL`] doc block already
+/// names) reaches every parse path through one edit on the
+/// substrate-primitive [`FixSafety::from_wire`] accessor, not a
+/// coordinated rewrite across the two reverse-projection trait
+/// impls.
+///
+/// Pinned load-bearing by
+/// [`tests::fix_safety_from_str_routes_through_try_from_str_impl`]
+/// (byte-parity pin across the two-arm accept-set + delegated-
+/// `.parse()`-projection witness) and
+/// [`tests::fix_safety_from_str_rejects_unknown_byte_strings`]
+/// (rejection witness against silent accept-set widening).
+impl std::str::FromStr for FixSafety {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as TryFrom<&str>>::try_from(s)
+    }
+}
+
 /// Standard-library trait-idiomatic forward projection on the
 /// [`FixSafety`] closed-set caixa-lint fix-safety-tier axis. Routes
 /// byte-for-byte through the paired substrate-primitive
@@ -6359,6 +6446,176 @@ mod tests {
                 FixSafety::from_wire(bad),
                 "TryFrom<&str>::ok() and from_wire must agree on the \
                  rejection outcome for {bad:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_from_str_routes_through_try_from_str_impl() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl std::str::FromStr for FixSafety` — asserts the standard-
+        // library `.parse()` parse-axis entry point and the paired
+        // [`super::FixSafety::try_from`] `TryFrom<&str>` impl (which in
+        // turn routes through the substrate-primitive
+        // [`super::FixSafety::from_wire`] `Option<Self>` accessor)
+        // resolve to the same two-arm canonical-lowercase accept-set
+        // across every arm the exhaustive [`super::FixSafety::ALL`]
+        // slice enumerates. Extends the substrate-wide `FromStr`
+        // parse-axis campaign — opened on
+        // [`caixa_core::dep::DepList`] via 6167092, then
+        // [`caixa_core::CaixaKind`] (9867432),
+        // [`caixa_core::aplicacao::PlacementStrategy`] (62ef49a),
+        // [`caixa_core::CaixaDialeto`] (ff01b2f),
+        // [`caixa_arch::invariants::InvariantKind`] (fb16072),
+        // [`caixa_arch::report::ArchVerdict`] (40e9dfd), and the paired
+        // sibling [`super::Severity`] (6b0a08c) — onto the *second (and
+        // last)* closed-set fieldless typed enum on the caixa-lint
+        // surface: the fix-safety-tier two-arm accept-set every `feira
+        // lint --fix` per-fix dispatch, every `caixa-lsp`-side per-fix
+        // `CodeActionKind::QuickFix` policy dispatch, and every future
+        // M4 admission-webhook / lint-report re-loader dispatches
+        // through. The peer method-named `from_wire` accessor and the
+        // paired `TryFrom<&str>` trait impl fix the two-arm
+        // canonical-lowercase accept-set; this pin locks the
+        // `FromStr::from_str` trait entry point onto the same set so
+        // any future divergence (a stray per-arm `match s` re-inlining
+        // that opens a compile-time link to an un-lifted arm-literal,
+        // a swap onto a hand-rolled parser that widens the accept-set
+        // past the two lifted
+        // [`super::CAIXA_LINT_FIX_SAFETY_WIRE_*`] consts) trips at
+        // caixa-lint test time. Also covers the stdlib `.parse()`
+        // short-form witness: `.parse::<FixSafety>()` is the
+        // `T: FromStr`-bounded generic every clap-style arg-parser,
+        // `serde` string-tagged deserializer, and generic
+        // `<T: FromStr>`-bound loader reaches for — the pin asserts
+        // both `<T as FromStr>::from_str` and `.parse::<T>()` resolve
+        // to the same two-arm accept-set.
+        use std::str::FromStr;
+        for &variant in FixSafety::ALL {
+            let wire = variant.as_str();
+            assert_eq!(
+                <FixSafety as FromStr>::from_str(wire),
+                Ok(variant),
+                "FromStr impl on FixSafety must round-trip \
+                 FixSafety::{variant:?}.as_str() = {wire:?} back to \
+                 Ok(FixSafety::{variant:?}) — divergence from the \
+                 paired TryFrom<&str> impl / FixSafety::from_wire \
+                 signals a silent detour off the substrate-primitive \
+                 accessor",
+            );
+            assert_eq!(
+                wire.parse::<FixSafety>(),
+                Ok(variant),
+                "stdlib .parse::<FixSafety>() short-form on \
+                 FixSafety::{variant:?}.as_str() = {wire:?} must route \
+                 through the lifted FromStr impl and reach \
+                 Ok(FixSafety::{variant:?})",
+            );
+            assert_eq!(
+                <FixSafety as FromStr>::from_str(wire).ok(),
+                FixSafety::from_wire(wire),
+                "FromStr::from_str ok()-projection on {wire:?} must \
+                 byte-equal FixSafety::from_wire on the same input — \
+                 the two reverse-projection axes must resolve to the \
+                 same two-arm canonical-lowercase accept-set",
+            );
+            assert_eq!(
+                <FixSafety as FromStr>::from_str(wire),
+                <FixSafety as TryFrom<&str>>::try_from(wire),
+                "FromStr::from_str and TryFrom<&str>::try_from must \
+                 byte-equal on every arm — FromStr delegates to \
+                 TryFrom<&str> by construction; divergence signals a \
+                 stray reroute onto a hand-rolled parser",
+            );
+        }
+    }
+
+    #[test]
+    fn fix_safety_from_str_rejects_unknown_byte_strings() {
+        // Rejection witness on the `impl std::str::FromStr for
+        // FixSafety` — sweeps a candidate set of byte-strings outside
+        // the two-arm canonical-lowercase wire accept-set the sibling
+        // [`super::FixSafety::as_str`] emits and asserts every one
+        // lands on `Err(())`, so a future accidental widening of the
+        // trait impl's accept-set (a stray case-fold that admits the
+        // pre-lift PascalCase Debug-derived shapes `"Safe"` /
+        // `"Unsafe"` on the wire axis, a Levenshtein-forgiving
+        // arm-lookup that admits `"saf"` / `"unsaf"` typos — the exact
+        // form a `format!("{:?}", …).to_lowercase()` round-trip on the
+        // paired [`std::fmt::Debug`] derive would otherwise land on,
+        // the drift footgun the emitter's documentation explicitly
+        // names as the reason the substrate-canonical lowercase
+        // `"safe"` / `"unsafe"` slug set exists) trips at caixa-lint
+        // test time. The candidate set spans the empty string,
+        // whitespace-only padding, uppercase / PascalCase rebrand
+        // candidates, Levenshtein-neighbor typos, the M3-and-later
+        // trajectory-item candidate `"experimental"` the sibling
+        // [`super::FixSafety::ALL`] doc block names (which must reject
+        // today and pass by construction when the arm lands), sibling
+        // closed-set-enum canonical tags on the peer
+        // [`super::Severity::as_str`] four-arm severity set
+        // (`"error"` / `"warning"` / `"info"` / `"hint"`), the peer
+        // `caixa_arch::invariants::InvariantKind::as_str` three-arm
+        // arch-severity set (`"safety"` / `"compliance"` — the
+        // `"hint"` arm on the caixa-lint severity axis is a
+        // coincidence of lowercase-tag choice, but neither belongs to
+        // the fix-safety-tier axis), the peer arch-verdict two-arm
+        // accept-set (`"proven"` / `"rejected"`), cross-crate kind /
+        // strategy tags, and trailing/leading-whitespace-padded
+        // canonical tags. Pairs the `<T as FromStr>::from_str` and
+        // stdlib `.parse()` short-form witnesses so a future divergence
+        // between the two parse-axis entry points (a hand-rolled
+        // `.parse` override that bypasses the delegated `FromStr`
+        // impl) trips here.
+        use std::str::FromStr;
+        for bad in [
+            "",
+            " ",
+            "\t",
+            "Safe",
+            "SAFE",
+            "Unsafe",
+            "UNSAFE",
+            "saf",
+            "unsaf",
+            "safer",
+            "unsafer",
+            "un-safe",
+            "un_safe",
+            "experimental",
+            "error",
+            "warning",
+            "info",
+            "hint",
+            "safety",
+            "compliance",
+            "proven",
+            "rejected",
+            "biblioteca",
+            "servico",
+            "one-for-one",
+            "safe ",
+            " safe",
+            "safe\n",
+            "safe\t",
+            "unsafe ",
+            " unsafe",
+        ] {
+            assert_eq!(
+                <FixSafety as FromStr>::from_str(bad),
+                Err(()),
+                "FromStr for FixSafety({bad:?}) must return Err(()) — \
+                 the trait impl's accept-set is exactly the two \
+                 FixSafety::as_str outputs; a widening would silently \
+                 split the FromStr impl's accept-set from the \
+                 emitter's arm-set",
+            );
+            assert_eq!(
+                bad.parse::<FixSafety>(),
+                Err(()),
+                "stdlib .parse::<FixSafety>() short-form on {bad:?} \
+                 must route through the lifted FromStr impl and \
+                 reject with Err(())",
             );
         }
     }
