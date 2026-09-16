@@ -4308,6 +4308,138 @@ impl From<&DepList> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the outside-M3 caixa-core two-list dep-graph
+/// [`DepList`] closed-set fieldless typed enum — routes byte-for-byte
+/// through the substrate-primitive [`DepList::as_str`] `pub const fn`
+/// accessor via [`std::rc::Rc::<str>::from`] on the returned
+/// `&'static str`, so every consumer that binds a [`DepList`] through
+/// the standard-library `.into()` / `From::from` surfaces onto the
+/// non-atomic single-threaded-reference-counted `std::rc::Rc<str>` axis
+/// reaches the same two lifted
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str` byte-
+/// strings the sibling `{&'static str, String, Cow<'static, str>,
+/// Box<str>, std::sync::Arc<str>}` return-shape axes already return.
+///
+/// Rust's standard library carries `impl From<&str> for
+/// std::rc::Rc<str>` and `impl From<String> for std::rc::Rc<str>` but
+/// no blanket `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>`, and
+/// the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`] trait tables
+/// are disjoint — so a single-threaded caixa-core dep-graph pass whose
+/// per-list `:deps` / `:deps-dev` bucket key is cloned across intra-
+/// pass tree nodes through the cheaper non-atomic [`std::rc::Rc<str>`]
+/// refcount (the atomically-reference-counted [`std::sync::Arc<str>`]
+/// axis cannot elide the CAS-fence cost within a single-threaded
+/// caixa-core pass), a future `feira dep --list <deps|deps-dev>`-
+/// side per-list histogram-column emitter keyed on a shared-ownership
+/// per-arm bucket key, a future `caixa-lsp`-side dep-graph quick-fix
+/// panel composer holding a shared per-list canonical `:`-prefixed
+/// kebab tag across intra-file dep tree nodes without atomic contention
+/// — reaches the substrate primitive through this impl and no other.
+/// A paired `std::rc::Rc::<str>::from(list.as_str())` open-code has no
+/// compile-time link back to the substrate primitive, and a two-step
+/// `std::rc::Rc::<str>::from(String::from(list))` composition through
+/// the owned-`String` axis allocates twice (once into the intermediate
+/// `String`, once into the [`std::rc::Rc<str>`] on the `From<String>`
+/// conversion) where the single-step trait impl allocates once.
+///
+/// Opens the caixa-core-internal tier of the [`std::rc::Rc<str>`]
+/// forward-projection campaign onto the caixa-core two-list dep-graph
+/// peer, following the trajectory the paired top-level
+/// [`crate::CaixaKind`] pair (e04aff0), the second caixa-core-internal
+/// peer [`crate::dialeto::CaixaDialeto`] pair (c5595e5), the render-
+/// side path-shape-diagnostic peer [`crate::render::PathShapeViolation`]
+/// pair (31fc43e), the M3-mesh-primitive-defining
+/// [`crate::aplicacao::PlacementStrategy`] pair (91b4c92), and the
+/// outside-`caixa-core` peers (`InvariantKind` c71818b, `ArchVerdict`
+/// cc759ef, `Severity` d7c58b6, `FixSafety` 046cc5f) walked before it
+/// on the same axis — closes the caixa-core-internal tier's third-peer
+/// slot after the render-side [`crate::render::PathShapeViolation`]
+/// second-peer pair. Leaves the outside-`caixa-core` peers
+/// (`caixa_theme::Semantic`, `caixa_provedor::FerriteRuntime`) as the
+/// campaign's next multi-peer targets on the [`std::rc::Rc<str>`] axis.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`] across the two-arm
+/// [`DepList::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` return-shape
+/// axes).
+impl From<DepList> for std::rc::Rc<str> {
+    fn from(list: DepList) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(list.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output*
+/// forward projection on the outside-M3 caixa-core two-list dep-graph
+/// [`DepList`] closed-set fieldless typed enum — the borrowed-input
+/// companion to the paired owned-input
+/// [`From<DepList> for std::rc::Rc<str>`] impl immediately above,
+/// closing the `{Self, &Self}` input-shape corner of the caixa-core-
+/// internal tier of the [`std::rc::Rc<str>`] axis on the two-list
+/// dep-graph peer. Routes byte-for-byte through the substrate-primitive
+/// [`DepList::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so a
+/// `DepList::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped pipe
+/// (whose iterator over `&'static [DepList]` yields `&DepList` by
+/// construction) reaches the same two lifted
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str` byte-
+/// strings the paired owned-input axis and the sibling
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` forward-projection corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface that the pipe
+/// shape [`DepList::ALL`]`.iter().map(std::rc::Rc::<str>::from)`
+/// reaches through this impl and no other — without it, the same pipe
+/// would force a spurious [`Copy`] deref
+/// (`std::rc::Rc::<str>::from((*list).as_str())`) or a `.copied()`
+/// restatement whose type bounds have no compile-time link back to
+/// the substrate primitive, and a `let key: std::rc::Rc<str> =
+/// (&list).into();`-shaped call site would force an explicit [`Copy`]
+/// deref (`std::rc::Rc::<str>::from(*list)`) or a
+/// `std::rc::Rc::<str>::from(list.as_str())` open-code with the same
+/// defect.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the third caixa-
+/// core-internal closed-set fieldless typed enum peer of the
+/// substrate-wide trait-idiomatic [`std::rc::Rc<str>`] forward-
+/// projection campaign, matching the trajectory the paired
+/// [`crate::CaixaKind`] (e04aff0),
+/// [`crate::dialeto::CaixaDialeto`] (c5595e5), and
+/// [`crate::render::PathShapeViolation`] (31fc43e) pairs walked before
+/// it on the caixa-core-internal tier of the same axis. Leaves the
+/// outside-`caixa-core` peers ([`caixa_theme::Semantic`],
+/// [`caixa_provedor::FerriteRuntime`]) as the campaign's next multi-
+/// peer targets on the [`std::rc::Rc<str>`] axis — this commit gives
+/// them a fifth-peer `{Self, &Self}` caixa-core-internal-tier template
+/// to converge onto.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_borrowed_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`] across the two-arm
+/// [`DepList::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, a cross-axis partition pin
+/// against the paired owned-input
+/// [`From<DepList> for std::rc::Rc<str>`] and the sibling borrowed-
+/// input `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes, and a
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe witness over
+/// [`DepList::ALL`] that resolves through the borrowed-input axis
+/// without a spurious [`Copy`] deref).
+impl From<&DepList> for std::rc::Rc<str> {
+    fn from(list: &DepList) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(list.as_str())
+    }
+}
+
 /// Trait-idiomatic [`std::str::FromStr`] parse axis on the two-list
 /// dep-graph [`DepList`] closed-set typed enum — routes byte-for-byte
 /// through the paired [`TryFrom<&str> for DepList`] impl (which in
@@ -19881,6 +20013,306 @@ mod tests {
              accessor without a spurious `Copy` deref (which would \
              only be reachable through the owned-input \
              `From<DepList> for std::sync::Arc<str>` axis by first \
+             calling `.copied()` on the iterator)"
+        );
+    }
+
+    #[test]
+    fn dep_list_from_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<DepList> for std::rc::Rc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::DepList::as_str`] `pub const fn` accessor
+        // resolve to the same two-arm emit-set (the paired
+        // [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+        // [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &str`
+        // byte-strings) across every arm the exhaustive
+        // [`super::DepList::ALL`] slice enumerates. Extends the caixa-
+        // core-internal tier of the substrate-wide
+        // [`std::rc::Rc<str>`] forward-projection campaign onto the
+        // third caixa-core-internal peer, after the top-level
+        // [`crate::CaixaKind`] (e04aff0), the second-peer
+        // [`crate::dialeto::CaixaDialeto`] (c5595e5), and the render-
+        // side [`crate::render::PathShapeViolation`] (31fc43e) pairs
+        // opened the tier. Rust's standard library carries
+        // `impl From<&str> for std::rc::Rc<str>` and
+        // `impl From<String> for std::rc::Rc<str>` but no blanket
+        // `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>`, and the
+        // [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`] trait
+        // tables are disjoint, so this axis is a distinct trait-
+        // idiomatic surface that a
+        // `let key: std::rc::Rc<str> = list.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `std::rc::Rc::<str>::from(list.as_str())` open-code has no
+        // compile-time link back to the substrate primitive, and a
+        // two-step `std::rc::Rc::<str>::from(String::from(list))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`std::rc::Rc<str>`] on the `From<String>` conversion) where
+        // the single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-
+        // input `{&'static str, String, Cow<'static, str>, Box<str>,
+        // std::sync::Arc<str>}` return-shape axes — locking the six
+        // return-shape paths on the owned-input surface together by
+        // construction so any future detour off the substrate-
+        // primitive [`super::DepList::as_str`] accessor trips at
+        // caixa-core test time.
+        for &variant in super::DepList::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::DepList>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<DepList> for std::rc::Rc<str> impl must round-\
+                 trip DepList::{variant:?} to the same lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* const \
+                 DepList::as_str returns — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on DepList::{variant:?} \
+                 must byte-equal DepList::as_str on the same input — \
+                 the blanket-derived Into shape must resolve to the \
+                 same as_str dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<DepList> for std::rc::Rc<str> and \
+                 From<DepList> for &'static str must resolve identically \
+                 on DepList::{variant:?} — divergence signals the owned-\
+                 input std::rc::Rc<str> and &'static str return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_string: String = <String as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<DepList> for std::rc::Rc<str> and \
+                 From<DepList> for String must resolve identically on \
+                 DepList::{variant:?} — divergence signals the owned-\
+                 input std::rc::Rc<str> and owned-`String` return-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<DepList> for std::rc::Rc<str> and \
+                 From<DepList> for Cow<'static, str> must resolve \
+                 identically on DepList::{variant:?} — divergence signals \
+                 the owned-input std::rc::Rc<str> and Cow<'static, str> \
+                 return-shape paths have drifted onto different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<DepList> for std::rc::Rc<str> and \
+                 From<DepList> for Box<str> must resolve identically on \
+                 DepList::{variant:?} — divergence signals the owned-\
+                 input std::rc::Rc<str> and Box<str> return-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<DepList> for std::rc::Rc<str> and \
+                 From<DepList> for std::sync::Arc<str> must resolve \
+                 identically on DepList::{variant:?} — divergence signals \
+                 the owned-input std::rc::Rc<str> and std::sync::Arc<str> \
+                 return-shape paths have drifted onto different emit-sets \
+                 (the two disjoint reference-counted trait tables have \
+                 desynchronized on the caixa-core two-list dep-graph axis)"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds five borrowed-input \
+                  return-shape paths (&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>) plus the paired \
+                  owned-input Rc<str> witness and the \
+                  .iter().map(std::rc::Rc::<str>::from) pipe witness into \
+                  one exhaustive round-trip over DepList::ALL — the \
+                  accepted line-count cost of keying the whole borrowed-\
+                  input Rc<str> corner to the substrate-primitive as_str \
+                  accessor at the same test-site"
+    )]
+    fn dep_list_from_borrowed_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&DepList> for std::rc::Rc<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::DepList::as_str`] `pub const fn` accessor
+        // resolve to the same two-arm emit-set across every arm the
+        // exhaustive [`super::DepList::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `std::rc::Rc<str>` forward-projection axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: std::rc::Rc<str> = (&list).into();`-shaped call
+        // site or a
+        // `DepList::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped
+        // pipe reaches through this impl and no other — the paired
+        // owned-input `From<DepList> for std::rc::Rc<str>` impl alone
+        // would force every borrowed-input call site through a spurious
+        // `Copy` deref
+        // (`std::rc::Rc::<str>::from((*list).as_str())`) or a
+        // `.copied()` restatement whose type bounds have no compile-
+        // time link back to the substrate primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the third
+        // caixa-core-internal closed-set fieldless typed enum peer of
+        // the substrate-wide trait-idiomatic [`std::rc::Rc<str>`]
+        // forward-projection campaign, matching the trajectory the
+        // paired [`crate::CaixaKind`] (e04aff0),
+        // [`crate::dialeto::CaixaDialeto`] (c5595e5), and
+        // [`crate::render::PathShapeViolation`] (31fc43e) pairs walked
+        // before it on the same tier of the same axis.
+        //
+        // Cross-axis partition pin against the paired owned-input
+        // [`From<DepList> for std::rc::Rc<str>`] and the sibling
+        // borrowed-input `{&'static str, String, Cow<'static, str>,
+        // Box<str>, std::sync::Arc<str>}` return-shape axes — locking
+        // the six return-shape × input-shape paths on the borrowed-
+        // input surface together by construction so any future detour
+        // off the substrate-primitive accessor trips at caixa-core
+        // test time. Then a `.iter().map(std::rc::Rc::<str>::from)`
+        // pipe witness over [`super::DepList::ALL`] — whose iterator
+        // yields `&DepList` by construction, so the borrowed-input
+        // [`std::rc::Rc<str>`] axis is what routes the pipe through
+        // the substrate-primitive [`super::DepList::as_str`] accessor
+        // without a spurious [`Copy`] deref (which would only be
+        // reachable through the owned-input
+        // [`From<DepList> for std::rc::Rc<str>`] axis by first calling
+        // `.copied()` on the iterator).
+        for &variant in super::DepList::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<&super::DepList>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&DepList> for std::rc::Rc<str> impl must round-\
+                 trip &DepList::{variant:?} to the same lifted \
+                 crate::render::DEP_AUTHOR_KEY_DEPS* const \
+                 DepList::as_str returns — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on &DepList::\
+                 {variant:?} must byte-equal DepList::as_str on the \
+                 same input — the blanket-derived Into shape on the \
+                 borrowed-input surface must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_rc: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&DepList> for std::rc::Rc<str> and \
+                 From<DepList> for std::rc::Rc<str> must resolve \
+                 identically on DepList::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 std::rc::Rc<str> forward-projection input-shape \
+                 paths have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::DepList>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&DepList> for std::rc::Rc<str> and \
+                 From<&DepList> for &'static str must resolve \
+                 identically on DepList::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&super::DepList>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&DepList> for std::rc::Rc<str> and \
+                 From<&DepList> for String must resolve identically on \
+                 DepList::{variant:?} — divergence signals the \
+                 borrowed-input std::rc::Rc<str> and owned-`String` \
+                 return-shape paths have drifted onto different emit-\
+                 sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::DepList>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&DepList> for std::rc::Rc<str> and \
+                 From<&DepList> for Cow<'static, str> must resolve \
+                 identically on DepList::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&super::DepList>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&DepList> for std::rc::Rc<str> and \
+                 From<&DepList> for Box<str> must resolve identically \
+                 on DepList::{variant:?} — divergence signals the \
+                 borrowed-input std::rc::Rc<str> and Box<str> \
+                 return-shape paths have drifted onto different emit-sets"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&super::DepList>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&DepList> for std::rc::Rc<str> and \
+                 From<&DepList> for std::sync::Arc<str> must resolve \
+                 identically on DepList::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 std::sync::Arc<str> return-shape paths have drifted \
+                 onto different emit-sets (the two disjoint reference-\
+                 counted trait tables have desynchronized on the \
+                 caixa-core two-list dep-graph axis)"
+            );
+        }
+        let via_iter: Vec<std::rc::Rc<str>> = super::DepList::ALL
+            .iter()
+            .map(std::rc::Rc::<str>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<str>> = super::DepList::ALL
+            .iter()
+            .map(|l| std::rc::Rc::<str>::from(l.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over \
+             DepList::ALL — a call site whose iteration axis holds \
+             `&DepList` by construction — must byte-equal \
+             `.iter().map(|l| std::rc::Rc::<str>::from(l.as_str()))` \
+             on every arm — the borrowed-input std::rc::Rc<str> \
+             `From<&DepList> for std::rc::Rc<str>` axis is what makes \
+             the `std::rc::Rc::<str>::from` composition route through \
+             the substrate-primitive `DepList::as_str` accessor \
+             without a spurious `Copy` deref (which would only be \
+             reachable through the owned-input \
+             `From<DepList> for std::rc::Rc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
     }
