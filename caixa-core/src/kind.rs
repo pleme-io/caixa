@@ -1648,6 +1648,152 @@ impl From<&CaixaKind> for std::rc::Rc<str> {
     }
 }
 
+/// Substrate-canonical [`AsRef<[u8]>`] byte-view projection on the
+/// structurally most fundamental closed-set fieldless typed enum on the
+/// caixa surface — every [`crate::Caixa`] carries a `:kind` — routing
+/// byte-for-byte through the paired substrate-primitive
+/// [`CaixaKind::as_str`] `pub const fn` accessor via [`str::as_bytes`]
+/// on the returned `&'static str`, so any future consumer that binds a
+/// [`CaixaKind`] through a standard-library `<T: AsRef<[u8]>>` trait
+/// bound reaches the same lifted
+/// [`crate::render::CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`crate::render::CAIXA_KIND_LABEL_BINARIO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SERVICO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_SUPERVISOR`] /
+/// [`crate::render::CAIXA_KIND_LABEL_APLICACAO`] /
+/// [`crate::render::CAIXA_KIND_LABEL_ACAO`] `pub const &str` roster the
+/// paired sibling [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`CaixaKind::as_str`] / `{Self, &Self} × {&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}`
+/// str-view + reverse-projection surfaces already return — through the
+/// byte-view axis, which the str-view axes cannot express.
+///
+/// The primary compounding target is the [`crate`]-adjacent
+/// [`caixa-lacre`](../../caixa-lacre/) BLAKE3 content-address closure:
+/// [`blake3::hash`] and [`blake3::Hasher::update`] both bind their
+/// input through `impl AsRef<[u8]>`, so any future
+/// per-caixa content-address tag that folds a `:kind` discriminator
+/// byte into the [`crate::Lacre`] closure (a hypothetical
+/// `hasher.update(kind);`-shape composition on the per-caixa BLAKE3
+/// closure builder) reaches the substrate-primitive
+/// [`CaixaKind::as_str`] accessor through this impl and no other —
+/// without it, every such call site opens the two-hop composition
+/// `kind.as_str().as_bytes()` (or the equally two-hop
+/// `AsRef::<str>::as_ref(&kind).as_bytes()`) whose byte-tail has no
+/// compile-time link back to the byte-projection axis, so any future
+/// silent detour off the substrate-primitive `as_str` accessor
+/// (a per-arm inline `match kind { … }` re-inlining, a rebrand of one
+/// `CAIXA_KIND_LABEL_*` const that touches the str-view axis but not
+/// the byte-view axis, an English-canonical vocabulary shift the M4
+/// admission-webhook rejection body composes) trips at diagnostic /
+/// hashing / logging time rather than at caixa-core test time. Peer
+/// consumer paths on the byte-view axis: any future
+/// [`std::io::Write::write_all`]-bound diagnostic sink (whose input
+/// binds through `impl AsRef<[u8]>`), any future byte-keyed
+/// [`std::collections::HashMap`] `<K: AsRef<[u8]>, V>` lookup whose
+/// entry-key trait bound rules out the sibling [`AsRef<str>`]
+/// str-view projection, and any future
+/// `ring::digest::Context::update` / `sha2::Sha256::update` /
+/// `blake3::Hasher::update` byte-input surface on any future per-kind
+/// content-address digest.
+///
+/// Rust's standard library carries `impl AsRef<[u8]> for str` and
+/// `impl AsRef<[u8]> for String`, so the two-hop composition
+/// `kind.as_str().as_bytes()` (or, equivalently,
+/// `AsRef::<str>::as_ref(&kind).as_bytes()`) is reachable through the
+/// pre-existing str-view axis alone. But that two-hop shape has no
+/// compile-time link back to the byte-projection axis, forces every
+/// downstream `<T: AsRef<[u8]>>`-bound consumer to open-code the
+/// two-hop composition at every call site rather than pass a
+/// [`CaixaKind`] through the trait bound directly, and admits a
+/// silent split whenever a future call site takes the sibling
+/// [`std::fmt::Display`] or [`From<Self> for String`] axis (whose
+/// `.as_bytes()` byte-tails byte-equal `as_str`'s by construction but
+/// carry no compile-time byte-view surface, since `Display` returns
+/// a formatter and `String` allocates). The lifted single-hop impl
+/// closes the byte-view axis so every future
+/// `<T: AsRef<[u8]>>`-bound consumer reaches the substrate primitive
+/// through one trait dispatch, and every future arm addition (a
+/// virtual-actor `Actor` arm the
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// M5 Orleans-inspired kind reaches through) grows the byte-view axis
+/// through one edit on the substrate-primitive `as_str` accessor, not
+/// a coordinated rewrite across every future
+/// `<T: AsRef<[u8]>>`-bound consumer's arm-set.
+///
+/// Deliberately routes through the human-readable
+/// [`CaixaKind::as_str`] axis, not the `PascalCase`
+/// [`CaixaKind::wire_name`] axis — same two-axis split the sibling
+/// [`AsRef<str>`] str-view projection preserves, extended onto the
+/// byte-view surface: the paired [`AsRef<str>`], [`AsRef<[u8]>`],
+/// [`std::fmt::Display`], and [`CaixaKind::as_str`] view surfaces all
+/// land on the diagnostic byte-string, while the wire axis (tatara-
+/// lisp author surface `:kind Biblioteca`) stays reachable only
+/// through the explicit [`CaixaKind::wire_name`] +
+/// [`serde::Serialize`] paths. Any future silent collapse of either
+/// axis onto the other (routing the byte-view through the wire
+/// axis's `PascalCase` bytes, routing the str-view through
+/// [`serde_json::to_string`]) trips through
+/// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+/// at caixa-core test time rather than at a downstream byte-consumer's
+/// silent split.
+///
+/// Opens the trait-idiomatic *byte-view* axis on the substrate-wide
+/// closed-set fieldless typed-enum family through the structurally
+/// most fundamental caixa-core enum peer — the first-mover on the
+/// byte-projection axis in the same manner
+/// [`std::str::FromStr`] (c452cae, the trait-idiomatic parse-axis
+/// first-mover on this same enum) and
+/// [`From<Self> for std::rc::Rc<str>`] (e04aff0, the trait-idiomatic
+/// single-threaded-refcounted reverse-projection axis first-mover on
+/// this same enum) opened their respective axes on the same peer. The
+/// sibling closed-set fieldless typed enums
+/// ([`crate::dialeto::CaixaDialeto`], [`crate::dep::DepList`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::WitShape`], [`crate::aplicacao::RateLimitUnit`],
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::upgrade::UpgradeInstruction`], and the outside-caixa-core
+/// peers) each carry the same [`AsRef<str>`] +
+/// `pub const fn as_str`/`as_suffix`/`as_lisp_form` substrate-primitive
+/// accessor discipline, so a future extension of the trait-idiomatic
+/// byte-view axis onto each peer reaches through one impl per enum
+/// keyed to that peer's substrate-primitive accessor.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_as_ref_bytes_routes_through_as_str_accessor`]
+/// (fail-before-pass-after byte-parity pin against
+/// [`CaixaKind::as_str`] `.as_bytes()` across the six-arm
+/// [`CaixaKind::ALL`] emit-set, cross-axis witness against the paired
+/// str-view [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`CaixaKind::as_str`] axes' `.as_bytes()` byte-tails, cross-axis
+/// witness against the paired reverse-projection
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>, std::rc::Rc<str>}` return-shape axes'
+/// `.as_bytes()` byte-tails, a `<T: AsRef<[u8]>>`-bound-consumer
+/// witness that a generic byte-input function accepts a [`CaixaKind`]
+/// directly through the trait bound, and a
+/// `blake3::Hasher::update`-shape byte-input surface witness routed
+/// through the `<T: AsRef<[u8]>>`-bound consumer axis to reach the
+/// caixa-lacre compounding target). Any future silent detour that
+/// routes the byte-view impl off the substrate-primitive
+/// [`CaixaKind::as_str`] accessor (a per-arm inline
+/// `b"biblioteca".as_slice()`-shaped re-inlining that opens a
+/// compile-time link to the un-lifted arm-literal, a swap onto the
+/// `PascalCase` [`CaixaKind::wire_name`] axis that would collide the
+/// human-readable / wire two-axis split on the byte-view surface,
+/// a swap onto the sibling `serialize_wire`-shape
+/// [`serde_json::to_string`] axis that would carry the surrounding
+/// JSON-encoded double-quote byte pair through the byte-view surface
+/// where the caller expected the bare byte-string) trips at caixa-
+/// core test time rather than at a downstream byte-consumer's silent
+/// split.
+impl AsRef<[u8]> for CaixaKind {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4564,6 +4710,288 @@ mod tests {
                  CaixaKind::ALL must yield the same lowercase-\
                  Portuguese byte-string CaixaKind::as_str returns for \
                  CaixaKind::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds the substrate-primitive \
+                  as_str accessor's `.as_bytes()` byte-tail plus the \
+                  paired str-view (AsRef<str>, Display, as_str) and \
+                  reverse-projection ({&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}) \
+                  return-shape axes' `.as_bytes()` byte-tails plus a \
+                  <T: AsRef<[u8]>>-bound-consumer witness plus a \
+                  blake3::Hasher::update-shape byte-input surface witness \
+                  into one exhaustive round-trip over CaixaKind::ALL — the \
+                  accepted line-count cost of opening the byte-view axis \
+                  keyed to the substrate-primitive as_str accessor at the \
+                  same test-site"
+    )]
+    #[allow(
+        clippy::needless_borrows_for_generic_args,
+        reason = "the borrowed-input surface (&variant) is exercised \
+                  deliberately: the `<T: AsRef<[u8]>>`-bound consumer and \
+                  the `blake3::Hasher::update`-shape byte-input surface \
+                  both accept either owned or borrowed input through the \
+                  standard-library blanket `impl<T: ?Sized + AsRef<[u8]>> \
+                  AsRef<[u8]> for &T`, and this pin round-trips both \
+                  input shapes to lock the borrowed-input path load-\
+                  bearing against a future silent regression"
+    )]
+    fn caixa_kind_as_ref_bytes_routes_through_as_str_accessor() {
+        // `<T: AsRef<[u8]>>`-bound-consumer witness helper: a generic
+        // byte-input function accepts a [`super::CaixaKind`] directly
+        // through the trait bound, without the caller open-coding the
+        // two-hop `kind.as_str().as_bytes()` composition. Lifted to the
+        // top of the function per `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock: mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound `update`
+        // signature so a per-caixa BLAKE3 content-address closure that
+        // composes `hasher.update(kind)` on the [`crate::Lacre`] closure
+        // builder reaches the substrate-primitive `as_str` accessor
+        // through the [`super::CaixaKind`] `AsRef<[u8]>` axis and no
+        // other. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for CaixaKind` — asserts the trait-
+        // idiomatic byte-view standard-library impl and the substrate-
+        // primitive [`super::CaixaKind::as_str`] `pub const fn`
+        // accessor's `.as_bytes()` byte-tail resolve to the same six-
+        // arm lowercase-Portuguese byte-string emit-set across every
+        // arm the exhaustive [`super::CaixaKind::ALL`] slice
+        // enumerates. Opens the substrate-wide trait-idiomatic
+        // byte-view axis on the closed-set fieldless typed-enum family
+        // through the structurally most fundamental caixa-core enum
+        // peer — the first-mover on the byte-projection axis in the
+        // same manner [`std::str::FromStr`] (c452cae) opened the
+        // trait-idiomatic parse axis and
+        // [`From<Self> for std::rc::Rc<str>`] (e04aff0) opened the
+        // trait-idiomatic single-threaded-refcounted reverse-
+        // projection axis on this same enum.
+        //
+        // Rust's standard library carries `impl AsRef<[u8]> for str`
+        // and `impl AsRef<[u8]> for String`, so a two-hop composition
+        // `kind.as_str().as_bytes()` (or the equally two-hop
+        // `AsRef::<str>::as_ref(&kind).as_bytes()`) is reachable
+        // through the pre-existing str-view axis alone. But that two-
+        // hop shape has no compile-time link back to the byte-
+        // projection axis, forces every downstream
+        // `<T: AsRef<[u8]>>`-bound consumer to open-code the two-hop
+        // composition at every call site, and admits a silent split
+        // whenever a future call site takes a sibling reverse-
+        // projection axis whose `.as_bytes()` byte-tail carries no
+        // compile-time byte-view surface. This impl closes the byte-
+        // view axis at the substrate-primitive [`super::CaixaKind::
+        // as_str`] accessor so every future `<T: AsRef<[u8]>>`-bound
+        // consumer reaches the same lifted
+        // [`super::crate::render::CAIXA_KIND_LABEL_*`] const roster
+        // the paired str-view axes already return through — through
+        // one trait dispatch.
+        for &variant in CaixaKind::ALL {
+            let via_trait: &[u8] = <CaixaKind as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for CaixaKind impl must byte-equal \
+                 CaixaKind::as_str().as_bytes() on CaixaKind::\
+                 {variant:?} — divergence signals a silent detour off \
+                 the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: [`AsRef<str>`] /
+            // [`std::fmt::Display`] / [`super::CaixaKind::as_str`] all
+            // resolve to the same lifted
+            // [`super::crate::render::CAIXA_KIND_LABEL_*`] const roster,
+            // and the byte-view axis must byte-equal each of their
+            // `.as_bytes()` byte-tails by construction — locking the
+            // str-view and byte-view axes together at the substrate-
+            // primitive accessor.
+            let str_view_ref: &str = <CaixaKind as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                str_view_ref.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and AsRef<str> for \
+                 CaixaKind must resolve to byte-equal byte-tails on \
+                 CaixaKind::{variant:?} — divergence signals the \
+                 byte-view and str-view axes have drifted off the same \
+                 substrate-primitive as_str accessor"
+            );
+            let display_bytes = variant.to_string();
+            assert_eq!(
+                via_trait,
+                display_bytes.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and \
+                 <CaixaKind as std::fmt::Display>::to_string must \
+                 resolve to byte-equal byte-tails on CaixaKind::\
+                 {variant:?} — divergence signals the byte-view axis \
+                 and the Display formatter axis have drifted off the \
+                 same substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired reverse-
+            // projection axes' `.as_bytes()` byte-tails: every one of
+            // `{&'static str, String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>, std::rc::Rc<str>}` allocates (or
+            // borrows) the same lowercase-Portuguese byte-string the
+            // substrate-primitive accessor emits, so the byte-view
+            // axis must byte-equal each of their `.as_bytes()` byte-
+            // tails by construction.
+            let owned_static: &'static str = <&'static str as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_static.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and From<CaixaKind> for \
+                 &'static str must resolve to byte-equal byte-tails on \
+                 CaixaKind::{variant:?}"
+            );
+            let owned_string: String = <String as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_string.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and From<CaixaKind> for \
+                 String must resolve to byte-equal byte-tails on \
+                 CaixaKind::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_cow.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and From<CaixaKind> for \
+                 Cow<'static, str> must resolve to byte-equal byte-\
+                 tails on CaixaKind::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_box.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and From<CaixaKind> for \
+                 Box<str> must resolve to byte-equal byte-tails on \
+                 CaixaKind::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_arc.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and From<CaixaKind> for \
+                 std::sync::Arc<str> must resolve to byte-equal byte-\
+                 tails on CaixaKind::{variant:?}"
+            );
+            let owned_rc_str: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_rc_str.as_bytes(),
+                "AsRef<[u8]> for CaixaKind and From<CaixaKind> for \
+                 std::rc::Rc<str> must resolve to byte-equal byte-\
+                 tails on CaixaKind::{variant:?}"
+            );
+            // Reject the wire-axis PascalCase byte-string: the byte-
+            // view axis must not silently collapse onto the sibling
+            // [`super::CaixaKind::wire_name`] axis, whose bytes differ
+            // on every arm (`"Biblioteca"` vs. `"biblioteca"`, …). A
+            // future silent swap onto the wire axis (a per-arm
+            // rebrand, a hypothetical
+            // `#[serde(rename_all = "…")]`-shape re-inlining that
+            // collapses the two-axis split) trips here.
+            let wire_bytes = variant.wire_name().as_bytes();
+            assert_ne!(
+                via_trait, wire_bytes,
+                "AsRef<[u8]> for CaixaKind must land on the \
+                 lowercase-Portuguese diagnostic byte-string \
+                 (CaixaKind::as_str), not the PascalCase wire byte-\
+                 string (CaixaKind::wire_name) — the two-axis split \
+                 is by design; if this fails on CaixaKind::{variant:?}, \
+                 the byte-view axis has silently collapsed onto the \
+                 wire axis"
+            );
+        }
+        // `<T: AsRef<[u8]>>`-bound-consumer witness: the generic byte-
+        // input function `generic_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a [`super::CaixaKind`]
+        // directly through the trait bound, without the caller open-
+        // coding the two-hop `kind.as_str().as_bytes()` composition.
+        // This is the shape that reaches the caixa-lacre BLAKE3
+        // content-address closure's `blake3::Hasher::update(impl
+        // AsRef<[u8]>)` byte-input surface through this impl and no
+        // other.
+        for &variant in CaixaKind::ALL {
+            let via_generic = generic_bytes_sink(variant);
+            let via_borrowed_generic = generic_bytes_sink(&variant);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 CaixaKind::{variant:?} must yield the same byte-tail \
+                 CaixaKind::as_str().as_bytes() returns — divergence \
+                 signals the byte-view axis fails to bridge a generic \
+                 byte-input trait bound to the substrate-primitive \
+                 accessor"
+            );
+            assert_eq!(
+                via_borrowed_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 &CaixaKind::{variant:?} must yield the same byte-tail \
+                 CaixaKind::as_str().as_bytes() returns — the borrowed-
+                 input surface must resolve to the same as_str dispatch"
+            );
+        }
+        // `blake3::Hasher::update`-shape byte-input surface witness on
+        // the caixa-lacre compounding target: the `MockHasher` (lifted
+        // above per `clippy::items_after_statements`) mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound update
+        // signature and accepts a [`super::CaixaKind`] directly,
+        // routing its byte-tail through the substrate-primitive
+        // `as_str` accessor — the shape a future per-caixa BLAKE3
+        // content-address closure composes to fold a `:kind`
+        // discriminator byte-tag into the [`crate::Lacre`] closure
+        // body.
+        for &variant in CaixaKind::ALL {
+            let mut owned_hasher = MockHasher::new();
+            owned_hasher.update(variant);
+            let owned_folded = owned_hasher.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(kind)`-shape composition on \
+                 CaixaKind::{variant:?} must fold the same byte-tail \
+                 CaixaKind::as_str().as_bytes() returns — the shape a \
+                 future per-caixa BLAKE3 content-address closure \
+                 composes to fold a `:kind` discriminator byte-tag into \
+                 the Lacre closure body"
+            );
+            let mut borrowed_hasher = MockHasher::new();
+            borrowed_hasher.update(&variant);
+            let borrowed_folded = borrowed_hasher.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(&kind)`-shape composition on \
+                 &CaixaKind::{variant:?} must fold the same byte-tail \
+                 CaixaKind::as_str().as_bytes() returns — the borrowed-\
+                 input surface must resolve to the same as_str dispatch"
             );
         }
     }
