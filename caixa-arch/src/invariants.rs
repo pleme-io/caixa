@@ -1456,6 +1456,117 @@ impl From<&InvariantKind> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the caixa-arch invariant-severity three-arm closed-set
+/// fieldless typed enum [`InvariantKind`] — the single-threaded reference-
+/// counted peer of the paired owned-input
+/// [`From<InvariantKind> for std::sync::Arc<str>`] impl (4e923c1) on the
+/// sibling atomically-reference-counted [`std::sync::Arc<str>`] axis.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`InvariantKind::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`.
+///
+/// Rust's standard library carries `impl From<&str> for std::rc::Rc<str>`
+/// and `impl From<String> for std::rc::Rc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor a `From<&T>`
+/// blanket), and — the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`]
+/// trait tables are disjoint — so this axis is a distinct trait-
+/// idiomatic surface a `let key: std::rc::Rc<str> = kind.into();`-shaped
+/// call site reaches through this impl and no other. A single-threaded
+/// caixa-arch audit-report pass whose per-Violation `kind` label is
+/// cloned across intra-report tree nodes via [`std::rc::Rc::clone`] (its
+/// cheaper non-atomic refcount bump the [`std::sync::Arc<str>`] axis's
+/// atomically-reference-counted return-shape cannot provide within a
+/// single-threaded audit pass) reaches the substrate-primitive
+/// [`InvariantKind::as_str`] accessor through this impl and no other.
+///
+/// Opens the outside-`caixa-core` tier of the trait-idiomatic
+/// [`std::rc::Rc<str>`] forward-projection axis — first-mover on the
+/// caixa-arch invariant-severity three-arm peer, after the axis opened
+/// on the structurally most fundamental caixa-core-internal
+/// [`caixa_core::CaixaKind`] pair (4fdfa37), widened onto the second
+/// caixa-core-internal peer [`caixa_core::CaixaDialeto`] (c884517), and
+/// extended onto the first M3-mesh-primitive-defining slot enum
+/// [`caixa_core::aplicacao::PlacementStrategy`] (30a1dee). Matches the
+/// trajectory the sibling atomically-reference-counted
+/// [`std::sync::Arc<str>`] axis walked before it onto this same enum
+/// (4e923c1 owned-input + immediately-following borrowed-input closure).
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the three-
+/// arm [`InvariantKind::ALL`] emit-set on the owned-input surface, plus
+/// a blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` return-shape
+/// axes).
+impl From<InvariantKind> for std::rc::Rc<str> {
+    fn from(kind: InvariantKind) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(kind.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the caixa-arch invariant-severity three-arm closed-set
+/// fieldless typed enum [`InvariantKind`] — the borrowed-input companion
+/// to the paired owned-input [`From<InvariantKind> for std::rc::Rc<str>`]
+/// impl immediately above, closing the `{Self, &Self}` input-shape
+/// corner of the outside-`caixa-core` tier of the [`std::rc::Rc<str>`]
+/// axis on the first-mover peer. Routes byte-for-byte through the
+/// substrate-primitive [`InvariantKind::as_str`] `pub const fn` accessor
+/// via [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so a
+/// `InvariantKind::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped pipe
+/// (whose iterator over `&'static [InvariantKind]` yields
+/// `&InvariantKind` by construction) reaches the same three
+/// `"safety"` / `"compliance"` / `"hint"` byte-strings the paired
+/// owned-input axis and the sibling `{Self, &Self} × {&'static str,
+/// String, Cow<'static, str>, Box<str>, std::sync::Arc<str>}` forward-
+/// projection corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface that the pipe shape
+/// [`InvariantKind::ALL`]`.iter().map(std::rc::Rc::<str>::from)` reaches
+/// through this impl and no other — without it, the same pipe would
+/// force a spurious [`Copy`] deref
+/// (`std::rc::Rc::<str>::from((*kind).as_str())`) or a `.copied()`
+/// restatement whose type bounds have no compile-time link back to the
+/// substrate primitive.
+///
+/// Closes the `{Self, &Self}` input-shape corner on the first-mover peer
+/// of the outside-`caixa-core` tier of the substrate-wide trait-
+/// idiomatic [`std::rc::Rc<str>`] forward-projection campaign, matching
+/// the trajectory the paired [`caixa_core::CaixaKind`] (4fdfa37),
+/// [`caixa_core::CaixaDialeto`] (c884517), and
+/// [`caixa_core::aplicacao::PlacementStrategy`] (30a1dee) pairs walked
+/// before it on the caixa-core-internal and M3-mesh-primitive-defining
+/// tiers of the same axis. Leaves the remaining outside-`caixa-core`
+/// closed-set fieldless typed enum peers ([`crate::ArchVerdict`],
+/// [`caixa_lint::Severity`], [`caixa_lint::FixSafety`],
+/// [`caixa_theme::Semantic`], [`caixa_provedor::FerriteRuntime`]) as
+/// the campaign's next multi-peer targets — this commit gives them a
+/// `{Self, &Self}` corner template to converge onto on the outside-
+/// `caixa-core` tier of the [`std::rc::Rc<str>`] axis.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_borrowed_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the three-
+/// arm [`InvariantKind::ALL`] emit-set on the borrowed-input surface,
+/// plus a blanket-derived [`Into`] shape witness, a cross-axis partition
+/// pin against the paired owned-input
+/// [`From<InvariantKind> for std::rc::Rc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes, and a
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe witness over
+/// [`InvariantKind::ALL`] that resolves through the borrowed-input axis
+/// without a spurious [`Copy`] deref).
+impl From<&InvariantKind> for std::rc::Rc<str> {
+    fn from(kind: &InvariantKind) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(kind.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -4056,5 +4167,318 @@ mod tests {
                  const family"
             );
         }
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn invariant_kind_from_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<InvariantKind> for std::rc::Rc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::InvariantKind::as_str`] `pub const fn`
+        // accessor resolve to the same three-arm canonical-lowercase
+        // emit-set across every arm the exhaustive
+        // [`super::InvariantKind::ALL`] slice enumerates. Opens the
+        // outside-`caixa-core` tier of the substrate-wide
+        // [`std::rc::Rc<str>`] forward-projection campaign — first-mover
+        // on the caixa-arch invariant-severity three-arm closed-set
+        // fieldless typed enum peer, after the axis opened on the
+        // structurally most fundamental caixa-core-internal
+        // [`caixa_core::CaixaKind`] pair (4fdfa37), widened onto the
+        // second caixa-core-internal peer
+        // [`caixa_core::CaixaDialeto`] (c884517), and extended onto the
+        // first M3-mesh-primitive-defining slot enum
+        // [`caixa_core::aplicacao::PlacementStrategy`] (30a1dee).
+        //
+        // Rust's standard library carries `impl From<&str> for
+        // std::rc::Rc<str>` and `impl From<String> for std::rc::Rc<str>`
+        // but no blanket `impl<T: AsRef<str>> From<T> for
+        // std::rc::Rc<str>`, and the [`std::sync::Arc<str>`] and
+        // [`std::rc::Rc<str>`] trait tables are disjoint, so this axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: std::rc::Rc<str> = kind.into();`-shaped call site
+        // reaches through this impl and no other — a paired
+        // `std::rc::Rc::<str>::from(kind.as_str())` open-code has no
+        // compile-time link back to the substrate primitive, and a two-
+        // step `std::rc::Rc::<str>::from(String::from(kind))`
+        // composition through the owned-`String` axis allocates twice
+        // (once into the intermediate `String`, once into the
+        // [`Rc<str>`] on the `From<String>` conversion) where the
+        // single-step trait impl allocates once.
+        //
+        // Cross-axis byte-parity witness against the sibling owned-input
+        // `{&'static str, String, Cow<'static, str>, Box<str>,
+        // std::sync::Arc<str>}` return-shape axes — locking the six
+        // return-shape paths on the owned-input surface together by
+        // construction so any future detour off the substrate-primitive
+        // [`super::InvariantKind::as_str`] accessor trips at caixa-arch
+        // test time.
+        for &variant in super::InvariantKind::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::InvariantKind>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<InvariantKind> for std::rc::Rc<str> impl must \
+                 round-trip InvariantKind::{variant:?} to the same \
+                 canonical-lowercase byte-string InvariantKind::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on InvariantKind::\
+                 {variant:?} must byte-equal InvariantKind::as_str on \
+                 the same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_static: &'static str =
+                <&'static str as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<InvariantKind> for std::rc::Rc<str> and \
+                 From<InvariantKind> for &'static str must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_string: String = <String as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<InvariantKind> for std::rc::Rc<str> and \
+                 From<InvariantKind> for String must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and owned-\
+                 `String` return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<InvariantKind> for std::rc::Rc<str> and \
+                 From<InvariantKind> for Cow<'static, str> must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<InvariantKind> for std::rc::Rc<str> and \
+                 From<InvariantKind> for Box<str> must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the owned-input std::rc::Rc<str> and Box<str> \
+                 return-shape paths have drifted onto different emit-sets"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<InvariantKind> for std::rc::Rc<str> and \
+                 From<InvariantKind> for std::sync::Arc<str> must \
+                 resolve identically on InvariantKind::{variant:?} — \
+                 divergence signals the owned-input std::rc::Rc<str> and \
+                 std::sync::Arc<str> return-shape paths have drifted \
+                 onto different emit-sets (the two disjoint reference-\
+                 counted trait tables have desynchronized on the caixa-\
+                 arch invariant-severity axis)"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds five borrowed-input \
+                  return-shape paths (&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>) plus the paired \
+                  owned-input Rc<str> witness and the \
+                  .iter().map(std::rc::Rc::<str>::from) pipe witness into \
+                  one exhaustive round-trip over InvariantKind::ALL — the \
+                  accepted line-count cost of keying the whole borrowed-\
+                  input Rc<str> corner to the substrate-primitive as_str \
+                  accessor at the same test-site"
+    )]
+    fn invariant_kind_from_borrowed_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&InvariantKind> for std::rc::Rc<str>` — asserts
+        // the borrowed-input standard-library trait impl and the
+        // substrate-primitive [`super::InvariantKind::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm
+        // canonical-lowercase emit-set across every arm the exhaustive
+        // [`super::InvariantKind::ALL`] slice enumerates. Rust's
+        // standard library does not carry a blanket
+        // `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a
+        // `Copy`-based `impl<T: Copy, U: From<T>> From<&T> for U`), so
+        // the borrowed-input `std::rc::Rc<str>` forward-projection axis
+        // is a distinct trait-idiomatic surface that a
+        // `let key: std::rc::Rc<str> = (&kind).into();`-shaped call site
+        // or a
+        // `InvariantKind::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped
+        // pipe reaches through this impl and no other — the paired
+        // owned-input `From<InvariantKind> for std::rc::Rc<str>` impl
+        // forces every borrowed-input call site through an explicit
+        // `Copy` deref (`std::rc::Rc::<str>::from((*kind).as_str())`)
+        // or a `std::rc::Rc::<str>::from(kind.as_str())` open-code whose
+        // type bounds have no compile-time link back to the substrate
+        // primitive.
+        //
+        // Closes the `{Self, &Self}` input-shape corner on the first-
+        // mover peer of the outside-`caixa-core` tier of the substrate-
+        // wide trait-idiomatic [`std::rc::Rc<str>`] forward-projection
+        // campaign, matching the trajectory the paired
+        // [`caixa_core::CaixaKind`] (4fdfa37),
+        // [`caixa_core::CaixaDialeto`] (c884517), and
+        // [`caixa_core::aplicacao::PlacementStrategy`] (30a1dee) pairs
+        // walked before it on the caixa-core-internal and M3-mesh-
+        // primitive-defining tiers of the same axis.
+        //
+        // Also byte-parity witness against the paired owned-input
+        // [`From<InvariantKind> for std::rc::Rc<str>`] and the sibling
+        // borrowed-input [`From<&InvariantKind> for &'static str`],
+        // [`From<&InvariantKind> for String`],
+        // [`From<&InvariantKind> for Cow<'static, str>`],
+        // [`From<&InvariantKind> for Box<str>`], and
+        // [`From<&InvariantKind> for std::sync::Arc<str>`] return-shape
+        // axes — locking the six return-shape × input-shape paths
+        // together by construction so any future detour off the
+        // substrate-primitive accessor trips at caixa-arch test time.
+        // Then a `.iter().map(std::rc::Rc::<str>::from)` pipe witness
+        // over [`super::InvariantKind::ALL`] — whose iterator yields
+        // `&InvariantKind` by construction, so the borrowed-input
+        // [`std::rc::Rc<str>`] axis is what routes the pipe through the
+        // substrate-primitive [`super::InvariantKind::as_str`] accessor
+        // without a spurious [`Copy`] deref.
+        for &variant in super::InvariantKind::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<&super::InvariantKind>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&InvariantKind> for std::rc::Rc<str> impl must \
+                 round-trip &InvariantKind::{variant:?} to the same \
+                 canonical-lowercase byte-string InvariantKind::as_str \
+                 returns — divergence signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on &InvariantKind::\
+                 {variant:?} must byte-equal InvariantKind::as_str on \
+                 the same input — the blanket-derived Into shape must \
+                 resolve to the same as_str dispatch as the explicit \
+                 From impl"
+            );
+            let owned_rc: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::InvariantKind>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&InvariantKind> for std::rc::Rc<str> and \
+                 From<InvariantKind> for std::rc::Rc<str> must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the borrowed-input and owned-input \
+                 std::rc::Rc<str> forward-projection input-shape paths \
+                 have drifted onto different emit-sets"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&super::InvariantKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&InvariantKind> for std::rc::Rc<str> and \
+                 From<&InvariantKind> for &'static str must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 &'static str return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_string: String = <String as From<&super::InvariantKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&InvariantKind> for std::rc::Rc<str> and \
+                 From<&InvariantKind> for String must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 owned-`String` return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&super::InvariantKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&InvariantKind> for std::rc::Rc<str> and \
+                 From<&InvariantKind> for Cow<'static, str> must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 Cow<'static, str> return-shape paths have drifted onto \
+                 different emit-sets"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&super::InvariantKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&InvariantKind> for std::rc::Rc<str> and \
+                 From<&InvariantKind> for Box<str> must resolve \
+                 identically on InvariantKind::{variant:?} — divergence \
+                 signals the borrowed-input std::rc::Rc<str> and \
+                 Box<str> return-shape paths have drifted onto different \
+                 emit-sets"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&super::InvariantKind>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&InvariantKind> for std::rc::Rc<str> and \
+                 From<&InvariantKind> for std::sync::Arc<str> must \
+                 resolve identically on InvariantKind::{variant:?} — \
+                 divergence signals the borrowed-input std::rc::Rc<str> \
+                 and std::sync::Arc<str> return-shape paths have drifted \
+                 onto different emit-sets (the two disjoint reference-\
+                 counted trait tables have desynchronized on the caixa-\
+                 arch invariant-severity axis under the borrowed-input \
+                 corner)"
+            );
+        }
+        let via_iter: Vec<std::rc::Rc<str>> = super::InvariantKind::ALL
+            .iter()
+            .map(std::rc::Rc::<str>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<str>> = super::InvariantKind::ALL
+            .iter()
+            .map(|k| std::rc::Rc::<str>::from(k.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over \
+             InvariantKind::ALL — a call site whose iteration axis holds \
+             `&InvariantKind` by construction — must byte-equal \
+             `.iter().map(|k| std::rc::Rc::<str>::from(k.as_str()))` on \
+             every arm — the borrowed-input std::rc::Rc<str> \
+             `From<&InvariantKind> for std::rc::Rc<str>` axis is what \
+             makes the `std::rc::Rc::<str>::from` composition route \
+             through the substrate-primitive `InvariantKind::as_str` \
+             accessor without a spurious `Copy` deref (which would only \
+             be reachable through the owned-input \
+             `From<InvariantKind> for std::rc::Rc<str>` axis by first \
+             calling `.copied()` on the iterator)"
+        );
     }
 }
