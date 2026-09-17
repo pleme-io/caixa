@@ -8942,6 +8942,60 @@ impl From<&PathShapeViolation> for std::rc::Rc<str> {
     }
 }
 
+/// Trait-idiomatic byte-view surface on the render-side sandbox-escape
+/// three-arm path-shape-diagnostic [`PathShapeViolation`] closed-set
+/// fieldless typed enum.
+///
+/// Every consumer that binds its input through the standard-library
+/// [`AsRef<[u8]>`] trait bound — a byte-keyed
+/// `HashMap<K: AsRef<[u8]>, V>` per-path-shape-violation policy table
+/// lookup on any future `feira lint --explain-path-shape=<tag>` /
+/// admission-webhook rejection body dispatcher, a
+/// `blake3::Hasher::update` / `ring::digest::Context::update` /
+/// `sha2::Sha256::update` byte-input surface on any future per-caixa
+/// path-gate diagnostic-histogram content-address digest folded into the
+/// [`crate::Lacre`] closure so downstream cache-keys partition on the
+/// three violation arms (`Empty`, `Absolute`, `ParentEscape`) at
+/// content-address time, an `std::io::Write::write_all`-bound
+/// structured-log per-arm byte-sink on the caixa-build pipeline's
+/// per-slot path-gate emission path — reaches the substrate primitive
+/// through one trait dispatch rather than open-coding the two-hop
+/// `violation.as_str().as_bytes()` composition at every call site.
+/// Routed byte-for-byte through the [`PathShapeViolation::as_str`]
+/// `pub const fn` accessor the paired str-view ([`AsRef<str>`],
+/// [`std::fmt::Display`], [`PathShapeViolation::as_str`]) and the five
+/// reverse-projection (`&'static str`, `String`, `Cow<'static, str>`,
+/// `Box<str>`, `std::sync::Arc<str>`, `std::rc::Rc<str>`) return-shape
+/// axes already resolve through, so any future divergence between the
+/// byte-view and str-view axes trips at caixa-core test time rather
+/// than at a downstream byte-consumer's silent split.
+///
+/// Extends the substrate-wide byte-view campaign the sibling
+/// [`crate::CaixaKind`] first-mover (69d8d86) opened onto the first
+/// render-side path-shape-diagnostic closed-set enum on the caixa-core
+/// surface — the ninth in-repo closed-set fieldless typed enum peer to
+/// pick up the discipline, after [`crate::CaixaKind`],
+/// [`crate::dialeto::CaixaDialeto`], [`crate::dep::DepList`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`],
+/// [`crate::supervisor::RestartStrategy`] +
+/// [`crate::supervisor::RestartPolicy`], and
+/// [`crate::aplicacao::WitShape`] (0e2d0f2 — the M3-mesh-`:contratos
+/// :wit` classifier peer one commit prior). Pin load-bearing by
+/// [`tests::path_shape_violation_as_ref_bytes_routes_through_as_str_accessor`]
+/// — fail-before-pass-after byte-parity pin against
+/// [`PathShapeViolation::as_str`] `.as_bytes()` across the three-arm
+/// [`PathShapeViolation::ALL`] emit-set, cross-axis witness against the
+/// paired str-view / six reverse-projection axes' `.as_bytes()`
+/// byte-tails, a `<T: AsRef<[u8]>>`-bound-consumer witness, and a
+/// `blake3::Hasher::update`-shape byte-input surface witness on both
+/// owned and borrowed input shapes.
+impl AsRef<[u8]> for PathShapeViolation {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -44799,6 +44853,216 @@ mod tests {
              `From<PathShapeViolation> for std::rc::Rc<str>` axis by \
              first calling `.copied()` on the iterator)"
         );
+    }
+
+    // The `generic_bytes_sink(&variant)` and `borrowed_hasher.update(&variant)`
+    // shapes below are the borrowed-input witness half of the by-value +
+    // by-reference partition the paired witness pair carries: the pair proves
+    // the trait bound accepts both owned (`variant`) and borrowed (`&variant`)
+    // shapes through the same substrate-primitive `as_str` accessor, which is
+    // the shape the caixa-lacre BLAKE3 content-address closure composes.
+    // `clippy::needless_borrows_for_generic_args` would fold the borrowed half
+    // into the owned half and collapse the by-value/by-reference partition
+    // this test load-bears; the `#[allow]` documents that the partition is
+    // deliberate, not an oversight.
+    #[allow(clippy::needless_borrows_for_generic_args, clippy::too_many_lines)]
+    #[test]
+    fn path_shape_violation_as_ref_bytes_routes_through_as_str_accessor() {
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for PathShapeViolation` — asserts the
+        // trait-idiomatic byte-view standard-library impl and the
+        // substrate-primitive [`super::PathShapeViolation::as_str`]
+        // `pub const fn` accessor's `.as_bytes()` byte-tail resolve to
+        // the same three-arm canonical-lowercase kebab byte-string
+        // emit-set across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Extends
+        // the trait-idiomatic byte-view axis onto the first render-side
+        // path-shape-diagnostic closed-set enum on the caixa-core
+        // surface — the ninth in-repo closed-set fieldless typed enum
+        // peer to pick up the discipline the sibling
+        // [`super::super::CaixaKind`] first-mover (69d8d86) opened.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_trait: &[u8] = <super::PathShapeViolation as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for PathShapeViolation impl must byte-\
+                 equal PathShapeViolation::as_str().as_bytes() on \
+                 PathShapeViolation::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: [`AsRef<str>`] /
+            // [`std::fmt::Display`] / [`super::PathShapeViolation::as_str`]
+            // all resolve to the same canonical-lowercase kebab byte-
+            // string, and the byte-view axis must byte-equal each of
+            // their `.as_bytes()` byte-tails by construction.
+            let str_view_ref: &str = <super::PathShapeViolation as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                str_view_ref.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and AsRef<str> for \
+                 PathShapeViolation must resolve to byte-equal byte-\
+                 tails on PathShapeViolation::{variant:?} — divergence \
+                 signals the byte-view and str-view axes have drifted \
+                 off the same substrate-primitive as_str accessor"
+            );
+            let display_bytes = variant.to_string();
+            assert_eq!(
+                via_trait,
+                display_bytes.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and \
+                 <PathShapeViolation as std::fmt::Display>::to_string \
+                 must resolve to byte-equal byte-tails on \
+                 PathShapeViolation::{variant:?}"
+            );
+            // Cross-axis witness against the paired reverse-projection
+            // axes' `.as_bytes()` byte-tails: every one of `{&'static
+            // str, String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>, std::rc::Rc<str>}` allocates (or
+            // borrows) the same three-arm canonical-lowercase kebab
+            // byte-string the substrate-primitive accessor emits.
+            let owned_static: &'static str =
+                <&'static str as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_static.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and \
+                 From<PathShapeViolation> for &'static str must resolve \
+                 to byte-equal byte-tails on \
+                 PathShapeViolation::{variant:?}"
+            );
+            let owned_string: String = <String as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_string.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and \
+                 From<PathShapeViolation> for String must resolve to \
+                 byte-equal byte-tails on \
+                 PathShapeViolation::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_cow.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and \
+                 From<PathShapeViolation> for Cow<'static, str> must \
+                 resolve to byte-equal byte-tails on \
+                 PathShapeViolation::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_box.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and \
+                 From<PathShapeViolation> for Box<str> must resolve to \
+                 byte-equal byte-tails on \
+                 PathShapeViolation::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_arc.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and \
+                 From<PathShapeViolation> for std::sync::Arc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 PathShapeViolation::{variant:?}"
+            );
+            let local_rc: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                via_trait,
+                local_rc.as_bytes(),
+                "AsRef<[u8]> for PathShapeViolation and \
+                 From<PathShapeViolation> for std::rc::Rc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 PathShapeViolation::{variant:?}"
+            );
+        }
+        // `<T: AsRef<[u8]>>`-bound-consumer witness: the generic byte-
+        // input function `generic_bytes_sink` accepts a
+        // [`super::PathShapeViolation`] directly through the trait
+        // bound, without the caller open-coding the two-hop
+        // `violation.as_str().as_bytes()` composition — the shape that
+        // reaches the caixa-lacre BLAKE3 content-address closure's
+        // `blake3::Hasher::update(impl AsRef<[u8]>)` byte-input surface
+        // through this impl and no other.
+        for &variant in super::PathShapeViolation::ALL {
+            let via_generic = generic_bytes_sink(variant);
+            let via_borrowed_generic = generic_bytes_sink(&variant);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 PathShapeViolation::{variant:?} must yield the same \
+                 byte-tail PathShapeViolation::as_str().as_bytes() \
+                 returns — divergence signals the byte-view axis fails \
+                 to bridge a generic byte-input trait bound to the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 &PathShapeViolation::{variant:?} must yield the same \
+                 byte-tail PathShapeViolation::as_str().as_bytes() \
+                 returns — the borrowed-input surface must resolve to \
+                 the same as_str dispatch"
+            );
+        }
+        // `blake3::Hasher::update`-shape byte-input surface witness on
+        // the caixa-lacre compounding target: the `MockHasher` mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound `update`
+        // signature and accepts a [`super::PathShapeViolation`]
+        // directly, routing its byte-tail through the substrate-
+        // primitive `as_str` accessor.
+        for &variant in super::PathShapeViolation::ALL {
+            let mut owned_hasher = MockHasher::new();
+            owned_hasher.update(variant);
+            let owned_folded = owned_hasher.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(violation)`-shape composition on \
+                 PathShapeViolation::{variant:?} must fold the same \
+                 byte-tail PathShapeViolation::as_str().as_bytes() \
+                 returns — the shape a future per-caixa path-gate \
+                 diagnostic-histogram content-address closure would \
+                 compose to fold a path-shape violation arm byte-tag \
+                 into the Lacre closure body"
+            );
+            let mut borrowed_hasher = MockHasher::new();
+            borrowed_hasher.update(&variant);
+            let borrowed_folded = borrowed_hasher.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(&violation)`-shape composition on \
+                 &PathShapeViolation::{variant:?} must fold the same \
+                 byte-tail PathShapeViolation::as_str().as_bytes() \
+                 returns — the borrowed-input surface must resolve to \
+                 the same as_str dispatch"
+            );
+        }
     }
 
     // ── is_lisp_extension — `:behavior :on-*` + `:upgrade-from ───────────
