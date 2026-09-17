@@ -1638,6 +1638,100 @@ impl AsRef<[u8]> for InvariantKind {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`Vec<u8>` output* byte-owned
+/// reverse projection on the first outside-`caixa-core` closed-set
+/// fieldless typed enum on the caixa surface ([`InvariantKind`]) —
+/// the byte-mirror of the [`From<InvariantKind> for String`] str-owned
+/// reverse-projection axis and the owned-`Vec<u8>` reverse-projection
+/// sibling of the [`AsRef<[u8]>`] borrowed byte-view axis (b5baf7d)
+/// lifted on this same enum. Routes byte-for-byte through the
+/// substrate-primitive [`InvariantKind::as_str`] `pub const fn`
+/// accessor via [`str::as_bytes`] + [`slice::to_vec`] so every
+/// consumer that binds an [`InvariantKind`] through the standard-
+/// library `impl From<InvariantKind> for Vec<u8>` axis (equivalently
+/// `<T: Into<Vec<u8>>>`) — a future
+/// [`std::io::Write::write_all`]-shape per-caixa-arch audit-log byte-
+/// sink whose input parameter is an owned [`Vec<u8>`] payload, a
+/// future `bytes::Bytes::from(Vec::<u8>::from(kind))` composer folding
+/// the per-severity byte-tag into the [`bytes::Bytes`] framing
+/// surface, a future `hasher.update(&Vec::<u8>::from(kind))`-shape
+/// BLAKE3 per-Violation content-address closure that needs the owned
+/// byte-tail buffered before folding into the audit-log closure body,
+/// a future per-severity protobuf/CBOR/msgpack `spec.severity`
+/// payload composer whose framer takes an owned [`Vec<u8>`] rather
+/// than a borrowed byte-slice — reaches the same three-arm lifted
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_SAFETY`] /
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_COMPLIANCE`] /
+/// [`CAIXA_ARCH_INVARIANT_KIND_WIRE_HINT`] const roster the paired
+/// [`AsRef<[u8]>`] borrowed byte-view axis, the four
+/// `{Self, &Self} × {&'static str, String}` 2×2 str-view forward-
+/// projection corners, and the [`std::borrow::Cow<'static, str>`] /
+/// [`Box<str>`] / [`std::sync::Arc<str>`] / [`std::rc::Rc<str>`]
+/// str-owned reverse-projection quartet already return, rather than
+/// an open-coded per-call-site `kind.as_str().as_bytes().to_vec()` /
+/// `<InvariantKind as AsRef<[u8]>>::as_ref(&kind).to_vec()` /
+/// `String::from(kind).into_bytes()` composition whose type bounds
+/// have no compile-time link back to the substrate primitive.
+///
+/// Opens the substrate-wide trait-idiomatic byte-owned reverse-
+/// projection axis on the *outside-`caixa-core`* closed-set fieldless
+/// typed-enum surface — the first-mover on that boundary in the same
+/// manner [`AsRef<[u8]>`] (b5baf7d) opened the paired borrowed byte-
+/// view axis on this same enum. The five remaining outside-
+/// `caixa-core` closed-set fieldless typed-enum peers (`ArchVerdict`,
+/// `Severity`, `FixSafety`, `Semantic`, `FerriteRuntime`) each become
+/// a mechanical one-lift extension against the substrate-primitive
+/// `as_str` accessor they already carry — tracking the paired byte-
+/// view axis's outside-caixa-core sweep (b5baf7d → 0e0057a → 1e65136
+/// → 1da1afc → 83f1e82 → c0111a6) verbatim.
+///
+/// Pinned load-bearing by
+/// [`tests::invariant_kind_from_into_owned_vec_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`InvariantKind::as_str`] across the
+/// three-arm emit-set binding the byte-owned reverse-projection axis
+/// against the paired [`AsRef<[u8]>`] borrowed byte-view axis and the
+/// str-owned reverse-projection family's `.into_bytes()` /
+/// `.as_bytes().to_vec()` byte-tails, plus a
+/// `<T: Into<Vec<u8>>>`-bound generic-consumer witness, a
+/// `std::io::Write::write_all`-shape owned-byte-sink surface witness
+/// on both owned and borrowed input shapes, and a
+/// [`std::fmt::Debug`]-derive-output rejection witness against a
+/// silent detour back onto the pre-lift `format!("{:?}", v.kind)`
+/// `PascalCase` byte-string every downstream `feira tofu` per-Violation
+/// render site walked before the [`InvariantKind::as_str`] accessor
+/// landed).
+impl From<InvariantKind> for Vec<u8> {
+    fn from(kind: InvariantKind) -> Vec<u8> {
+        kind.as_str().as_bytes().to_vec()
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, owned-`Vec<u8>` output* byte-
+/// owned reverse projection on the first outside-`caixa-core`
+/// closed-set fieldless typed enum on the caixa surface
+/// ([`InvariantKind`]) — the borrowed-input peer of
+/// [`From<InvariantKind> for Vec<u8>`], closing the
+/// `{Self, &Self} → Vec<u8>` pair on the byte-owned reverse-
+/// projection axis in one lift. Routes byte-for-byte through the
+/// substrate-primitive [`InvariantKind::as_str`] `pub const fn`
+/// accessor so every consumer that holds a borrowed
+/// [`&InvariantKind`] and needs an owned [`Vec<u8>`] — a future
+/// `.iter().map(Vec::<u8>::from).collect()` pipe over
+/// `&[InvariantKind]` (whose iterator yields `&InvariantKind`, not
+/// `InvariantKind`, so the owned-input axis alone forces every call
+/// site through an explicit `.copied()` / spurious [`Copy`] deref
+/// restatement rather than the direct trait-idiomatic projection), a
+/// future admission-webhook rejection body composer that walks
+/// [`InvariantKind::ALL`] through an `Into<Vec<u8>>`-bound per-arm
+/// byte-writer to surface the accepted arch-severity set — reaches
+/// the same three-arm lifted `CAIXA_ARCH_INVARIANT_KIND_WIRE_*` const
+/// roster the paired owned-input peer already returns.
+impl From<&InvariantKind> for Vec<u8> {
+    fn from(kind: &InvariantKind) -> Vec<u8> {
+        kind.as_str().as_bytes().to_vec()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Violation {
     pub invariant_id: String,
@@ -4745,6 +4839,255 @@ mod tests {
                  borrowed-input surface must byte-equal the substrate-\
                  primitive as_str accessor's byte-tail on \
                  InvariantKind::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is opened here \
+                  on the first outside-caixa-core closed-set fieldless \
+                  typed-enum peer, so the pin binds both new impls \
+                  against every paired byte-view and str-owned axis on \
+                  the same enum plus a <T: Into<Vec<u8>>>-bound generic-\
+                  consumer witness, a std::io::Write::write_all-shape \
+                  owned-byte-sink surface witness on both owned and \
+                  borrowed input shapes, and a std::fmt::Debug-derive-\
+                  output rejection witness against a silent detour back \
+                  onto the pre-lift `format!(\"{:?}\", v.kind)` \
+                  PascalCase byte-string every downstream \
+                  `feira tofu` per-Violation render site walked before \
+                  the InvariantKind::as_str accessor landed"
+    )]
+    fn invariant_kind_from_into_owned_vec_bytes_routes_through_as_str_accessor() {
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness helper: a generic
+        // owned-byte-input function accepts a [`super::InvariantKind`]
+        // directly through the trait bound, without the caller open-
+        // coding the three-hop `kind.as_str().as_bytes().to_vec()`
+        // composition. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_owned_bytes_sink<T: Into<Vec<u8>>>(t: T) -> Vec<u8> {
+            t.into()
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface
+        // mock: mirrors `std::io::Write::write_all` /
+        // `bytes::BytesMut::extend_from_slice` / any per-Violation
+        // audit-log byte-sink that consumes a `Vec<u8>` payload via
+        // `Into<Vec<u8>>`, so a future per-caixa-arch per-severity
+        // audit-log emit reaches the substrate-primitive `as_str`
+        // accessor through the byte-owned reverse-projection axis and
+        // no other. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockOwnedByteSink(Vec<u8>);
+        impl MockOwnedByteSink {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn write_all(&mut self, bytes: impl Into<Vec<u8>>) -> &mut Self {
+                self.0.extend_from_slice(&bytes.into());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<InvariantKind> for Vec<u8>` and
+        // `impl From<&InvariantKind> for Vec<u8>` — asserts the trait-
+        // idiomatic byte-owned reverse-projection standard-library
+        // impls and the substrate-primitive
+        // [`super::InvariantKind::as_str`] `pub const fn` accessor's
+        // `.as_bytes().to_vec()` byte-tail resolve to the same three-
+        // arm lowercase byte-string emit-set across every arm the
+        // exhaustive [`super::InvariantKind::ALL`] slice enumerates.
+        // Opens the substrate-wide trait-idiomatic byte-owned
+        // reverse-projection axis on the outside-caixa-core closed-
+        // set fieldless typed-enum surface through the first-mover
+        // peer — matching the trajectory the paired [`AsRef<[u8]>`]
+        // (b5baf7d) borrowed byte-view axis walked before it.
+        for &variant in InvariantKind::ALL {
+            let via_owned_from: Vec<u8> = <Vec<u8> as From<InvariantKind>>::from(variant);
+            let via_borrowed_from: Vec<u8> = <Vec<u8> as From<&InvariantKind>>::from(&variant);
+            let via_method_bytes: Vec<u8> = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_owned_from, via_method_bytes,
+                "From<InvariantKind> for Vec<u8> impl must byte-equal \
+                 InvariantKind::as_str().as_bytes().to_vec() on \
+                 InvariantKind::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from, via_method_bytes,
+                "From<&InvariantKind> for Vec<u8> impl must byte-equal \
+                 InvariantKind::as_str().as_bytes().to_vec() on \
+                 InvariantKind::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_owned_from, via_borrowed_from,
+                "From<InvariantKind> for Vec<u8> and \
+                 From<&InvariantKind> for Vec<u8> must byte-equal each \
+                 other on InvariantKind::{variant:?} — divergence \
+                 signals the owned-input and borrowed-input paths have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis witness against the paired [`AsRef<[u8]>`]
+            // borrowed byte-view axis (b5baf7d): the byte-owned
+            // reverse-projection axis must byte-equal the paired
+            // borrowed byte-view axis by construction — locking the
+            // byte-view and byte-owned axes together at the substrate-
+            // primitive accessor.
+            let borrowed_bytes: &[u8] = <InvariantKind as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from,
+                borrowed_bytes.to_vec(),
+                "From<InvariantKind> for Vec<u8> and AsRef<[u8]> for \
+                 InvariantKind must resolve to byte-equal byte-tails \
+                 on InvariantKind::{variant:?} — divergence signals \
+                 the byte-owned and byte-view axes have drifted off \
+                 the same substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the str-owned reverse-
+            // projection family's `.into_bytes()` /
+            // `.as_bytes().to_vec()` byte-tails: every one of
+            // `{String, Cow<'static, str>, Box<str>, std::sync::Arc<str>,
+            // std::rc::Rc<str>}` allocates (or borrows) the same
+            // lowercase byte-string the substrate-primitive accessor
+            // emits, so the byte-owned axis must byte-equal each of
+            // their owned byte-tails by construction.
+            let owned_string: String = <String as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_string.into_bytes(),
+                "From<InvariantKind> for Vec<u8> and \
+                 String::from(kind).into_bytes() must resolve to byte-\
+                 equal byte-tails on InvariantKind::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_cow.as_bytes().to_vec(),
+                "From<InvariantKind> for Vec<u8> and \
+                 From<InvariantKind> for Cow<'static, str> must \
+                 resolve to byte-equal byte-tails on \
+                 InvariantKind::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_box.as_bytes().to_vec(),
+                "From<InvariantKind> for Vec<u8> and \
+                 From<InvariantKind> for Box<str> must resolve to \
+                 byte-equal byte-tails on InvariantKind::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_arc.as_bytes().to_vec(),
+                "From<InvariantKind> for Vec<u8> and \
+                 From<InvariantKind> for std::sync::Arc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 InvariantKind::{variant:?}"
+            );
+            let owned_rc_str: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_rc_str.as_bytes().to_vec(),
+                "From<InvariantKind> for Vec<u8> and \
+                 From<InvariantKind> for std::rc::Rc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 InvariantKind::{variant:?}"
+            );
+            // Reject the pre-lift `format!(\"{:?}\", v.kind)`
+            // PascalCase byte-string every downstream `feira tofu`
+            // per-Violation render site walked before the substrate-
+            // canonical [`super::InvariantKind::as_str`] accessor
+            // landed: the byte-owned reverse-projection axis must not
+            // silently collapse back onto the derived [`std::fmt::Debug`]
+            // output, whose bytes differ on every arm (`"Safety"` vs.
+            // `"safety"`, `"Compliance"` vs. `"compliance"`, `"Hint"`
+            // vs. `"hint"`). A future `#[derive(Debug)]` swap for a
+            // hand-rolled `impl Debug` that pretty-prints the arm with
+            // per-arm context (`"Safety(hard)"`, `"Hint(recommend)"`)
+            // or a silent re-route of the byte-owned axis onto the
+            // sibling `Debug` output trips here rather than at a
+            // downstream operator's terminal-scroll.
+            let debug_bytes = format!("{variant:?}").into_bytes();
+            assert_ne!(
+                via_owned_from, debug_bytes,
+                "From<InvariantKind> for Vec<u8> must land on the \
+                 lowercase-wire byte-string (InvariantKind::as_str), \
+                 not the PascalCase byte-string \
+                 `format!(\"{{:?}}\", variant)` — the pre-lift \
+                 `format!(\"{{:?}}\", v.kind).to_lowercase()` consumer \
+                 at `caixa-feira/src/cmd/tofu.rs` fed the derived \
+                 Debug output through a lowercase pass to reach the \
+                 wire byte-string; if this fails on \
+                 InvariantKind::{variant:?}, the byte-owned axis has \
+                 silently collapsed back onto the Debug-derive output"
+            );
+        }
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness on both owned
+        // and borrowed input shapes: the generic owned-byte-input
+        // function `generic_owned_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::InvariantKind`] and a `&InvariantKind` directly
+        // through the trait bound, without the caller open-coding the
+        // three-hop `kind.as_str().as_bytes().to_vec()` composition.
+        for &variant in InvariantKind::ALL {
+            let via_generic_owned = generic_owned_bytes_sink(variant);
+            let borrowed: &InvariantKind = &variant;
+            let via_generic_borrowed = generic_owned_bytes_sink(borrowed);
+            let via_method_bytes: Vec<u8> = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic_owned, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on the \
+                 owned-input surface must byte-equal the substrate-\
+                 primitive as_str accessor's byte-tail on \
+                 InvariantKind::{variant:?}"
+            );
+            assert_eq!(
+                via_generic_borrowed, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on the \
+                 borrowed-input surface must byte-equal the \
+                 substrate-primitive as_str accessor's byte-tail on \
+                 InvariantKind::{variant:?}"
+            );
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface
+        // witness on both owned and borrowed input shapes — the
+        // primary compounding target on the byte-owned reverse-
+        // projection axis is a future per-Violation audit-log
+        // payload composer that binds its byte-tag input through
+        // exactly this trait bound.
+        for &variant in InvariantKind::ALL {
+            let via_method_bytes: Vec<u8> = variant.as_str().as_bytes().to_vec();
+            let mut sink_owned = MockOwnedByteSink::new();
+            sink_owned.write_all(variant);
+            let owned_written = sink_owned.finalize();
+            assert_eq!(
+                owned_written, via_method_bytes,
+                "std::io::Write::write_all-shape owned-byte-sink \
+                 surface on the owned-input surface must byte-equal \
+                 the substrate-primitive as_str accessor's byte-tail \
+                 on InvariantKind::{variant:?}"
+            );
+            let mut sink_borrowed = MockOwnedByteSink::new();
+            let borrowed: &InvariantKind = &variant;
+            sink_borrowed.write_all(borrowed);
+            let borrowed_written = sink_borrowed.finalize();
+            assert_eq!(
+                borrowed_written, via_method_bytes,
+                "std::io::Write::write_all-shape owned-byte-sink \
+                 surface on the borrowed-input surface must byte-\
+                 equal the substrate-primitive as_str accessor's \
+                 byte-tail on InvariantKind::{variant:?}"
             );
         }
     }
