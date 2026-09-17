@@ -2740,6 +2740,67 @@ impl From<&RestartPolicy> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic byte-view surface on the per-child restart-decision
+/// policy typed enum.
+///
+/// Every consumer that binds its input through the standard-library
+/// [`AsRef<[u8]>`] trait bound — a byte-keyed
+/// `HashMap<K: AsRef<[u8]>, V>` per-policy reconciliation-decision
+/// table lookup on the future wasm-operator supervisor scheduler; a
+/// `blake3::Hasher::update` / `ring::digest::Context::update` /
+/// `sha2::Sha256::update` byte-input surface on any future per-child
+/// content-address digest folded into the [`crate::Lacre`] closure so
+/// downstream cache-keys partition on the three OTP restart policies
+/// (`Permanent`, `Temporary`, `Transient`) at content-address time; an
+/// `std::io::Write::write_all`-bound structured-log per-arm byte-sink —
+/// reaches the substrate primitive through one trait dispatch rather
+/// than open-coding the two-hop `restart.as_str().as_bytes()`
+/// composition at every call site. Routed byte-for-byte through the
+/// [`RestartPolicy::as_str`] `pub const fn` accessor the paired
+/// str-view ([`AsRef<str>`], [`std::fmt::Display`],
+/// [`RestartPolicy::as_str`]) and the five reverse-projection
+/// (`&'static str`, `String`, `Cow<'static, str>`, `Box<str>`,
+/// `std::sync::Arc<str>`) return-shape axes already resolve through,
+/// so any future divergence between the byte-view and str-view axes
+/// trips at caixa-core test time rather than at a downstream byte-
+/// consumer's silent split.
+///
+/// Peer of the sibling per-supervisor-restart-strategy axis
+/// [`AsRef<[u8]> for RestartStrategy`] (cd4c4e0, the first M2-OTP-
+/// shape supervisor slot enum to open this axis) — the sixth
+/// closed-set fieldless typed enum on the caixa surface to converge
+/// onto the trait-idiomatic byte-view discipline, and the second (and
+/// final) M2-OTP-shape sibling to pick it up, closing the byte-view
+/// axis across the paired `:supervisor :estrategia` +
+/// `:children :restart` M2 slot pair. Pin load-bearing by the paired
+/// [`tests::restart_policy_as_ref_bytes_routes_through_as_str_accessor`]
+/// (fail-before-pass-after byte-parity pin against
+/// [`RestartPolicy::as_str`] `.as_bytes()` across the three-arm
+/// [`RestartPolicy::ALL`] emit-set, cross-axis witness against the
+/// paired str-view [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`RestartPolicy::as_str`] axes' `.as_bytes()` byte-tails,
+/// cross-axis witness against the paired reverse-projection
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes' `.as_bytes()` byte-tails,
+/// a `<T: AsRef<[u8]>>`-bound-consumer witness that a generic
+/// byte-input function accepts a [`RestartPolicy`] directly through
+/// the trait bound, and a `blake3::Hasher::update`-shape byte-input
+/// surface witness routed through the `<T: AsRef<[u8]>>`-bound
+/// consumer axis to reach the caixa-lacre compounding target). Any
+/// future silent detour that routes the byte-view impl off the
+/// substrate-primitive [`RestartPolicy::as_str`] accessor (a per-arm
+/// inline `b"Permanent".as_slice()`-shaped re-inlining that opens a
+/// compile-time link to the un-lifted arm-literal, a swap onto the
+/// kebab-case [`gen_platform::Discriminant`] catalog identity that
+/// would collide the wire axis with the dispatcher-catalog axis) trips
+/// at caixa-core test time rather than at a downstream byte-consumer's
+/// silent split.
+impl AsRef<[u8]> for RestartPolicy {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -12376,6 +12437,245 @@ mod tests {
             assert_eq!(via_as_ref, via_accessor);
             assert_eq!(via_display, via_accessor);
             assert_eq!(via_as_ref, via_display.as_str());
+        }
+    }
+
+    // The `generic_bytes_sink(&variant)` and `borrowed_hasher.update(&variant)`
+    // shapes below are the borrowed-input witness half of the by-value +
+    // by-reference partition the paired witness pair carries: the pair proves
+    // the trait bound accepts both owned (`variant`) and borrowed (`&variant`)
+    // shapes through the same substrate-primitive `as_str` accessor, which is
+    // the shape the caixa-lacre BLAKE3 content-address closure composes.
+    // `clippy::needless_borrows_for_generic_args` would fold the borrowed half
+    // into the owned half and collapse the by-value/by-reference partition
+    // this test load-bears; the `#[allow]` documents that the partition is
+    // deliberate, not an oversight.
+    #[allow(clippy::needless_borrows_for_generic_args)]
+    #[test]
+    fn restart_policy_as_ref_bytes_routes_through_as_str_accessor() {
+        // `<T: AsRef<[u8]>>`-bound generic-consumer witness: a byte-input
+        // function that binds its argument through the standard-library
+        // [`AsRef<[u8]>`] trait bound accepts a [`super::RestartPolicy`]
+        // directly, without the caller open-coding the two-hop
+        // `restart.as_str().as_bytes()` composition. Lifted to the top
+        // of the function per `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock: mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound `update`
+        // signature so a per-child BLAKE3 content-address closure that
+        // composes `hasher.update(restart)` on the [`crate::Lacre`]
+        // closure builder reaches the substrate-primitive `as_str`
+        // accessor through the [`super::RestartPolicy`] `AsRef<[u8]>`
+        // axis and no other. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for RestartPolicy` — asserts the trait-
+        // idiomatic byte-view standard-library impl and the substrate-
+        // primitive [`super::RestartPolicy::as_str`] `pub const fn`
+        // accessor's `.as_bytes()` byte-tail resolve to the same three-
+        // arm `PascalCase` wire byte-string emit-set across every arm
+        // the exhaustive [`super::RestartPolicy::ALL`] slice enumerates.
+        // Extends the trait-idiomatic byte-view axis onto the second
+        // (and final) M2 OTP-shape closed-set fieldless typed enum peer
+        // on the caixa surface (the paired per-child restart-decision
+        // policy sibling on the same M2 `:supervisor` slot), closing
+        // the byte-view axis across the `:supervisor :estrategia` +
+        // `:children :restart` M2 slot pair the sibling
+        // [`super::RestartStrategy`] first-mover (cd4c4e0) opened.
+        //
+        // Rust's standard library carries `impl AsRef<[u8]> for str` and
+        // `impl AsRef<[u8]> for String`, so a two-hop composition
+        // `restart.as_str().as_bytes()` (or the equally two-hop
+        // `AsRef::<str>::as_ref(&restart).as_bytes()`) is reachable
+        // through the pre-existing str-view axis alone. But that two-hop
+        // shape has no compile-time link back to the byte-projection
+        // axis, forces every downstream `<T: AsRef<[u8]>>`-bound
+        // consumer to open-code the two-hop composition at every call
+        // site, and admits a silent split whenever a future call site
+        // takes a sibling reverse-projection axis whose `.as_bytes()`
+        // byte-tail carries no compile-time byte-view surface. This
+        // impl closes the byte-view axis at the substrate-primitive
+        // [`super::RestartPolicy::as_str`] accessor so every future
+        // `<T: AsRef<[u8]>>`-bound consumer reaches the same lifted
+        // [`super::crate::render::SUPERVISOR_CHILD_RESTART_*`] const
+        // roster the paired str-view axes already return through —
+        // through one trait dispatch.
+        for &variant in RestartPolicy::ALL {
+            let via_trait: &[u8] = <RestartPolicy as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for RestartPolicy impl must byte-equal \
+                 RestartPolicy::as_str().as_bytes() on \
+                 RestartPolicy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: [`AsRef<str>`] /
+            // [`std::fmt::Display`] / [`super::RestartPolicy::as_str`]
+            // all resolve to the same lifted
+            // [`super::crate::render::SUPERVISOR_CHILD_RESTART_*`] const
+            // roster, and the byte-view axis must byte-equal each of
+            // their `.as_bytes()` byte-tails by construction — locking
+            // the str-view and byte-view axes together at the
+            // substrate-primitive accessor.
+            let str_view_ref: &str = <RestartPolicy as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                str_view_ref.as_bytes(),
+                "AsRef<[u8]> for RestartPolicy and AsRef<str> for \
+                 RestartPolicy must resolve to byte-equal byte-tails \
+                 on RestartPolicy::{variant:?} — divergence signals \
+                 the byte-view and str-view axes have drifted off the \
+                 same substrate-primitive as_str accessor"
+            );
+            let display_bytes = variant.to_string();
+            assert_eq!(
+                via_trait,
+                display_bytes.as_bytes(),
+                "AsRef<[u8]> for RestartPolicy and \
+                 <RestartPolicy as std::fmt::Display>::to_string must \
+                 resolve to byte-equal byte-tails on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 byte-view axis and the Display formatter axis have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis witness against the paired reverse-projection
+            // axes' `.as_bytes()` byte-tails: every one of `{&'static
+            // str, String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>}` allocates (or borrows) the same
+            // `PascalCase` wire byte-string the substrate-primitive
+            // accessor emits, so the byte-view axis must byte-equal
+            // each of their `.as_bytes()` byte-tails by construction.
+            let owned_static: &'static str = <&'static str as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_static.as_bytes(),
+                "AsRef<[u8]> for RestartPolicy and From<RestartPolicy> \
+                 for &'static str must resolve to byte-equal byte-tails \
+                 on RestartPolicy::{variant:?}"
+            );
+            let owned_string: String = <String as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_string.as_bytes(),
+                "AsRef<[u8]> for RestartPolicy and From<RestartPolicy> \
+                 for String must resolve to byte-equal byte-tails on \
+                 RestartPolicy::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_cow.as_bytes(),
+                "AsRef<[u8]> for RestartPolicy and From<RestartPolicy> \
+                 for Cow<'static, str> must resolve to byte-equal byte-\
+                 tails on RestartPolicy::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_box.as_bytes(),
+                "AsRef<[u8]> for RestartPolicy and From<RestartPolicy> \
+                 for Box<str> must resolve to byte-equal byte-tails on \
+                 RestartPolicy::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_arc.as_bytes(),
+                "AsRef<[u8]> for RestartPolicy and From<RestartPolicy> \
+                 for std::sync::Arc<str> must resolve to byte-equal \
+                 byte-tails on RestartPolicy::{variant:?}"
+            );
+        }
+        // `<T: AsRef<[u8]>>`-bound-consumer witness: the generic byte-
+        // input function `generic_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::RestartPolicy`] directly through the trait bound,
+        // without the caller open-coding the two-hop
+        // `restart.as_str().as_bytes()` composition. This is the shape
+        // that reaches the caixa-lacre BLAKE3 content-address closure's
+        // `blake3::Hasher::update(impl AsRef<[u8]>)` byte-input surface
+        // through this impl and no other.
+        for &variant in RestartPolicy::ALL {
+            let via_generic = generic_bytes_sink(variant);
+            let via_borrowed_generic = generic_bytes_sink(&variant);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 RestartPolicy::{variant:?} must yield the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns — \
+                 divergence signals the byte-view axis fails to bridge \
+                 a generic byte-input trait bound to the substrate-\
+                 primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 &RestartPolicy::{variant:?} must yield the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns — the \
+                 borrowed-input surface must resolve to the same as_str \
+                 dispatch"
+            );
+        }
+        // `blake3::Hasher::update`-shape byte-input surface witness on
+        // the caixa-lacre compounding target: the `MockHasher` (lifted
+        // above per `clippy::items_after_statements`) mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound update
+        // signature and accepts a [`super::RestartPolicy`] directly,
+        // routing its byte-tail through the substrate-primitive
+        // `as_str` accessor — the shape a future per-child BLAKE3
+        // content-address closure composes to fold a `:restart`
+        // discriminator byte-tag into the [`crate::Lacre`] closure
+        // body.
+        for &variant in RestartPolicy::ALL {
+            let mut owned_hasher = MockHasher::new();
+            owned_hasher.update(variant);
+            let owned_folded = owned_hasher.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(restart)`-shape composition on \
+                 RestartPolicy::{variant:?} must fold the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns — the \
+                 shape a future per-child BLAKE3 content-address \
+                 closure composes to fold a `:restart` discriminator \
+                 byte-tag into the Lacre closure body"
+            );
+            let mut borrowed_hasher = MockHasher::new();
+            borrowed_hasher.update(&variant);
+            let borrowed_folded = borrowed_hasher.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(&restart)`-shape composition on \
+                 &RestartPolicy::{variant:?} must fold the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns — the \
+                 borrowed-input surface must resolve to the same as_str \
+                 dispatch"
+            );
         }
     }
 
