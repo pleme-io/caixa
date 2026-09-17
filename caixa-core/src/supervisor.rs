@@ -1424,6 +1424,94 @@ impl AsRef<[u8]> for RestartStrategy {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`Vec<u8>` output* byte-owned
+/// reverse projection on the first M2 OTP-shape closed-set fieldless
+/// typed enum peer on the caixa surface ([`RestartStrategy`]) — the
+/// byte-mirror of the [`From<RestartStrategy> for String`] str-owned
+/// reverse-projection axis and the owned-`Vec<u8>` reverse-projection
+/// sibling of the paired [`AsRef<[u8]>`] borrowed byte-view axis
+/// (cd4c4e0) lifted on this same enum. Routes byte-for-byte through
+/// the substrate-primitive [`RestartStrategy::as_str`] `pub const fn`
+/// accessor via [`str::as_bytes`] + [`slice::to_vec`] so every
+/// consumer that binds a [`RestartStrategy`] through the standard-
+/// library `impl From<RestartStrategy> for Vec<u8>` axis
+/// (equivalently `<T: Into<Vec<u8>>>`) — a future
+/// [`std::io::Write::write_all`]-shape per-supervisor audit-log byte-
+/// sink whose input parameter is an owned [`Vec<u8>`] payload, a
+/// future `bytes::Bytes::from(Vec::<u8>::from(strategy))` composer
+/// folding the per-arm sibling-restart-topology byte-tag into the
+/// [`bytes::Bytes`] framing surface, a future
+/// `hasher.update(&Vec::<u8>::from(strategy))`-shape BLAKE3 content-
+/// address closure that needs the owned byte-tail buffered before
+/// folding into the [`crate::Lacre`] closure body, a future per-
+/// strategy protobuf/CBOR/msgpack payload composer whose framer takes
+/// an owned [`Vec<u8>`] rather than a borrowed byte-slice — reaches
+/// the substrate primitive through one trait dispatch rather than an
+/// open-coded per-call-site `strategy.as_str().as_bytes().to_vec()`
+/// composition whose type bounds have no compile-time link back to
+/// the substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic byte-owned reverse-
+/// projection axis onto the first M2-OTP-shape closed-set fieldless
+/// typed-enum peer, matching the trajectory the first-mover
+/// [`crate::CaixaKind`] `From<{Self, &Self}> for Vec<u8>` lift
+/// (b245fd6), the second-mover [`crate::dialeto::CaixaDialeto`] lift
+/// (4cceaf5), and the third-mover [`crate::dep::DepList`] lift
+/// (e974ca2) established across the caixa-core-internal tier. Every
+/// future arm addition (an OTP-`rest_for_all` fifth arm the theory
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// might reach for once the four canonical OTP strategies stop
+/// covering the substrate's discovered load-shape) grows the byte-
+/// owned axis through one edit on the substrate-primitive
+/// [`RestartStrategy::as_str`] accessor, mirroring the discipline the
+/// paired [`AsRef<[u8]>`] borrowed byte-view axis campaign already
+/// tracked across every closed-set fieldless typed enum peer on the
+/// substrate.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_into_owned_vec_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] across the
+/// four-arm [`RestartStrategy::ALL`] emit-set binding the byte-owned
+/// reverse-projection axis against the paired [`AsRef<[u8]>`]
+/// borrowed byte-view axis and the str-owned reverse-projection
+/// family (`String`, `Cow<'static, str>`, `Box<str>`,
+/// `std::sync::Arc<str>`) `.into_bytes()` / `.as_bytes().to_vec()`
+/// byte-tails, a `<T: Into<Vec<u8>>>`-bound generic-consumer witness,
+/// and a `std::io::Write::write_all`-shape owned-byte-sink surface
+/// witness on both owned and borrowed input shapes).
+impl From<RestartStrategy> for Vec<u8> {
+    fn from(strategy: RestartStrategy) -> Vec<u8> {
+        strategy.as_str().as_bytes().to_vec()
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, owned-`Vec<u8>` output* byte-
+/// owned reverse projection on the first M2 OTP-shape closed-set
+/// fieldless typed enum peer on the caixa surface
+/// ([`RestartStrategy`]) — the borrowed-input peer of
+/// [`From<RestartStrategy> for Vec<u8>`], closing the
+/// `{Self, &Self} → Vec<u8>` pair on the byte-owned reverse-projection
+/// axis in one lift. Routes byte-for-byte through the substrate-
+/// primitive [`RestartStrategy::as_str`] `pub const fn` accessor so
+/// every consumer that holds a borrowed [`&RestartStrategy`] and
+/// needs an owned [`Vec<u8>`] — a future
+/// `.iter().map(Vec::<u8>::from).collect()` pipe over
+/// `&[RestartStrategy]` (whose iterator yields `&RestartStrategy`,
+/// not `RestartStrategy`, so the owned-input axis alone forces every
+/// call site through an explicit `.copied()` / spurious [`Copy`]
+/// deref restatement rather than the direct trait-idiomatic
+/// projection), a future admission-webhook rejection body composer
+/// that walks [`RestartStrategy::ALL`] through an `Into<Vec<u8>>`-
+/// bound per-arm byte-writer to surface the accepted `:estrategia`
+/// set — reaches the substrate primitive through one trait dispatch
+/// rather than a `Vec::<u8>::from(*strategy)` spurious-`Copy`-deref
+/// restatement.
+impl From<&RestartStrategy> for Vec<u8> {
+    fn from(strategy: &RestartStrategy) -> Vec<u8> {
+        strategy.as_str().as_bytes().to_vec()
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -10508,6 +10596,234 @@ mod tests {
                 borrowed_folded,
                 variant.as_str().as_bytes(),
                 "`hasher.update(&estrategia)`-shape composition on \
+                 &RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns — \
+                 the borrowed-input surface must resolve to the same \
+                 as_str dispatch"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  here onto the first M2-OTP-shape closed-set fieldless \
+                  typed-enum peer, so the pin binds the new impl against \
+                  every paired byte-view and str-owned axis on the same \
+                  enum plus a generic <T: Into<Vec<u8>>>-bound consumer \
+                  witness and a std::io::Write::write_all-shape owned-\
+                  byte-sink surface witness on both owned and borrowed \
+                  input shapes to lock the whole family against a future \
+                  silent regression"
+    )]
+    fn restart_strategy_from_into_owned_vec_bytes_routes_through_as_str_accessor() {
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness helper: a generic
+        // owned-byte-input function accepts a [`super::RestartStrategy`]
+        // directly through the trait bound, without the caller open-
+        // coding the three-hop `strategy.as_str().as_bytes().to_vec()`
+        // composition. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_owned_bytes_sink<T: Into<Vec<u8>>>(t: T) -> Vec<u8> {
+            t.into()
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface
+        // mock: mirrors `std::io::Write::write_all` /
+        // `bytes::BytesMut::extend_from_slice` / any per-arm audit-log
+        // byte-sink that consumes a `Vec<u8>` payload via
+        // `Into<Vec<u8>>`, so a future per-supervisor per-`:estrategia`
+        // audit-log emit reaches the substrate-primitive `as_str`
+        // accessor through the byte-owned reverse-projection axis and
+        // no other. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockOwnedByteSink(Vec<u8>);
+        impl MockOwnedByteSink {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn write_all(&mut self, bytes: impl Into<Vec<u8>>) -> &mut Self {
+                self.0.extend_from_slice(&bytes.into());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartStrategy> for Vec<u8>` and
+        // `impl From<&RestartStrategy> for Vec<u8>` — asserts the trait-
+        // idiomatic byte-owned reverse-projection standard-library
+        // impls and the substrate-primitive
+        // [`super::RestartStrategy::as_str`] `pub const fn` accessor's
+        // `.as_bytes().to_vec()` byte-tail resolve to the same four-arm
+        // PascalCase wire byte-string emit-set across every arm the
+        // exhaustive [`super::RestartStrategy::ALL`] slice enumerates.
+        // Extends the substrate-wide trait-idiomatic byte-owned
+        // reverse-projection axis onto the first M2-OTP-shape closed-
+        // set fieldless typed-enum peer on the caixa surface
+        // (`:supervisor :estrategia`), matching the trajectory the
+        // first-mover [`super::crate::CaixaKind`] lift (b245fd6), the
+        // second-mover [`super::crate::dialeto::CaixaDialeto`] lift
+        // (4cceaf5), and the third-mover
+        // [`super::crate::dep::DepList`] lift (e974ca2) established
+        // across the caixa-core-internal tier.
+        for &variant in RestartStrategy::ALL {
+            let via_owned_from: Vec<u8> = <Vec<u8> as From<RestartStrategy>>::from(variant);
+            let via_borrowed_from: Vec<u8> = <Vec<u8> as From<&RestartStrategy>>::from(&variant);
+            let via_method_bytes: Vec<u8> = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_owned_from, via_method_bytes,
+                "From<RestartStrategy> for Vec<u8> impl must byte-equal \
+                 RestartStrategy::as_str().as_bytes().to_vec() on \
+                 RestartStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from, via_method_bytes,
+                "From<&RestartStrategy> for Vec<u8> impl must byte-\
+                 equal RestartStrategy::as_str().as_bytes().to_vec() \
+                 on RestartStrategy::{variant:?} — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_owned_from, via_borrowed_from,
+                "From<RestartStrategy> for Vec<u8> and \
+                 From<&RestartStrategy> for Vec<u8> must byte-equal \
+                 each other on RestartStrategy::{variant:?} — \
+                 divergence signals the owned-input and borrowed-input \
+                 paths have drifted off the same substrate-primitive \
+                 as_str accessor"
+            );
+            // Cross-axis witness against the paired [`AsRef<[u8]>`]
+            // borrowed byte-view axis (cd4c4e0): the byte-owned
+            // reverse-projection axis must byte-equal the paired
+            // borrowed byte-view axis by construction — locking the
+            // byte-view and byte-owned axes together at the substrate-
+            // primitive accessor.
+            let borrowed_bytes: &[u8] = <RestartStrategy as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from,
+                borrowed_bytes.to_vec(),
+                "From<RestartStrategy> for Vec<u8> and AsRef<[u8]> \
+                 for RestartStrategy must resolve to byte-equal byte-\
+                 tails on RestartStrategy::{variant:?} — divergence \
+                 signals the byte-owned and byte-view axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis witness against the str-owned reverse-
+            // projection family's `.into_bytes()` / `.as_bytes().to_vec()`
+            // byte-tails: every one of `{String, Cow<'static, str>,
+            // Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}`
+            // allocates (or borrows) the same PascalCase wire byte-
+            // string the substrate-primitive accessor emits, so the
+            // byte-owned axis must byte-equal each of their owned
+            // byte-tails by construction.
+            let owned_string: String = <String as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_string.into_bytes(),
+                "From<RestartStrategy> for Vec<u8> and \
+                 String::from(strategy).into_bytes() must resolve to \
+                 byte-equal byte-tails on RestartStrategy::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_cow.as_bytes().to_vec(),
+                "From<RestartStrategy> for Vec<u8> and \
+                 From<RestartStrategy> for Cow<'static, str> must \
+                 resolve to byte-equal byte-tails on \
+                 RestartStrategy::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_box.as_bytes().to_vec(),
+                "From<RestartStrategy> for Vec<u8> and \
+                 From<RestartStrategy> for Box<str> must resolve to \
+                 byte-equal byte-tails on RestartStrategy::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_arc.as_bytes().to_vec(),
+                "From<RestartStrategy> for Vec<u8> and \
+                 From<RestartStrategy> for std::sync::Arc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 RestartStrategy::{variant:?}"
+            );
+        }
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness on both owned
+        // and borrowed input shapes: the generic owned-byte-input
+        // function `generic_owned_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::RestartStrategy`] and a `&RestartStrategy`
+        // directly through the trait bound, without the caller open-
+        // coding the three-hop `strategy.as_str().as_bytes().to_vec()`
+        // composition.
+        for &variant in RestartStrategy::ALL {
+            let via_generic_owned = generic_owned_bytes_sink(variant);
+            // Bind the borrowed-input path through an explicit
+            // `&RestartStrategy` local so the generic-consumer witness
+            // routes through `From<&RestartStrategy> for Vec<u8>` (T
+            // binds to `&RestartStrategy`) rather than clippy-collapsing
+            // the borrow onto the owned-input peer.
+            let variant_ref: &RestartStrategy = &variant;
+            let via_generic_borrowed = generic_owned_bytes_sink(variant_ref);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic_owned, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on \
+                 RestartStrategy::{variant:?} must yield the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns — \
+                 divergence signals the byte-owned axis fails to bridge \
+                 a generic owned-byte-input trait bound to the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_generic_borrowed, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on \
+                 &RestartStrategy::{variant:?} must yield the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns — \
+                 the borrowed-input surface must resolve to the same \
+                 as_str dispatch"
+            );
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface
+        // witness: the `MockOwnedByteSink` (lifted above per
+        // `clippy::items_after_statements`) mirrors
+        // `std::io::Write::write_all` /
+        // `bytes::BytesMut::extend_from_slice`'s `impl Into<Vec<u8>>`-
+        // bound owned-byte input signature and accepts a
+        // [`super::RestartStrategy`] directly on both owned and
+        // borrowed input shapes, routing its byte-tail through the
+        // substrate-primitive `as_str` accessor — the shape a future
+        // per-supervisor per-`:estrategia` audit-log emit composes to
+        // fold an `:estrategia` discriminator byte-tag into a
+        // downstream owned-byte-sink surface.
+        for &variant in RestartStrategy::ALL {
+            let mut owned_sink = MockOwnedByteSink::new();
+            owned_sink.write_all(variant);
+            let owned_folded = owned_sink.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`sink.write_all(strategy)`-shape composition on \
+                 RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns"
+            );
+            let mut borrowed_sink = MockOwnedByteSink::new();
+            let variant_ref: &RestartStrategy = &variant;
+            borrowed_sink.write_all(variant_ref);
+            let borrowed_folded = borrowed_sink.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`sink.write_all(&strategy)`-shape composition on \
                  &RestartStrategy::{variant:?} must fold the same byte-\
                  tail RestartStrategy::as_str().as_bytes() returns — \
                  the borrowed-input surface must resolve to the same \
