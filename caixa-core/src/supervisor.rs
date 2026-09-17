@@ -1323,6 +1323,107 @@ impl From<&RestartStrategy> for std::sync::Arc<str> {
     }
 }
 
+/// Substrate-canonical [`AsRef<[u8]>`] byte-view projection on the M2
+/// OTP-shape sibling-restart [`RestartStrategy`] closed-set fieldless
+/// typed enum — routes byte-for-byte through the substrate-primitive
+/// [`RestartStrategy::as_str`] `pub const fn` accessor via
+/// [`str::as_bytes`] on the returned `&'static str`, so any future
+/// consumer that binds a [`RestartStrategy`] through a standard-library
+/// `<T: AsRef<[u8]>>` trait bound reaches the same four-arm lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`]
+/// `PascalCase` wire byte-string emit-set the paired sibling
+/// [`AsRef<str>`] (5b828ed) / [`std::fmt::Display`] /
+/// [`RestartStrategy::as_str`] str-view surfaces and every
+/// `{Self, &Self} × {&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` reverse-projection corner already return —
+/// through the byte-view axis, which the str-view axes cannot express.
+///
+/// Rust's standard library carries `impl AsRef<[u8]> for str` and
+/// `impl AsRef<[u8]> for String`, so the two-hop composition
+/// `strategy.as_str().as_bytes()` (or, equivalently,
+/// `AsRef::<str>::as_ref(&strategy).as_bytes()`) is reachable through
+/// the pre-existing str-view axis alone. But that two-hop shape has no
+/// compile-time link back to the byte-projection axis, forces every
+/// downstream `<T: AsRef<[u8]>>`-bound consumer to open-code the
+/// two-hop composition at every call site, and admits a silent split
+/// whenever a future call site takes a sibling reverse-projection axis
+/// whose `.as_bytes()` byte-tail carries no compile-time byte-view
+/// surface (`Display` returns a formatter, `String` / `Box<str>` /
+/// `Arc<str>` allocate). The lifted single-hop impl closes the
+/// byte-view axis so every future `<T: AsRef<[u8]>>`-bound consumer
+/// reaches the substrate primitive through one trait dispatch, and
+/// every future arm addition (an OTP-`rest_for_all` fifth arm the
+/// theory
+/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// might reach for once the four canonical OTP strategies stop covering
+/// the substrate's discovered load-shape) grows the byte-view axis
+/// through one edit on the substrate-primitive `as_str` accessor, not a
+/// coordinated rewrite across every future `<T: AsRef<[u8]>>`-bound
+/// consumer's arm-set.
+///
+/// The primary compounding target is the same `caixa-lacre` BLAKE3
+/// content-address closure the peer [`crate::CaixaKind`] (69d8d86),
+/// [`crate::dialeto::CaixaDialeto`] (8151347),
+/// [`crate::dep::DepList`] (05ffaca),
+/// [`crate::aplicacao::PlacementStrategy`] (daa8705), and
+/// [`crate::aplicacao::RateLimitUnit`] (4867e0f) `AsRef<[u8]>` impls
+/// open onto: [`blake3::hash`] and [`blake3::Hasher::update`] both bind
+/// their input through `impl AsRef<[u8]>`, so any future per-supervisor
+/// content-address tag that folds an `:estrategia` discriminator
+/// byte-tag into the [`crate::Lacre`] closure (a hypothetical
+/// `hasher.update(estrategia);`-shape composition partitioning the
+/// four OTP restart-topology closures at content-address time so
+/// downstream `Lacre` consumers key per-strategy reconciliation caches
+/// off the typed discriminator rather than the sibling `&'static str`
+/// wire scalar) reaches the substrate-primitive `as_str` accessor
+/// through this impl and no other.
+///
+/// Opens the trait-idiomatic byte-view axis on the first M2 OTP-shape
+/// closed-set fieldless typed enum peer on the caixa surface
+/// (`:supervisor :estrategia`), extending the substrate-wide byte-view
+/// campaign the sibling [`crate::CaixaKind`] first-mover (69d8d86)
+/// opened onto the fifth in-caixa-core enum peer. The remaining
+/// in-caixa-core closed-set fieldless typed-enum peers
+/// ([`RestartPolicy`], [`crate::aplicacao::WitShape`],
+/// [`crate::upgrade::UpgradeInstruction`],
+/// [`crate::render::PathShapeViolation`]) each carry the same
+/// [`AsRef<str>`] + `pub const fn as_str` substrate-primitive accessor
+/// discipline, so a future extension of the byte-view axis onto each
+/// peer reaches through one impl per enum keyed to that peer's
+/// substrate-primitive accessor.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_as_ref_bytes_routes_through_as_str_accessor`]
+/// (fail-before-pass-after byte-parity pin against
+/// [`RestartStrategy::as_str`] `.as_bytes()` across the four-arm
+/// [`RestartStrategy::ALL`] emit-set, cross-axis witness against the
+/// paired str-view [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`RestartStrategy::as_str`] axes' `.as_bytes()` byte-tails,
+/// cross-axis witness against the paired reverse-projection
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes' `.as_bytes()` byte-tails,
+/// a `<T: AsRef<[u8]>>`-bound-consumer witness that a generic
+/// byte-input function accepts a [`RestartStrategy`] directly through
+/// the trait bound, and a `blake3::Hasher::update`-shape byte-input
+/// surface witness routed through the `<T: AsRef<[u8]>>`-bound
+/// consumer axis to reach the caixa-lacre compounding target). Any
+/// future silent detour that routes the byte-view impl off the
+/// substrate-primitive [`RestartStrategy::as_str`] accessor (a per-arm
+/// inline `b"OneForOne".as_slice()`-shaped re-inlining that opens a
+/// compile-time link to the un-lifted arm-literal, a swap onto the
+/// kebab-case [`gen_platform::Discriminant`] catalog identity that
+/// would collide the wire axis with the dispatcher-catalog axis) trips
+/// at caixa-core test time rather than at a downstream byte-consumer's
+/// silent split.
+impl AsRef<[u8]> for RestartStrategy {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -10099,6 +10200,259 @@ mod tests {
              owned-input `From<RestartStrategy> for std::sync::Arc<str>` \
              axis by first calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds the substrate-primitive \
+                  as_str accessor's `.as_bytes()` byte-tail plus the \
+                  paired str-view (AsRef<str>, Display, as_str) and \
+                  reverse-projection ({&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>}) return-shape \
+                  axes' `.as_bytes()` byte-tails plus a <T: AsRef<[u8]>>\
+                  -bound-consumer witness plus a blake3::Hasher::update-\
+                  shape byte-input surface witness into one exhaustive \
+                  round-trip over RestartStrategy::ALL — the accepted \
+                  line-count cost of opening the byte-view axis keyed \
+                  to the substrate-primitive as_str accessor at the \
+                  same test-site"
+    )]
+    #[allow(
+        clippy::needless_borrows_for_generic_args,
+        reason = "the borrowed-input surface (&variant) is exercised \
+                  deliberately: the `<T: AsRef<[u8]>>`-bound consumer \
+                  and the `blake3::Hasher::update`-shape byte-input \
+                  surface both accept either owned or borrowed input \
+                  through the standard-library blanket \
+                  `impl<T: ?Sized + AsRef<[u8]>> AsRef<[u8]> for &T`, \
+                  and this pin round-trips both input shapes to lock \
+                  the borrowed-input path load-bearing against a \
+                  future silent regression"
+    )]
+    fn restart_strategy_as_ref_bytes_routes_through_as_str_accessor() {
+        // `<T: AsRef<[u8]>>`-bound generic-consumer witness: a byte-input
+        // function that binds its argument through the standard-library
+        // [`AsRef<[u8]>`] trait bound accepts a [`super::RestartStrategy`]
+        // directly, without the caller open-coding the two-hop
+        // `estrategia.as_str().as_bytes()` composition. Lifted to the top
+        // of the function per `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock: mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound `update`
+        // signature so a per-supervisor BLAKE3 content-address closure
+        // that composes `hasher.update(estrategia)` on the
+        // [`crate::Lacre`] closure builder reaches the substrate-primitive
+        // `as_str` accessor through the [`super::RestartStrategy`]
+        // `AsRef<[u8]>` axis and no other. Lifted to the top of the
+        // function per `clippy::items_after_statements`.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for RestartStrategy` — asserts the trait-
+        // idiomatic byte-view standard-library impl and the substrate-
+        // primitive [`super::RestartStrategy::as_str`] `pub const fn`
+        // accessor's `.as_bytes()` byte-tail resolve to the same four-arm
+        // `PascalCase` wire byte-string emit-set across every arm the
+        // exhaustive [`super::RestartStrategy::ALL`] slice enumerates.
+        // Opens the trait-idiomatic byte-view axis onto the first M2
+        // OTP-shape closed-set fieldless typed enum peer on the caixa
+        // surface (`:supervisor :estrategia`), extending the substrate-
+        // wide byte-view campaign the sibling
+        // [`super::crate::CaixaKind`] first-mover (69d8d86) opened.
+        //
+        // Rust's standard library carries `impl AsRef<[u8]> for str` and
+        // `impl AsRef<[u8]> for String`, so a two-hop composition
+        // `estrategia.as_str().as_bytes()` (or the equally two-hop
+        // `AsRef::<str>::as_ref(&estrategia).as_bytes()`) is reachable
+        // through the pre-existing str-view axis alone. But that two-hop
+        // shape has no compile-time link back to the byte-projection
+        // axis, forces every downstream `<T: AsRef<[u8]>>`-bound
+        // consumer to open-code the two-hop composition at every call
+        // site, and admits a silent split whenever a future call site
+        // takes a sibling reverse-projection axis whose `.as_bytes()`
+        // byte-tail carries no compile-time byte-view surface. This
+        // impl closes the byte-view axis at the substrate-primitive
+        // [`super::RestartStrategy::as_str`] accessor so every future
+        // `<T: AsRef<[u8]>>`-bound consumer reaches the same lifted
+        // [`super::crate::render::SUPERVISOR_ESTRATEGIA_*`] const roster
+        // the paired str-view axes already return through — through one
+        // trait dispatch.
+        for &variant in RestartStrategy::ALL {
+            let via_trait: &[u8] = <RestartStrategy as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for RestartStrategy impl must byte-equal \
+                 RestartStrategy::as_str().as_bytes() on \
+                 RestartStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: [`AsRef<str>`] /
+            // [`std::fmt::Display`] / [`super::RestartStrategy::as_str`]
+            // all resolve to the same lifted
+            // [`super::crate::render::SUPERVISOR_ESTRATEGIA_*`] const
+            // roster, and the byte-view axis must byte-equal each of
+            // their `.as_bytes()` byte-tails by construction — locking
+            // the str-view and byte-view axes together at the
+            // substrate-primitive accessor.
+            let str_view_ref: &str = <RestartStrategy as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                str_view_ref.as_bytes(),
+                "AsRef<[u8]> for RestartStrategy and AsRef<str> for \
+                 RestartStrategy must resolve to byte-equal byte-tails \
+                 on RestartStrategy::{variant:?} — divergence signals \
+                 the byte-view and str-view axes have drifted off the \
+                 same substrate-primitive as_str accessor"
+            );
+            let display_bytes = variant.to_string();
+            assert_eq!(
+                via_trait,
+                display_bytes.as_bytes(),
+                "AsRef<[u8]> for RestartStrategy and \
+                 <RestartStrategy as std::fmt::Display>::to_string must \
+                 resolve to byte-equal byte-tails on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 byte-view axis and the Display formatter axis have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis witness against the paired reverse-projection
+            // axes' `.as_bytes()` byte-tails: every one of `{&'static
+            // str, String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>}` allocates (or borrows) the same
+            // `PascalCase` wire byte-string the substrate-primitive
+            // accessor emits, so the byte-view axis must byte-equal
+            // each of their `.as_bytes()` byte-tails by construction.
+            let owned_static: &'static str = <&'static str as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_static.as_bytes(),
+                "AsRef<[u8]> for RestartStrategy and From<RestartStrategy> \
+                 for &'static str must resolve to byte-equal byte-tails \
+                 on RestartStrategy::{variant:?}"
+            );
+            let owned_string: String = <String as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_string.as_bytes(),
+                "AsRef<[u8]> for RestartStrategy and From<RestartStrategy> \
+                 for String must resolve to byte-equal byte-tails on \
+                 RestartStrategy::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_cow.as_bytes(),
+                "AsRef<[u8]> for RestartStrategy and From<RestartStrategy> \
+                 for Cow<'static, str> must resolve to byte-equal byte-\
+                 tails on RestartStrategy::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_box.as_bytes(),
+                "AsRef<[u8]> for RestartStrategy and From<RestartStrategy> \
+                 for Box<str> must resolve to byte-equal byte-tails on \
+                 RestartStrategy::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_arc.as_bytes(),
+                "AsRef<[u8]> for RestartStrategy and From<RestartStrategy> \
+                 for std::sync::Arc<str> must resolve to byte-equal byte-\
+                 tails on RestartStrategy::{variant:?}"
+            );
+        }
+        // `<T: AsRef<[u8]>>`-bound-consumer witness: the generic byte-
+        // input function `generic_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::RestartStrategy`] directly through the trait bound,
+        // without the caller open-coding the two-hop
+        // `estrategia.as_str().as_bytes()` composition. This is the
+        // shape that reaches the caixa-lacre BLAKE3 content-address
+        // closure's `blake3::Hasher::update(impl AsRef<[u8]>)` byte-
+        // input surface through this impl and no other.
+        for &variant in RestartStrategy::ALL {
+            let via_generic = generic_bytes_sink(variant);
+            let via_borrowed_generic = generic_bytes_sink(&variant);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 RestartStrategy::{variant:?} must yield the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns — \
+                 divergence signals the byte-view axis fails to bridge \
+                 a generic byte-input trait bound to the substrate-\
+                 primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 &RestartStrategy::{variant:?} must yield the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns — \
+                 the borrowed-input surface must resolve to the same \
+                 as_str dispatch"
+            );
+        }
+        // `blake3::Hasher::update`-shape byte-input surface witness on
+        // the caixa-lacre compounding target: the `MockHasher` (lifted
+        // above per `clippy::items_after_statements`) mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound update
+        // signature and accepts a [`super::RestartStrategy`] directly,
+        // routing its byte-tail through the substrate-primitive
+        // `as_str` accessor — the shape a future per-supervisor BLAKE3
+        // content-address closure composes to fold an `:estrategia`
+        // discriminator byte-tag into the [`crate::Lacre`] closure
+        // body.
+        for &variant in RestartStrategy::ALL {
+            let mut owned_hasher = MockHasher::new();
+            owned_hasher.update(variant);
+            let owned_folded = owned_hasher.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(estrategia)`-shape composition on \
+                 RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns — \
+                 the shape a future per-supervisor BLAKE3 content-\
+                 address closure composes to fold an `:estrategia` \
+                 discriminator byte-tag into the Lacre closure body"
+            );
+            let mut borrowed_hasher = MockHasher::new();
+            borrowed_hasher.update(&variant);
+            let borrowed_folded = borrowed_hasher.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(&estrategia)`-shape composition on \
+                 &RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns — \
+                 the borrowed-input surface must resolve to the same \
+                 as_str dispatch"
+            );
+        }
     }
 
     #[test]
