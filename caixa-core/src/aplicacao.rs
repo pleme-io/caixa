@@ -5681,6 +5681,56 @@ impl RateLimit {
     pub const fn canonical_unit(&self) -> Option<RateLimitUnit> {
         RateLimitUnit::from_window(self.window)
     }
+
+    /// Typed forward-projection constructor: takes a `rate` scalar and a
+    /// canonical [`RateLimitUnit`] arm, returns the [`RateLimit`] whose
+    /// `:window` field is the peer `pub const fn` [`RateLimitUnit::window`]
+    /// canonical-`Duration` projection of the passed arm. Every
+    /// [`RateLimit`] produced by this constructor satisfies
+    /// `canonical_unit() == Some(unit)` by construction — the reverse
+    /// projection through [`RateLimit::canonical_unit`] round-trips to
+    /// the same typed arm the caller supplied, and the `.window` field
+    /// carries a canonical `{1s, 60s, 3600s}` `Duration` structurally
+    /// (no downstream `Duration → RateLimitUnit` resolver can return
+    /// `None` on a [`RateLimit`] produced through this path).
+    ///
+    /// Paired forward-projection lift on the round-trip axis the
+    /// reverse-projection [`RateLimit::canonical_unit`]
+    /// (`Duration → Option<RateLimitUnit>`) opened — a consumer that
+    /// already has a typed [`RateLimitUnit`] in hand (via
+    /// [`RateLimitUnit::from_suffix`], [`RateLimitUnit::from_window`],
+    /// or an author-facing pattern-match on an [`AplicacaoSpec`] view)
+    /// can now materialize a [`RateLimit`] on the M3 mesh-slot
+    /// rate-limit primitive without ever touching the `Duration` axis
+    /// directly. The canonical-window invariant
+    /// (MESH-COMPOSITION §III.2 #3, the three-arm
+    /// `{Second, Minute, Hour}` typed enum's `.window()` accept-set) is
+    /// carried through the closed-set typed enum, not restated at the
+    /// call site.
+    ///
+    /// `pub const fn` — mirrors the sibling `pub const fn`
+    /// [`Self::rate`] / [`Self::window`] / [`Self::canonical_unit`]
+    /// substrate-primitive projections, so const-context consumers
+    /// (`const _:() = { let _rl = RateLimit::from_canonical(100,
+    /// RateLimitUnit::Second); }` fixture pins, future M4 admission-
+    /// webhook `const fn` typed-slot builders, any `const fn`
+    /// per-`:contratos`-edge rate-limit-override overlay materializer)
+    /// reach the same typed dispatch on the substrate primitive at
+    /// const-eval time as at runtime.
+    ///
+    /// Pinned load-bearing by
+    /// [`tests::rate_limit_from_canonical_round_trips_through_canonical_unit`]
+    /// (round-trip pin across every closed-set [`RateLimitUnit::ALL`]
+    /// arm and a per-arm scalar-`rate` witness sweep) and
+    /// [`tests::rate_limit_from_canonical_constructor_is_const_fn`]
+    /// (const-eval-surface pin via `const fn` wrapper).
+    #[must_use]
+    pub const fn from_canonical(rate: u32, unit: RateLimitUnit) -> Self {
+        Self {
+            rate,
+            window: unit.window(),
+        }
+    }
 }
 
 /// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Second`]
@@ -30463,6 +30513,88 @@ mod tests {
                 "RateLimit::canonical_unit() via const fn wrapper must \
                  return Some({unit:?}) for a RateLimit whose window is \
                  the peer RateLimitUnit::{unit:?}.window() output"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_from_canonical_round_trips_through_canonical_unit() {
+        // Round-trip pin on the M3 mesh-slot rate-limit primitive's typed
+        // forward-projection constructor
+        // [`RateLimit::from_canonical(rate, unit)`]: for every closed-set
+        // [`RateLimitUnit::ALL`] arm and every scalar-`rate` witness in a
+        // representative sweep (`{1, 100, u32::MAX}` — canonical minimum,
+        // author-surface exemplar carried in `MESH-COMPOSITION.md` §III.2,
+        // and the upper-bound saturation witness at `u32::MAX` that pins
+        // the accessor is `u32`-transparent), the round-trip
+        // `from_canonical(rate, unit).canonical_unit() == Some(unit)` and
+        // `.rate() == rate` and `.window() == unit.window()` all hold. A
+        // violation means either the constructor stopped routing the
+        // canonical `Duration` through the peer `pub const fn`
+        // [`RateLimitUnit::window`] projection (any hand-authored per-arm
+        // second-magnitude literal there would silently split from the
+        // emitter on a future `window()` edit), or one of the scalar
+        // accessors on [`RateLimit`] drifted from the storage field's
+        // identity.
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                assert_eq!(
+                    rl.rate(),
+                    rate,
+                    "RateLimit::from_canonical({rate}, {unit:?}) must \
+                     carry the passed rate through to .rate()"
+                );
+                assert_eq!(
+                    rl.window(),
+                    unit.window(),
+                    "RateLimit::from_canonical({rate}, {unit:?}) must \
+                     carry the peer RateLimitUnit::window() output as \
+                     the .window() field"
+                );
+                assert_eq!(
+                    rl.canonical_unit(),
+                    Some(*unit),
+                    "RateLimit::from_canonical({rate}, {unit:?}) must \
+                     reverse-project through canonical_unit() back to \
+                     Some({unit:?})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_from_canonical_constructor_is_const_fn() {
+        // Const-eval-surface pin via `const fn` wrapper: witnesses that
+        // [`RateLimit::from_canonical`] carries the `pub const fn` posture
+        // its sibling scalar accessors ([`RateLimit::rate`] /
+        // [`RateLimit::window`] / [`RateLimit::canonical_unit`]) already
+        // carry — well-formed only when the callee is itself `const fn`
+        // (any future downgrade fails at caixa-core build time with E0015
+        // `cannot call non-const method`). Composes with the sibling
+        // [`rate_limit_unit_from_window_accessor_is_const_fn`] and
+        // [`rate_limit_canonical_unit_accessor_is_const_fn`] pins to
+        // keep the paired `Duration ↔ RateLimitUnit` bijection's
+        // const-posture migrating as one unit.
+        const fn from_canonical_via_const_fn(
+            rate: u32,
+            unit: super::RateLimitUnit,
+        ) -> super::RateLimit {
+            super::RateLimit::from_canonical(rate, unit)
+        }
+        for unit in super::RateLimitUnit::ALL {
+            let via_wrapper = from_canonical_via_const_fn(100, *unit);
+            let direct = super::RateLimit::from_canonical(100, *unit);
+            assert_eq!(
+                via_wrapper, direct,
+                "RateLimit::from_canonical(100, {unit:?}) via const fn \
+                 wrapper must agree with direct dispatch"
+            );
+            assert_eq!(
+                via_wrapper.canonical_unit(),
+                Some(*unit),
+                "RateLimit::from_canonical(100, {unit:?}) via const fn \
+                 wrapper must round-trip through canonical_unit()"
             );
         }
     }
