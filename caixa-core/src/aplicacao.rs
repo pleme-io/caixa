@@ -7254,6 +7254,124 @@ impl From<&RateLimitUnit> for std::rc::Rc<str> {
     }
 }
 
+/// Substrate-canonical [`AsRef<[u8]>`] byte-view projection on the second
+/// M3-mesh-primitive-defining [`RateLimitUnit`] closed-set fieldless
+/// typed enum — routes byte-for-byte through the substrate-primitive
+/// [`RateLimitUnit::as_suffix`] `pub const fn` accessor via
+/// [`str::as_bytes`] on the returned `&'static str`, so any future
+/// consumer that binds a [`RateLimitUnit`] through a standard-library
+/// `<T: AsRef<[u8]>>` trait bound reaches the same lifted
+/// [`RATE_LIMIT_UNIT_SUFFIX_SECOND`] / [`RATE_LIMIT_UNIT_SUFFIX_MINUTE`]
+/// / [`RATE_LIMIT_UNIT_SUFFIX_HOUR`] `pub const &str` roster the paired
+/// sibling [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`RateLimitUnit::as_suffix`] / `{Self, &Self} × {&'static str,
+/// String, Cow<'static, str>, Box<str>, std::sync::Arc<str>,
+/// std::rc::Rc<str>}` str-view + reverse-projection surfaces already
+/// return — through the byte-view axis, which the str-view axes cannot
+/// express.
+///
+/// The primary compounding target is the same
+/// [`caixa-lacre`](../../caixa-lacre/) BLAKE3 content-address closure
+/// the peer [`crate::CaixaKind`] (69d8d86),
+/// [`crate::dialeto::CaixaDialeto`] (8151347),
+/// [`crate::dep::DepList`] (05ffaca), and [`PlacementStrategy`]
+/// (daa8705) `AsRef<[u8]>` impls opened onto: [`blake3::hash`] and
+/// [`blake3::Hasher::update`] both bind their input through
+/// `impl AsRef<[u8]>`, so any future per-Aplicacao content-address tag
+/// that folds a `:politicas :rate-limit :window` canonical-unit
+/// discriminator byte-tag into the [`crate::Lacre`] closure (a
+/// hypothetical `hasher.update(unit);`-shape composition on the per-
+/// Aplicacao BLAKE3 closure builder that partitions the
+/// [`RateLimitUnit::Second`] `1s` token-bucket-refill closure from the
+/// [`RateLimitUnit::Minute`] `60s` closure from the
+/// [`RateLimitUnit::Hour`] `3600s` closure at content-address time so a
+/// downstream `Lacre` consumer can key its per-unit rate-limit build
+/// cache off the typed discriminator directly rather than the sibling
+/// canonical-suffix `&'static str` wire scalar) reaches the substrate-
+/// primitive [`RateLimitUnit::as_suffix`] accessor through this impl
+/// and no other. Peer consumer paths on the byte-view axis: any future
+/// [`std::io::Write::write_all`]-bound `feira app policy census` per-
+/// unit histogram-column emitter (whose input binds through
+/// `impl AsRef<[u8]>`), any future byte-keyed
+/// [`std::collections::HashMap`] `<K: AsRef<[u8]>, V>` per-unit
+/// dispatch-table lookup whose entry-key trait bound rules out the
+/// sibling [`AsRef<str>`] str-view projection, and any future
+/// `ring::digest::Context::update` / `sha2::Sha256::update` /
+/// `blake3::Hasher::update` byte-input surface on any future per-unit
+/// content-address digest.
+///
+/// Rust's standard library carries `impl AsRef<[u8]> for str` and
+/// `impl AsRef<[u8]> for String`, so the two-hop composition
+/// `unit.as_suffix().as_bytes()` (or, equivalently,
+/// `AsRef::<str>::as_ref(&unit).as_bytes()`) is reachable through the
+/// pre-existing str-view axis alone. But that two-hop shape has no
+/// compile-time link back to the byte-projection axis, forces every
+/// downstream `<T: AsRef<[u8]>>`-bound consumer to open-code the two-
+/// hop composition at every call site rather than pass a
+/// [`RateLimitUnit`] through the trait bound directly, and admits a
+/// silent split whenever a future call site takes the sibling
+/// [`std::fmt::Display`] or [`From<Self> for String`] axis (whose
+/// `.as_bytes()` byte-tails byte-equal `as_suffix`'s by construction
+/// but carry no compile-time byte-view surface, since `Display` returns
+/// a formatter and `String` allocates). The lifted single-hop impl
+/// closes the byte-view axis so every future `<T: AsRef<[u8]>>`-bound
+/// consumer reaches the substrate primitive through one trait dispatch,
+/// and every future arm addition (a `"d"` day suffix once Envoy's
+/// `rate_limit_action` grows daily-bucket support, a `"ms"` sub-second
+/// window once high-throughput per-edge policies come into scope per
+/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
+/// §III.2 #3 — both trajectory items the sibling
+/// [`RateLimitUnit::window_from_suffix`] doc block already names) grows
+/// the byte-view axis through one edit on the substrate-primitive
+/// `as_suffix` accessor, not a coordinated rewrite across every future
+/// `<T: AsRef<[u8]>>`-bound consumer's arm-set.
+///
+/// Extends the trait-idiomatic byte-view axis onto the second M3-mesh-
+/// primitive-defining closed-set fieldless typed enum on the caixa
+/// surface — matching the trajectory the sibling caixa-core-internal
+/// [`crate::CaixaKind`] first-mover `AsRef<[u8]>` impl (69d8d86),
+/// [`crate::dialeto::CaixaDialeto`] second-mover impl (8151347),
+/// [`crate::dep::DepList`] third-mover impl (05ffaca), and
+/// [`PlacementStrategy`] first-M3-mesh-mover impl (daa8705) walked
+/// before it. The paired [`RateLimitUnit::as_suffix`] accessor returns
+/// the canonical author-surface single-byte suffix (`"s"` / `"m"` /
+/// `"h"`) the [`rate_limit_codec::parse`] resolver reads back and the
+/// [`rate_limit_codec::render`] emitter emits — so the byte-view axis
+/// routes through the same wire byte-string every author-surface and
+/// downstream Envoy `local_rate_limit.token_bucket.fill_interval`
+/// overlay consumer keys off.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_as_ref_bytes_routes_through_as_suffix_accessor`]
+/// (fail-before-pass-after byte-parity pin against
+/// [`RateLimitUnit::as_suffix`] `.as_bytes()` across the three-arm
+/// [`RateLimitUnit::ALL`] emit-set, cross-axis witness against the
+/// paired str-view [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`RateLimitUnit::as_suffix`] axes' `.as_bytes()` byte-tails, cross-
+/// axis witness against the paired reverse-projection
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>, std::rc::Rc<str>}` return-shape axes'
+/// `.as_bytes()` byte-tails, a `<T: AsRef<[u8]>>`-bound-consumer
+/// witness that a generic byte-input function accepts a
+/// [`RateLimitUnit`] directly through the trait bound on both owned
+/// and borrowed input shapes, and a `blake3::Hasher::update`-shape
+/// byte-input surface witness routed through the
+/// `<T: AsRef<[u8]>>`-bound consumer axis to reach the caixa-lacre
+/// compounding target on both owned and borrowed input shapes). Any
+/// future silent detour that routes the byte-view impl off the
+/// substrate-primitive [`RateLimitUnit::as_suffix`] accessor (a per-
+/// arm inline `b"s".as_slice()`-shaped re-inlining that opens a
+/// compile-time link to the un-lifted arm-literal, a swap onto the
+/// second-magnitude [`RateLimitUnit::window`] axis that would collide
+/// the canonical-suffix / token-bucket-refill two-axis split on the
+/// byte-view surface) trips at caixa-core test time rather than at a
+/// downstream byte-consumer's silent split.
+impl AsRef<[u8]> for RateLimitUnit {
+    fn as_ref(&self) -> &[u8] {
+        self.as_suffix().as_bytes()
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -32363,6 +32481,211 @@ mod tests {
              `.iter().map(|u| std::rc::Rc::<str>::from(u.as_suffix()))` \
              on every arm"
         );
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds the substrate-primitive \
+                  as_suffix accessor's `.as_bytes()` byte-tail plus the \
+                  paired str-view (AsRef<str>, Display, as_suffix) and \
+                  reverse-projection ({&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}) \
+                  return-shape axes' `.as_bytes()` byte-tails plus a \
+                  <T: AsRef<[u8]>>-bound-consumer witness plus a \
+                  blake3::Hasher::update-shape byte-input surface witness \
+                  into one exhaustive round-trip over \
+                  RateLimitUnit::ALL — the accepted line-count cost of \
+                  extending the byte-view axis keyed to the substrate-\
+                  primitive as_suffix accessor at the same test-site"
+    )]
+    #[allow(
+        clippy::needless_borrows_for_generic_args,
+        reason = "the borrowed-input surface (&variant) is exercised \
+                  deliberately: the `<T: AsRef<[u8]>>`-bound consumer and \
+                  the `blake3::Hasher::update`-shape byte-input surface \
+                  both accept either owned or borrowed input through the \
+                  standard-library blanket `impl<T: ?Sized + AsRef<[u8]>> \
+                  AsRef<[u8]> for &T`, and this pin round-trips both \
+                  input shapes to lock the borrowed-input path load-\
+                  bearing against a future silent regression"
+    )]
+    fn rate_limit_unit_as_ref_bytes_routes_through_as_suffix_accessor() {
+        // `<T: AsRef<[u8]>>`-bound-consumer witness helper: a generic
+        // byte-input function accepts a [`super::RateLimitUnit`]
+        // directly through the trait bound, without the caller open-
+        // coding the two-hop `unit.as_suffix().as_bytes()` composition.
+        // Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock:
+        // mirrors `blake3::Hasher::update` /
+        // `ring::digest::Context::update` / `sha2::Sha256::update`'s
+        // `impl AsRef<[u8]>`-bound `update` signature so a per-
+        // Aplicacao BLAKE3 content-address closure that composes
+        // `hasher.update(unit)` on the [`crate::Lacre`] closure builder
+        // reaches the substrate-primitive `as_suffix` accessor through
+        // the [`super::RateLimitUnit`] `AsRef<[u8]>` axis and no other.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        for &variant in super::RateLimitUnit::ALL {
+            let via_trait: &[u8] = <super::RateLimitUnit as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_suffix().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for RateLimitUnit impl must byte-equal \
+                 RateLimitUnit::as_suffix().as_bytes() on \
+                 RateLimitUnit::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails.
+            let via_as_ref_str: &str = <super::RateLimitUnit as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                via_as_ref_str.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and AsRef<str> for \
+                 RateLimitUnit `.as_bytes()` must byte-equal on \
+                 RateLimitUnit::{variant:?} — divergence signals the \
+                 paired str-view and byte-view axes have drifted off \
+                 the shared substrate-primitive as_suffix accessor"
+            );
+            let via_display: String = format!("{variant}");
+            assert_eq!(
+                via_trait,
+                via_display.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 std::fmt::Display::fmt::<RateLimitUnit> `.as_bytes()` \
+                 must byte-equal on RateLimitUnit::{variant:?} — \
+                 divergence signals the paired Display and byte-view \
+                 axes have drifted off the shared substrate-primitive \
+                 as_suffix accessor"
+            );
+            let via_as_suffix: &'static str = variant.as_suffix();
+            assert_eq!(
+                via_trait,
+                via_as_suffix.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 RateLimitUnit::as_suffix `.as_bytes()` must byte-\
+                 equal on RateLimitUnit::{variant:?} — divergence \
+                 signals the byte-view axis has drifted off the \
+                 substrate-primitive as_suffix accessor it is defined \
+                 to route through"
+            );
+            // Cross-axis witness against the paired reverse-projection
+            // axes' `.as_bytes()` byte-tails.
+            let via_static: &'static str = <&'static str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_static.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 From<RateLimitUnit> for &'static str `.as_bytes()` \
+                 must byte-equal on RateLimitUnit::{variant:?}"
+            );
+            let via_string: String = String::from(variant);
+            assert_eq!(
+                via_trait,
+                via_string.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 From<RateLimitUnit> for String `.as_bytes()` must \
+                 byte-equal on RateLimitUnit::{variant:?}"
+            );
+            let via_cow: std::borrow::Cow<'static, str> =
+                std::borrow::Cow::<'static, str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_cow.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 From<RateLimitUnit> for Cow<'static, str> \
+                 `.as_bytes()` must byte-equal on \
+                 RateLimitUnit::{variant:?}"
+            );
+            let via_box: Box<str> = Box::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_box.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 From<RateLimitUnit> for Box<str> `.as_bytes()` must \
+                 byte-equal on RateLimitUnit::{variant:?}"
+            );
+            let atomic_shared: std::sync::Arc<str> = std::sync::Arc::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                atomic_shared.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 From<RateLimitUnit> for std::sync::Arc<str> \
+                 `.as_bytes()` must byte-equal on \
+                 RateLimitUnit::{variant:?}"
+            );
+            let single_thread_shared: std::rc::Rc<str> = std::rc::Rc::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                single_thread_shared.as_bytes(),
+                "AsRef<[u8]> for RateLimitUnit and \
+                 From<RateLimitUnit> for std::rc::Rc<str> \
+                 `.as_bytes()` must byte-equal on \
+                 RateLimitUnit::{variant:?}"
+            );
+            // `<T: AsRef<[u8]>>`-bound-consumer witness on both owned
+            // and borrowed input surfaces.
+            let via_generic_owned = generic_bytes_sink(variant);
+            assert_eq!(
+                via_trait, via_generic_owned,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on the \
+                 owned-input surface must byte-equal the \
+                 substrate-primitive as_suffix accessor's byte-tail \
+                 on RateLimitUnit::{variant:?}"
+            );
+            let via_generic_borrowed = generic_bytes_sink(&variant);
+            assert_eq!(
+                via_trait, via_generic_borrowed,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on the \
+                 borrowed-input surface must byte-equal the \
+                 substrate-primitive as_suffix accessor's byte-tail \
+                 on RateLimitUnit::{variant:?}"
+            );
+            // `blake3::Hasher::update`-shape byte-input surface
+            // witness on both owned and borrowed input surfaces —
+            // the primary compounding target on the byte-view axis
+            // is the caixa-lacre BLAKE3 content-address closure,
+            // which binds its input through exactly this trait bound.
+            let mut hasher_owned_input = MockHasher::new();
+            hasher_owned_input.update(variant);
+            let owned_digest = hasher_owned_input.finalize();
+            assert_eq!(
+                owned_digest.as_slice(),
+                via_trait,
+                "blake3::Hasher::update-shape byte-input surface on \
+                 the owned-input surface must byte-equal the \
+                 substrate-primitive as_suffix accessor's byte-tail \
+                 on RateLimitUnit::{variant:?}"
+            );
+            let mut hasher_borrowed_input = MockHasher::new();
+            hasher_borrowed_input.update(&variant);
+            let borrowed_digest = hasher_borrowed_input.finalize();
+            assert_eq!(
+                borrowed_digest.as_slice(),
+                via_trait,
+                "blake3::Hasher::update-shape byte-input surface on \
+                 the borrowed-input surface must byte-equal the \
+                 substrate-primitive as_suffix accessor's byte-tail \
+                 on RateLimitUnit::{variant:?}"
+            );
+        }
     }
 
     #[test]
