@@ -1755,6 +1755,52 @@ impl From<&WitShape> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic byte-view surface on the M3-mesh `:contratos :wit`
+/// pre-projection WIT-shape classifier typed enum.
+///
+/// Every consumer that binds its input through the standard-library
+/// [`AsRef<[u8]>`] trait bound — a byte-keyed
+/// `HashMap<K: AsRef<[u8]>, V>` per-shape network-policy or Cilium-
+/// identity table lookup on the future `caixa-mesh` renderer, a
+/// `blake3::Hasher::update` / `ring::digest::Context::update` /
+/// `sha2::Sha256::update` byte-input surface on any future per-edge
+/// content-address digest folded into the [`crate::Lacre`] closure so
+/// downstream cache-keys partition on the four WIT-shape arms (`Http`,
+/// `PubSub`, `Store`, `Capability`) at content-address time, an
+/// `std::io::Write::write_all`-bound structured-log per-arm byte-sink —
+/// reaches the substrate primitive through one trait dispatch rather
+/// than open-coding the two-hop `shape.as_str().as_bytes()`
+/// composition at every call site. Routed byte-for-byte through the
+/// [`WitShape::as_str`] `pub const fn` accessor the paired str-view
+/// ([`AsRef<str>`], [`std::fmt::Display`], [`WitShape::as_str`]) and
+/// the five reverse-projection (`&'static str`, `String`,
+/// `Cow<'static, str>`, `Box<str>`, `std::sync::Arc<str>`) return-
+/// shape axes already resolve through, so any future divergence
+/// between the byte-view and str-view axes trips at caixa-core test
+/// time rather than at a downstream byte-consumer's silent split.
+///
+/// Extends the substrate-wide byte-view campaign the sibling
+/// [`crate::CaixaKind`] first-mover (69d8d86) opened onto the first
+/// `:contratos :wit` WIT-shape-classification axis to converge on the
+/// trait-idiomatic byte-view discipline, and the seventh in-caixa-core
+/// closed-set fieldless typed enum peer to pick it up (after
+/// [`crate::CaixaKind`], [`crate::dialeto::CaixaDialeto`],
+/// [`crate::dep::DepList`], [`PlacementStrategy`], [`RateLimitUnit`],
+/// [`crate::supervisor::RestartStrategy`] +
+/// [`crate::supervisor::RestartPolicy`]). Pin load-bearing by
+/// [`tests::wit_shape_as_ref_bytes_routes_through_as_str_accessor`]
+/// — fail-before-pass-after byte-parity pin against
+/// [`WitShape::as_str`] `.as_bytes()` across the four-arm
+/// [`WitShape::ALL`] emit-set, cross-axis witness against the paired
+/// str-view / reverse-projection axes' `.as_bytes()` byte-tails, a
+/// `<T: AsRef<[u8]>>`-bound-consumer witness, and a
+/// `blake3::Hasher::update`-shape byte-input surface witness.
+impl AsRef<[u8]> for WitShape {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -20582,6 +20628,196 @@ mod tests {
              `From<WitShape> for std::sync::Arc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    // The `generic_bytes_sink(&variant)` and `borrowed_hasher.update(&variant)`
+    // shapes below are the borrowed-input witness half of the by-value +
+    // by-reference partition the paired witness pair carries: the pair proves
+    // the trait bound accepts both owned (`variant`) and borrowed (`&variant`)
+    // shapes through the same substrate-primitive `as_str` accessor, which is
+    // the shape the caixa-lacre BLAKE3 content-address closure composes.
+    // `clippy::needless_borrows_for_generic_args` would fold the borrowed half
+    // into the owned half and collapse the by-value/by-reference partition
+    // this test load-bears; the `#[allow]` documents that the partition is
+    // deliberate, not an oversight.
+    #[allow(clippy::needless_borrows_for_generic_args, clippy::too_many_lines)]
+    #[test]
+    fn wit_shape_as_ref_bytes_routes_through_as_str_accessor() {
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for WitShape` — asserts the trait-idiomatic
+        // byte-view standard-library impl and the substrate-primitive
+        // [`super::WitShape::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-tail resolve to the same four-arm inline
+        // census-label byte-string emit-set across every arm the
+        // exhaustive [`super::WitShape::ALL`] slice enumerates. Extends
+        // the trait-idiomatic byte-view axis onto the first
+        // `:contratos :wit` WIT-shape-classification axis to converge
+        // on the discipline, and the seventh in-caixa-core closed-set
+        // fieldless typed enum peer to pick it up on the campaign the
+        // sibling [`super::crate::CaixaKind`] first-mover (69d8d86)
+        // opened.
+        for &variant in WitShape::ALL {
+            let via_trait: &[u8] = <WitShape as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for WitShape impl must byte-equal \
+                 WitShape::as_str().as_bytes() on WitShape::{variant:?} — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: [`AsRef<str>`] /
+            // [`std::fmt::Display`] / [`super::WitShape::as_str`] all
+            // resolve to the same inline census-label byte-string, and
+            // the byte-view axis must byte-equal each of their
+            // `.as_bytes()` byte-tails by construction.
+            let str_view_ref: &str = <WitShape as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                str_view_ref.as_bytes(),
+                "AsRef<[u8]> for WitShape and AsRef<str> for WitShape \
+                 must resolve to byte-equal byte-tails on \
+                 WitShape::{variant:?} — divergence signals the byte-\
+                 view and str-view axes have drifted off the same \
+                 substrate-primitive as_str accessor"
+            );
+            let display_bytes = variant.to_string();
+            assert_eq!(
+                via_trait,
+                display_bytes.as_bytes(),
+                "AsRef<[u8]> for WitShape and <WitShape as \
+                 std::fmt::Display>::to_string must resolve to byte-\
+                 equal byte-tails on WitShape::{variant:?}"
+            );
+            // Cross-axis witness against the paired reverse-projection
+            // axes' `.as_bytes()` byte-tails: every one of `{&'static
+            // str, String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>}` allocates (or borrows) the same
+            // four-arm inline census-label byte-string the substrate-
+            // primitive accessor emits.
+            let owned_static: &'static str = <&'static str as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_static.as_bytes(),
+                "AsRef<[u8]> for WitShape and From<WitShape> for \
+                 &'static str must resolve to byte-equal byte-tails on \
+                 WitShape::{variant:?}"
+            );
+            let owned_string: String = <String as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_string.as_bytes(),
+                "AsRef<[u8]> for WitShape and From<WitShape> for \
+                 String must resolve to byte-equal byte-tails on \
+                 WitShape::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_cow.as_bytes(),
+                "AsRef<[u8]> for WitShape and From<WitShape> for \
+                 Cow<'static, str> must resolve to byte-equal byte-\
+                 tails on WitShape::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_box.as_bytes(),
+                "AsRef<[u8]> for WitShape and From<WitShape> for \
+                 Box<str> must resolve to byte-equal byte-tails on \
+                 WitShape::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait,
+                owned_arc.as_bytes(),
+                "AsRef<[u8]> for WitShape and From<WitShape> for \
+                 std::sync::Arc<str> must resolve to byte-equal byte-\
+                 tails on WitShape::{variant:?}"
+            );
+        }
+        // `<T: AsRef<[u8]>>`-bound-consumer witness: the generic byte-
+        // input function `generic_bytes_sink` accepts a
+        // [`super::WitShape`] directly through the trait bound, without
+        // the caller open-coding the two-hop `shape.as_str().as_bytes()`
+        // composition — the shape that reaches the caixa-lacre BLAKE3
+        // content-address closure's
+        // `blake3::Hasher::update(impl AsRef<[u8]>)` byte-input surface
+        // through this impl and no other.
+        for &variant in WitShape::ALL {
+            let via_generic = generic_bytes_sink(variant);
+            let via_borrowed_generic = generic_bytes_sink(&variant);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 WitShape::{variant:?} must yield the same byte-tail \
+                 WitShape::as_str().as_bytes() returns — divergence \
+                 signals the byte-view axis fails to bridge a generic \
+                 byte-input trait bound to the substrate-primitive \
+                 accessor"
+            );
+            assert_eq!(
+                via_borrowed_generic, via_method_bytes,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on \
+                 &WitShape::{variant:?} must yield the same byte-tail \
+                 WitShape::as_str().as_bytes() returns — the borrowed-\
+                 input surface must resolve to the same as_str dispatch"
+            );
+        }
+        // `blake3::Hasher::update`-shape byte-input surface witness on
+        // the caixa-lacre compounding target: the `MockHasher` mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound `update`
+        // signature and accepts a [`super::WitShape`] directly, routing
+        // its byte-tail through the substrate-primitive `as_str`
+        // accessor.
+        for &variant in WitShape::ALL {
+            let mut owned_hasher = MockHasher::new();
+            owned_hasher.update(variant);
+            let owned_folded = owned_hasher.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(shape)`-shape composition on \
+                 WitShape::{variant:?} must fold the same byte-tail \
+                 WitShape::as_str().as_bytes() returns — the shape a \
+                 future per-edge BLAKE3 content-address closure \
+                 composes to fold a `:contratos :wit` shape-arm byte-\
+                 tag into the Lacre closure body"
+            );
+            let mut borrowed_hasher = MockHasher::new();
+            borrowed_hasher.update(&variant);
+            let borrowed_folded = borrowed_hasher.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`hasher.update(&shape)`-shape composition on \
+                 &WitShape::{variant:?} must fold the same byte-tail \
+                 WitShape::as_str().as_bytes() returns — the borrowed-\
+                 input surface must resolve to the same as_str dispatch"
+            );
+        }
     }
 
     #[test]
