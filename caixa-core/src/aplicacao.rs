@@ -10259,6 +10259,123 @@ impl From<&PlacementStrategy> for std::rc::Rc<str> {
     }
 }
 
+/// Substrate-canonical [`AsRef<[u8]>`] byte-view projection on the first
+/// M3-mesh-primitive-defining [`PlacementStrategy`] closed-set fieldless
+/// typed enum — routes byte-for-byte through the substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`str::as_bytes`] on the returned `&'static str`, so any future
+/// consumer that binds a [`PlacementStrategy`] through a standard-library
+/// `<T: AsRef<[u8]>>` trait bound reaches the same lifted
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] `pub const &str`
+/// roster the paired sibling [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`PlacementStrategy::as_str`] / `{Self, &Self} × {&'static str,
+/// String, Cow<'static, str>, Box<str>, std::sync::Arc<str>,
+/// std::rc::Rc<str>}` str-view + reverse-projection surfaces already
+/// return — through the byte-view axis, which the str-view axes cannot
+/// express.
+///
+/// The primary compounding target is the [`crate`]-adjacent
+/// [`caixa-lacre`](../../caixa-lacre/) BLAKE3 content-address closure
+/// the peer [`crate::CaixaKind`] (69d8d86), [`crate::dialeto::CaixaDialeto`]
+/// (8151347), and [`crate::dep::DepList`] (05ffaca) `AsRef<[u8]>` impls
+/// open onto: [`blake3::hash`] and [`blake3::Hasher::update`] both bind
+/// their input through `impl AsRef<[u8]>`, so any future per-Aplicacao
+/// content-address tag that folds a `:placement :estrategia`
+/// discriminator byte-tag into the [`crate::Lacre`] closure (a
+/// hypothetical `hasher.update(strategy);`-shape composition on the
+/// per-Aplicacao BLAKE3 closure builder that partitions the
+/// [`PlacementStrategy::SingleNode`] Erlang/OTP distributed-app-takeover
+/// closure from the [`PlacementStrategy::Replicated`] active-active-
+/// across-every-named-cluster closure from the
+/// [`PlacementStrategy::Sharded`] Akka-style hash-keyed closure at
+/// content-address time so a downstream `Lacre` consumer can key its
+/// per-strategy build cache off the typed discriminator directly rather
+/// than the sibling `PascalCase` wire scalar) reaches the substrate-
+/// primitive [`PlacementStrategy::as_str`] accessor through this impl
+/// and no other — without it, every such call site opens the two-hop
+/// composition `strategy.as_str().as_bytes()` whose byte-tail has no
+/// compile-time link back to the byte-projection axis. Peer consumer
+/// paths on the byte-view axis: any future
+/// [`std::io::Write::write_all`]-bound `feira app placement --list`
+/// per-strategy histogram-column emitter (whose input binds through
+/// `impl AsRef<[u8]>`), any future byte-keyed
+/// [`std::collections::HashMap`] `<K: AsRef<[u8]>, V>` per-strategy
+/// dispatch-table lookup whose entry-key trait bound rules out the
+/// sibling [`AsRef<str>`] str-view projection, and any future
+/// `ring::digest::Context::update` / `sha2::Sha256::update` /
+/// `blake3::Hasher::update` byte-input surface on any future
+/// per-strategy content-address digest.
+///
+/// Rust's standard library carries `impl AsRef<[u8]> for str` and
+/// `impl AsRef<[u8]> for String`, so the two-hop composition
+/// `strategy.as_str().as_bytes()` (or, equivalently,
+/// `AsRef::<str>::as_ref(&strategy).as_bytes()`) is reachable through
+/// the pre-existing str-view axis alone. But that two-hop shape has no
+/// compile-time link back to the byte-projection axis, forces every
+/// downstream `<T: AsRef<[u8]>>`-bound consumer to open-code the two-
+/// hop composition at every call site rather than pass a
+/// [`PlacementStrategy`] through the trait bound directly, and admits
+/// a silent split whenever a future call site takes the sibling
+/// [`std::fmt::Display`] or [`From<Self> for String`] axis (whose
+/// `.as_bytes()` byte-tails byte-equal `as_str`'s by construction but
+/// carry no compile-time byte-view surface, since `Display` returns a
+/// formatter and `String` allocates). The lifted single-hop impl closes
+/// the byte-view axis so every future `<T: AsRef<[u8]>>`-bound consumer
+/// reaches the substrate primitive through one trait dispatch, and
+/// every future arm addition (an `Anycast` mesh-anycast arm the
+/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
+/// §II.5 hint names as a trajectory item) grows the byte-view axis
+/// through one edit on the substrate-primitive `as_str` accessor, not
+/// a coordinated rewrite across every future `<T: AsRef<[u8]>>`-bound
+/// consumer's arm-set.
+///
+/// Extends the trait-idiomatic byte-view axis onto the first M3-mesh-
+/// primitive-defining closed-set fieldless typed enum on the caixa
+/// surface — matching the trajectory the sibling caixa-core-internal
+/// [`crate::CaixaKind`] first-mover `AsRef<[u8]>` impl (69d8d86),
+/// [`crate::dialeto::CaixaDialeto`] second-mover impl (8151347), and
+/// [`crate::dep::DepList`] third-mover impl (05ffaca) walked before it.
+/// The paired [`PlacementStrategy::as_str`] accessor returns the
+/// `PascalCase` wire form the un-`rename`d [`serde::Serialize`] derive
+/// emits under [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`] on every JSON /
+/// YAML CR round-trip — so the byte-view axis routes through the same
+/// wire byte-string every downstream K8s-CR reader keys off.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_as_ref_bytes_routes_through_as_str_accessor`]
+/// (fail-before-pass-after byte-parity pin against
+/// [`PlacementStrategy::as_str`] `.as_bytes()` across the three-arm
+/// [`PlacementStrategy::ALL`] emit-set, cross-axis witness against the
+/// paired str-view [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`PlacementStrategy::as_str`] axes' `.as_bytes()` byte-tails, cross-
+/// axis witness against the paired reverse-projection
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>, std::rc::Rc<str>}` return-shape axes'
+/// `.as_bytes()` byte-tails, a `<T: AsRef<[u8]>>`-bound-consumer
+/// witness that a generic byte-input function accepts a
+/// [`PlacementStrategy`] directly through the trait bound, and a
+/// `blake3::Hasher::update`-shape byte-input surface witness routed
+/// through the `<T: AsRef<[u8]>>`-bound consumer axis to reach the
+/// caixa-lacre compounding target). Any future silent detour that
+/// routes the byte-view impl off the substrate-primitive
+/// [`PlacementStrategy::as_str`] accessor (a per-arm inline
+/// `b"SingleNode".as_slice()`-shaped re-inlining that opens a compile-
+/// time link to the un-lifted arm-literal, a swap onto a hypothetical
+/// kebab-case dispatcher-catalog axis that would collide the
+/// `PascalCase` wire form with the caixa-tatara dispatcher-key form on
+/// the byte-view surface, a swap onto the sibling
+/// [`serde_json::to_string`] axis that would carry surrounding JSON-
+/// encoded double-quote byte pairs through the byte-view surface where
+/// the caller expected the bare byte-string) trips at caixa-core test
+/// time rather than at a downstream byte-consumer's silent split.
+impl AsRef<[u8]> for PlacementStrategy {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -28405,6 +28522,286 @@ mod tests {
              std::rc::Rc<str>` axis by first calling `.copied()` on \
              the iterator)"
         );
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds the substrate-primitive \
+                  as_str accessor's `.as_bytes()` byte-tail plus the \
+                  paired str-view (AsRef<str>, Display, as_str) and \
+                  reverse-projection ({&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}) \
+                  return-shape axes' `.as_bytes()` byte-tails plus a \
+                  <T: AsRef<[u8]>>-bound-consumer witness plus a \
+                  blake3::Hasher::update-shape byte-input surface witness \
+                  into one exhaustive round-trip over \
+                  PlacementStrategy::ALL — the accepted line-count cost of \
+                  extending the byte-view axis keyed to the substrate-\
+                  primitive as_str accessor at the same test-site"
+    )]
+    #[allow(
+        clippy::needless_borrows_for_generic_args,
+        reason = "the borrowed-input surface (&variant) is exercised \
+                  deliberately: the `<T: AsRef<[u8]>>`-bound consumer and \
+                  the `blake3::Hasher::update`-shape byte-input surface \
+                  both accept either owned or borrowed input through the \
+                  standard-library blanket `impl<T: ?Sized + AsRef<[u8]>> \
+                  AsRef<[u8]> for &T`, and this pin round-trips both \
+                  input shapes to lock the borrowed-input path load-\
+                  bearing against a future silent regression"
+    )]
+    fn placement_strategy_as_ref_bytes_routes_through_as_str_accessor() {
+        // `<T: AsRef<[u8]>>`-bound-consumer witness helper: a generic
+        // byte-input function accepts a [`super::PlacementStrategy`]
+        // directly through the trait bound, without the caller open-
+        // coding the two-hop `strategy.as_str().as_bytes()`
+        // composition. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock:
+        // mirrors `blake3::Hasher::update` /
+        // `ring::digest::Context::update` / `sha2::Sha256::update`'s
+        // `impl AsRef<[u8]>`-bound `update` signature so a per-
+        // Aplicacao BLAKE3 content-address closure that composes
+        // `hasher.update(strategy)` on the [`crate::Lacre`] closure
+        // builder reaches the substrate-primitive `as_str` accessor
+        // through the [`super::PlacementStrategy`] `AsRef<[u8]>` axis
+        // and no other. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for PlacementStrategy` — asserts the
+        // trait-idiomatic byte-view standard-library impl and the
+        // substrate-primitive [`super::PlacementStrategy::as_str`]
+        // `pub const fn` accessor's `.as_bytes()` byte-tail resolve to
+        // the same three-arm `PascalCase` wire byte-string emit-set
+        // across every arm the exhaustive
+        // [`super::PlacementStrategy::ALL`] slice enumerates. Extends
+        // the substrate-wide trait-idiomatic byte-view axis on the
+        // closed-set fieldless typed-enum family onto the first M3-
+        // mesh-primitive-defining slot enum on the caixa surface — in
+        // the same manner [`std::str::FromStr`] (bc745d8) opened the
+        // trait-idiomatic parse axis and
+        // [`From<Self> for std::rc::Rc<str>`] (91b4c92) opened the
+        // trait-idiomatic single-threaded-refcounted reverse-
+        // projection axis on this same enum.
+        //
+        // Rust's standard library carries `impl AsRef<[u8]> for str`
+        // and `impl AsRef<[u8]> for String`, so a two-hop composition
+        // `strategy.as_str().as_bytes()` (or the equally two-hop
+        // `AsRef::<str>::as_ref(&strategy).as_bytes()`) is reachable
+        // through the pre-existing str-view axis alone. But that two-
+        // hop shape has no compile-time link back to the byte-
+        // projection axis, forces every downstream
+        // `<T: AsRef<[u8]>>`-bound consumer to open-code the two-hop
+        // composition at every call site, and admits a silent split
+        // whenever a future call site takes a sibling reverse-
+        // projection axis whose `.as_bytes()` byte-tail carries no
+        // compile-time byte-view surface. This impl closes the byte-
+        // view axis at the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] accessor so every
+        // future `<T: AsRef<[u8]>>`-bound consumer reaches the same
+        // lifted [`super::crate::render::M3_PLACEMENT_ESTRATEGIA_*`]
+        // const roster the paired str-view axes already return
+        // through — through one trait dispatch.
+        for &variant in PlacementStrategy::ALL {
+            let via_trait: &[u8] = <PlacementStrategy as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for PlacementStrategy impl must byte-equal \
+                 PlacementStrategy::as_str().as_bytes() on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: [`AsRef<str>`] /
+            // [`std::fmt::Display`] / [`super::PlacementStrategy::as_str`]
+            // all resolve to the same lifted
+            // [`super::crate::render::M3_PLACEMENT_ESTRATEGIA_*`]
+            // const roster, and the byte-view axis must byte-equal
+            // each of their `.as_bytes()` byte-tails by construction —
+            // locking the str-view and byte-view axes together at the
+            // substrate-primitive accessor.
+            let via_as_ref_str: &str = <PlacementStrategy as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                via_as_ref_str.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and AsRef<str> for \
+                 PlacementStrategy `.as_bytes()` must byte-equal on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the paired str-view and byte-view axes have drifted \
+                 off the shared substrate-primitive as_str accessor"
+            );
+            let via_display: String = format!("{variant}");
+            assert_eq!(
+                via_trait,
+                via_display.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 std::fmt::Display::fmt::<PlacementStrategy> \
+                 `.as_bytes()` must byte-equal on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the paired Display and byte-view axes have drifted \
+                 off the shared substrate-primitive as_str accessor"
+            );
+            let via_as_str: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait,
+                via_as_str.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 PlacementStrategy::as_str `.as_bytes()` must byte-\
+                 equal on PlacementStrategy::{variant:?} — divergence \
+                 signals the byte-view axis has drifted off the \
+                 substrate-primitive as_str accessor it is defined to \
+                 route through"
+            );
+            // Cross-axis witness against the paired reverse-projection
+            // axes' `.as_bytes()` byte-tails: every one of
+            // {&'static str, String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>, std::rc::Rc<str>} resolves to the
+            // same lifted `M3_PLACEMENT_ESTRATEGIA_*` const roster
+            // through the substrate-primitive as_str accessor, so the
+            // byte-view axis must byte-equal each of their
+            // `.as_bytes()` byte-tails by construction.
+            let via_static: &'static str = <&'static str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_static.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 From<PlacementStrategy> for &'static str `.as_bytes()` \
+                 must byte-equal on PlacementStrategy::{variant:?} — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_string: String = String::from(variant);
+            assert_eq!(
+                via_trait,
+                via_string.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 From<PlacementStrategy> for String `.as_bytes()` must \
+                 byte-equal on PlacementStrategy::{variant:?} — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let via_cow: std::borrow::Cow<'static, str> =
+                std::borrow::Cow::<'static, str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_cow.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 From<PlacementStrategy> for Cow<'static, str> \
+                 `.as_bytes()` must byte-equal on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            let via_box: Box<str> = Box::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_box.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 From<PlacementStrategy> for Box<str> `.as_bytes()` \
+                 must byte-equal on PlacementStrategy::{variant:?} — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            let atomic_shared: std::sync::Arc<str> = std::sync::Arc::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                atomic_shared.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 From<PlacementStrategy> for std::sync::Arc<str> \
+                 `.as_bytes()` must byte-equal on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            let single_thread_shared: std::rc::Rc<str> = std::rc::Rc::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                single_thread_shared.as_bytes(),
+                "AsRef<[u8]> for PlacementStrategy and \
+                 From<PlacementStrategy> for std::rc::Rc<str> \
+                 `.as_bytes()` must byte-equal on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // `<T: AsRef<[u8]>>`-bound-consumer witness: a generic
+            // byte-input function accepts a [`super::PlacementStrategy`]
+            // directly through the trait bound, on both owned and
+            // borrowed input surfaces (Rust's standard library carries
+            // a blanket `impl<T: ?Sized + AsRef<[u8]>> AsRef<[u8]> for
+            // &T`, so the borrowed-input surface is reachable through
+            // the same impl).
+            let via_generic_owned = generic_bytes_sink(variant);
+            assert_eq!(
+                via_trait, via_generic_owned,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on the \
+                 owned-input surface must byte-equal the \
+                 substrate-primitive as_str accessor's byte-tail on \
+                 PlacementStrategy::{variant:?}"
+            );
+            let via_generic_borrowed = generic_bytes_sink(&variant);
+            assert_eq!(
+                via_trait, via_generic_borrowed,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on the \
+                 borrowed-input surface must byte-equal the \
+                 substrate-primitive as_str accessor's byte-tail on \
+                 PlacementStrategy::{variant:?}"
+            );
+            // `blake3::Hasher::update`-shape byte-input surface
+            // witness: mirrors the exact `impl AsRef<[u8]>`-bound
+            // `update` signature the peer content-address digest
+            // libraries carry, and asserts the byte-view axis routes
+            // the strategy discriminator into the hasher on the same
+            // wire byte-string as the substrate-primitive as_str
+            // accessor. Owned and borrowed input surfaces are both
+            // exercised — the peer libraries accept either shape
+            // through the same blanket-derived impl.
+            let mut hasher_owned_input = MockHasher::new();
+            hasher_owned_input.update(variant);
+            let owned_digest = hasher_owned_input.finalize();
+            assert_eq!(
+                owned_digest.as_slice(),
+                via_trait,
+                "blake3::Hasher::update-shape byte-input surface on \
+                 the owned-input surface must byte-equal the \
+                 substrate-primitive as_str accessor's byte-tail on \
+                 PlacementStrategy::{variant:?} — the primary \
+                 compounding target on the byte-view axis is the \
+                 caixa-lacre BLAKE3 content-address closure, which \
+                 binds its input through exactly this trait bound"
+            );
+            let mut hasher_borrowed_input = MockHasher::new();
+            hasher_borrowed_input.update(&variant);
+            let borrowed_digest = hasher_borrowed_input.finalize();
+            assert_eq!(
+                borrowed_digest.as_slice(),
+                via_trait,
+                "blake3::Hasher::update-shape byte-input surface on \
+                 the borrowed-input surface must byte-equal the \
+                 substrate-primitive as_str accessor's byte-tail on \
+                 PlacementStrategy::{variant:?} — the borrowed-input \
+                 surface is reachable through the standard-library \
+                 blanket `impl<T: ?Sized + AsRef<[u8]>> AsRef<[u8]> \
+                 for &T`, and both input surfaces must resolve to the \
+                 same wire byte-string by construction"
+            );
+        }
     }
 
     #[test]
