@@ -10590,6 +10590,98 @@ impl AsRef<[u8]> for PlacementStrategy {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`Vec<u8>` output* byte-owned
+/// reverse projection on the first M3-mesh-primitive-defining
+/// `:placement :estrategia` distribution-strategy [`PlacementStrategy`]
+/// closed-set fieldless typed enum on the caixa surface — the byte-
+/// mirror of the [`From<PlacementStrategy> for String`] str-owned
+/// reverse-projection axis and the owned-`Vec<u8>` reverse-projection
+/// sibling of the paired [`AsRef<[u8]>`] borrowed byte-view axis
+/// (daa8705) lifted on this same enum. Routes byte-for-byte through
+/// the substrate-primitive [`PlacementStrategy::as_str`] `pub const fn`
+/// accessor via [`str::as_bytes`] + [`slice::to_vec`] so every
+/// consumer that binds a [`PlacementStrategy`] through the standard-
+/// library `impl From<PlacementStrategy> for Vec<u8>` axis
+/// (equivalently `<T: Into<Vec<u8>>>`) — a future
+/// [`std::io::Write::write_all`]-shape per-Aplicacao audit-log byte-
+/// sink whose input parameter is an owned [`Vec<u8>`] payload, a
+/// future `bytes::Bytes::from(Vec::<u8>::from(strategy))` composer
+/// folding the per-arm `:placement :estrategia` distribution
+/// discriminator byte-tag into the [`bytes::Bytes`] framing surface,
+/// a future `hasher.update(&Vec::<u8>::from(strategy))`-shape BLAKE3
+/// content-address closure that needs the owned byte-tail buffered
+/// before folding into the per-Aplicacao [`crate::Lacre`] closure
+/// body, a future per-strategy protobuf/CBOR/msgpack payload
+/// composer whose framer takes an owned [`Vec<u8>`] rather than a
+/// borrowed byte-slice — reaches the substrate primitive through one
+/// trait dispatch rather than an open-coded per-call-site
+/// `strategy.as_str().as_bytes().to_vec()` composition whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic byte-owned reverse-
+/// projection axis onto the first M3-mesh-primitive-defining closed-
+/// set fieldless typed-enum peer, matching the trajectory the
+/// first-mover [`crate::CaixaKind`] `From<{Self, &Self}> for Vec<u8>`
+/// lift (b245fd6), the second-mover [`crate::dialeto::CaixaDialeto`]
+/// lift (4cceaf5), the third-mover [`crate::dep::DepList`] lift
+/// (e974ca2), and the M2-OTP-shape supervisor pair
+/// ([`crate::supervisor::RestartStrategy`] — 63e5dd0 —
+/// and [`crate::supervisor::RestartPolicy`] — 96a522a) established
+/// across the caixa-core-internal + M2 supervisor tiers. Every
+/// future arm addition (an `Anycast` mesh-anycast arm the
+/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
+/// §II.5 hint names as a trajectory item) grows the byte-owned axis
+/// through one edit on the substrate-primitive
+/// [`PlacementStrategy::as_str`] accessor, mirroring the discipline
+/// the paired [`AsRef<[u8]>`] borrowed byte-view axis campaign
+/// already tracked across every closed-set fieldless typed enum peer
+/// on the substrate.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_owned_vec_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] across the
+/// three-arm [`PlacementStrategy::ALL`] emit-set binding the byte-
+/// owned reverse-projection axis against the paired [`AsRef<[u8]>`]
+/// borrowed byte-view axis and the str-owned reverse-projection
+/// family (`String`, `Cow<'static, str>`, `Box<str>`,
+/// `std::sync::Arc<str>`, `std::rc::Rc<str>`) `.into_bytes()` /
+/// `.as_bytes().to_vec()` byte-tails, a `<T: Into<Vec<u8>>>`-bound
+/// generic-consumer witness, and a `std::io::Write::write_all`-shape
+/// owned-byte-sink surface witness on both owned and borrowed input
+/// shapes).
+impl From<PlacementStrategy> for Vec<u8> {
+    fn from(strategy: PlacementStrategy) -> Vec<u8> {
+        strategy.as_str().as_bytes().to_vec()
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, owned-`Vec<u8>` output* byte-
+/// owned reverse projection on the first M3-mesh-primitive-defining
+/// [`PlacementStrategy`] closed-set fieldless typed enum on the caixa
+/// surface — the borrowed-input peer of
+/// [`From<PlacementStrategy> for Vec<u8>`], closing the
+/// `{Self, &Self} → Vec<u8>` pair on the byte-owned reverse-projection
+/// axis in one lift. Routes byte-for-byte through the substrate-
+/// primitive [`PlacementStrategy::as_str`] `pub const fn` accessor so
+/// every consumer that holds a borrowed [`&PlacementStrategy`] and
+/// needs an owned [`Vec<u8>`] — a future
+/// `.iter().map(Vec::<u8>::from).collect()` pipe over
+/// `&[PlacementStrategy]` (whose iterator yields `&PlacementStrategy`,
+/// not `PlacementStrategy`, so the owned-input axis alone forces
+/// every call site through an explicit `.copied()` restatement rather
+/// than the direct trait-idiomatic projection), a future admission-
+/// webhook rejection body composer that walks
+/// [`PlacementStrategy::ALL`] through an `Into<Vec<u8>>`-bound per-
+/// arm byte-writer to surface the accepted `:placement :estrategia`
+/// set — reaches the substrate primitive through one trait dispatch
+/// rather than a `Vec::<u8>::from(*strategy)` spurious-`Copy`-deref
+/// restatement.
+impl From<&PlacementStrategy> for Vec<u8> {
+    fn from(strategy: &PlacementStrategy) -> Vec<u8> {
+        strategy.as_str().as_bytes().to_vec()
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -29204,6 +29296,255 @@ mod tests {
                  blanket `impl<T: ?Sized + AsRef<[u8]>> AsRef<[u8]> \
                  for &T`, and both input surfaces must resolve to the \
                  same wire byte-string by construction"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  here onto the first M3-mesh-primitive-defining \
+                  closed-set fieldless typed-enum peer, so the pin \
+                  binds the new impl against every paired byte-view \
+                  and str-owned axis on the same enum plus a generic \
+                  <T: Into<Vec<u8>>>-bound consumer witness and a \
+                  std::io::Write::write_all-shape owned-byte-sink \
+                  surface witness on both owned and borrowed input \
+                  shapes to lock the whole family against a future \
+                  silent regression"
+    )]
+    fn placement_strategy_from_into_owned_vec_bytes_routes_through_as_str_accessor() {
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness helper: a generic
+        // owned-byte-input function accepts a
+        // [`super::PlacementStrategy`] directly through the trait
+        // bound, without the caller open-coding the three-hop
+        // `strategy.as_str().as_bytes().to_vec()` composition. Lifted
+        // to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_owned_bytes_sink<T: Into<Vec<u8>>>(t: T) -> Vec<u8> {
+            t.into()
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface
+        // mock: mirrors `std::io::Write::write_all` /
+        // `bytes::BytesMut::extend_from_slice` / any per-arm audit-log
+        // byte-sink that consumes a `Vec<u8>` payload via
+        // `Into<Vec<u8>>`, so a future per-Aplicacao per-`:placement
+        // :estrategia` audit-log emit reaches the substrate-primitive
+        // `as_str` accessor through the byte-owned reverse-projection
+        // axis and no other. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockOwnedByteSink(Vec<u8>);
+        impl MockOwnedByteSink {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn write_all(&mut self, bytes: impl Into<Vec<u8>>) -> &mut Self {
+                self.0.extend_from_slice(&bytes.into());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for Vec<u8>` and
+        // `impl From<&PlacementStrategy> for Vec<u8>` — asserts the
+        // trait-idiomatic byte-owned reverse-projection standard-
+        // library impls and the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] `pub const fn`
+        // accessor's `.as_bytes().to_vec()` byte-tail resolve to the
+        // same three-arm PascalCase wire byte-string emit-set across
+        // every arm the exhaustive [`super::PlacementStrategy::ALL`]
+        // slice enumerates. Extends the substrate-wide trait-
+        // idiomatic byte-owned reverse-projection axis onto the first
+        // M3-mesh-primitive-defining closed-set fieldless typed-enum
+        // peer on the caixa surface (`:placement :estrategia`),
+        // matching the trajectory the first-mover
+        // [`super::crate::CaixaKind`] lift (b245fd6), the second-
+        // mover [`super::crate::dialeto::CaixaDialeto`] lift
+        // (4cceaf5), the third-mover
+        // [`super::crate::dep::DepList`] lift (e974ca2), and the
+        // M2-OTP-shape supervisor pair
+        // ([`super::crate::supervisor::RestartStrategy`] — 63e5dd0 —
+        // and [`super::crate::supervisor::RestartPolicy`] — 96a522a)
+        // established across the caixa-core-internal + M2 supervisor
+        // tiers.
+        for &variant in PlacementStrategy::ALL {
+            let via_owned_from: Vec<u8> = <Vec<u8> as From<PlacementStrategy>>::from(variant);
+            let via_borrowed_from: Vec<u8> = <Vec<u8> as From<&PlacementStrategy>>::from(&variant);
+            let via_method_bytes: Vec<u8> = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_owned_from, via_method_bytes,
+                "From<PlacementStrategy> for Vec<u8> impl must byte-\
+                 equal PlacementStrategy::as_str().as_bytes().to_vec() \
+                 on PlacementStrategy::{variant:?} — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            assert_eq!(
+                via_borrowed_from, via_method_bytes,
+                "From<&PlacementStrategy> for Vec<u8> impl must byte-\
+                 equal PlacementStrategy::as_str().as_bytes().to_vec() \
+                 on PlacementStrategy::{variant:?} — divergence \
+                 signals a silent detour off the substrate-primitive \
+                 accessor"
+            );
+            assert_eq!(
+                via_owned_from, via_borrowed_from,
+                "From<PlacementStrategy> for Vec<u8> and \
+                 From<&PlacementStrategy> for Vec<u8> must byte-equal \
+                 each other on PlacementStrategy::{variant:?} — \
+                 divergence signals the owned-input and borrowed-\
+                 input paths have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired [`AsRef<[u8]>`]
+            // borrowed byte-view axis (daa8705): the byte-owned
+            // reverse-projection axis must byte-equal the paired
+            // borrowed byte-view axis by construction — locking the
+            // byte-view and byte-owned axes together at the
+            // substrate-primitive accessor.
+            let borrowed_bytes: &[u8] = <PlacementStrategy as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from,
+                borrowed_bytes.to_vec(),
+                "From<PlacementStrategy> for Vec<u8> and AsRef<[u8]> \
+                 for PlacementStrategy must resolve to byte-equal \
+                 byte-tails on PlacementStrategy::{variant:?} — \
+                 divergence signals the byte-owned and byte-view axes \
+                 have drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis witness against the str-owned reverse-
+            // projection family's `.into_bytes()` /
+            // `.as_bytes().to_vec()` byte-tails: every one of
+            // `{String, Cow<'static, str>, Box<str>,
+            // std::sync::Arc<str>, std::rc::Rc<str>}` allocates (or
+            // borrows) the same PascalCase wire byte-string the
+            // substrate-primitive accessor emits, so the byte-owned
+            // axis must byte-equal each of their owned byte-tails by
+            // construction.
+            let owned_string: String = <String as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_string.into_bytes(),
+                "From<PlacementStrategy> for Vec<u8> and \
+                 String::from(strategy).into_bytes() must resolve to \
+                 byte-equal byte-tails on PlacementStrategy::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_cow.as_bytes().to_vec(),
+                "From<PlacementStrategy> for Vec<u8> and \
+                 From<PlacementStrategy> for Cow<'static, str> must \
+                 resolve to byte-equal byte-tails on \
+                 PlacementStrategy::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_box.as_bytes().to_vec(),
+                "From<PlacementStrategy> for Vec<u8> and \
+                 From<PlacementStrategy> for Box<str> must resolve to \
+                 byte-equal byte-tails on PlacementStrategy::{variant:?}"
+            );
+            let atomic_shared: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                atomic_shared.as_bytes().to_vec(),
+                "From<PlacementStrategy> for Vec<u8> and \
+                 From<PlacementStrategy> for std::sync::Arc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 PlacementStrategy::{variant:?}"
+            );
+            let single_thread_shared: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                single_thread_shared.as_bytes().to_vec(),
+                "From<PlacementStrategy> for Vec<u8> and \
+                 From<PlacementStrategy> for std::rc::Rc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 PlacementStrategy::{variant:?}"
+            );
+        }
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness on both owned
+        // and borrowed input shapes: the generic owned-byte-input
+        // function `generic_owned_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::PlacementStrategy`] and a `&PlacementStrategy`
+        // directly through the trait bound, without the caller
+        // open-coding the three-hop
+        // `strategy.as_str().as_bytes().to_vec()` composition.
+        for &variant in PlacementStrategy::ALL {
+            let via_generic_owned = generic_owned_bytes_sink(variant);
+            // Bind the borrowed-input path through an explicit
+            // `&PlacementStrategy` local so the generic-consumer
+            // witness routes through `From<&PlacementStrategy> for
+            // Vec<u8>` (T binds to `&PlacementStrategy`) rather than
+            // clippy-collapsing the borrow onto the owned-input peer.
+            let variant_ref: &PlacementStrategy = &variant;
+            let via_generic_borrowed = generic_owned_bytes_sink(variant_ref);
+            let via_method_bytes = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                via_generic_owned, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on \
+                 PlacementStrategy::{variant:?} must yield the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns — divergence signals the byte-owned axis \
+                 fails to bridge a generic owned-byte-input trait \
+                 bound to the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_generic_borrowed, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on \
+                 &PlacementStrategy::{variant:?} must yield the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns — the borrowed-input surface must resolve to \
+                 the same as_str dispatch"
+            );
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface
+        // witness: the `MockOwnedByteSink` (lifted above per
+        // `clippy::items_after_statements`) mirrors
+        // `std::io::Write::write_all` /
+        // `bytes::BytesMut::extend_from_slice`'s `impl Into<Vec<u8>>`-
+        // bound owned-byte input signature and accepts a
+        // [`super::PlacementStrategy`] directly on both owned and
+        // borrowed input shapes, routing its byte-tail through the
+        // substrate-primitive `as_str` accessor — the shape a future
+        // per-Aplicacao per-`:placement :estrategia` audit-log emit
+        // composes to fold a `:placement :estrategia` discriminator
+        // byte-tag into a downstream owned-byte-sink surface.
+        for &variant in PlacementStrategy::ALL {
+            let mut owned_sink = MockOwnedByteSink::new();
+            owned_sink.write_all(variant);
+            let owned_folded = owned_sink.finalize();
+            assert_eq!(
+                owned_folded,
+                variant.as_str().as_bytes(),
+                "`sink.write_all(strategy)`-shape composition on \
+                 PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns"
+            );
+            let mut borrowed_sink = MockOwnedByteSink::new();
+            let variant_ref: &PlacementStrategy = &variant;
+            borrowed_sink.write_all(variant_ref);
+            let borrowed_folded = borrowed_sink.finalize();
+            assert_eq!(
+                borrowed_folded,
+                variant.as_str().as_bytes(),
+                "`sink.write_all(&strategy)`-shape composition on \
+                 &PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns — the borrowed-input surface must resolve to \
+                 the same as_str dispatch"
             );
         }
     }
