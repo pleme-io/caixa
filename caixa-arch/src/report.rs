@@ -1566,6 +1566,85 @@ impl From<&ArchVerdict> for std::rc::Rc<str> {
     }
 }
 
+/// Trait-idiomatic *byte-view* projection on the [`ArchVerdict`] closed-
+/// set caixa-arch verdict-outcome typed enum — routes byte-for-byte
+/// through the substrate-primitive [`ArchVerdict::as_str`] `pub const fn`
+/// accessor's `.as_bytes()` byte-tail so every consumer that binds an
+/// [`ArchVerdict`] through the standard-library `<T: AsRef<[u8]>>` trait
+/// bound (a future [`std::io::Write::write_all`]-bound `feira arch`
+/// per-report diagnostic sink; a byte-keyed
+/// [`std::collections::HashMap`] `<K: AsRef<[u8]>, V>` per-verdict
+/// dispatch-table lookup whose entry-key trait bound rules out the
+/// sibling [`AsRef<str>`] str-view projection; a future
+/// `blake3::Hasher::update` / `ring::digest::Context::update` /
+/// `sha2::Sha256::update` byte-input surface on any future per-verdict
+/// content-address digest folded into the [`ArchReport`] audit closure)
+/// reaches the substrate primitive through one trait dispatch rather
+/// than open-coding the two-hop `verdict.as_str().as_bytes()`
+/// composition at every call site.
+///
+/// Rust's standard library carries `impl AsRef<[u8]> for str` and
+/// `impl AsRef<[u8]> for String`, so the two-hop composition
+/// `verdict.as_str().as_bytes()` is reachable through the pre-existing
+/// str-view axis alone. But that two-hop shape has no compile-time link
+/// back to the byte-projection axis, forces every downstream
+/// `<T: AsRef<[u8]>>`-bound consumer to open-code the composition at
+/// every call site, and admits a silent split whenever a future call
+/// site takes a sibling reverse-projection axis whose `.as_bytes()`
+/// byte-tail carries no compile-time byte-view surface. The lifted
+/// single-hop impl closes the byte-view axis so every future
+/// `<T: AsRef<[u8]>>`-bound consumer reaches the substrate primitive
+/// through one trait dispatch, and every future arm addition (a
+/// `PartiallyProven` tier the `iac-forge` policy-engine grows for
+/// compliance-only violation sets, an `Unknown` tier for the M4
+/// admission-webhook's timeout-during-check outcome — both trajectory
+/// items the sibling [`ArchVerdict::ALL`] doc block already names)
+/// grows the byte-view axis through one edit on the substrate-primitive
+/// [`ArchVerdict::as_str`] accessor.
+///
+/// Extends the substrate-wide trait-idiomatic byte-view axis onto the
+/// *second outside-caixa-core* closed-set fieldless typed enum on the
+/// caixa surface — matching the trajectory the caixa-core-internal
+/// [`caixa_core::CaixaKind`] first-mover impl (69d8d86),
+/// [`caixa_core::CaixaDialeto`] second-mover impl (8151347),
+/// [`caixa_core::dep::DepList`] third-mover impl (05ffaca), the
+/// M3-mesh-primitive-defining [`caixa_core::aplicacao::PlacementStrategy`]
+/// impl (daa8705), [`caixa_core::aplicacao::RateLimitUnit`] impl
+/// (4867e0f), and the first-mover outside-caixa-core
+/// [`crate::invariants::InvariantKind`] impl (b5baf7d) walked before it.
+/// The paired [`ArchVerdict::as_str`] accessor returns the canonical
+/// lowercase wire byte-string (`"proven"` / `"rejected"`) every
+/// `feira arch` per-report render site, every `feira tofu` HCL-emission
+/// gate, and every future M4 admission-webhook / policy-engine
+/// audit-loader keys off. Leaves the remaining outside-`caixa-core`
+/// closed-set fieldless typed-enum peers ([`caixa_lint::Severity`],
+/// [`caixa_lint::FixSafety`],
+/// [`caixa_lint::diagnostic::PathShapeViolation`],
+/// [`caixa_theme::Semantic`], [`caixa_provedor::FerriteRuntime`]) as
+/// the campaign's next mechanical one-impl extensions against the
+/// substrate-primitive `as_str` accessor they already carry.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_as_ref_bytes_routes_through_as_str_accessor`]
+/// (fail-before-pass-after byte-parity pin against
+/// [`ArchVerdict::as_str`] `.as_bytes()` across the two-arm
+/// [`ArchVerdict::ALL`] emit-set, cross-axis witness against the paired
+/// str-view [`AsRef<str>`] / [`std::fmt::Display`] /
+/// [`ArchVerdict::as_str`] axes' `.as_bytes()` byte-tails, cross-axis
+/// witness against the paired reverse-projection
+/// `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>, std::rc::Rc<str>}` return-shape axes'
+/// `.as_bytes()` byte-tails, a `<T: AsRef<[u8]>>`-bound-consumer witness
+/// on both owned and borrowed input surfaces, and a
+/// `blake3::Hasher::update`-shape byte-input surface witness routed
+/// through the `<T: AsRef<[u8]>>`-bound consumer axis to reach the
+/// caixa-lacre compounding target).
+impl AsRef<[u8]> for ArchVerdict {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchReport {
     pub verdict: ArchVerdict,
@@ -4258,5 +4337,197 @@ mod tests {
              `From<ArchVerdict> for std::rc::Rc<str>` axis by first \
              calling `.copied()` on the iterator)"
         );
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds the substrate-primitive \
+                  as_str accessor's `.as_bytes()` byte-tail plus the \
+                  paired str-view (AsRef<str>, Display, as_str) and \
+                  reverse-projection ({&'static str, String, Cow<'static, \
+                  str>, Box<str>, std::sync::Arc<str>, std::rc::Rc<str>}) \
+                  return-shape axes' `.as_bytes()` byte-tails plus a \
+                  <T: AsRef<[u8]>>-bound-consumer witness plus a \
+                  blake3::Hasher::update-shape byte-input surface witness \
+                  into one exhaustive round-trip over ArchVerdict::ALL — \
+                  the accepted line-count cost of extending the byte-view \
+                  axis keyed to the substrate-primitive as_str accessor \
+                  at the same test-site"
+    )]
+    #[allow(
+        clippy::needless_borrows_for_generic_args,
+        reason = "the borrowed-input surface (&variant) is exercised \
+                  deliberately: the `<T: AsRef<[u8]>>`-bound consumer and \
+                  the `blake3::Hasher::update`-shape byte-input surface \
+                  both accept either owned or borrowed input through the \
+                  standard-library blanket `impl<T: ?Sized + AsRef<[u8]>> \
+                  AsRef<[u8]> for &T`, and this pin round-trips both \
+                  input shapes to lock the borrowed-input path load-\
+                  bearing against a future silent regression"
+    )]
+    fn arch_verdict_as_ref_bytes_routes_through_as_str_accessor() {
+        // `<T: AsRef<[u8]>>`-bound-consumer witness helper: a generic
+        // byte-input function accepts a [`super::ArchVerdict`] directly
+        // through the trait bound, without the caller open-coding the
+        // two-hop `verdict.as_str().as_bytes()` composition. Lifted to
+        // the top of the function per `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock: mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound `update`
+        // signature so a future per-ArchReport BLAKE3 content-address
+        // closure that composes `hasher.update(verdict)` on the audit-
+        // log closure builder reaches the substrate-primitive `as_str`
+        // accessor through the [`super::ArchVerdict`] `AsRef<[u8]>` axis
+        // and no other.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        for &variant in ArchVerdict::ALL {
+            let via_trait: &[u8] = <ArchVerdict as AsRef<[u8]>>::as_ref(&variant);
+            let via_method_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for ArchVerdict impl must byte-equal \
+                 ArchVerdict::as_str().as_bytes() on \
+                 ArchVerdict::{variant:?} — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails.
+            let via_as_ref_str: &str = <ArchVerdict as AsRef<str>>::as_ref(&variant);
+            assert_eq!(
+                via_trait,
+                via_as_ref_str.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and AsRef<str> for \
+                 ArchVerdict `.as_bytes()` must byte-equal on \
+                 ArchVerdict::{variant:?}"
+            );
+            let via_display: String = format!("{variant}");
+            assert_eq!(
+                via_trait,
+                via_display.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and \
+                 std::fmt::Display::fmt::<ArchVerdict> `.as_bytes()` \
+                 must byte-equal on ArchVerdict::{variant:?}"
+            );
+            let via_as_str: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait,
+                via_as_str.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and ArchVerdict::as_str \
+                 `.as_bytes()` must byte-equal on ArchVerdict::{variant:?}"
+            );
+            // Cross-axis witness against the paired reverse-projection
+            // axes' `.as_bytes()` byte-tails.
+            let via_static: &'static str = <&'static str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_static.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and From<ArchVerdict> for \
+                 &'static str `.as_bytes()` must byte-equal on \
+                 ArchVerdict::{variant:?}"
+            );
+            let via_string: String = String::from(variant);
+            assert_eq!(
+                via_trait,
+                via_string.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and From<ArchVerdict> for \
+                 String `.as_bytes()` must byte-equal on \
+                 ArchVerdict::{variant:?}"
+            );
+            let via_cow: std::borrow::Cow<'static, str> =
+                std::borrow::Cow::<'static, str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_cow.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and From<ArchVerdict> for \
+                 Cow<'static, str> `.as_bytes()` must byte-equal on \
+                 ArchVerdict::{variant:?}"
+            );
+            let via_box: Box<str> = Box::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                via_box.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and From<ArchVerdict> for \
+                 Box<str> `.as_bytes()` must byte-equal on \
+                 ArchVerdict::{variant:?}"
+            );
+            let atomic_shared: std::sync::Arc<str> = std::sync::Arc::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                atomic_shared.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and From<ArchVerdict> for \
+                 std::sync::Arc<str> `.as_bytes()` must byte-equal on \
+                 ArchVerdict::{variant:?}"
+            );
+            let single_thread_shared: std::rc::Rc<str> = std::rc::Rc::<str>::from(variant);
+            assert_eq!(
+                via_trait,
+                single_thread_shared.as_bytes(),
+                "AsRef<[u8]> for ArchVerdict and From<ArchVerdict> for \
+                 std::rc::Rc<str> `.as_bytes()` must byte-equal on \
+                 ArchVerdict::{variant:?}"
+            );
+            // `<T: AsRef<[u8]>>`-bound-consumer witness on both owned
+            // and borrowed input surfaces.
+            let via_generic_owned = generic_bytes_sink(variant);
+            assert_eq!(
+                via_trait, via_generic_owned,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on the \
+                 owned-input surface must byte-equal the substrate-\
+                 primitive as_str accessor's byte-tail on \
+                 ArchVerdict::{variant:?}"
+            );
+            let via_generic_borrowed = generic_bytes_sink(&variant);
+            assert_eq!(
+                via_trait, via_generic_borrowed,
+                "generic `<T: AsRef<[u8]>>`-bound consumer on the \
+                 borrowed-input surface must byte-equal the substrate-\
+                 primitive as_str accessor's byte-tail on \
+                 ArchVerdict::{variant:?}"
+            );
+            // `blake3::Hasher::update`-shape byte-input surface witness
+            // on both owned and borrowed input surfaces — the primary
+            // compounding target on the byte-view axis is the caixa-
+            // lacre BLAKE3 content-address closure, which binds its
+            // input through exactly this trait bound.
+            let mut hasher_owned_input = MockHasher::new();
+            hasher_owned_input.update(variant);
+            let owned_digest = hasher_owned_input.finalize();
+            assert_eq!(
+                owned_digest.as_slice(),
+                via_trait,
+                "blake3::Hasher::update-shape byte-input surface on the \
+                 owned-input surface must byte-equal the substrate-\
+                 primitive as_str accessor's byte-tail on \
+                 ArchVerdict::{variant:?}"
+            );
+            let mut hasher_borrowed_input = MockHasher::new();
+            hasher_borrowed_input.update(&variant);
+            let borrowed_digest = hasher_borrowed_input.finalize();
+            assert_eq!(
+                borrowed_digest.as_slice(),
+                via_trait,
+                "blake3::Hasher::update-shape byte-input surface on the \
+                 borrowed-input surface must byte-equal the substrate-\
+                 primitive as_str accessor's byte-tail on \
+                 ArchVerdict::{variant:?}"
+            );
+        }
     }
 }
