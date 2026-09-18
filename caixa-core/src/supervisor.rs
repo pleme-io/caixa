@@ -1512,6 +1512,107 @@ impl From<&RestartStrategy> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
+/// first M2-OTP-shape closed-set fieldless typed enum peer on the caixa
+/// surface ([`RestartStrategy`]) — the byte-view mirror of the str-view
+/// reverse-projection axis carried by the paired
+/// [`TryFrom<&str> for RestartStrategy`] impl (which routes through the
+/// substrate-primitive [`RestartStrategy::from_wire`] `Option<Self>`
+/// accessor on the four-arm `PascalCase` accept-set the sibling
+/// [`RestartStrategy::as_str`] emitter returns). Routes byte-for-byte
+/// through the standard-library [`std::str::from_utf8`] UTF-8 validator
+/// and then through [`RestartStrategy::from_wire`] so every consumer that
+/// holds a borrowed [`&[u8]`] and needs to project it back into a typed
+/// [`RestartStrategy`] — a future `bytes::Bytes::as_ref()`-fed reader
+/// that parses a per-supervisor `:estrategia` `PascalCase` wire scalar
+/// from an already-borrowed framing byte-tail (a
+/// `tracing::field::valuable::Value::Bytes` recorder on the future
+/// wasm-operator's per-supervisor sibling-restart-strategy diagnostic
+/// emission path, a future audit-report re-loader binding a prior
+/// [`RestartStrategy::as_str`] output from a mmap'd byte-slice back
+/// through the typed enum for cross-run comparison), a future M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR admission-webhook rejection
+/// body that reads a `spec.estrategia` field off a raw HTTP body byte-
+/// slice before UTF-8 validation commits allocation, a future generic
+/// `<T: for<'a> TryFrom<&'a [u8]>>`-bound loader over any of the
+/// substrate's closed-set typed enums — reaches the same four-arm
+/// `PascalCase` wire accept-set the sibling method-named
+/// [`RestartStrategy::from_wire`] resolver and the paired trait-idiomatic
+/// [`TryFrom<&str>`] axis already resolve against, rather than an open-
+/// coded per-call-site
+/// `std::str::from_utf8(bytes).ok().and_then(RestartStrategy::from_wire)`
+/// composition or a
+/// `<RestartStrategy as TryFrom<&str>>::try_from(std::str::from_utf8(bytes)?)`
+/// two-hop shape whose type bounds have no compile-time link to the
+/// substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-view reverse-
+/// projection* family — opened on the structurally most fundamental
+/// closed-set fieldless typed enum peer ([`crate::CaixaKind`], commit
+/// 18d1940), extended onto the second caixa-core-internal peer
+/// ([`crate::CaixaDialeto`], commit d102cb8) and the third
+/// ([`crate::dep::DepList`], commit b8f25d5) — onto the first
+/// M2-OTP-shape supervisor-slot closed-set fieldless typed enum peer,
+/// tracking the "route through `from_wire` via `std::str::from_utf8`"
+/// discipline the first-mover established. Rust's standard library
+/// carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a two-
+/// hop composition through [`std::str::from_utf8`] + the paired
+/// [`TryFrom<&str>`] axis is reachable at every call site but has no
+/// compile-time link back to the byte-view reverse-projection axis.
+/// Every remaining closed-set fieldless typed enum peer on the substrate
+/// ([`RestartPolicy`], [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::aplicacao::WitShape`],
+/// and the outside-`caixa-core` peers `PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) is a future target of the campaign, mirroring the
+/// trajectory the closed byte-owned reverse-projection family walked
+/// arm-by-arm onto each peer.
+///
+/// `type Error = ()` matches the sibling [`RestartStrategy::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing and
+/// the paired trait-idiomatic [`TryFrom<&str>`] axis's unit-error shape —
+/// the caller picks the diagnostic form appropriate for its use site (a
+/// future `feira supervisor --estrategia …` arg-parse composes its own
+/// per-verb "unknown strategy: <arg> — accepted: {…}" message enumerating
+/// [`RestartStrategy::WIRE_NAMES`]; a future admission-webhook rejection
+/// body wraps the `Err(())` outcome with the accepted-set enumeration for
+/// operator diagnostics; a `Result::map_err` at the call site lifts the
+/// unit-error to a per-verb error type). Two rejection paths route
+/// through the single unit-error: an invalid UTF-8 byte-sequence
+/// ([`std::str::from_utf8`] returns `Err`) and a valid UTF-8 byte-string
+/// that falls outside the four-arm `PascalCase` accept-set
+/// ([`RestartStrategy::from_wire`] returns `None`) — both collapse onto
+/// `Err(())` so the trait signature stays consistent with the sibling
+/// str-view reverse axis, and a caller that needs to distinguish the two
+/// failure modes composes [`std::str::from_utf8`] +
+/// [`RestartStrategy::from_wire`] explicitly.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`RestartStrategy::from_wire`] across the
+/// four-arm [`RestartStrategy::ALL`] accept-set on the borrowed byte-
+/// slice surface, plus a cross-axis witness that the byte-view reverse
+/// projection agrees with the paired [`TryFrom<&str>`] str-view reverse
+/// axis on every accepted arm) and
+/// [`tests::restart_strategy_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-vocabulary
+/// rejection path — the latter includes the sibling kebab-case
+/// dispatcher-catalog byte-strings on the two-axis wire/catalog split so
+/// a caller that confuses the two axes trips here rather than at a
+/// downstream K8s-CR round-trip miss).
+impl TryFrom<&[u8]> for RestartStrategy {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -15600,6 +15701,221 @@ mod tests {
             SupervisorError::restart_window_exceeds_cap(above_hour),
             SupervisorError::RestartWindowExceedsCap { window: above_hour },
         );
+    }
+
+    #[test]
+    fn restart_strategy_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for RestartStrategy` — asserts the trait-
+        // idiomatic byte-view reverse-projection standard-library impl
+        // and the substrate-primitive [`RestartStrategy::from_wire`]
+        // `Option<Self>` accessor resolve to the same four-arm
+        // `PascalCase` wire accept-set across every arm the exhaustive
+        // [`RestartStrategy::ALL`] slice enumerates. Extends the
+        // substrate-wide trait-idiomatic byte-view reverse-projection
+        // axis onto the first M2-OTP-shape supervisor-slot closed-set
+        // fieldless typed enum peer — mirror of the paired
+        // [`TryFrom<&str> for RestartStrategy`] str-view reverse-
+        // projection axis on the same enum, and the byte-view companion
+        // of the pre-existing byte-owned reverse-projection family
+        // ([`AsRef<[u8]>`], [`From<RestartStrategy> for Vec<u8>`],
+        // [`From<&RestartStrategy> for Vec<u8>`]) on this same enum.
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_routes_through_from_wire_accessor`]
+        // (18d1940),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_bytes_routes_through_from_wire_accessor`]
+        // (d102cb8), and
+        // [`crate::dep::tests::dep_list_try_from_bytes_routes_through_from_wire_accessor`]
+        // (b8f25d5) — tracks the "route through `from_wire` via
+        // `std::str::from_utf8`" discipline the first-mover established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so
+        // a two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent split
+        // whenever a future call site takes a sibling byte-projection
+        // axis whose parse arm-set carries no compile-time byte-view
+        // surface. This impl closes the byte-view reverse-projection
+        // axis at the substrate-primitive [`RestartStrategy::from_wire`]
+        // accessor so every future `<T: for<'a> TryFrom<&'a [u8]>>`-
+        // bound consumer reaches the same four-arm `PascalCase` wire
+        // accept-set through one trait dispatch.
+        for &variant in RestartStrategy::ALL {
+            let wire_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                <RestartStrategy as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on RestartStrategy must round-trip \
+                 RestartStrategy::{variant:?}.as_str().as_bytes() back to \
+                 Ok(RestartStrategy::{variant:?}) — divergence from \
+                 RestartStrategy::from_wire signals a silent detour off \
+                 the substrate-primitive accessor"
+            );
+            assert_eq!(
+                <RestartStrategy as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                RestartStrategy::from_wire(variant.as_str()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 RestartStrategy::{variant:?}.as_str().as_bytes() must \
+                 byte-equal RestartStrategy::from_wire on the paired \
+                 &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection axis
+            // must agree with the paired str-view reverse-projection
+            // axis ([`TryFrom<&str>`]) on every accepted arm — the two
+            // reverse paths share one `PascalCase` accept-set through
+            // the substrate-primitive `from_wire` accessor.
+            let via_str: Result<RestartStrategy, ()> =
+                <RestartStrategy as TryFrom<&str>>::try_from(variant.as_str());
+            let via_bytes: Result<RestartStrategy, ()> =
+                <RestartStrategy as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on RestartStrategy must agree on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 byte-view and str-view reverse paths have drifted off \
+                 the same substrate-primitive from_wire accessor"
+            );
+            // Forward/reverse byte-view cross-axis witness: feed the
+            // paired [`AsRef<[u8]>`] byte-tail back through the new
+            // impl and assert it round-trips to the originating arm.
+            let via_asref: &[u8] = <RestartStrategy as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                <RestartStrategy as TryFrom<&[u8]>>::try_from(via_asref),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ AsRef<[u8]> must round-trip \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 forward and reverse byte-view axes have drifted off \
+                 the same substrate-primitive as_str/from_wire pair"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for
+        // RestartStrategy` — sweeps two rejection paths the byte-view
+        // reverse-projection axis collapses onto the single unit-error
+        // `Err(())` return: the invalid-UTF-8 rejection path
+        // ([`std::str::from_utf8`] returns `Err` before
+        // [`RestartStrategy::from_wire`] runs) and the valid-UTF-8-but-
+        // unknown-wire rejection path ([`RestartStrategy::from_wire`]
+        // returns `None` on a byte-string outside the four-arm
+        // `PascalCase` accept-set). Both must reject, so a future
+        // accidental widening of the trait impl's accept-set (a case-
+        // fold path, a silent acceptance of the kebab-case dispatcher-
+        // catalog byte-strings on this axis — which would collide the
+        // two-axis wire/catalog split the sibling
+        // [`RestartStrategy::from_wire`] doc block makes load-bearing —
+        // a `#[serde(rename_all = "…")]` attribute drift that widens
+        // the parse arm-set silently, a stray fallback that maps
+        // invalid UTF-8 onto a default arm rather than the trait-
+        // idiomatic `Err(())`) trips at caixa-core test time. Peer of
+        // the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (18d1940),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (d102cb8), and
+        // [`crate::dep::tests::dep_list_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (b8f25d5) rejection witnesses.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without its continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <RestartStrategy as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on RestartStrategy must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates mirror the corpus
+        // the sibling `restart_strategy_try_from_str_rejects_unknown_byte_strings`
+        // (5b828ed) str-view rejection witness already pins on the
+        // paired [`TryFrom<&str>`] axis: the empty byte-string,
+        // whitespace-only padding, the kebab-case dispatcher-catalog
+        // byte-strings on the sibling axis the pre-existing
+        // [`std::str::FromStr`] impl the [`gen_platform::FromStrKind`]
+        // derive installs parses onto (a caller who confuses the two
+        // axes trips here rather than at a downstream K8s-CR round-
+        // trip miss), lowercase / uppercase / mixed-case folds of each
+        // `PascalCase` arm, whitespace-padded / trailing-newline /
+        // quote-wrapped forms, and plausible-but-wrong English rebrand
+        // candidates.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\n",
+            b"\t",
+            b"one-for-one",
+            b"one-for-all",
+            b"rest-for-one",
+            b"simple-one-for-one",
+            b"oneforone",
+            b"one_for_one",
+            b"OneForOnes",
+            b"ONEFORONE",
+            b"oneforall",
+            b"restforone",
+            b"simpleoneforone",
+            b"OneForOne ",
+            b" OneForOne",
+            b" OneForAll ",
+            b"OneForOne\n",
+            b"RestForOne\t",
+            b"OneForEach",
+            b"AllForOne",
+            b"one for one",
+            b"\"OneForOne\"",
+            b"?",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <RestartStrategy as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on RestartStrategy must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired RestartStrategy::from_wire \
+                 resolver"
+            );
+            // Cross-axis witness: on a byte-string that is valid UTF-8,
+            // the byte-view reverse-projection axis must agree with the
+            // paired str-view reverse-projection axis
+            // ([`TryFrom<&str>`]) — both route through the same
+            // [`RestartStrategy::from_wire`] resolver, so the two
+            // rejection paths align by construction.
+            if let Ok(s) = std::str::from_utf8(input) {
+                assert_eq!(
+                    <RestartStrategy as TryFrom<&[u8]>>::try_from(input),
+                    <RestartStrategy as TryFrom<&str>>::try_from(s),
+                    "TryFrom<&[u8]> and TryFrom<&str> reverse-\
+                     projection axes on RestartStrategy must agree on \
+                     the valid-UTF-8 input {input:?} — divergence \
+                     signals the two reverse paths have drifted off \
+                     the same substrate-primitive from_wire accessor"
+                );
+            }
+        }
     }
 
     #[test]
