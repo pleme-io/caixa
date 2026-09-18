@@ -2045,6 +2045,74 @@ impl From<&Semantic> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed byte-slice* reverse projection on the
+/// [`Semantic`] closed-set caixa-theme semantic-style typed enum —
+/// routes byte-for-byte through [`std::str::from_utf8`] +
+/// the substrate-primitive [`Semantic::from_wire`] `Option<Self>`
+/// accessor, so `<Semantic as TryFrom<&[u8]>>::try_from(bytes)`
+/// reaches the same sixteen-arm canonical-lowercase-kebab wire-form
+/// accept-set the sibling method-named [`Semantic::from_wire`]
+/// resolver and the paired [`TryFrom<&str>`] impl already resolve
+/// against. Both rejection paths (invalid UTF-8 and valid-UTF-8-but-
+/// unknown-wire) collapse onto the single unit-error `Err(())`
+/// return, matching the trait-idiomatic-`()`-error shape the
+/// substrate-wide sibling `TryFrom<&[u8]>` impls carry.
+///
+/// Extends the substrate-wide trait-idiomatic byte-view reverse-
+/// projection axis onto the *fifth* outside-`caixa-core` closed-set
+/// fieldless typed-enum peer (and the first inside `caixa-theme`):
+/// the sixteen-arm caixa-theme semantic-style accept-set every
+/// per-`Semantic` paint dispatch, every future `caixa-lsp`-side
+/// per-`SemanticTokenType` wire-up, every future `caixa.nvim` per-
+/// highlight-group re-loader, and every future `blackmatter-shell`
+/// per-arm `data-semantic="<kebab>"` DOM-attribute re-loader
+/// dispatches through — matching the trajectory the first-mover
+/// outside-`caixa-core` [`caixa_arch::invariants::InvariantKind`]
+/// `TryFrom<&[u8]>` impl (40b7417), second-mover outside-`caixa-core`
+/// [`caixa_arch::report::ArchVerdict`] `TryFrom<&[u8]>` impl
+/// (4dbca85), third-mover outside-`caixa-core`
+/// `caixa_lint::diagnostic::Severity` `TryFrom<&[u8]>` impl (f11dc96),
+/// and fourth-mover outside-`caixa-core`
+/// `caixa_lint::diagnostic::FixSafety` `TryFrom<&[u8]>` impl
+/// (46a3e3e) walked before it. Leaves the last outside-`caixa-core`
+/// closed-set fieldless typed-enum peer
+/// ([`caixa_provedor::FerriteRuntime`]) as the campaign's next
+/// mechanical one-lift extension — tracking the paired byte-owned
+/// axis's outside-`caixa-core` sweep verbatim.
+///
+/// Pinned load-bearing by
+/// [`tests::semantic_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`Semantic::from_wire`] across the
+/// sixteen-arm [`Semantic::ALL`] accept-set on the borrowed byte-
+/// slice surface, plus a cross-axis witness that the byte-view
+/// reverse projection agrees with the paired [`TryFrom<&str>`] str-
+/// view reverse axis on every accepted arm, and a forward/reverse
+/// byte-view cross-axis witness that feeding the paired
+/// [`AsRef<[u8]>`] byte-tail and the paired
+/// [`From<Semantic> for Vec<u8>`] and [`From<&Semantic> for Vec<u8>`]
+/// owned byte-tails back through the new impl round-trips to the
+/// originating arm) and
+/// [`tests::semantic_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-
+/// vocabulary rejection path — the latter mirrors the corpus the
+/// paired [`TryFrom<&str>`] rejection witness already pins, including
+/// the trajectory-item candidates `b"namespace"` / `b"deleted"` the
+/// sibling [`Semantic::ALL`] doc block already names and sibling
+/// closed-set canonical tags on other axes so a byte-level cross-
+/// axis leak trips at caixa-theme test time rather than at a
+/// downstream consumer's silent misclassification).
+impl TryFrom<&[u8]> for Semantic {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, <Self as TryFrom<&[u8]>>::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5428,6 +5496,236 @@ mod tests {
                  surface on the borrowed-input surface must byte-equal \
                  the substrate-primitive as_str accessor's byte-tail on \
                  Semantic::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for Semantic` — asserts the trait-
+        // idiomatic byte-view reverse-projection standard-library impl
+        // and the substrate-primitive [`super::Semantic::from_wire`]
+        // `Option<Self>` accessor resolve to the same sixteen-arm
+        // canonical-lowercase-kebab semantic-style accept-set across
+        // every arm the exhaustive [`super::Semantic::ALL`] slice
+        // enumerates. Extends the substrate-wide trait-idiomatic byte-
+        // view reverse-projection axis onto the *fifth outside-
+        // `caixa-core`* closed-set fieldless typed-enum peer (and the
+        // first inside `caixa-theme`) — matching the paired
+        // [`super::Semantic`] byte-view forward triple ([`AsRef<[u8]>`],
+        // [`From<Semantic> for Vec<u8>`],
+        // [`From<&Semantic> for Vec<u8>`]) and the paired str-view
+        // reverse-projection axis ([`TryFrom<&str> for Semantic`])
+        // already walked on this enum, and matching the trajectory the
+        // first-mover outside-`caixa-core`
+        // `caixa_arch::invariants::InvariantKind` `TryFrom<&[u8]>` impl
+        // (40b7417), second-mover outside-`caixa-core`
+        // `caixa_arch::report::ArchVerdict` `TryFrom<&[u8]>` impl
+        // (4dbca85), third-mover outside-`caixa-core`
+        // `caixa_lint::diagnostic::Severity` `TryFrom<&[u8]>` impl
+        // (f11dc96), and fourth-mover outside-`caixa-core`
+        // `caixa_lint::diagnostic::FixSafety` `TryFrom<&[u8]>` impl
+        // (46a3e3e) walked before it.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so
+        // a two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent
+        // split whenever a future call site takes a sibling byte-
+        // projection axis whose parse arm-set carries no compile-time
+        // byte-view surface. This impl closes the byte-view reverse-
+        // projection axis at the substrate-primitive
+        // [`super::Semantic::from_wire`] accessor so every future
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer reaches the
+        // same sixteen-arm semantic-style accept-set through one trait
+        // dispatch.
+        for &variant in super::Semantic::ALL {
+            let wire_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                <super::Semantic as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on Semantic must round-trip \
+                 Semantic::{variant:?}.as_str().as_bytes() back to \
+                 Ok(Semantic::{variant:?}) — divergence from \
+                 Semantic::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <super::Semantic as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                super::Semantic::from_wire(variant.as_str()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 Semantic::{variant:?}.as_str().as_bytes() must byte-\
+                 equal Semantic::from_wire on the paired &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection
+            // axis must agree with the paired str-view reverse-
+            // projection axis ([`TryFrom<&str>`]) on every accepted
+            // arm — the two reverse paths share one semantic-style
+            // accept-set through the substrate-primitive `from_wire`
+            // accessor.
+            let via_str: Result<super::Semantic, ()> =
+                <super::Semantic as TryFrom<&str>>::try_from(variant.as_str());
+            let via_bytes: Result<super::Semantic, ()> =
+                <super::Semantic as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on Semantic must agree on \
+                 Semantic::{variant:?} — divergence signals the byte-\
+                 view and str-view reverse paths have drifted off the \
+                 same substrate-primitive from_wire accessor"
+            );
+            // Forward/reverse byte-view cross-axis witness: feed the
+            // paired [`AsRef<[u8]>`] byte-tail back through the new
+            // impl and assert it round-trips to the originating arm.
+            let via_asref: &[u8] = <super::Semantic as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                <super::Semantic as TryFrom<&[u8]>>::try_from(via_asref),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ AsRef<[u8]> must round-trip \
+                 Semantic::{variant:?} — divergence signals the \
+                 forward and reverse byte-view axes have drifted off \
+                 the same substrate-primitive as_str/from_wire pair"
+            );
+            // Byte-owned round-trip witness: feed the paired
+            // [`From<Semantic> for Vec<u8>`] owned byte-tail back
+            // through the byte-view reverse impl as a borrowed slice
+            // and assert the round-trip lands on the originating arm
+            // — locks the owned and borrowed byte projections
+            // together at the substrate-primitive accessor.
+            let owned_bytes: Vec<u8> = <Vec<u8> as From<super::Semantic>>::from(variant);
+            assert_eq!(
+                <super::Semantic as TryFrom<&[u8]>>::try_from(owned_bytes.as_slice()),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<Semantic> for Vec<u8> must \
+                 round-trip Semantic::{variant:?} — divergence \
+                 signals the byte-owned reverse-projection axis has \
+                 drifted off the paired byte-view reverse axis"
+            );
+            // Borrowed-input byte-owned round-trip witness: same
+            // discipline on the paired [`From<&Semantic> for Vec<u8>`]
+            // owned byte-tail — closes the four-corner {owned-input,
+            // borrowed-input} × {owned-output byte-vec, borrowed-
+            // output byte-slice} projection square through the new
+            // byte-view reverse impl.
+            let borrowed_owned_bytes: Vec<u8> = <Vec<u8> as From<&super::Semantic>>::from(&variant);
+            assert_eq!(
+                <super::Semantic as TryFrom<&[u8]>>::try_from(borrowed_owned_bytes.as_slice()),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<&Semantic> for Vec<u8> must \
+                 round-trip Semantic::{variant:?} — divergence \
+                 signals the borrowed-input byte-owned axis has \
+                 drifted off the paired byte-view reverse axis"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for Semantic`
+        // — sweeps two rejection paths the byte-view reverse-
+        // projection axis collapses onto the single unit-error
+        // `Err(())` return: the invalid-UTF-8 rejection path
+        // ([`std::str::from_utf8`] returns `Err` before
+        // [`super::Semantic::from_wire`] runs) and the valid-UTF-8-
+        // but-unknown-wire rejection path
+        // ([`super::Semantic::from_wire`] returns `None` on a byte-
+        // string outside the sixteen-arm semantic-style accept-set).
+        // Both must reject, so a future accidental widening of the
+        // trait impl's accept-set (a case-fold path, a silent
+        // inclusion of the pre-lift PascalCase Debug-derived shapes
+        // like `"Keyword"` / `"KeywordArg"` on the wire axis, a
+        // silent overlap with sibling closed-set canonical tags on
+        // other axes, a stray fallback that maps invalid UTF-8 onto
+        // a default arm rather than the trait-idiomatic
+        // `Err(())`) trips at caixa-theme test time.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without
+        //     continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator
+        //     rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <super::Semantic as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on Semantic must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates mirror the corpus
+        // the sibling `semantic_try_from_str_rejects_unknown_byte_strings`
+        // str-view rejection witness already pins on the paired
+        // [`TryFrom<&str>`] axis: the empty byte-string, whitespace-
+        // only padding, PascalCase / uppercase rebrand candidates,
+        // Levenshtein-neighbor typos, the trajectory-item candidates
+        // `b"namespace"` / `b"deleted"` the sibling
+        // [`super::Semantic::ALL`] doc block names, sibling closed-
+        // set canonical tags on other axes (`b"safe"`, `b"unsafe"`,
+        // `b"proven"`, `b"rejected"`, `b"biblioteca"`, `b"servico"`,
+        // `b"one-for-one"`, `b"empty"`, `b"safety"`, `b"compliance"`),
+        // and trailing/leading-whitespace-padded canonical tags.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\n",
+            b"\t",
+            b"Keyword",
+            b"KEYWORD",
+            b"KeywordArg",
+            b"keyword_arg",
+            b"keyword arg",
+            b"keywordarg",
+            b"keywords",
+            b"keywor",
+            b"namespace",
+            b"deleted",
+            b"safe",
+            b"unsafe",
+            b"proven",
+            b"rejected",
+            b"biblioteca",
+            b"servico",
+            b"one-for-one",
+            b"empty",
+            b"safety",
+            b"compliance",
+            b"keyword ",
+            b" keyword",
+            b"keyword\n",
+            b"keyword\t",
+            b"?",
+            b"\"keyword\"",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <super::Semantic as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on Semantic must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired Semantic::from_wire \
+                 resolver, or a cross-axis leak from a sibling \
+                 closed-set typed-enum axis's non-shared arm-set"
             );
         }
     }
