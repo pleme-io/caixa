@@ -1696,6 +1696,91 @@ impl AsRef<[u8]> for FerriteRuntime {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`Vec<u8>` output* byte-owned reverse
+/// projection on the [`FerriteRuntime`] closed two-arm caixa-provedor
+/// ferrite-runtime typed enum — routes byte-for-byte through the substrate-
+/// primitive [`FerriteRuntime::variant_slug`] `pub const fn` accessor via
+/// [`str::as_bytes`] + [`slice::to_vec`] so every consumer that binds a
+/// [`FerriteRuntime`] through the standard-library `<T: Into<Vec<u8>>>`
+/// trait bound (a future [`std::io::Write::write_all`]-shape per-runtime-
+/// tier audit-log byte-sink whose input parameter is an owned [`Vec<u8>`]
+/// payload on the `feira publish-provider --runtime=<tag>` verb, a future
+/// `bytes::Bytes::from(Vec::<u8>::from(runtime))` composer folding the per-
+/// arm byte-tag into a [`bytes::Bytes`] framing surface, a future
+/// `hasher.update(&Vec::<u8>::from(runtime))`-shape BLAKE3 per-provider
+/// content-address closure that needs the owned byte-tail buffered before
+/// folding into the [`caixa_lacre::Lacre`] closure body) reaches the same
+/// two-arm canonical-lowercase-kebab byte-string emit-set (`"ferrite-safe"`
+/// / `"ferrite-arena"`) the paired [`AsRef<[u8]>`] borrowed byte-view axis
+/// (c0111a6) and the six str-owned reverse-projection corners
+/// (`&'static str`, `String`, `Cow<'static, str>`, `Box<str>`,
+/// `std::sync::Arc<str>`, `std::rc::Rc<str>`) already return, rather than
+/// an open-coded per-call-site `runtime.variant_slug().as_bytes().to_vec()`
+/// composition whose type bounds have no compile-time link back to the
+/// substrate primitive.
+///
+/// Closes the substrate-wide trait-idiomatic byte-owned reverse-projection
+/// axis on the *sixth and final outside-`caixa-core`* closed-set fieldless
+/// typed-enum peer — matching the trajectory the caixa-core-internal
+/// [`caixa_core::CaixaKind`] first-mover (b245fd6),
+/// [`caixa_core::CaixaDialeto`] (4cceaf5),
+/// [`caixa_core::dep::DepList`] (e974ca2), the M2-OTP-shape
+/// [`caixa_core::supervisor::RestartStrategy`] (63e5dd0) /
+/// [`caixa_core::supervisor::RestartPolicy`] (96a522a), the M3-mesh-
+/// primitive-defining [`caixa_core::aplicacao::PlacementStrategy`]
+/// (008a35b) / [`caixa_core::aplicacao::RateLimitUnit`] (602ae0b) /
+/// [`caixa_core::aplicacao::WitShape`] (7b4b278), the outside-`caixa-core`
+/// first-mover `caixa_arch::invariants::InvariantKind` (ed29f5a), the
+/// second-mover `caixa_arch::report::ArchVerdict` (5268ed1), the third-
+/// mover `caixa_lint::Severity` (3aa6644), the fourth-mover
+/// `caixa_lint::FixSafety` (38060a4), and the render-side
+/// [`caixa_core::render::PathShapeViolation`] (c98fb87) and fifth-mover
+/// `caixa_theme::style::Semantic` (2293192) peers walked before it. With
+/// this close, the whole outside-`caixa-core` tier of the substrate-wide
+/// byte-owned reverse-projection campaign is complete across every closed-
+/// set fieldless typed enum peer on the caixa surface on both
+/// `{Self, &Self}` input-shape corners.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_from_into_owned_vec_bytes_routes_through_variant_slug_accessor`]
+/// (byte-parity pin against [`FerriteRuntime::variant_slug`] across the
+/// two-arm [`FerriteRuntime::ALL`] emit-set binding the byte-owned
+/// reverse-projection axis against the paired [`AsRef<[u8]>`] borrowed
+/// byte-view axis and the str-owned reverse-projection family's
+/// `.into_bytes()` / `.as_bytes().to_vec()` byte-tails, plus a
+/// `<T: Into<Vec<u8>>>`-bound generic-consumer witness on both owned and
+/// borrowed input shapes, plus a `std::io::Write::write_all`-shape owned-
+/// byte-sink witness, plus a Debug-derive rejection witness against a
+/// silent collapse onto the `PascalCase` `format!("{:?}", variant)` byte-
+/// string).
+impl From<FerriteRuntime> for Vec<u8> {
+    fn from(runtime: FerriteRuntime) -> Vec<u8> {
+        runtime.variant_slug().as_bytes().to_vec()
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, owned-`Vec<u8>` output* byte-owned
+/// reverse projection on [`FerriteRuntime`] — the borrowed-input peer of
+/// [`From<FerriteRuntime> for Vec<u8>`], closing the `{Self, &Self} → Vec<u8>`
+/// pair on the byte-owned reverse-projection axis in one lift. Routes
+/// byte-for-byte through the substrate-primitive
+/// [`FerriteRuntime::variant_slug`] `pub const fn` accessor so every
+/// consumer that holds a borrowed [`&FerriteRuntime`] and needs an owned
+/// [`Vec<u8>`] — a future `.iter().map(Vec::<u8>::from).collect()` pipe
+/// over `&[FerriteRuntime]` (whose iterator yields `&FerriteRuntime`, not
+/// `FerriteRuntime`, so the owned-input axis alone would force every call
+/// site through an explicit `.copied()` restatement rather than the direct
+/// trait-idiomatic projection), a future `feira publish-provider --list-
+/// runtimes` byte emitter walking [`FerriteRuntime::ALL`] through an
+/// `Into<Vec<u8>>`-bound per-arm byte-writer to surface the accepted
+/// runtime-tag set — reaches the same two-arm canonical-lowercase-kebab
+/// byte-string emit-set the paired owned-input peer already returns.
+impl From<&FerriteRuntime> for Vec<u8> {
+    fn from(runtime: &FerriteRuntime) -> Vec<u8> {
+        runtime.variant_slug().as_bytes().to_vec()
+    }
+}
+
 /// Free-function wrapper preserved for the crate-level `pub use`
 /// re-export in [`crate`]; routes through the substrate-primitive
 /// method [`FerriteRuntime::rt_import`].
@@ -4826,6 +4911,251 @@ mod tests {
                  the borrowed-input surface must byte-equal the \
                  substrate-primitive variant_slug accessor's byte-tail \
                  on FerriteRuntime::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "cross-axis partition pin folds the substrate-primitive \
+                  variant_slug accessor's `.as_bytes().to_vec()` byte-tail \
+                  plus the paired AsRef<[u8]> borrowed byte-view axis and \
+                  the str-owned reverse-projection family's `.into_bytes()` \
+                  / `.as_bytes().to_vec()` byte-tails plus a \
+                  <T: Into<Vec<u8>>>-bound-consumer witness plus a \
+                  std::io::Write::write_all-shape owned-byte-sink surface \
+                  witness plus a Debug-derive rejection witness into one \
+                  exhaustive round-trip over FerriteRuntime::ALL — the \
+                  accepted line-count cost of closing the byte-owned \
+                  reverse-projection axis keyed to the substrate-primitive \
+                  variant_slug accessor at the same test-site"
+    )]
+    fn ferrite_runtime_from_into_owned_vec_bytes_routes_through_variant_slug_accessor() {
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness helper: a generic
+        // owned-byte-input function accepts a [`super::FerriteRuntime`]
+        // directly through the trait bound, without the caller open-
+        // coding the three-hop `runtime.variant_slug().as_bytes().to_vec()`
+        // composition. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_owned_bytes_sink<T: Into<Vec<u8>>>(t: T) -> Vec<u8> {
+            t.into()
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface mock:
+        // mirrors `std::io::Write::write_all` /
+        // `bytes::BytesMut::extend_from_slice` / any per-runtime-tier
+        // audit-log byte-sink that consumes a `Vec<u8>` payload via
+        // `Into<Vec<u8>>`, so a future per-provider audit-log emit
+        // reaches the substrate-primitive `variant_slug` accessor
+        // through the byte-owned reverse-projection axis and no other.
+        // Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        struct MockOwnedByteSink(Vec<u8>);
+        impl MockOwnedByteSink {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn write_all(&mut self, bytes: impl Into<Vec<u8>>) -> &mut Self {
+                self.0.extend_from_slice(&bytes.into());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        for &variant in super::FerriteRuntime::ALL {
+            let via_owned_from: Vec<u8> = <Vec<u8> as From<super::FerriteRuntime>>::from(variant);
+            let via_borrowed_from: Vec<u8> =
+                <Vec<u8> as From<&super::FerriteRuntime>>::from(&variant);
+            let via_method_bytes: Vec<u8> = variant.variant_slug().as_bytes().to_vec();
+            assert_eq!(
+                via_owned_from, via_method_bytes,
+                "From<FerriteRuntime> for Vec<u8> impl must byte-equal \
+                 FerriteRuntime::variant_slug().as_bytes().to_vec() on \
+                 FerriteRuntime::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from, via_method_bytes,
+                "From<&FerriteRuntime> for Vec<u8> impl must byte-equal \
+                 FerriteRuntime::variant_slug().as_bytes().to_vec() on \
+                 FerriteRuntime::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_owned_from, via_borrowed_from,
+                "From<FerriteRuntime> for Vec<u8> and \
+                 From<&FerriteRuntime> for Vec<u8> must byte-equal each \
+                 other on FerriteRuntime::{variant:?} — divergence \
+                 signals the owned-input and borrowed-input paths have \
+                 drifted off the same substrate-primitive variant_slug \
+                 accessor"
+            );
+            // Cross-axis witness against the paired [`AsRef<[u8]>`]
+            // borrowed byte-view axis (c0111a6): the byte-owned reverse-
+            // projection axis must byte-equal the paired borrowed byte-
+            // view axis by construction — locking the byte-view and
+            // byte-owned axes together at the substrate-primitive
+            // accessor.
+            let borrowed_bytes: &[u8] = <super::FerriteRuntime as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from,
+                borrowed_bytes.to_vec(),
+                "From<FerriteRuntime> for Vec<u8> and AsRef<[u8]> for \
+                 FerriteRuntime must resolve to byte-equal byte-tails \
+                 on FerriteRuntime::{variant:?} — divergence signals \
+                 the byte-owned and byte-view axes have drifted off the \
+                 same substrate-primitive variant_slug accessor"
+            );
+            // Cross-axis witness against the str-owned reverse-
+            // projection family's `.into_bytes()` / `.as_bytes().to_vec()`
+            // byte-tails: every one of `{&'static str, String,
+            // Cow<'static, str>, Box<str>, std::sync::Arc<str>,
+            // std::rc::Rc<str>}` allocates (or borrows) the same two-arm
+            // canonical-lowercase-kebab byte-string the substrate-
+            // primitive accessor emits, so the byte-owned axis must
+            // byte-equal each of their owned byte-tails by construction.
+            let via_static: &'static str = <&'static str>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                via_static.as_bytes().to_vec(),
+                "From<FerriteRuntime> for Vec<u8> and \
+                 From<FerriteRuntime> for &'static str `.as_bytes().to_vec()` \
+                 must resolve to byte-equal byte-tails on \
+                 FerriteRuntime::{variant:?}"
+            );
+            let owned_string: String = <String as From<super::FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_string.into_bytes(),
+                "From<FerriteRuntime> for Vec<u8> and \
+                 String::from(runtime).into_bytes() must resolve to \
+                 byte-equal byte-tails on FerriteRuntime::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<super::FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_cow.as_bytes().to_vec(),
+                "From<FerriteRuntime> for Vec<u8> and \
+                 From<FerriteRuntime> for Cow<'static, str> must \
+                 resolve to byte-equal byte-tails on \
+                 FerriteRuntime::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<super::FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_box.as_bytes().to_vec(),
+                "From<FerriteRuntime> for Vec<u8> and \
+                 From<FerriteRuntime> for Box<str> must resolve to \
+                 byte-equal byte-tails on FerriteRuntime::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<super::FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_arc.as_bytes().to_vec(),
+                "From<FerriteRuntime> for Vec<u8> and \
+                 From<FerriteRuntime> for std::sync::Arc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 FerriteRuntime::{variant:?}"
+            );
+            let owned_rc_str: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<super::FerriteRuntime>>::from(variant);
+            assert_eq!(
+                via_owned_from,
+                owned_rc_str.as_bytes().to_vec(),
+                "From<FerriteRuntime> for Vec<u8> and \
+                 From<FerriteRuntime> for std::rc::Rc<str> must \
+                 resolve to byte-equal byte-tails on \
+                 FerriteRuntime::{variant:?}"
+            );
+            // Reject the `format!("{:?}", variant)` PascalCase byte-
+            // string any future per-runtime render site would otherwise
+            // reach without the substrate-primitive
+            // [`super::FerriteRuntime::variant_slug`] accessor: the
+            // byte-owned reverse-projection axis must not silently
+            // collapse back onto the derived [`std::fmt::Debug`] output,
+            // whose bytes differ on every arm (`"Safe"` vs.
+            // `"ferrite-safe"`, `"Arena"` vs. `"ferrite-arena"`). A
+            // future `#[derive(Debug)]` swap for a hand-rolled `impl
+            // Debug` or a silent re-route of the byte-owned axis onto
+            // the sibling `Debug` output trips here rather than at a
+            // downstream operator's terminal-scroll.
+            let debug_bytes = format!("{variant:?}").into_bytes();
+            assert_ne!(
+                via_owned_from, debug_bytes,
+                "From<FerriteRuntime> for Vec<u8> must land on the \
+                 canonical-lowercase-kebab byte-string \
+                 (FerriteRuntime::variant_slug), not the PascalCase \
+                 byte-string `format!(\"{{:?}}\", variant)`; if this \
+                 fails on FerriteRuntime::{variant:?}, the byte-owned \
+                 axis has silently collapsed back onto the Debug-derive \
+                 output"
+            );
+        }
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness on both owned and
+        // borrowed input shapes: the generic owned-byte-input function
+        // `generic_owned_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::FerriteRuntime`] and a `&FerriteRuntime` directly
+        // through the trait bound, without the caller open-coding the
+        // three-hop `runtime.variant_slug().as_bytes().to_vec()`
+        // composition.
+        for &variant in super::FerriteRuntime::ALL {
+            let via_generic_owned = generic_owned_bytes_sink(variant);
+            // Bind the borrowed-input path through an explicit
+            // `&FerriteRuntime` local so the generic-consumer witness
+            // routes through `From<&FerriteRuntime> for Vec<u8>` (T
+            // binds to `&FerriteRuntime`) rather than clippy-collapsing
+            // the borrow onto the owned-input `From<FerriteRuntime> for
+            // Vec<u8>` peer.
+            let variant_ref: &super::FerriteRuntime = &variant;
+            let via_generic_borrowed = generic_owned_bytes_sink(variant_ref);
+            let via_method_bytes: Vec<u8> = variant.variant_slug().as_bytes().to_vec();
+            assert_eq!(
+                via_generic_owned, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on the \
+                 owned-input surface must byte-equal the substrate-\
+                 primitive variant_slug accessor's byte-tail on \
+                 FerriteRuntime::{variant:?}"
+            );
+            assert_eq!(
+                via_generic_borrowed, via_method_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on the \
+                 borrowed-input surface must byte-equal the substrate-\
+                 primitive variant_slug accessor's byte-tail on \
+                 FerriteRuntime::{variant:?}"
+            );
+        }
+        // `std::io::Write::write_all`-shape owned-byte-sink surface
+        // witness on both owned and borrowed input shapes — the primary
+        // compounding target on the byte-owned reverse-projection axis
+        // is a future per-runtime-tier audit-log payload composer that
+        // binds its byte-tag input through exactly this trait bound.
+        for &variant in super::FerriteRuntime::ALL {
+            let via_method_bytes: Vec<u8> = variant.variant_slug().as_bytes().to_vec();
+            let mut sink_owned = MockOwnedByteSink::new();
+            sink_owned.write_all(variant);
+            let owned_sunk = sink_owned.finalize();
+            assert_eq!(
+                owned_sunk, via_method_bytes,
+                "std::io::Write::write_all-shape owned-byte-sink \
+                 surface on the owned-input surface must byte-equal the \
+                 substrate-primitive variant_slug accessor's byte-tail \
+                 on FerriteRuntime::{variant:?}"
+            );
+            let mut sink_borrowed = MockOwnedByteSink::new();
+            let variant_ref: &super::FerriteRuntime = &variant;
+            sink_borrowed.write_all(variant_ref);
+            let borrowed_sunk = sink_borrowed.finalize();
+            assert_eq!(
+                borrowed_sunk, via_method_bytes,
+                "std::io::Write::write_all-shape owned-byte-sink \
+                 surface on the borrowed-input surface must byte-equal \
+                 the substrate-primitive variant_slug accessor's byte-\
+                 tail on FerriteRuntime::{variant:?}"
             );
         }
     }
