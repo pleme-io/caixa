@@ -3277,6 +3277,112 @@ impl TryFrom<&[u8]> for RestartPolicy {
     }
 }
 
+/// Trait-idiomatic *owned byte-vec input* reverse projection on the second
+/// (and final) M2-OTP-shape supervisor-slot closed-set fieldless typed enum
+/// peer on the caixa surface ([`RestartPolicy`]) — the owned-input peer of
+/// [`TryFrom<&[u8]> for RestartPolicy`], closing the byte-view reverse-
+/// projection *square* ({owned-input, borrowed-input} × {owned-output
+/// byte-vec, borrowed-output byte-slice}) on the M2-OTP-shape
+/// `:supervisor :estrategia` + `:children :restart` slot pair the sibling
+/// [`RestartStrategy`] first-mover (34951fe) opened on the byte-owned
+/// reverse-input axis one commit-window prior. Routes byte-for-byte through
+/// [`<Self as TryFrom<&[u8]>>::try_from`] on the [`Vec<u8>::as_slice`]
+/// borrow so the owned-input surface reaches the same
+/// [`std::str::from_utf8`] + [`RestartPolicy::from_wire`] resolution chain
+/// the borrowed-input peer already carries — one substrate-primitive
+/// accessor, one trait dispatch, no per-consumer detour.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`, so a
+/// consumer that holds an owned [`Vec<u8>`] and needs a typed
+/// [`RestartPolicy`] otherwise picks between (a) an open-coded
+/// `<RestartPolicy as TryFrom<&[u8]>>::try_from(bytes.as_slice())` at every
+/// call site (whose type bounds have no compile-time link to the byte-
+/// owned reverse-projection axis), (b) a two-hop
+/// `String::from_utf8(bytes)` + [`RestartPolicy::from_wire`] composition
+/// whose error surface leaks the standard-library
+/// [`std::string::FromUtf8Error`] (widening the sibling [`TryFrom<&[u8]>`]
+/// axis's unit-error) and silently allocates a [`String`] on inputs that
+/// will never make it past the wire vocabulary, or (c) an intermediate
+/// `<RestartPolicy as TryFrom<&str>>::try_from(std::str::from_utf8(&bytes)?)`
+/// three-hop shape. This impl closes the owned-byte-vec reverse-projection
+/// axis at the substrate-primitive [`RestartPolicy::from_wire`] accessor so
+/// every future `<T: TryFrom<Vec<u8>>>`-bound owned-byte-vec consumer — a
+/// future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR admission-webhook body
+/// reader that hands the `spec.children[].restart` byte-tail off as a
+/// [`Vec<u8>`] before UTF-8 validation commits allocation, a
+/// `bytes::Bytes::to_vec()`-shape wire-body composer walking a prior
+/// audit's per-child rejection payload back to the typed enum, a
+/// `std::io::Read::read_to_end`-shape audit-log source whose framing yields
+/// an owned byte-vec per per-policy scalar, an
+/// `<T: TryFrom<Vec<u8>>>`-bound generic loader over any of the
+/// substrate's closed-set typed enums — reaches the same three-arm
+/// `PascalCase` wire accept-set through one trait dispatch.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-owned reverse-
+/// projection* family — opened on the structurally most fundamental
+/// closed-set fieldless typed enum peer ([`crate::CaixaKind`], commit
+/// 99c2849), extended onto the second caixa-core-internal peer
+/// ([`crate::CaixaDialeto`], commit 83a1526), the third
+/// ([`crate::dep::DepList`], commit 42091cb), and the first M2-OTP-shape
+/// supervisor-slot peer ([`RestartStrategy`], commit 34951fe) — onto the
+/// second (and final) M2-OTP-shape supervisor-slot closed-set fieldless
+/// typed enum peer, tracking the "delegate through `TryFrom<&[u8]>` on the
+/// `Vec<u8>::as_slice` borrow" discipline the first-mover established.
+/// Every remaining closed-set fieldless typed enum peer on the substrate
+/// ([`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::aplicacao::WitShape`],
+/// [`crate::render::PathShapeViolation`], and the outside-`caixa-core`
+/// peers `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`,
+/// `Semantic`, `FerriteRuntime`) is a future target of the campaign,
+/// mirroring the trajectory the closed byte-view reverse-projection
+/// family (`TryFrom<&[u8]>`) and the closed byte-owned forward-projection
+/// family (`From<{Self, &Self}> for Vec<u8>`) already walked across the
+/// same slot pair.
+///
+/// `type Error = ()` matches the sibling [`TryFrom<&[u8]> for
+/// RestartPolicy`] unit-error shape, preserving the trait-family
+/// consistency across the borrowed-and-owned byte-view reverse-projection
+/// pair. The owned [`Vec<u8>`] input is dropped on the error path (the
+/// standard-library `String::from_utf8` convention of returning the input
+/// in the error deliberately declined — a caller that needs the bytes back
+/// holds a clone before the call, and the closed-set-enum use site rarely
+/// wants the raw bytes back past a "did you mean" diagnostic that operates
+/// on the wire vocabulary rather than the input).
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&[u8]>`] axis
+/// across the three-arm [`RestartPolicy::ALL`] accept-set on the owned
+/// byte-vec surface, cross-axis witness that the byte-owned reverse
+/// projection agrees with the paired str-view reverse-projection axis
+/// ([`TryFrom<&str>`]) on every accepted arm through the shared substrate-
+/// primitive [`RestartPolicy::from_wire`] accessor, and a four-corner
+/// {owned-input, borrowed-input} × {`From<Self>` → `Vec<u8>`,
+/// `From<&Self>` → `Vec<u8>`} round-trip witness available on this enum
+/// because [`RestartPolicy::as_str`] and [`RestartPolicy::from_wire`]
+/// share one `PascalCase` byte-vocabulary — like the sibling
+/// [`RestartStrategy`] and unlike the sibling [`crate::CaixaKind`] which
+/// its peer test deliberately declines the four-corner witness on because
+/// the wire/diagnostic split makes the forward and reverse pairs speak
+/// different byte-strings) and
+/// [`tests::restart_policy_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-vocabulary
+/// rejection path — the latter includes the sibling kebab-case
+/// dispatcher-catalog byte-strings on the two-axis wire/catalog split so
+/// a caller that confuses the two axes trips here rather than at a
+/// downstream K8s-CR round-trip miss, plus a cross-axis witness that the
+/// owned byte-vec reverse-projection axis agrees with the borrowed byte-
+/// slice reverse-projection axis on every rejected input).
+impl TryFrom<Vec<u8>> for RestartPolicy {
+    type Error = ();
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&[u8]>>::try_from(bytes.as_slice())
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -16639,5 +16745,281 @@ mod tests {
             WINDOW_CAP,
             SupervisorError::RestartWindowExceedsCap { .. }
         ));
+    }
+
+    #[test]
+    fn restart_policy_try_from_vec_bytes_routes_through_borrowed_byte_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<Vec<u8>> for RestartPolicy` — asserts the trait-
+        // idiomatic owned-byte-vec reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&[u8]>`] axis
+        // resolve to the same three-arm `PascalCase` wire accept-set
+        // across every arm the exhaustive [`RestartPolicy::ALL`] slice
+        // enumerates. Closes the substrate-wide trait-idiomatic byte-
+        // owned reverse-projection axis on the M2-OTP-shape
+        // `:supervisor :estrategia` + `:children :restart` slot pair the
+        // sibling [`RestartStrategy`] first-mover
+        // [`restart_strategy_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (34951fe) opened one commit-window prior — owned-input mirror
+        // of the paired [`TryFrom<&[u8]>`] byte-view reverse-projection
+        // axis on this same enum (d9ef5f0), and byte-owned reverse
+        // companion of the pre-existing byte-owned *forward*-projection
+        // pair ([`From<RestartPolicy> for Vec<u8>`],
+        // [`From<&RestartPolicy> for Vec<u8>`]) on this same enum. Peer
+        // of the sibling first-mover
+        // [`crate::kind::tests::caixa_kind_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (99c2849) on the [`crate::CaixaKind`] closed-set typed-enum
+        // peer, the sibling second-mover
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (83a1526) on the [`crate::CaixaDialeto`] peer, the sibling
+        // third-mover
+        // [`crate::dep::tests::dep_list_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (42091cb) on the [`crate::dep::DepList`] peer, and the sibling
+        // fourth-mover
+        // [`restart_strategy_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (34951fe) on the [`RestartStrategy`] peer — tracks the
+        // "delegate through `TryFrom<&[u8]>` on the `Vec<u8>::as_slice`
+        // borrow" discipline the first-mover established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`,
+        // so an owned-byte-vec caller otherwise picks between an open-
+        // coded `<T as TryFrom<&[u8]>>::try_from(bytes.as_slice())` at
+        // every call site whose type bounds have no compile-time link
+        // back to the byte-owned reverse-projection axis, or a
+        // `String::from_utf8(bytes)` two-hop shape whose error surface
+        // leaks the standard-library `FromUtf8Error` type. This impl
+        // closes the byte-owned reverse-projection axis at the
+        // substrate-primitive [`RestartPolicy::from_wire`] accessor so
+        // every future `<T: TryFrom<Vec<u8>>>`-bound owned-byte-vec
+        // consumer reaches the same three-arm `PascalCase` wire accept-
+        // set through one trait dispatch.
+        for &variant in RestartPolicy::ALL {
+            let wire_bytes: Vec<u8> = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(wire_bytes.clone()),
+                Ok(variant),
+                "TryFrom<Vec<u8>> impl on RestartPolicy must round-trip \
+                 RestartPolicy::{variant:?}.as_str().as_bytes().to_vec() \
+                 back to Ok(RestartPolicy::{variant:?}) — divergence \
+                 from the sibling TryFrom<&[u8]> axis signals a silent \
+                 detour off the substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness: the owned-byte-vec reverse-projection
+            // axis must agree with the borrowed byte-slice reverse-
+            // projection axis on every accepted arm — the two axes share
+            // one `PascalCase` wire vocabulary through the substrate-
+            // primitive `from_wire` accessor, and the owned-input axis
+            // delegates to the borrowed peer by design.
+            let via_owned: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(wire_bytes.clone());
+            let via_borrowed: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<&[u8]>>::try_from(wire_bytes.as_slice());
+            assert_eq!(
+                via_owned, via_borrowed,
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on RestartPolicy must agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 owned-input and borrowed-input byte-view reverse paths \
+                 have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
+            // Cross-axis witness against the paired str-view reverse
+            // axis ([`TryFrom<&str>`]) — the three reverse paths (str-
+            // view, byte-view borrowed, byte-view owned) share one
+            // substrate primitive.
+            let via_str: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<&str>>::try_from(variant.as_str());
+            assert_eq!(
+                via_owned, via_str,
+                "TryFrom<Vec<u8>> and TryFrom<&str> reverse-projection \
+                 axes on RestartPolicy must agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 byte-owned and str-view reverse paths have drifted off \
+                 the same substrate-primitive from_wire accessor"
+            );
+            // Four-corner witness: because [`RestartPolicy`] carries
+            // no wire-vs-diagnostic split (as_str and from_wire share
+            // one `PascalCase` byte-vocabulary — like the sibling
+            // [`RestartStrategy`] and unlike the sibling
+            // [`crate::CaixaKind`] whose peer test deliberately declines
+            // this witness), the byte-owned reverse-projection axis on
+            // this enum *does* round-trip against the paired byte-owned
+            // forward-projection pair. Pin every corner of the {owned-
+            // input, borrowed-input} × {From<Self> → Vec<u8>,
+            // From<&Self> → Vec<u8>} square onto the same Ok(variant)
+            // return so a future accident that drops one corner off the
+            // substrate-primitive accessor trips here.
+            let owned_forward: Vec<u8> = <Vec<u8> as From<RestartPolicy>>::from(variant);
+            let borrowed_forward: Vec<u8> = <Vec<u8> as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                owned_forward, wire_bytes,
+                "From<RestartPolicy> for Vec<u8> forward projection on \
+                 RestartPolicy::{variant:?} must byte-equal \
+                 variant.as_str().as_bytes().to_vec() — divergence \
+                 signals the paired forward pair drifted off the \
+                 substrate-primitive as_str accessor"
+            );
+            assert_eq!(
+                borrowed_forward, wire_bytes,
+                "From<&RestartPolicy> for Vec<u8> forward projection \
+                 on &RestartPolicy::{variant:?} must byte-equal \
+                 variant.as_str().as_bytes().to_vec() — divergence \
+                 signals the paired forward pair drifted off the \
+                 substrate-primitive as_str accessor"
+            );
+            assert_eq!(
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(owned_forward.clone()),
+                Ok(variant),
+                "Four-corner round-trip on RestartPolicy::{variant:?} \
+                 through From<RestartPolicy> for Vec<u8> then \
+                 TryFrom<Vec<u8>> for RestartPolicy must return \
+                 Ok(variant) — divergence signals the byte-owned \
+                 forward pair and the byte-owned reverse axis have \
+                 drifted apart"
+            );
+            assert_eq!(
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(borrowed_forward),
+                Ok(variant),
+                "Four-corner round-trip on RestartPolicy::{variant:?} \
+                 through From<&RestartPolicy> for Vec<u8> then \
+                 TryFrom<Vec<u8>> for RestartPolicy must return \
+                 Ok(variant) — divergence signals the borrowed-input \
+                 forward corner and the owned-input reverse corner have \
+                 drifted apart"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<Vec<u8>> for
+        // RestartPolicy` — sweeps the same two rejection paths the
+        // sibling borrowed `TryFrom<&[u8]>` axis collapses onto the
+        // single unit-error return: the invalid-UTF-8 rejection path
+        // (`std::str::from_utf8` on the underlying byte-slice returns
+        // `Err` before [`RestartPolicy::from_wire`] runs) and the
+        // valid-UTF-8-but-unknown-wire rejection path
+        // ([`RestartPolicy::from_wire`] returns `None` on a byte-
+        // string outside the three-arm `PascalCase` accept-set). Both
+        // must reject so a future accidental widening of the trait
+        // impl's accept-set (a case-fold path, a silent acceptance of
+        // the kebab-case dispatcher-catalog byte-strings on this axis —
+        // which would collide the two-axis wire/catalog split the
+        // sibling [`RestartPolicy::from_wire`] doc block makes load-
+        // bearing — a `#[serde(rename_all = "…")]` attribute drift that
+        // widens the parse arm-set silently, a stray
+        // `String::from_utf8_lossy` detour that widens the input
+        // surface with the U+FFFD replacement character, an
+        // `Option::unwrap_or_default`-shape fallback that maps invalid
+        // UTF-8 onto a default arm rather than the trait-idiomatic
+        // `Err(())`) trips at caixa-core test time. Peer of the sibling
+        // first-mover
+        // [`crate::kind::tests::caixa_kind_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (99c2849) on the [`crate::CaixaKind`] peer, the sibling
+        // second-mover
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (83a1526) on the [`crate::CaixaDialeto`] peer, the sibling
+        // third-mover
+        // [`crate::dep::tests::dep_list_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (42091cb) on the [`crate::dep::DepList`] peer, and the
+        // sibling fourth-mover
+        // [`restart_strategy_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (34951fe) on the [`RestartStrategy`] peer rejection
+        // witnesses.
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80], // UTF-16 surrogate half — rejected by UTF-8
+        ];
+        for &input in non_utf8_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on RestartPolicy must reject \
+                 the non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+            // Cross-axis witness: the owned-input axis must agree with
+            // the borrowed-input axis on every rejected input.
+            assert_eq!(
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <RestartPolicy as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on RestartPolicy must agree on the non-UTF-8 \
+                 input {input:?} — divergence signals the owned-input \
+                 and borrowed-input byte-view reverse paths have drifted \
+                 off the same substrate-primitive from_wire accessor"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates mirror the corpus the
+        // sibling borrowed-input rejection witness
+        // [`restart_policy_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (d9ef5f0) already pins on the paired byte-view axis: the
+        // empty byte-string, whitespace-only padding, the kebab-case
+        // dispatcher-catalog byte-strings on the sibling axis the pre-
+        // existing [`std::str::FromStr`] impl the
+        // [`gen_platform::FromStrKind`] derive installs parses onto (a
+        // caller who confuses the two axes trips here rather than at a
+        // downstream K8s-CR round-trip miss), lowercase / uppercase /
+        // mixed-case folds of each `PascalCase` arm, whitespace-padded /
+        // trailing-newline / quote-wrapped forms, and plausible-but-
+        // wrong English rebrand candidates (`Ephemeral`, `Always`,
+        // `Never`, `OnAbnormalExit`, `intrinsic`).
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\n",
+            b"\t",
+            b"permanent",
+            b"temporary",
+            b"transient",
+            b"PERMANENT",
+            b"TEMPORARY",
+            b"TRANSIENT",
+            b"Permanents",
+            b"Permanent ",
+            b" Permanent",
+            b" Temporary ",
+            b"Permanent\n",
+            b"Transient\t",
+            b"\"Permanent\"",
+            b"Ephemeral",
+            b"Always",
+            b"Never",
+            b"OnAbnormalExit",
+            b"intrinsic",
+            b"?",
+        ];
+        for &input in unknown_wire_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on RestartPolicy must reject \
+                 the valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired RestartPolicy::from_wire \
+                 resolver"
+            );
+            // Cross-axis witness against the borrowed byte-view axis:
+            // the two paths must agree by construction, since the owned
+            // axis delegates to the borrowed peer.
+            assert_eq!(
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <RestartPolicy as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on RestartPolicy must agree on the valid-UTF-8-\
+                 but-unknown-wire input {input:?} — divergence signals \
+                 the owned-input and borrowed-input byte-view reverse \
+                 paths have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
+        }
     }
 }
