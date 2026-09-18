@@ -1904,6 +1904,88 @@ impl From<&CaixaKind> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
+/// structurally most fundamental closed-set fieldless typed enum on the caixa
+/// surface ([`CaixaKind`]) — the byte-view mirror of the str-view reverse-
+/// projection axis carried by the paired [`TryFrom<&str> for CaixaKind`] impl
+/// (which routes through the substrate-primitive [`CaixaKind::from_wire`]
+/// `Option<Self>` accessor on the `PascalCase` wire vocabulary). Routes
+/// byte-for-byte through the standard-library [`std::str::from_utf8`] UTF-8
+/// validator and then through [`CaixaKind::from_wire`] so every consumer that
+/// holds a borrowed [`&[u8]`] and needs to project it back into a typed
+/// [`CaixaKind`] — a future admission-webhook rejection body that reads a
+/// `spec.kind` field off a raw HTTP body byte-slice before UTF-8 validation
+/// commits allocation, a future `bytes::Bytes::as_ref()`-fed CR-decoder that
+/// parses a per-caixa `:kind` tag from an already-borrowed framing byte-tail,
+/// a future BLAKE3-content-addressed manifest reader that walks a fixed
+/// byte-slice payload back into typed enum values through the sibling
+/// [`crate::Lacre`] closure body, a future generic
+/// `<T: for<'a> TryFrom<&'a [u8]>>`-bound loader over any of the substrate's
+/// closed-set typed enums — reaches the same six-arm `PascalCase` wire accept-
+/// set the sibling method-named [`CaixaKind::from_wire`] resolver and the
+/// paired trait-idiomatic [`TryFrom<&str>`] axis already resolve against,
+/// rather than an open-coded per-call-site
+/// `std::str::from_utf8(bytes).ok().and_then(CaixaKind::from_wire)` composition
+/// or a `<CaixaKind as TryFrom<&str>>::try_from(std::str::from_utf8(bytes)?)`
+/// two-hop shape whose type bounds have no compile-time link to the
+/// substrate primitive.
+///
+/// First-mover on the substrate-wide trait-idiomatic *byte-view reverse-
+/// projection* family — Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a two-hop
+/// composition through [`std::str::from_utf8`] + the paired [`TryFrom<&str>`]
+/// axis is reachable at every call site but has no compile-time link back to
+/// the byte-view reverse-projection axis. Opening the axis on the
+/// structurally most fundamental closed-set fieldless typed enum peer on the
+/// caixa surface (every caixa carries a `:kind`) establishes the "route
+/// through `from_wire` via `std::str::from_utf8`" discipline; every future
+/// closed-set fieldless typed enum peer on the substrate
+/// ([`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::dep::DepList`],
+/// [`crate::dialeto::CaixaDialeto`], and the outside-`caixa-core` peers
+/// `WitShape`, `PathShapeViolation`, `InvariantKind`, `ArchVerdict`,
+/// `Severity`, `FixSafety`, `Semantic`, `FerriteRuntime`) is a future target
+/// of the campaign, mirroring the discipline the closed byte-owned forward-
+/// projection family established.
+///
+/// `type Error = ()` matches the sibling [`CaixaKind::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing and the
+/// paired trait-idiomatic [`TryFrom<&str>`] axis's unit-error shape — the
+/// caller picks the diagnostic form appropriate for its use site (a future
+/// admission-webhook rejection body wraps the `Err(())` with the accepted-set
+/// enumeration for operator diagnostics; a `Result::map_err` at the call
+/// site lifts the unit-error to a per-verb error type). Two rejection paths
+/// route through the single unit-error: an invalid UTF-8 byte-sequence
+/// (`std::str::from_utf8` returns `Err`) and a valid UTF-8 byte-string that
+/// falls outside the six-arm `PascalCase` wire accept-set
+/// ([`CaixaKind::from_wire`] returns `None`) — both collapse onto `Err(())`
+/// so the trait signature stays consistent with the sibling str-view reverse
+/// axis, and a caller that needs to distinguish the two failure modes
+/// composes [`std::str::from_utf8`] + [`CaixaKind::from_wire`] explicitly.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`CaixaKind::from_wire`] across the six-arm
+/// [`CaixaKind::ALL`] accept-set on the borrowed byte-slice surface, plus a
+/// cross-axis witness that the byte-view reverse projection agrees with the
+/// paired [`TryFrom<&str>`] str-view reverse axis on every accepted arm) and
+/// [`tests::caixa_kind_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-vocabulary
+/// rejection path).
+impl TryFrom<&[u8]> for CaixaKind {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5352,6 +5434,171 @@ mod tests {
                  CaixaKind::as_str().as_bytes() returns — the borrowed-\
                  input surface must resolve to the same as_str dispatch"
             );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for CaixaKind` — asserts the trait-idiomatic
+        // byte-view reverse-projection standard-library impl and the
+        // substrate-primitive [`super::CaixaKind::from_wire`] `Option<Self>`
+        // accessor resolve to the same six-arm `PascalCase` wire accept-set
+        // across every arm the exhaustive [`super::CaixaKind::ALL`] slice
+        // enumerates. Opens the substrate-wide trait-idiomatic byte-view
+        // reverse-projection axis on the closed-set fieldless typed-enum
+        // family through the structurally most fundamental caixa-core enum
+        // peer — mirror of the paired [`TryFrom<&str> for CaixaKind`] str-
+        // view reverse-projection axis, and the byte-view companion of the
+        // pre-existing byte-owned reverse-projection family
+        // ([`AsRef<[u8]>`], [`From<CaixaKind> for Vec<u8>`],
+        // [`From<&CaixaKind> for Vec<u8>`]) on this same enum.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a
+        // two-hop composition through [`std::str::from_utf8`] + the paired
+        // [`TryFrom<&str>`] axis is reachable through the pre-existing str-
+        // view reverse-projection axis alone. But that two-hop shape has no
+        // compile-time link back to the byte-view reverse-projection axis,
+        // forces every downstream `<T: for<'a> TryFrom<&'a [u8]>>`-bound
+        // consumer to open-code the composition at every call site, and
+        // admits a silent split whenever a future call site takes a sibling
+        // byte-projection axis whose parse arm-set carries no compile-time
+        // byte-view surface. This impl closes the byte-view reverse-
+        // projection axis at the substrate-primitive
+        // [`super::CaixaKind::from_wire`] accessor so every future
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer reaches the same
+        // six-arm `PascalCase` wire accept-set through one trait dispatch.
+        for &variant in CaixaKind::ALL {
+            let wire_bytes: &[u8] = variant.wire_name().as_bytes();
+            assert_eq!(
+                <CaixaKind as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on CaixaKind must round-trip \
+                 CaixaKind::{variant:?}.wire_name().as_bytes() back to \
+                 Ok(CaixaKind::{variant:?}) — divergence from \
+                 CaixaKind::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <CaixaKind as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                CaixaKind::from_wire(variant.wire_name()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 CaixaKind::{variant:?}.wire_name().as_bytes() must byte-\
+                 equal CaixaKind::from_wire on the paired &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection axis must
+            // agree with the paired str-view reverse-projection axis
+            // ([`TryFrom<&str>`]) on every accepted arm — the two reverse
+            // paths share one `PascalCase` wire vocabulary through the
+            // substrate-primitive `from_wire` accessor.
+            let via_str: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<&str>>::try_from(variant.wire_name());
+            let via_bytes: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection axes \
+                 on CaixaKind must agree on CaixaKind::{variant:?} — \
+                 divergence signals the byte-view and str-view reverse \
+                 paths have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for CaixaKind` —
+        // sweeps two rejection paths the byte-view reverse-projection axis
+        // collapses onto the single unit-error `Err(())` return: the
+        // invalid-UTF-8 rejection path ([`std::str::from_utf8`] returns
+        // `Err` before [`super::CaixaKind::from_wire`] runs) and the
+        // valid-UTF-8-but-unknown-wire rejection path
+        // ([`super::CaixaKind::from_wire`] returns `None` on a byte-string
+        // outside the six-arm `PascalCase` accept-set). Both must reject,
+        // so a future accidental widening of the trait impl's accept-set
+        // (a case-fold path, a silent inclusion of the lowercase Portuguese
+        // [`super::CaixaKind::as_str`] surface onto the wire axis that
+        // would collide the two-axis split the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`] pin
+        // makes load-bearing, a `#[serde(rename_all = "…")]` attribute
+        // drift that widens the parse arm-set silently, a stray fallback
+        // that maps invalid UTF-8 onto a default arm rather than the
+        // trait-idiomatic `Err(())`) trips at caixa-core test time.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without its continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator rejects
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80], // UTF-16 surrogate half — rejected by UTF-8
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <CaixaKind as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on CaixaKind must reject the non-\
+                 UTF-8 byte-sequence {input:?} with Err(()) — silent \
+                 acceptance signals the UTF-8 validation path collapsed \
+                 onto a default arm rather than the trait-idiomatic \
+                 unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates: the empty byte-string,
+        // the six-arm lowercase Portuguese diagnostic byte-strings the peer
+        // [`super::CaixaKind::as_str`] axis emits (a caller who confuses
+        // the wire axis with the diagnostic axis trips here), a lowercase
+        // fold of a PascalCase arm, and a small residual of plausible-but-
+        // wrong strings.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b"biblioteca",
+            b"binario",
+            b"servico",
+            b"supervisor",
+            b"aplicacao",
+            b"acao",
+            b"BIBLIOTECA",
+            b"biBlioteca",
+            b"Bibliotecas",
+            b"library",
+            b"service",
+            b" Biblioteca",
+            b"Biblioteca ",
+            b"Biblioteca\n",
+            b"\"Biblioteca\"",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <CaixaKind as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on CaixaKind must reject the valid-\
+                 UTF-8-but-unknown-wire byte-string {input:?} with \
+                 Err(()) — silent acceptance signals an accept-set \
+                 widening off the paired CaixaKind::from_wire resolver"
+            );
+            // Cross-axis witness: on a byte-string that is valid UTF-8, the
+            // byte-view reverse-projection axis must agree with the paired
+            // str-view reverse-projection axis ([`TryFrom<&str>`]) — both
+            // route through the same [`super::CaixaKind::from_wire`]
+            // resolver, so the two rejection paths align by construction.
+            if let Ok(s) = std::str::from_utf8(input) {
+                assert_eq!(
+                    <CaixaKind as TryFrom<&[u8]>>::try_from(input),
+                    <CaixaKind as TryFrom<&str>>::try_from(s),
+                    "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                     axes on CaixaKind must agree on the valid-UTF-8 \
+                     input {input:?} — divergence signals the two \
+                     reverse paths have drifted off the same \
+                     substrate-primitive from_wire accessor"
+                );
+            }
         }
     }
 }
