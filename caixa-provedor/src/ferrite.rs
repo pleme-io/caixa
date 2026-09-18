@@ -1781,6 +1781,106 @@ impl From<&FerriteRuntime> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed byte-slice* reverse projection on the
+/// [`FerriteRuntime`] closed two-arm caixa-provedor ferrite-runtime
+/// typed enum — routes byte-for-byte through [`std::str::from_utf8`]
+/// composed with the substrate-primitive
+/// [`FerriteRuntime::from_wire`] `Option<Self>` accessor, so
+/// `<FerriteRuntime as TryFrom<&[u8]>>::try_from(bytes)` reaches the
+/// same two-arm canonical-lowercase-kebab wire accept-set
+/// (`"ferrite-safe"` / `"ferrite-arena"`) the sibling method-named
+/// [`FerriteRuntime::from_wire`] resolver and the paired
+/// [`TryFrom<&str>`] impl (42ab951) already resolve against. Both
+/// rejection paths (invalid UTF-8 and valid-UTF-8-but-unknown-wire)
+/// collapse onto the single unit-error `Err(())` return, matching the
+/// trait-idiomatic-`()`-error shape the substrate-wide sibling
+/// `TryFrom<&[u8]>` impls carry.
+///
+/// Closes the substrate-wide trait-idiomatic byte-view reverse-
+/// projection axis on the *sixth and final outside-`caixa-core`*
+/// closed-set fieldless typed-enum peer (and the sole peer on the
+/// caixa-provedor surface) — matching the trajectory the caixa-core-
+/// internal [`caixa_core::CaixaKind`] first-mover (18d1940),
+/// [`caixa_core::CaixaDialeto`] (d102cb8),
+/// [`caixa_core::dep::DepList`] (b8f25d5), the M2-OTP-shape
+/// [`caixa_core::supervisor::RestartStrategy`] (c699a83) /
+/// [`caixa_core::supervisor::RestartPolicy`] (d9ef5f0), the M3-mesh-
+/// primitive-defining [`caixa_core::aplicacao::PlacementStrategy`]
+/// (de03220) / [`caixa_core::aplicacao::RateLimitUnit`] (294c77d) /
+/// [`caixa_core::aplicacao::WitShape`] (de9875c), the outside-
+/// `caixa-core` first-mover `caixa_arch::invariants::InvariantKind`
+/// (40b7417), the second-mover `caixa_arch::report::ArchVerdict`
+/// (4dbca85), the third-mover `caixa_lint::diagnostic::Severity`
+/// (f11dc96), the fourth-mover `caixa_lint::diagnostic::FixSafety`
+/// (46a3e3e), and the fifth-mover `caixa_theme::style::Semantic`
+/// (b8c795d) peers walked before it. With this close, the whole
+/// outside-`caixa-core` tier of the substrate-wide byte-view reverse-
+/// projection campaign is complete across every closed-set fieldless
+/// typed-enum peer on the caixa surface, matching the paired byte-
+/// owned reverse-projection axis's outside-`caixa-core` close on the
+/// same [`FerriteRuntime`] enum (1b1d010).
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a
+/// two-hop composition through [`std::str::from_utf8`] + the paired
+/// [`TryFrom<&str>`] axis is reachable through the pre-existing str-
+/// view reverse-projection axis alone. But that two-hop shape has no
+/// compile-time link back to the byte-view reverse-projection axis,
+/// forces every downstream `<T: for<'a> TryFrom<&'a [u8]>>`-bound
+/// consumer (a future protobuf/CBOR/msgpack per-provider `spec.runtime`
+/// field-decoder whose bytes arm surfaces the runtime-slug tag before
+/// UTF-8 validation, a future M4 `caixa.pleme.io/v1alpha1/Provider`
+/// admission-webhook intercepting raw per-arm runtime-tag request
+/// bytes before the serde derive dispatches, a future
+/// `bytes::Bytes::as_ref()`-shape byte-tail composer, a future
+/// `std::io::Read::read_to_end`-shape provider-config ingest byte-
+/// source) to open-code the composition at every call site.
+///
+/// A future arm addition (a `Region` tier between
+/// [`FerriteRuntime::Safe`] and [`FerriteRuntime::Arena`] for the
+/// intermediate `ferrite/rt/region` checked-arena flavor the ferrite
+/// roadmap grows — the trajectory item every sibling
+/// [`FerriteRuntime`] doc block already names) reaches every parse
+/// path — [`FerriteRuntime::from_wire`], [`TryFrom<&str>::try_from`],
+/// [`std::str::FromStr::from_str`], and now
+/// [`TryFrom<&[u8]>::try_from`] — through one match-arm edit on the
+/// substrate-primitive accessor, not a coordinated rewrite across
+/// every trait impl.
+///
+/// Pinned load-bearing by
+/// [`tests::ferrite_runtime_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`FerriteRuntime::from_wire`] across the
+/// two-arm [`FerriteRuntime::ALL`] accept-set on the borrowed byte-
+/// slice surface, plus a cross-axis witness that the byte-view
+/// reverse projection agrees with the paired [`TryFrom<&str>`] str-
+/// view reverse axis on every accepted arm, and a forward/reverse
+/// byte-view cross-axis witness that feeding the paired
+/// [`AsRef<[u8]>`] byte-tail and the paired
+/// [`From<FerriteRuntime> for Vec<u8>`] and
+/// [`From<&FerriteRuntime> for Vec<u8>`] owned byte-tails back through
+/// the new impl round-trips to the originating arm) and
+/// [`tests::ferrite_runtime_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-
+/// vocabulary rejection path — the latter mirrors the corpus the
+/// paired [`TryFrom<&str>`] rejection witness already pins, including
+/// the trajectory-item candidate `b"ferrite-region"` the sibling
+/// [`FerriteRuntime`] doc block already names, the sibling
+/// [`FerriteRuntime::rt_import`] Go-import projection outputs, and
+/// sibling closed-set canonical tags on other axes so a byte-level
+/// cross-axis leak trips at caixa-provedor test time rather than at a
+/// downstream consumer's silent misclassification).
+impl TryFrom<&[u8]> for FerriteRuntime {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, <Self as TryFrom<&[u8]>>::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 /// Free-function wrapper preserved for the crate-level `pub use`
 /// re-export in [`crate`]; routes through the substrate-primitive
 /// method [`FerriteRuntime::rt_import`].
@@ -5156,6 +5256,264 @@ mod tests {
                  surface on the borrowed-input surface must byte-equal \
                  the substrate-primitive variant_slug accessor's byte-\
                  tail on FerriteRuntime::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for FerriteRuntime` — asserts the trait-
+        // idiomatic byte-view reverse-projection standard-library impl
+        // and the substrate-primitive [`super::FerriteRuntime::from_wire`]
+        // `Option<Self>` accessor resolve to the same two-arm
+        // canonical-lowercase-kebab wire accept-set across every arm
+        // the exhaustive [`super::FerriteRuntime::ALL`] slice
+        // enumerates. Closes the substrate-wide trait-idiomatic byte-
+        // view reverse-projection axis on the *sixth and final outside-
+        // `caixa-core`* closed-set fieldless typed-enum peer (and the
+        // sole peer on the caixa-provedor surface) — matching the
+        // paired [`super::FerriteRuntime`] byte-view forward triple
+        // ([`AsRef<[u8]>`], [`From<FerriteRuntime> for Vec<u8>`],
+        // [`From<&FerriteRuntime> for Vec<u8>`]) and the paired str-
+        // view reverse-projection axis ([`TryFrom<&str> for
+        // FerriteRuntime`]) already walked on this enum, and matching
+        // the trajectory the first-mover outside-`caixa-core`
+        // `caixa_arch::invariants::InvariantKind` `TryFrom<&[u8]>` impl
+        // (40b7417), second-mover outside-`caixa-core`
+        // `caixa_arch::report::ArchVerdict` `TryFrom<&[u8]>` impl
+        // (4dbca85), third-mover outside-`caixa-core`
+        // `caixa_lint::diagnostic::Severity` `TryFrom<&[u8]>` impl
+        // (f11dc96), fourth-mover outside-`caixa-core`
+        // `caixa_lint::diagnostic::FixSafety` `TryFrom<&[u8]>` impl
+        // (46a3e3e), and fifth-mover outside-`caixa-core`
+        // `caixa_theme::style::Semantic` `TryFrom<&[u8]>` impl
+        // (b8c795d) walked before it.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so
+        // a two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent
+        // split whenever a future call site takes a sibling byte-
+        // projection axis whose parse arm-set carries no compile-time
+        // byte-view surface. This impl closes the byte-view reverse-
+        // projection axis at the substrate-primitive
+        // [`super::FerriteRuntime::from_wire`] accessor so every future
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer reaches the
+        // same two-arm ferrite-runtime accept-set through one trait
+        // dispatch.
+        for &variant in super::FerriteRuntime::ALL {
+            let wire_bytes: &[u8] = variant.variant_slug().as_bytes();
+            assert_eq!(
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on FerriteRuntime must round-trip \
+                 FerriteRuntime::{variant:?}.variant_slug().as_bytes() \
+                 back to Ok(FerriteRuntime::{variant:?}) — divergence \
+                 from FerriteRuntime::from_wire signals a silent detour \
+                 off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                super::FerriteRuntime::from_wire(variant.variant_slug()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 FerriteRuntime::{variant:?}.variant_slug().as_bytes() \
+                 must byte-equal FerriteRuntime::from_wire on the \
+                 paired &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection
+            // axis must agree with the paired str-view reverse-
+            // projection axis ([`TryFrom<&str>`]) on every accepted
+            // arm — the two reverse paths share one ferrite-runtime
+            // accept-set through the substrate-primitive `from_wire`
+            // accessor.
+            let via_str: Result<super::FerriteRuntime, ()> =
+                <super::FerriteRuntime as TryFrom<&str>>::try_from(variant.variant_slug());
+            let via_bytes: Result<super::FerriteRuntime, ()> =
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on FerriteRuntime must agree on \
+                 FerriteRuntime::{variant:?} — divergence signals the \
+                 byte-view and str-view reverse paths have drifted off \
+                 the same substrate-primitive from_wire accessor"
+            );
+            // Forward/reverse byte-view cross-axis witness: feed the
+            // paired [`AsRef<[u8]>`] byte-tail back through the new
+            // impl and assert it round-trips to the originating arm.
+            let via_asref: &[u8] = <super::FerriteRuntime as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(via_asref),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ AsRef<[u8]> must round-trip \
+                 FerriteRuntime::{variant:?} — divergence signals the \
+                 forward and reverse byte-view axes have drifted off \
+                 the same substrate-primitive variant_slug/from_wire \
+                 pair"
+            );
+            // Byte-owned round-trip witness: feed the paired
+            // [`From<FerriteRuntime> for Vec<u8>`] owned byte-tail
+            // back through the byte-view reverse impl as a borrowed
+            // slice and assert the round-trip lands on the
+            // originating arm — locks the owned and borrowed byte
+            // projections together at the substrate-primitive
+            // accessor.
+            let owned_bytes: Vec<u8> = <Vec<u8> as From<super::FerriteRuntime>>::from(variant);
+            assert_eq!(
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(owned_bytes.as_slice()),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<FerriteRuntime> for Vec<u8> \
+                 must round-trip FerriteRuntime::{variant:?} — \
+                 divergence signals the byte-owned reverse-projection \
+                 axis has drifted off the paired byte-view reverse \
+                 axis"
+            );
+            // Borrowed-input byte-owned round-trip witness: same
+            // discipline on the paired [`From<&FerriteRuntime> for
+            // Vec<u8>`] owned byte-tail — closes the four-corner
+            // {owned-input, borrowed-input} × {owned-output byte-vec,
+            // borrowed-output byte-slice} projection square through
+            // the new byte-view reverse impl.
+            let borrowed_owned_bytes: Vec<u8> =
+                <Vec<u8> as From<&super::FerriteRuntime>>::from(&variant);
+            assert_eq!(
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(
+                    borrowed_owned_bytes.as_slice()
+                ),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<&FerriteRuntime> for Vec<u8> \
+                 must round-trip FerriteRuntime::{variant:?} — \
+                 divergence signals the borrowed-input byte-owned axis \
+                 has drifted off the paired byte-view reverse axis"
+            );
+        }
+    }
+
+    #[test]
+    fn ferrite_runtime_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for
+        // FerriteRuntime` — sweeps two rejection paths the byte-view
+        // reverse-projection axis collapses onto the single unit-error
+        // `Err(())` return: the invalid-UTF-8 rejection path
+        // ([`std::str::from_utf8`] returns `Err` before
+        // [`super::FerriteRuntime::from_wire`] runs) and the valid-
+        // UTF-8-but-unknown-wire rejection path
+        // ([`super::FerriteRuntime::from_wire`] returns `None` on a
+        // byte-string outside the two-arm ferrite-runtime accept-set).
+        // Both must reject, so a future accidental widening of the
+        // trait impl's accept-set (a case-fold path, a silent
+        // inclusion of the pre-lift PascalCase Debug-derived shapes
+        // `"Safe"` / `"Arena"` on the wire axis, a silent overlap
+        // with the sibling [`super::FerriteRuntime::rt_import`] Go-
+        // import projection outputs, a silent overlap with sibling
+        // closed-set canonical tags on other axes, a stray fallback
+        // that maps invalid UTF-8 onto a default arm rather than the
+        // trait-idiomatic `Err(())`) trips at caixa-provedor test
+        // time.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without
+        //     continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator
+        //     rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on FerriteRuntime must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates mirror the corpus
+        // the sibling `ferrite_runtime_try_from_str_rejects_unknown_byte_strings`
+        // str-view rejection witness already pins on the paired
+        // [`TryFrom<&str>`] axis: the empty byte-string, whitespace-
+        // only padding, PascalCase / uppercase rebrand candidates,
+        // Levenshtein-neighbor typos, snake_case and no-separator
+        // variants, the trajectory-item candidate
+        // `b"ferrite-region"` (the intermediate
+        // `ferrite/rt/region` checked-arena flavor every sibling
+        // [`super::FerriteRuntime`] doc block already names as the
+        // next arm), the sibling [`super::FerriteRuntime::rt_import`]
+        // Go-import projection outputs on both arms, sibling closed-
+        // set canonical tags on other axes (`b"biblioteca"`,
+        // `b"servico"`, `b"one-for-one"`, `b"empty"`, `b"safety"`,
+        // `b"compliance"`, `b"proven"`, `b"rejected"`, `b"keyword"`),
+        // and whitespace-padded canonical tags.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\n",
+            b"\t",
+            b"Safe",
+            b"SAFE",
+            b"safe",
+            b"Arena",
+            b"ARENA",
+            b"arena",
+            b"Ferrite-Safe",
+            b"FERRITE-SAFE",
+            b"Ferrite-Arena",
+            b"FERRITE-ARENA",
+            b"ferrite_safe",
+            b"ferrite_arena",
+            b"ferritesafe",
+            b"ferritearena",
+            b"ferrite-saf",
+            b"ferrite-aren",
+            b"region",
+            b"ferrite-region",
+            b"unsafe",
+            b"gc",
+            b"rt \"github.com/pleme-io/ferrite/rt\"",
+            b"rt \"github.com/pleme-io/ferrite/rt/arena\"",
+            b"biblioteca",
+            b"servico",
+            b"one-for-one",
+            b"empty",
+            b"safety",
+            b"compliance",
+            b"proven",
+            b"rejected",
+            b"keyword",
+            b"ferrite-safe ",
+            b" ferrite-safe",
+            b"ferrite-safe\n",
+            b"ferrite-safe\t",
+            b"ferrite-arena ",
+            b" ferrite-arena",
+            b"?",
+            b"\"ferrite-safe\"",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <super::FerriteRuntime as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on FerriteRuntime must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired FerriteRuntime::from_wire \
+                 resolver, or a cross-axis leak from a sibling closed-\
+                 set typed-enum axis's non-shared arm-set"
             );
         }
     }
