@@ -1895,6 +1895,120 @@ impl From<&WitShape> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed-byte-slice input, `Result<Self, ()>` output*
+/// byte-view reverse projection on the M3-mesh `:contratos :wit` pre-
+/// projection [`WitShape`] closed-set fieldless typed enum on the caixa
+/// surface — the byte-mirror of the paired [`TryFrom<&str> for WitShape`]
+/// str-view reverse-projection axis (5472902) and the byte-view *reverse*
+/// companion of the pre-existing byte-view *forward* triple
+/// ([`AsRef<[u8]>`], [`From<WitShape> for Vec<u8>`],
+/// [`From<&WitShape> for Vec<u8>`]) lifted on this same enum. Routes
+/// borrowed byte-slice input through [`std::str::from_utf8`] + the
+/// substrate-primitive [`WitShape::from_wire`] `Option<Self>` accessor so
+/// every consumer that binds a byte-slice through the standard-library
+/// `impl TryFrom<&[u8]> for WitShape` axis (equivalently
+/// `<T: for<'a> TryFrom<&'a [u8]>>`) — a future
+/// [`std::io::Read::read_to_end`]-shape per-Aplicacao ingest byte-source
+/// whose framing already carries the canonical four-arm census-label
+/// byte-string (`b"http"` / `b"pubsub"` / `b"store"` / `b"capability"`)
+/// as a bare byte-slice, a future protobuf/CBOR/msgpack field-decoder
+/// whose bytes arm surfaces the census-label before UTF-8 validation, a
+/// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` admission-webhook
+/// intercepting the raw `:contratos :wit` census-label request bytes
+/// before the serde derive dispatches, a future `bytes::Bytes::as_ref()`-
+/// shape byte-tail composer folding a wire payload through the byte-
+/// view reverse-projection axis before any UTF-8 round-trip — reaches
+/// the substrate primitive through one trait dispatch rather than an
+/// open-coded per-call-site
+/// `std::str::from_utf8(bytes).ok().and_then(WitShape::from_wire)`
+/// composition or a
+/// `<WitShape as TryFrom<&str>>::try_from(std::str::from_utf8(bytes)?)`
+/// two-hop shape whose type bounds have no compile-time link back to
+/// the substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-view reverse-
+/// projection* family onto the M3-mesh `:contratos :wit` census-label
+/// closed-set fieldless typed-enum peer on the caixa surface, matching
+/// the trajectory the first-mover [`crate::CaixaKind`] `TryFrom<&[u8]>`
+/// lift (18d1940), the second-mover [`crate::dialeto::CaixaDialeto`]
+/// lift (d102cb8), the third-mover [`crate::dep::DepList`] lift
+/// (b8f25d5), the M2-OTP-shape supervisor-slot pair
+/// ([`crate::supervisor::RestartStrategy`] — c699a83 — and
+/// [`crate::supervisor::RestartPolicy`] — d9ef5f0), and the M3-mesh-
+/// primitive-defining [`PlacementStrategy`] (de03220) + [`RateLimitUnit`]
+/// (294c77d) pairs established across the caixa-core-internal + M2
+/// supervisor + M3 mesh-primitive tiers. Rust's standard library carries
+/// no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a two-
+/// hop composition through [`std::str::from_utf8`] + the paired
+/// [`TryFrom<&str>`] axis is reachable at every call site but has no
+/// compile-time link back to the byte-view reverse-projection axis.
+/// The outside-`caixa-core` peers (`PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) remain the next targets of the campaign.
+///
+/// Deliberately routes through the census-label reverse axis
+/// [`WitShape::from_wire`], *not* through the raw `:contratos :wit`
+/// identifier classifier [`WitShape::classify`] — the two axes carry
+/// disjoint accept-sets by construction (the
+/// `wit_shape_from_wire_and_classify_partition_the_axis` cross-axis
+/// partition pin locks it), so a byte-slice reader that reaches for
+/// the trait-idiomatic reverse projection lands on the same author-
+/// surface-canonical census-label byte-string the codec's parse and
+/// render arms both dispatch on, while raw-identifier classification
+/// stays reachable only through the explicit [`WitShape::classify`]
+/// path.
+///
+/// `type Error = ()` matches the sibling [`WitShape::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing and
+/// the paired trait-idiomatic [`TryFrom<&str>`] axis's unit-error shape —
+/// the caller picks the diagnostic form appropriate for its use site
+/// (a future `feira app graph --by-wit-shape` clap-style arg-parse
+/// composes its own per-verb "unknown wit shape: <arg> — accepted:
+/// {http, pubsub, store, capability}" message; a future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` admission-webhook rejection body
+/// wraps the `Err(())` outcome with the accepted-set enumeration for
+/// operator diagnostics; a `Result::map_err` at the call site lifts the
+/// unit-error to a per-verb error type). Two rejection paths route
+/// through the single unit-error: an invalid UTF-8 byte-sequence
+/// ([`std::str::from_utf8`] returns `Err`) and a valid UTF-8 byte-
+/// string that falls outside the four-arm census-label accept-set
+/// ([`WitShape::from_wire`] returns `None`) — both collapse onto
+/// `Err(())` so the trait signature stays consistent with the sibling
+/// str-view reverse axis, and a caller that needs to distinguish the
+/// two failure modes composes [`std::str::from_utf8`] +
+/// [`WitShape::from_wire`] explicitly.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`WitShape::from_wire`] across the four-arm
+/// [`WitShape::ALL`] accept-set on the borrowed byte-slice surface,
+/// plus a cross-axis witness that the byte-view reverse projection
+/// agrees with the paired [`TryFrom<&str>`] str-view reverse axis on
+/// every accepted arm, and a forward/reverse byte-view cross-axis
+/// witness that feeding the paired [`AsRef<[u8]>`] byte-tail and the
+/// paired [`From<WitShape> for Vec<u8>`] owned byte-tail back through
+/// the new impl round-trips to the originating arm) and
+/// [`tests::wit_shape_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-
+/// vocabulary rejection path — the latter mirrors the corpus the
+/// paired [`TryFrom<&str>`] rejection witness already pins, including
+/// the raw `:contratos :wit` identifiers [`WitShape::classify`]
+/// consumes on the sibling axis so a byte-level cross-axis leak trips
+/// at caixa-core test time rather than at a downstream consumer's
+/// silent misclassification).
+impl TryFrom<&[u8]> for WitShape {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -21590,6 +21704,255 @@ mod tests {
                  borrowed-input surface must resolve to the same \
                  as_str dispatch"
             );
+        }
+    }
+
+    #[test]
+    fn wit_shape_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for WitShape` — asserts the trait-
+        // idiomatic byte-view reverse-projection standard-library impl
+        // and the substrate-primitive [`super::WitShape::from_wire`]
+        // `Option<Self>` accessor resolve to the same four-arm census-
+        // label accept-set across every arm the exhaustive
+        // [`super::WitShape::ALL`] slice enumerates. Extends the
+        // substrate-wide trait-idiomatic byte-view reverse-projection
+        // axis onto the M3-mesh `:contratos :wit` census-label closed-
+        // set fieldless typed-enum peer on the caixa surface — mirror
+        // of the paired [`TryFrom<&str> for WitShape`] str-view reverse-
+        // projection axis (5472902), and the byte-view companion of the
+        // pre-existing byte-owned reverse-projection family
+        // ([`AsRef<[u8]>`], [`From<WitShape> for Vec<u8>`],
+        // [`From<&WitShape> for Vec<u8>`]) on this same enum.
+        //
+        // Peer of the sibling
+        // `rate_limit_unit_try_from_bytes_routes_through_from_suffix_accessor`
+        // (294c77d) on the second M3-mesh-primitive-defining slot enum,
+        // `placement_strategy_try_from_bytes_routes_through_from_wire_accessor`
+        // (de03220) on the first M3-mesh-primitive-defining slot enum,
+        // `restart_policy_try_from_bytes_routes_through_from_wire_accessor`
+        // (d9ef5f0),
+        // `restart_strategy_try_from_bytes_routes_through_from_wire_accessor`
+        // (c699a83),
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_routes_through_from_wire_accessor`]
+        // (18d1940),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_bytes_routes_through_from_wire_accessor`]
+        // (d102cb8), and
+        // [`crate::dep::tests::dep_list_try_from_bytes_routes_through_from_wire_accessor`]
+        // (b8f25d5) — tracks the "route through the substrate-primitive
+        // reverse accessor via `std::str::from_utf8`" discipline the
+        // first-mover established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a
+        // two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent split
+        // whenever a future call site takes a sibling byte-projection
+        // axis whose parse arm-set carries no compile-time byte-view
+        // surface. This impl closes the byte-view reverse-projection
+        // axis at the substrate-primitive [`super::WitShape::from_wire`]
+        // accessor so every future `<T: for<'a> TryFrom<&'a [u8]>>`-
+        // bound consumer reaches the same four-arm census-label accept-
+        // set through one trait dispatch.
+        for &variant in WitShape::ALL {
+            let wire_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                <WitShape as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on WitShape must round-trip \
+                 WitShape::{variant:?}.as_str().as_bytes() back to \
+                 Ok(WitShape::{variant:?}) — divergence from \
+                 WitShape::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <WitShape as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                WitShape::from_wire(variant.as_str()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 WitShape::{variant:?}.as_str().as_bytes() must byte-\
+                 equal WitShape::from_wire on the paired &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection axis
+            // must agree with the paired str-view reverse-projection
+            // axis ([`TryFrom<&str>`]) on every accepted arm — the two
+            // reverse paths share one census-label accept-set through
+            // the substrate-primitive `from_wire` accessor.
+            let via_str: Result<WitShape, ()> =
+                <WitShape as TryFrom<&str>>::try_from(variant.as_str());
+            let via_bytes: Result<WitShape, ()> =
+                <WitShape as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on WitShape must agree on WitShape::{variant:?} \
+                 — divergence signals the byte-view and str-view \
+                 reverse paths have drifted off the same substrate-\
+                 primitive from_wire accessor"
+            );
+            // Forward/reverse byte-view cross-axis witness: feed the
+            // paired [`AsRef<[u8]>`] byte-tail back through the new
+            // impl and assert it round-trips to the originating arm.
+            let via_asref: &[u8] = <WitShape as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                <WitShape as TryFrom<&[u8]>>::try_from(via_asref),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ AsRef<[u8]> must round-trip \
+                 WitShape::{variant:?} — divergence signals the \
+                 forward and reverse byte-view axes have drifted off \
+                 the same substrate-primitive as_str/from_wire pair"
+            );
+            // Byte-owned round-trip witness: feed the paired
+            // [`From<WitShape> for Vec<u8>`] owned byte-tail back
+            // through the byte-view reverse impl as a borrowed slice
+            // and assert the round-trip lands on the originating arm —
+            // locks the owned and borrowed byte projections together
+            // at the substrate-primitive accessor.
+            let owned_bytes: Vec<u8> = <Vec<u8> as From<WitShape>>::from(variant);
+            assert_eq!(
+                <WitShape as TryFrom<&[u8]>>::try_from(owned_bytes.as_slice()),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<WitShape> for Vec<u8> must \
+                 round-trip WitShape::{variant:?} — divergence signals \
+                 the byte-owned reverse-projection axis has drifted \
+                 off the paired byte-view reverse axis"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for WitShape` —
+        // sweeps two rejection paths the byte-view reverse-projection
+        // axis collapses onto the single unit-error `Err(())` return:
+        // the invalid-UTF-8 rejection path ([`std::str::from_utf8`]
+        // returns `Err` before [`super::WitShape::from_wire`] runs) and
+        // the valid-UTF-8-but-unknown-wire rejection path
+        // ([`super::WitShape::from_wire`] returns `None` on a byte-
+        // string outside the four-arm census-label accept-set). Both
+        // must reject, so a future accidental widening of the trait
+        // impl's accept-set (a case-fold path, a silent inclusion of a
+        // PascalCase rebrand of the wire byte-string that would collide
+        // the two-axis split the sibling
+        // `wit_shape_from_wire_rejects_unknown_byte_strings` pin makes
+        // load-bearing, a silent overlap with the raw `:contratos :wit`
+        // identifier accept-set the paired [`super::WitShape::classify`]
+        // total function consumes on the sibling axis, a stray fallback
+        // that maps invalid UTF-8 onto a default arm rather than the
+        // trait-idiomatic `Err(())`) trips at caixa-core test time.
+        // Peer of the sibling
+        // `rate_limit_unit_try_from_bytes_rejects_unknown_and_non_utf8_bytes`
+        // (294c77d),
+        // `placement_strategy_try_from_bytes_rejects_unknown_and_non_utf8_bytes`
+        // (de03220),
+        // `restart_policy_try_from_bytes_rejects_unknown_and_non_utf8_bytes`
+        // (d9ef5f0),
+        // `restart_strategy_try_from_bytes_rejects_unknown_and_non_utf8_bytes`
+        // (c699a83),
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (18d1940),
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (d102cb8), and
+        // [`crate::dep::tests::dep_list_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (b8f25d5) rejection witnesses.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <WitShape as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on WitShape must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates mirror the corpus
+        // the sibling `wit_shape_try_from_str_rejects_unknown_byte_strings`
+        // str-view rejection witness already pins on the paired
+        // [`TryFrom<&str>`] axis: the empty byte-string, whitespace-only
+        // padding, PascalCase / uppercase / snake_case / kebab-case
+        // rebrand candidates, English-rebrand candidates
+        // (`b"messaging"`, `b"cache"`), raw `:contratos :wit`
+        // identifiers the sibling [`super::WitShape::classify`] axis
+        // consumes (`b"wasi:http/proxy"`, `b"nats:events"`,
+        // `b"wasi:keyvalue/store"`) that must not silently leak across
+        // the two-axis partition into the census-label reverse axis,
+        // the residual `b"?"` and JSON-quoted `b"\"http\""` shapes.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\n",
+            b"\t",
+            b"Http",
+            b"HTTP",
+            b"PubSub",
+            b"PUBSUB",
+            b"Store",
+            b"STORE",
+            b"Capability",
+            b"CAPABILITY",
+            b"pub-sub",
+            b"pub_sub",
+            b"pubSub",
+            b"http ",
+            b" http",
+            b" store ",
+            b"capability\n",
+            b"http/",
+            b"messaging",
+            b"cache",
+            b"wasi:http/proxy",
+            b"wasi:keyvalue/store",
+            b"nats:events",
+            b"?",
+            b"\"http\"",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <WitShape as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on WitShape must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired WitShape::from_wire \
+                 resolver, or a cross-axis leak from the raw-\
+                 identifier axis WitShape::classify consumes"
+            );
+            // Cross-axis witness: on a byte-string that is valid UTF-8,
+            // the byte-view reverse-projection axis must agree with
+            // the paired str-view reverse-projection axis
+            // ([`TryFrom<&str>`]) — both route through the same
+            // [`super::WitShape::from_wire`] resolver, so the two
+            // rejection paths align by construction.
+            if let Ok(s) = std::str::from_utf8(input) {
+                assert_eq!(
+                    <WitShape as TryFrom<&[u8]>>::try_from(input),
+                    <WitShape as TryFrom<&str>>::try_from(s),
+                    "TryFrom<&[u8]> and TryFrom<&str> reverse-\
+                     projection axes on WitShape must agree on the \
+                     valid-UTF-8 input {input:?} — divergence signals \
+                     the two reverse paths have drifted off the same \
+                     substrate-primitive from_wire accessor"
+                );
+            }
         }
     }
 
