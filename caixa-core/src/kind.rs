@@ -1986,6 +1986,99 @@ impl TryFrom<&[u8]> for CaixaKind {
     }
 }
 
+/// Trait-idiomatic *owned byte-vec input* reverse projection on the
+/// structurally most fundamental closed-set fieldless typed enum on the
+/// caixa surface ([`CaixaKind`]) — the owned-input peer of
+/// [`TryFrom<&[u8]> for CaixaKind`], mirroring the closed
+/// [`From<CaixaKind> for Vec<u8>`] + [`From<&CaixaKind> for Vec<u8>`]
+/// byte-owned *forward*-projection pair on this same enum onto the
+/// byte-owned *reverse*-projection axis. Routes byte-for-byte through
+/// [`<Self as TryFrom<&[u8]>>::try_from`] on the [`Vec<u8>::as_slice`]
+/// borrow, so the owned-input surface reaches the same
+/// [`std::str::from_utf8`] + [`CaixaKind::from_wire`] resolution chain
+/// the borrowed-input peer already carries — one substrate-primitive
+/// accessor, one trait dispatch, no per-consumer detour.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`, so a
+/// consumer that holds an owned [`Vec<u8>`] and needs a typed
+/// [`CaixaKind`] otherwise picks between (a) an open-coded
+/// `<CaixaKind as TryFrom<&[u8]>>::try_from(bytes.as_slice())` at every
+/// call site (whose type bounds have no compile-time link to the byte-
+/// owned reverse-projection axis), (b) a two-hop
+/// `String::from_utf8(bytes)` + [`CaixaKind::from_wire`] composition
+/// whose error surface leaks the standard-library [`std::string::FromUtf8Error`]
+/// (widening the sibling [`TryFrom<&[u8]>`] axis's unit-error) and
+/// silently allocates a [`String`] on inputs that will never make it
+/// past the wire vocabulary, or (c) an intermediate
+/// `<CaixaKind as TryFrom<&str>>::try_from(std::str::from_utf8(&bytes)?)`
+/// three-hop shape. This impl closes the owned-byte-vec reverse-
+/// projection axis at the substrate-primitive
+/// [`CaixaKind::from_wire`] accessor so every future
+/// `<T: TryFrom<Vec<u8>>>`-bound owned-byte-vec consumer — a future
+/// admission-webhook body reader that hands raw request bytes off as
+/// a [`Vec<u8>`] before UTF-8 validation commits, a future
+/// `std::io::Read::read_to_end`-shape audit-log source whose framing
+/// yields an owned byte-vec per frame, a future protobuf/CBOR/msgpack
+/// per-field decoder whose bytes arm surfaces an owned [`Vec<u8>`]
+/// before dispatch, a `bytes::Bytes::to_vec()`-shape wire-body
+/// composer walking a prior audit's payload back to the typed enum,
+/// an `<T: TryFrom<Vec<u8>>>`-bound generic loader over any of the
+/// substrate's closed-set typed enums — reaches the same six-arm
+/// `PascalCase` wire accept-set through one trait dispatch.
+///
+/// First-mover on the substrate-wide trait-idiomatic *byte-owned
+/// reverse-projection* family, opening on the structurally most
+/// fundamental caixa-core enum peer (every caixa carries a `:kind`).
+/// Every future closed-set fieldless typed enum peer on the substrate
+/// ([`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::dep::DepList`],
+/// [`crate::dialeto::CaixaDialeto`], [`crate::render::PathShapeViolation`],
+/// and the outside-`caixa-core` peers `WitShape`, `InvariantKind`,
+/// `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`, `FerriteRuntime`)
+/// is a future target of the campaign, mirroring the trajectory the
+/// closed byte-view reverse-projection family (`TryFrom<&[u8]>`) and
+/// the closed byte-owned forward-projection family
+/// (`From<{Self, &Self}> for Vec<u8>`) already walked.
+///
+/// `type Error = ()` matches the sibling [`TryFrom<&[u8]> for CaixaKind`]
+/// unit-error shape, preserving the trait-family consistency across the
+/// borrowed-and-owned byte-view reverse-projection pair. The owned
+/// [`Vec<u8>`] input is dropped on the error path (the standard-library
+/// `String::from_utf8` convention of returning the input in the error
+/// deliberately declined — a caller that needs the bytes back holds a
+/// clone before the call, and the closed-set-enum use site rarely
+/// wants the raw bytes back past a "did you mean" diagnostic that
+/// operates on the wire vocabulary rather than the input).
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&[u8]>`] axis
+/// across the six-arm [`CaixaKind::ALL`] accept-set on the owned byte-
+/// vec surface, plus a cross-axis witness that the byte-owned reverse
+/// projection agrees with the paired str-view reverse-projection axis
+/// ([`TryFrom<&str>`]) on every accepted arm through the shared
+/// substrate-primitive [`CaixaKind::from_wire`] accessor, plus a four-
+/// corner {owned-input, borrowed-input} × {owned-output byte-vec,
+/// borrowed-output byte-slice} round-trip witness against the paired
+/// [`From<{Self, &Self}> for Vec<u8>`] byte-owned forward-projection
+/// pair) and
+/// [`tests::caixa_kind_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-
+/// vocabulary rejection path, plus a cross-axis witness that the
+/// owned byte-vec reverse-projection axis agrees with the borrowed
+/// byte-slice reverse-projection axis on every rejected input).
+impl TryFrom<Vec<u8>> for CaixaKind {
+    type Error = ();
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&[u8]>>::try_from(bytes.as_slice())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5599,6 +5692,200 @@ mod tests {
                      substrate-primitive from_wire accessor"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_vec_bytes_routes_through_borrowed_byte_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<Vec<u8>> for CaixaKind` — asserts the trait-
+        // idiomatic owned-byte-vec reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&[u8]>`] axis
+        // resolve to the same six-arm `PascalCase` wire accept-set
+        // across every arm the exhaustive [`super::CaixaKind::ALL`]
+        // slice enumerates. Opens the substrate-wide trait-idiomatic
+        // byte-owned reverse-projection axis on the closed-set
+        // fieldless typed-enum family through the structurally most
+        // fundamental caixa-core enum peer — owned-input mirror of the
+        // paired [`TryFrom<&[u8]>`] byte-view reverse-projection axis
+        // (18d1940), and byte-owned reverse companion of the pre-
+        // existing byte-owned *forward*-projection pair
+        // ([`From<CaixaKind> for Vec<u8>`], [`From<&CaixaKind> for
+        // Vec<u8>`]) on this same enum.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`,
+        // so an owned-byte-vec caller otherwise picks between an
+        // open-coded `<T as TryFrom<&[u8]>>::try_from(bytes.as_slice())`
+        // at every call site whose type bounds have no compile-time
+        // link back to the byte-owned reverse-projection axis, or a
+        // `String::from_utf8(bytes)` two-hop shape whose error surface
+        // leaks the standard-library `FromUtf8Error` type. This impl
+        // closes the byte-owned reverse-projection axis at the
+        // substrate-primitive [`super::CaixaKind::from_wire`] accessor
+        // so every future `<T: TryFrom<Vec<u8>>>`-bound owned-byte-vec
+        // consumer reaches the same six-arm `PascalCase` wire accept-
+        // set through one trait dispatch.
+        for &variant in CaixaKind::ALL {
+            let wire_bytes: Vec<u8> = variant.wire_name().as_bytes().to_vec();
+            assert_eq!(
+                <CaixaKind as TryFrom<Vec<u8>>>::try_from(wire_bytes.clone()),
+                Ok(variant),
+                "TryFrom<Vec<u8>> impl on CaixaKind must round-trip \
+                 CaixaKind::{variant:?}.wire_name().as_bytes().to_vec() \
+                 back to Ok(CaixaKind::{variant:?}) — divergence from \
+                 the sibling TryFrom<&[u8]> axis signals a silent detour \
+                 off the substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness: the owned-byte-vec reverse-projection
+            // axis must agree with the borrowed byte-slice reverse-
+            // projection axis on every accepted arm — the two axes
+            // share one `PascalCase` wire vocabulary through the
+            // substrate-primitive `from_wire` accessor, and the owned-
+            // input axis delegates to the borrowed peer by design.
+            let via_owned: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<Vec<u8>>>::try_from(wire_bytes.clone());
+            let via_borrowed: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<&[u8]>>::try_from(wire_bytes.as_slice());
+            assert_eq!(
+                via_owned, via_borrowed,
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on CaixaKind must agree on CaixaKind::{variant:?} \
+                 — divergence signals the owned-input and borrowed-\
+                 input byte-view reverse paths have drifted off the \
+                 same substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness against the paired str-view reverse
+            // axis ([`TryFrom<&str>`]) — the three reverse paths (str-
+            // view, byte-view borrowed, byte-view owned) share one
+            // substrate primitive.
+            let via_str: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<&str>>::try_from(variant.wire_name());
+            assert_eq!(
+                via_owned, via_str,
+                "TryFrom<Vec<u8>> and TryFrom<&str> reverse-projection \
+                 axes on CaixaKind must agree on CaixaKind::{variant:?} \
+                 — divergence signals the byte-owned and str-view \
+                 reverse paths have drifted off the same substrate-\
+                 primitive from_wire accessor"
+            );
+        }
+        // Deliberate non-witness: this reverse-projection axis is *not*
+        // round-tripped against the byte-owned *forward*-projection
+        // pair ([`From<CaixaKind> for Vec<u8>`], [`From<&CaixaKind>
+        // for Vec<u8>`]) — the two axes operate on different
+        // vocabularies by design on this enum. The forward pair folds
+        // through the lowercase-Portuguese [`super::CaixaKind::as_str`]
+        // diagnostic surface (`"biblioteca"` / `"servico"` / …),
+        // while the reverse axis routes through the substrate-primitive
+        // [`super::CaixaKind::from_wire`] `PascalCase` wire accept-set
+        // (`"Biblioteca"` / `"Servico"` / …) — a two-axis split the
+        // sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin already makes load-bearing. That the two byte-vec
+        // tails are *not* interchangeable on this enum is a load-
+        // bearing property of the wire-vs-diagnostic split, and this
+        // non-round-trip is what preserves it.
+    }
+
+    #[test]
+    fn caixa_kind_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<Vec<u8>> for CaixaKind`
+        // — sweeps the same two rejection paths the sibling borrowed
+        // `TryFrom<&[u8]>` axis collapses onto the single unit-error
+        // return: the invalid-UTF-8 rejection path (`std::str::from_utf8`
+        // on the underlying byte-slice returns `Err` before
+        // [`super::CaixaKind::from_wire`] runs) and the valid-UTF-8-
+        // but-unknown-wire rejection path
+        // ([`super::CaixaKind::from_wire`] returns `None` on a byte-
+        // string outside the six-arm `PascalCase` accept-set). Both
+        // must reject so a future accidental widening of the trait
+        // impl's accept-set (a case-fold path, a silent inclusion of
+        // the lowercase Portuguese diagnostic surface onto the wire
+        // axis that would collide the two-axis split, an
+        // `Option::unwrap_or_default`-shape fallback that maps invalid
+        // UTF-8 onto a default arm rather than the trait-idiomatic
+        // `Err(())`, a stray `String::from_utf8_lossy` detour that
+        // widens the input surface with the U+FFFD replacement
+        // character) trips at caixa-core test time.
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80], // UTF-16 surrogate half — rejected by UTF-8
+        ];
+        for &input in non_utf8_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <CaixaKind as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on CaixaKind must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+            // Cross-axis witness: the owned-input axis must agree with
+            // the borrowed-input axis on every rejected input.
+            assert_eq!(
+                <CaixaKind as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <CaixaKind as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on CaixaKind must agree on the non-UTF-8 input \
+                 {input:?} — divergence signals the owned-input and \
+                 borrowed-input byte-view reverse paths have drifted \
+                 off the same substrate-primitive from_wire accessor"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates: the empty byte-
+        // string, the six-arm lowercase Portuguese diagnostic byte-
+        // strings the peer [`super::CaixaKind::as_str`] axis emits (a
+        // caller who confuses the wire axis with the diagnostic axis
+        // trips here), a lowercase fold of a PascalCase arm, and a
+        // small residual of plausible-but-wrong strings.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b"biblioteca",
+            b"binario",
+            b"servico",
+            b"supervisor",
+            b"aplicacao",
+            b"acao",
+            b"BIBLIOTECA",
+            b"biBlioteca",
+            b"Bibliotecas",
+            b"library",
+            b"service",
+            b" Biblioteca",
+            b"Biblioteca ",
+            b"Biblioteca\n",
+            b"\"Biblioteca\"",
+        ];
+        for &input in unknown_wire_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <CaixaKind as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on CaixaKind must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired CaixaKind::from_wire \
+                 resolver"
+            );
+            // Cross-axis witness against the borrowed byte-view axis:
+            // the two paths must agree by construction, since the owned
+            // axis delegates to the borrowed peer.
+            assert_eq!(
+                <CaixaKind as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <CaixaKind as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on CaixaKind must agree on the valid-UTF-8-but-\
+                 unknown-wire input {input:?} — divergence signals the \
+                 owned-input and borrowed-input byte-view reverse \
+                 paths have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
         }
     }
 }
