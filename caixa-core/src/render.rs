@@ -9106,6 +9106,111 @@ impl From<&PathShapeViolation> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed byte-slice* reverse projection on the
+/// [`PathShapeViolation`] closed three-arm render-side path-shape-
+/// diagnostic typed enum — routes byte-for-byte through
+/// [`std::str::from_utf8`] composed with the substrate-primitive
+/// [`PathShapeViolation::from_wire`] `Option<Self>` accessor, so
+/// `<PathShapeViolation as TryFrom<&[u8]>>::try_from(bytes)` reaches
+/// the same three-arm canonical-lowercase-kebab wire accept-set
+/// (`"empty"` / `"absolute"` / `"parent-escape"`) the sibling
+/// method-named [`PathShapeViolation::from_wire`] resolver and the
+/// paired [`TryFrom<&str>`] impl already resolve against. Both
+/// rejection paths (invalid UTF-8 and valid-UTF-8-but-unknown-wire)
+/// collapse onto the single unit-error `Err(())` return, matching
+/// the trait-idiomatic-`()`-error shape the substrate-wide sibling
+/// `TryFrom<&[u8]>` impls carry.
+///
+/// Extends the substrate-wide trait-idiomatic byte-view reverse-
+/// projection axis — walked across the caixa-core-internal
+/// [`crate::CaixaKind`] (18d1940), [`crate::CaixaDialeto`] (d102cb8),
+/// [`crate::dep::DepList`] (b8f25d5), the M2-OTP-shape
+/// [`crate::supervisor::RestartStrategy`] (c699a83) /
+/// [`crate::supervisor::RestartPolicy`] (d9ef5f0), the M3-mesh-
+/// primitive-defining [`crate::aplicacao::PlacementStrategy`] (de03220)
+/// / [`crate::aplicacao::RateLimitUnit`] (294c77d) /
+/// [`crate::aplicacao::WitShape`] (de9875c), and the outside-caixa-core
+/// [`caixa_arch::invariants::InvariantKind`] (40b7417),
+/// [`caixa_arch::report::ArchVerdict`] (4dbca85),
+/// `caixa_lint::diagnostic::Severity` (f11dc96),
+/// `caixa_lint::diagnostic::FixSafety` (46a3e3e),
+/// `caixa_theme::style::Semantic` (b8c795d), and
+/// `caixa_provedor::FerriteRuntime` (a9aabe3) peers — onto the
+/// *first render-side path-shape-diagnostic* closed-set fieldless
+/// typed enum on the caixa-core surface. Mirrors the paired byte-
+/// owned reverse-projection axis's landing on this enum (c98fb87)
+/// and closes the trait-idiomatic byte-projection surface on
+/// [`PathShapeViolation`]: the forward triple ([`AsRef<[u8]>`]
+/// (2c58220) plus the [`From<Self> for Vec<u8>`] /
+/// [`From<&Self> for Vec<u8>`] pair (c98fb87)) is now matched by
+/// the reverse trait ([`TryFrom<&[u8]>`]) on the same substrate-
+/// primitive [`PathShapeViolation::from_wire`] accessor.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a
+/// two-hop composition through [`std::str::from_utf8`] + the paired
+/// [`TryFrom<&str>`] axis is reachable through the pre-existing str-
+/// view reverse-projection axis alone. But that two-hop shape has
+/// no compile-time link back to the byte-view reverse-projection
+/// axis, forces every downstream `<T: for<'a> TryFrom<&'a [u8]>>`-
+/// bound consumer (a future `feira lint --explain-path-shape`
+/// re-loader whose stdin ingest binds the wire byte-tag as
+/// `Vec<u8>`, a future M4 `mesh.pleme.io/v1alpha1/Caixa` CR
+/// admission-webhook re-loader intercepting raw per-arm path-shape-
+/// violation-tag response bytes before the serde derive dispatches,
+/// a `bytes::Bytes::as_ref()`-shape byte-tail composer walking a
+/// prior audit's `Vec<u8>` payload back to the typed enum, a
+/// `std::io::Read::read_to_end`-shape audit-log ingest byte-source
+/// re-hydrating per-slot path-gate emissions) to open-code the
+/// composition at every call site.
+///
+/// A future arm addition (a `Symlink` arm the future symlink-escape
+/// gate would carry once [`std::path::Path::is_symlink`] becomes
+/// part of the sandbox contract, a `TrailingSpace` arm a future
+/// authoring-side whitespace-hygiene gate would raise for
+/// `"lib/init.lisp "` shapes — both trajectory items the sibling
+/// [`PathShapeViolation::ALL`] doc block already names) reaches
+/// every parse path — [`PathShapeViolation::from_wire`],
+/// [`TryFrom<&str>::try_from`], [`std::str::FromStr::from_str`],
+/// and now [`TryFrom<&[u8]>::try_from`] — through one match-arm
+/// edit on the substrate-primitive accessor, not a coordinated
+/// rewrite across every trait impl.
+///
+/// Pinned load-bearing by
+/// [`tests::path_shape_violation_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`PathShapeViolation::from_wire`] across
+/// the three-arm [`PathShapeViolation::ALL`] accept-set on the
+/// borrowed byte-slice surface, plus a cross-axis witness that the
+/// byte-view reverse projection agrees with the paired
+/// [`TryFrom<&str>`] str-view reverse axis on every accepted arm,
+/// and a forward/reverse byte-view cross-axis witness that feeding
+/// the paired [`AsRef<[u8]>`] byte-tail and the paired
+/// [`From<PathShapeViolation> for Vec<u8>`] and
+/// [`From<&PathShapeViolation> for Vec<u8>`] owned byte-tails back
+/// through the new impl round-trips to the originating arm) and
+/// [`tests::path_shape_violation_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both
+/// the non-UTF-8 byte-sequence rejection path and the unknown-wire-
+/// vocabulary rejection path — the latter mirrors the corpus the
+/// paired [`TryFrom<&str>`] rejection witness already pins,
+/// including the trajectory-item candidates the sibling
+/// [`PathShapeViolation`] doc block already names, the derived
+/// `PascalCase` [`std::fmt::Debug`]-shapes the substrate-canonical
+/// kebab-case accessor's docstring explicitly names as drift
+/// footguns, and sibling closed-set canonical tags on other axes
+/// so a byte-level cross-axis leak trips at caixa-core test time
+/// rather than at a downstream consumer's silent misclassification).
+impl TryFrom<&[u8]> for PathShapeViolation {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, <Self as TryFrom<&[u8]>>::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
 /// the shape every caixa-author-supplied callback / script path must
 /// take so the layout checker's `root.join(p)` resolves inside the
@@ -45438,6 +45543,257 @@ mod tests {
                  surface on the borrowed-input surface must byte-\
                  equal the substrate-primitive as_str accessor's \
                  byte-tail on PathShapeViolation::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for PathShapeViolation` — asserts the
+        // trait-idiomatic byte-view reverse-projection standard-library
+        // impl and the substrate-primitive
+        // [`super::PathShapeViolation::from_wire`] `Option<Self>`
+        // accessor resolve to the same three-arm canonical-lowercase-
+        // kebab wire accept-set across every arm the exhaustive
+        // [`super::PathShapeViolation::ALL`] slice enumerates. Extends
+        // the substrate-wide trait-idiomatic byte-view reverse-
+        // projection axis onto the first render-side path-shape-
+        // diagnostic closed-set fieldless typed-enum peer on the
+        // caixa-core surface — matching the trajectory the caixa-core-
+        // internal [`super::super::CaixaKind`] first-mover (18d1940),
+        // [`super::super::CaixaDialeto`] (d102cb8),
+        // [`super::super::dep::DepList`] (b8f25d5), the M2-OTP-shape
+        // [`super::super::supervisor::RestartStrategy`] (c699a83) /
+        // [`super::super::supervisor::RestartPolicy`] (d9ef5f0), the
+        // M3-mesh-primitive-defining
+        // [`super::super::aplicacao::PlacementStrategy`] (de03220) /
+        // [`super::super::aplicacao::RateLimitUnit`] (294c77d) /
+        // [`super::super::aplicacao::WitShape`] (de9875c), and the
+        // outside-caixa-core `caixa_arch::invariants::InvariantKind`
+        // (40b7417), `caixa_arch::report::ArchVerdict` (4dbca85),
+        // `caixa_lint::diagnostic::Severity` (f11dc96),
+        // `caixa_lint::diagnostic::FixSafety` (46a3e3e),
+        // `caixa_theme::style::Semantic` (b8c795d), and
+        // `caixa_provedor::FerriteRuntime` (a9aabe3) peers walked
+        // before it. Mirrors the paired byte-owned reverse-projection
+        // axis's landing on this same enum (c98fb87).
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so
+        // a two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent
+        // split whenever a future call site takes a sibling byte-
+        // projection axis whose parse arm-set carries no compile-time
+        // byte-view surface. This impl closes the byte-view reverse-
+        // projection axis at the substrate-primitive
+        // [`super::PathShapeViolation::from_wire`] accessor so every
+        // future `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer
+        // reaches the same three-arm path-shape-violation accept-set
+        // through one trait dispatch.
+        for &variant in super::PathShapeViolation::ALL {
+            let wire_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on PathShapeViolation must round-\
+                 trip PathShapeViolation::{variant:?}.as_str().as_bytes() \
+                 back to Ok(PathShapeViolation::{variant:?}) — \
+                 divergence from PathShapeViolation::from_wire signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                super::PathShapeViolation::from_wire(variant.as_str()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 PathShapeViolation::{variant:?}.as_str().as_bytes() \
+                 must byte-equal PathShapeViolation::from_wire on the \
+                 paired &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection
+            // axis must agree with the paired str-view reverse-
+            // projection axis ([`TryFrom<&str>`]) on every accepted
+            // arm — the two reverse paths share one path-shape-
+            // violation accept-set through the substrate-primitive
+            // `from_wire` accessor.
+            let via_str: Result<super::PathShapeViolation, ()> =
+                <super::PathShapeViolation as TryFrom<&str>>::try_from(variant.as_str());
+            let via_bytes: Result<super::PathShapeViolation, ()> =
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on PathShapeViolation must agree on \
+                 PathShapeViolation::{variant:?} — divergence signals \
+                 the byte-view and str-view reverse paths have drifted \
+                 off the same substrate-primitive from_wire accessor"
+            );
+            // Forward/reverse byte-view cross-axis witness: feed the
+            // paired [`AsRef<[u8]>`] byte-tail back through the new
+            // impl and assert it round-trips to the originating arm.
+            let via_asref: &[u8] = <super::PathShapeViolation as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(via_asref),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ AsRef<[u8]> must round-trip \
+                 PathShapeViolation::{variant:?} — divergence signals \
+                 the forward and reverse byte-view axes have drifted \
+                 off the same substrate-primitive as_str/from_wire \
+                 pair"
+            );
+            // Byte-owned round-trip witness: feed the paired
+            // [`From<PathShapeViolation> for Vec<u8>`] owned byte-tail
+            // back through the byte-view reverse impl as a borrowed
+            // slice and assert the round-trip lands on the originating
+            // arm — locks the owned and borrowed byte projections
+            // together at the substrate-primitive accessor.
+            let owned_bytes: Vec<u8> = <Vec<u8> as From<super::PathShapeViolation>>::from(variant);
+            assert_eq!(
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(owned_bytes.as_slice()),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<PathShapeViolation> for Vec<u8> \
+                 must round-trip PathShapeViolation::{variant:?} — \
+                 divergence signals the byte-owned reverse-projection \
+                 axis has drifted off the paired byte-view reverse \
+                 axis"
+            );
+            // Borrowed-input byte-owned round-trip witness: same
+            // discipline on the paired [`From<&PathShapeViolation> for
+            // Vec<u8>`] owned byte-tail — closes the four-corner
+            // {owned-input, borrowed-input} × {owned-output byte-vec,
+            // borrowed-output byte-slice} projection square through
+            // the new byte-view reverse impl.
+            let borrowed_owned_bytes: Vec<u8> =
+                <Vec<u8> as From<&super::PathShapeViolation>>::from(&variant);
+            assert_eq!(
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(
+                    borrowed_owned_bytes.as_slice()
+                ),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<&PathShapeViolation> for \
+                 Vec<u8> must round-trip PathShapeViolation::{variant:?} \
+                 — divergence signals the borrowed-input byte-owned \
+                 axis has drifted off the paired byte-view reverse \
+                 axis"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for
+        // PathShapeViolation` — sweeps two rejection paths the byte-
+        // view reverse-projection axis collapses onto the single unit-
+        // error `Err(())` return: the invalid-UTF-8 rejection path
+        // ([`std::str::from_utf8`] returns `Err` before
+        // [`super::PathShapeViolation::from_wire`] runs) and the
+        // valid-UTF-8-but-unknown-wire rejection path
+        // ([`super::PathShapeViolation::from_wire`] returns `None` on
+        // a byte-string outside the three-arm path-shape-violation
+        // accept-set). Both must reject, so a future accidental
+        // widening of the trait impl's accept-set (a case-fold path
+        // admitting the pre-lift PascalCase Debug-derived shapes
+        // `b"Empty"` / `b"Absolute"` / `b"ParentEscape"` on the wire
+        // axis — the exact drift footgun the substrate-canonical
+        // kebab-case accessor's docstring explicitly names as the
+        // reason the kebab-case `"parent-escape"` slug exists — a
+        // Levenshtein-forgiving arm-lookup that admits
+        // `b"parentescape"` typos, a silent absorption of sibling
+        // closed-set-enum canonical tags which are distinct-axis
+        // projections on peer closed-set enums that share no arm with
+        // this one, a stray fallback that maps invalid UTF-8 onto a
+        // default arm rather than the trait-idiomatic `Err(())`)
+        // trips at caixa-core test time.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without
+        //     continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator
+        //     rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on PathShapeViolation must reject \
+                 the non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates mirror the corpus
+        // the sibling `path_shape_violation_try_from_str_rejects_unknown_byte_strings`
+        // str-view rejection witness already pins on the paired
+        // [`TryFrom<&str>`] axis: the empty byte-string, whitespace-
+        // only padding, PascalCase / uppercase rebrand candidates
+        // (the drift footgun the substrate-canonical `as_str`
+        // accessor's docstring explicitly names — a
+        // `format!("{:?}", …).to_lowercase()` round-trip on the
+        // paired `std::fmt::Debug` derive would collapse
+        // `ParentEscape` to `b"parentescape"` rather than the
+        // canonical kebab-case `b"parent-escape"`), underscored /
+        // space-separated rebrand candidates, Levenshtein-neighbor
+        // typos, sibling closed-set canonical tags on other axes
+        // (`b"biblioteca"`, `b"servico"`, `b"one-for-one"`,
+        // `b"safety"`, `b"hint"`) that must NOT bleed across enum
+        // accept-sets under a shared generic loader, and trailing/
+        // leading-whitespace-padded canonical tags.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\n",
+            b"\t",
+            b"Empty",
+            b"EMPTY",
+            b"Absolute",
+            b"ABSOLUTE",
+            b"ParentEscape",
+            b"PARENTESCAPE",
+            b"parentescape",
+            b"parent_escape",
+            b"parent escape",
+            b"parent-escap",
+            b"biblioteca",
+            b"servico",
+            b"safety",
+            b"hint",
+            b"one-for-one",
+            b"empty ",
+            b" empty",
+            b"empty\n",
+            b"empty\t",
+            b"absolute ",
+            b" absolute",
+            b"parent-escape ",
+            b" parent-escape",
+            b"?",
+            b"\"empty\"",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <super::PathShapeViolation as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on PathShapeViolation must reject \
+                 the valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired PathShapeViolation::from_wire \
+                 resolver, or a cross-axis leak from a sibling closed-\
+                 set typed-enum axis's non-shared arm-set"
             );
         }
     }
