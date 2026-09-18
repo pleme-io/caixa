@@ -4846,6 +4846,115 @@ impl TryFrom<&[u8]> for DepList {
     }
 }
 
+/// Trait-idiomatic *owned byte-vec input* reverse projection on the
+/// third caixa-core-internal closed-set fieldless typed enum peer
+/// ([`DepList`]) — the owned-input peer of
+/// [`TryFrom<&[u8]> for DepList`], mirroring the closed
+/// [`From<DepList> for Vec<u8>`] + [`From<&DepList> for Vec<u8>`]
+/// byte-owned *forward*-projection pair on this same enum onto the
+/// byte-owned *reverse*-projection axis. Routes byte-for-byte through
+/// [`<Self as TryFrom<&[u8]>>::try_from`] on the [`Vec<u8>::as_slice`]
+/// borrow, so the owned-input surface reaches the same
+/// [`std::str::from_utf8`] + [`DepList::from_wire`] resolution chain
+/// the borrowed-input peer already carries — one substrate-primitive
+/// accessor, one trait dispatch, no per-consumer detour.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`, so a
+/// consumer that holds an owned [`Vec<u8>`] and needs a typed
+/// [`DepList`] otherwise picks between (a) an open-coded
+/// `<DepList as TryFrom<&[u8]>>::try_from(bytes.as_slice())` at every
+/// call site (whose type bounds have no compile-time link to the byte-
+/// owned reverse-projection axis), (b) a two-hop
+/// `String::from_utf8(bytes)` + [`DepList::from_wire`] composition
+/// whose error surface leaks the standard-library [`std::string::FromUtf8Error`]
+/// (widening the sibling [`TryFrom<&[u8]>`] axis's unit-error) and
+/// silently allocates a [`String`] on inputs that will never make it
+/// past the wire vocabulary, or (c) an intermediate
+/// `<DepList as TryFrom<&str>>::try_from(std::str::from_utf8(&bytes)?)`
+/// three-hop shape. This impl closes the owned-byte-vec reverse-
+/// projection axis at the substrate-primitive
+/// [`DepList::from_wire`] accessor so every future
+/// `<T: TryFrom<Vec<u8>>>`-bound owned-byte-vec consumer — a future
+/// admission-webhook body reader that hands raw request bytes off as
+/// a [`Vec<u8>`] before UTF-8 validation commits, a future
+/// `std::io::Read::read_to_end`-shape audit-log source whose framing
+/// yields an owned byte-vec per frame, a future protobuf/CBOR/msgpack
+/// per-field decoder whose bytes arm surfaces an owned [`Vec<u8>`]
+/// before dispatch, a `bytes::Bytes::to_vec()`-shape wire-body
+/// composer walking a prior audit's payload back to the typed enum,
+/// an `<T: TryFrom<Vec<u8>>>`-bound generic loader over any of the
+/// substrate's closed-set typed enums — reaches the same two-arm
+/// `:`-prefixed kebab-case wire accept-set through one trait dispatch.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-owned reverse-
+/// projection* family onto the third caixa-core-internal closed-set
+/// fieldless typed enum peer, tracking the trajectory the sibling
+/// first-mover [`TryFrom<Vec<u8>> for crate::CaixaKind`] (99c2849)
+/// opened on the structurally most fundamental enum and the sibling
+/// second-mover [`TryFrom<Vec<u8>> for crate::CaixaDialeto`] (83a1526)
+/// continued through. Peer of the sibling closed byte-view reverse-
+/// projection family (`TryFrom<&[u8]>`; extended onto this enum
+/// b8f25d5) and of the closed byte-owned forward-projection family
+/// (`From<{Self, &Self}> for Vec<u8>`; extended onto this enum on the
+/// same commit as its `TryFrom<&[u8]>` peer) on this same enum — the
+/// {owned-input, borrowed-input} × {owned-output byte-vec, borrowed-
+/// output byte-slice} byte-view reverse-projection square now closes
+/// on [`DepList`].
+///
+/// `type Error = ()` matches the sibling [`TryFrom<&[u8]> for DepList`]
+/// unit-error shape, preserving the trait-family consistency across
+/// the borrowed-and-owned byte-view reverse-projection pair. Both
+/// rejection paths (invalid UTF-8, valid-UTF-8-but-unknown-wire)
+/// collapse onto `Err(())` through the delegated borrowed axis.
+/// The owned [`Vec<u8>`] input is dropped on the error path (the
+/// standard-library `String::from_utf8` convention of returning the
+/// input in the error deliberately declined — a caller that needs
+/// the bytes back holds a clone before the call, and the closed-set-
+/// enum use site rarely wants the raw bytes back past a "did you
+/// mean" diagnostic that operates on the wire vocabulary rather than
+/// the input).
+///
+/// Like the peer [`TryFrom<Vec<u8>> for crate::CaixaDialeto`] and
+/// unlike [`TryFrom<Vec<u8>> for crate::CaixaKind`] (which carries a
+/// wire-vs-diagnostic two-axis split — lowercase Portuguese
+/// `as_str` vs `PascalCase` `wire_name`), [`DepList`] has no such
+/// split: [`Self::as_str`] and [`Self::from_wire`] operate on the
+/// same two-arm `:`-prefixed kebab-case byte-vocabulary
+/// (`":deps"`, `":deps-dev"`). So on this enum the byte-owned reverse-
+/// projection axis *can* round-trip against the paired byte-owned
+/// forward-projection pair ([`From<DepList> for Vec<u8>`],
+/// [`From<&DepList> for Vec<u8>`]) — a four-corner witness the pinned
+/// load-bearing test makes explicit, and a witness the sibling
+/// [`TryFrom<Vec<u8>> for crate::CaixaKind`] axis deliberately
+/// declines.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&[u8]>`]
+/// axis across the two-arm [`DepList::ALL`] accept-set on the owned
+/// byte-vec surface, plus a cross-axis witness that the byte-owned
+/// reverse projection agrees with the paired str-view reverse-
+/// projection axis ([`TryFrom<&str>`]) on every accepted arm through
+/// the shared substrate-primitive [`DepList::from_wire`] accessor,
+/// plus a four-corner {owned-input, borrowed-input} × {owned-output
+/// byte-vec, borrowed-output byte-slice} round-trip witness against
+/// the paired [`From<{Self, &Self}> for Vec<u8>`] byte-owned forward-
+/// projection pair) and
+/// [`tests::dep_list_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-
+/// vocabulary rejection path, plus a cross-axis witness that the
+/// owned byte-vec reverse-projection axis agrees with the borrowed
+/// byte-slice reverse-projection axis on every rejected input).
+impl TryFrom<Vec<u8>> for DepList {
+    type Error = ();
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&[u8]>>::try_from(bytes.as_slice())
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -21611,6 +21720,258 @@ mod tests {
                      substrate-primitive from_wire accessor"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn dep_list_try_from_vec_bytes_routes_through_borrowed_byte_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<Vec<u8>> for DepList` — asserts the trait-
+        // idiomatic owned-byte-vec reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&[u8]>`] axis
+        // resolve to the same two-arm `:`-prefixed kebab-case wire
+        // accept-set across every arm the exhaustive
+        // [`super::DepList::ALL`] slice enumerates. Extends the
+        // substrate-wide trait-idiomatic byte-owned reverse-projection
+        // axis onto the third caixa-core-internal closed-set fieldless
+        // typed enum peer — owned-input mirror of the paired
+        // [`TryFrom<&[u8]>`] byte-view reverse-projection axis
+        // (b8f25d5), and byte-owned reverse companion of the pre-
+        // existing byte-owned *forward*-projection pair
+        // ([`From<super::DepList> for Vec<u8>`],
+        // [`From<&super::DepList> for Vec<u8>`]) on this same enum.
+        // Peer of the sibling first-mover
+        // [`crate::kind::tests::caixa_kind_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (99c2849) on the [`crate::CaixaKind`] closed-set typed-enum
+        // peer and the sibling second-mover
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (83a1526) on the [`crate::CaixaDialeto`] peer — tracks the
+        // "delegate through `TryFrom<&[u8]>` on the `Vec<u8>::as_slice`
+        // borrow" discipline the first-mover established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`,
+        // so an owned-byte-vec caller otherwise picks between an
+        // open-coded `<T as TryFrom<&[u8]>>::try_from(bytes.as_slice())`
+        // at every call site whose type bounds have no compile-time
+        // link back to the byte-owned reverse-projection axis, or a
+        // `String::from_utf8(bytes)` two-hop shape whose error surface
+        // leaks the standard-library `FromUtf8Error` type. This impl
+        // closes the byte-owned reverse-projection axis at the
+        // substrate-primitive [`super::DepList::from_wire`] accessor
+        // so every future `<T: TryFrom<Vec<u8>>>`-bound owned-byte-vec
+        // consumer reaches the same two-arm `:`-prefixed kebab-case
+        // wire accept-set through one trait dispatch.
+        for &variant in super::DepList::ALL {
+            let wire_bytes: Vec<u8> = variant.as_str().as_bytes().to_vec();
+            assert_eq!(
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(wire_bytes.clone()),
+                Ok(variant),
+                "TryFrom<Vec<u8>> impl on DepList must round-trip \
+                 DepList::{variant:?}.as_str().as_bytes().to_vec() \
+                 back to Ok(DepList::{variant:?}) — divergence from \
+                 the sibling TryFrom<&[u8]> axis signals a silent \
+                 detour off the substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness: the owned-byte-vec reverse-projection
+            // axis must agree with the borrowed byte-slice reverse-
+            // projection axis on every accepted arm — the two axes
+            // share one `:`-prefixed kebab-case wire vocabulary
+            // through the substrate-primitive `from_wire` accessor,
+            // and the owned-input axis delegates to the borrowed peer
+            // by design.
+            let via_owned: Result<super::DepList, ()> =
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(wire_bytes.clone());
+            let via_borrowed: Result<super::DepList, ()> =
+                <super::DepList as TryFrom<&[u8]>>::try_from(wire_bytes.as_slice());
+            assert_eq!(
+                via_owned, via_borrowed,
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on DepList must agree on DepList::{variant:?} — \
+                 divergence signals the owned-input and borrowed-input \
+                 byte-view reverse paths have drifted off the same \
+                 substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness against the paired str-view reverse
+            // axis ([`TryFrom<&str>`]) — the three reverse paths (str-
+            // view, byte-view borrowed, byte-view owned) share one
+            // substrate primitive.
+            let via_str: Result<super::DepList, ()> =
+                <super::DepList as TryFrom<&str>>::try_from(variant.as_str());
+            assert_eq!(
+                via_owned, via_str,
+                "TryFrom<Vec<u8>> and TryFrom<&str> reverse-projection \
+                 axes on DepList must agree on DepList::{variant:?} — \
+                 divergence signals the byte-owned and str-view \
+                 reverse paths have drifted off the same substrate-\
+                 primitive from_wire accessor"
+            );
+            // Four-corner witness: because [`super::DepList`] carries
+            // no wire-vs-diagnostic split (as_str and from_wire share
+            // one `:`-prefixed kebab-case byte-vocabulary), the byte-
+            // owned reverse-projection axis on this enum *does* round-
+            // trip against the paired byte-owned forward-projection
+            // pair. Pin every corner of the {owned-input, borrowed-
+            // input} × {From<Self> → Vec<u8>, From<&Self> → Vec<u8>}
+            // square onto the same Ok(variant) return so a future
+            // accident that drops one corner off the substrate-
+            // primitive accessor trips here.
+            let owned_forward: Vec<u8> = <Vec<u8> as From<super::DepList>>::from(variant);
+            let borrowed_forward: Vec<u8> = <Vec<u8> as From<&super::DepList>>::from(&variant);
+            assert_eq!(
+                owned_forward, wire_bytes,
+                "From<DepList> for Vec<u8> forward projection on \
+                 DepList::{variant:?} must byte-equal \
+                 variant.as_str().as_bytes().to_vec() — divergence \
+                 signals the paired forward pair drifted off the \
+                 substrate-primitive as_str accessor"
+            );
+            assert_eq!(
+                borrowed_forward, wire_bytes,
+                "From<&DepList> for Vec<u8> forward projection on \
+                 &DepList::{variant:?} must byte-equal \
+                 variant.as_str().as_bytes().to_vec() — divergence \
+                 signals the paired forward pair drifted off the \
+                 substrate-primitive as_str accessor"
+            );
+            assert_eq!(
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(owned_forward.clone()),
+                Ok(variant),
+                "Four-corner round-trip on DepList::{variant:?} \
+                 through From<DepList> for Vec<u8> then \
+                 TryFrom<Vec<u8>> for DepList must return \
+                 Ok(variant) — divergence signals the byte-owned \
+                 forward pair and the byte-owned reverse axis have \
+                 drifted apart"
+            );
+            assert_eq!(
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(borrowed_forward),
+                Ok(variant),
+                "Four-corner round-trip on DepList::{variant:?} \
+                 through From<&DepList> for Vec<u8> then \
+                 TryFrom<Vec<u8>> for DepList must return \
+                 Ok(variant) — divergence signals the borrowed-input \
+                 forward corner and the owned-input reverse corner \
+                 have drifted apart"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<Vec<u8>> for DepList`
+        // — sweeps the same two rejection paths the sibling borrowed
+        // `TryFrom<&[u8]>` axis collapses onto the single unit-error
+        // return: the invalid-UTF-8 rejection path (`std::str::from_utf8`
+        // on the underlying byte-slice returns `Err` before
+        // [`super::DepList::from_wire`] runs) and the valid-UTF-8-
+        // but-unknown-wire rejection path
+        // ([`super::DepList::from_wire`] returns `None` on a byte-
+        // string outside the two-arm `:`-prefixed kebab-case accept-
+        // set). Both must reject so a future accidental widening of
+        // the trait impl's accept-set (a case-fold path, a silent
+        // acceptance of a `":packages"` rebrand alias, a
+        // `#[serde(rename_all = "…")]` attribute drift that widens
+        // the parse arm-set silently, a stray `String::from_utf8_lossy`
+        // detour that widens the input surface with the U+FFFD
+        // replacement character, an `Option::unwrap_or_default`-shape
+        // fallback that maps invalid UTF-8 onto a default arm rather
+        // than the trait-idiomatic `Err(())`) trips at caixa-core test
+        // time. Peer of the sibling first-mover
+        // [`crate::kind::tests::caixa_kind_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (99c2849) on the [`crate::CaixaKind`] peer and the sibling
+        // second-mover
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (83a1526) on the [`crate::CaixaDialeto`] peer.
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80], // UTF-16 surrogate half — rejected by UTF-8
+        ];
+        for &input in non_utf8_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on DepList must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+            // Cross-axis witness: the owned-input axis must agree with
+            // the borrowed-input axis on every rejected input.
+            assert_eq!(
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <super::DepList as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on DepList must agree on the non-UTF-8 input \
+                 {input:?} — divergence signals the owned-input and \
+                 borrowed-input byte-view reverse paths have drifted \
+                 off the same substrate-primitive from_wire accessor"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates: the empty byte-
+        // string, whitespace-only forms, case-folded variants of
+        // accepted arms, the un-`:`-prefixed bare-kebab
+        // ("deps"/"deps-dev") the sibling
+        // [`super::DepList::from_wire`] doc block flags as a
+        // `:`-prefix-discipline hazard, plausible rebrand aliases the
+        // sibling `dep_list_try_from_str_rejects_unknown_byte_strings`
+        // rejection witness already pins on the str-view reverse
+        // axis, and whitespace-padded / quoted forms.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\t",
+            b"\n",
+            b":deps ",
+            b" :deps",
+            b":DEPS",
+            b":Deps",
+            b":Deps-Dev",
+            b":deps_dev",
+            b":deps-development",
+            b":dev-deps",
+            b":packages",
+            b":packages-dev",
+            b"deps",
+            b"deps-dev",
+            b"Prod",
+            b"Dev",
+            b"prod",
+            b"dev",
+            b"\":deps\"",
+            b"\":deps-dev\"",
+            b":deps\n",
+            b":deps-dev\n",
+        ];
+        for &input in unknown_wire_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on DepList must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired DepList::from_wire \
+                 resolver"
+            );
+            // Cross-axis witness against the borrowed byte-view axis:
+            // the two paths must agree by construction, since the owned
+            // axis delegates to the borrowed peer.
+            assert_eq!(
+                <super::DepList as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <super::DepList as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on DepList must agree on the valid-UTF-8-but-\
+                 unknown-wire input {input:?} — divergence signals \
+                 the owned-input and borrowed-input byte-view reverse \
+                 paths have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
         }
     }
 }
