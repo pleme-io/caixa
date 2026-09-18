@@ -4750,6 +4750,102 @@ impl From<&DepList> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
+/// third caixa-core-internal closed-set fieldless typed enum peer
+/// ([`DepList`]) — the byte-view mirror of the str-view reverse-projection
+/// axis carried by the paired [`TryFrom<&str> for DepList`] impl (which
+/// routes through the substrate-primitive [`DepList::from_wire`]
+/// `Option<Self>` accessor on the two-arm `:`-prefixed kebab-case accept-
+/// set the sibling [`DepList::as_str`] emitter returns —
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`]). Routes byte-for-byte
+/// through the standard-library [`std::str::from_utf8`] UTF-8 validator
+/// and then through [`DepList::from_wire`] so every consumer that holds a
+/// borrowed [`&[u8]`] and needs to project it back into a typed
+/// [`DepList`] — a future `bytes::Bytes::as_ref()`-fed reader that parses
+/// a per-caixa `:deps` / `:deps-dev` classification tag from an already-
+/// borrowed framing byte-tail (a `tracing::field::valuable::Value::Bytes`
+/// recorder on the caixa-lacre `:deps` / `:deps-dev` partitioning
+/// pipeline, a future audit-report re-loader binding a prior
+/// [`DepList::as_str`] output from an mmap'd byte-slice back through the
+/// typed enum for cross-run comparison), a future admission-webhook
+/// rejection body that reads a `spec.dep_list` field off a raw HTTP body
+/// byte-slice before UTF-8 validation commits allocation, a future
+/// generic `<T: for<'a> TryFrom<&'a [u8]>>`-bound loader over any of the
+/// substrate's closed-set typed enums — reaches the same two-arm
+/// `:`-prefixed kebab-case wire accept-set the sibling method-named
+/// [`DepList::from_wire`] resolver and the paired trait-idiomatic
+/// [`TryFrom<&str>`] axis already resolve against, rather than an open-
+/// coded per-call-site
+/// `std::str::from_utf8(bytes).ok().and_then(DepList::from_wire)`
+/// composition or a
+/// `<DepList as TryFrom<&str>>::try_from(std::str::from_utf8(bytes)?)`
+/// two-hop shape whose type bounds have no compile-time link to the
+/// substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-view reverse-
+/// projection* family — opened on the structurally most fundamental
+/// closed-set fieldless typed enum peer ([`crate::CaixaKind`], commit
+/// 18d1940) and extended onto [`crate::dialeto::CaixaDialeto`] (d102cb8
+/// second-mover) — onto the third caixa-core-internal closed-set
+/// fieldless typed enum peer, tracking the "route through `from_wire` via
+/// `std::str::from_utf8`" discipline the first-mover established. Rust's
+/// standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a two-hop
+/// composition through [`std::str::from_utf8`] + the paired
+/// [`TryFrom<&str>`] axis is reachable at every call site but has no
+/// compile-time link back to the byte-view reverse-projection axis. Every
+/// future closed-set fieldless typed enum peer on the substrate
+/// ([`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::aplicacao::WitShape`],
+/// and the outside-`caixa-core` peers `PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) is a future target of the campaign, mirroring the
+/// trajectory the closed byte-owned reverse-projection family walked
+/// arm-by-arm onto each peer.
+///
+/// `type Error = ()` matches the sibling [`DepList::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing and
+/// the paired trait-idiomatic [`TryFrom<&str>`] axis's unit-error shape —
+/// the caller picks the diagnostic form appropriate for its use site (a
+/// future `feira dep --list <deps|deps-dev>` arg-parse composes its own
+/// per-verb "unknown list: <arg> — accepted: {…}" message enumerating
+/// [`DepList::ALL`]; the M4 admission-webhook rejection body wraps
+/// `Err(())` with the accepted-set enumeration for operator diagnostics;
+/// a `Result::map_err` at the call site lifts the unit-error to a per-
+/// verb error type). Two rejection paths route through the single unit-
+/// error: an invalid UTF-8 byte-sequence ([`std::str::from_utf8`] returns
+/// `Err`) and a valid UTF-8 byte-string that falls outside the two-arm
+/// `:`-prefixed kebab-case accept-set ([`DepList::from_wire`] returns
+/// `None`) — both collapse onto `Err(())` so the trait signature stays
+/// consistent with the sibling str-view reverse axis, and a caller that
+/// needs to distinguish the two failure modes composes
+/// [`std::str::from_utf8`] + [`DepList::from_wire`] explicitly.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`DepList::from_wire`] across the two-arm
+/// [`DepList::ALL`] accept-set on the borrowed byte-slice surface, plus a
+/// cross-axis witness that the byte-view reverse projection agrees with
+/// the paired [`TryFrom<&str>`] str-view reverse axis on every accepted
+/// arm) and
+/// [`tests::dep_list_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-vocabulary
+/// rejection path).
+impl TryFrom<&[u8]> for DepList {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -21306,6 +21402,215 @@ mod tests {
                  DepList::as_str().as_bytes() returns — the borrowed-\
                  input surface must resolve to the same as_str dispatch"
             );
+        }
+    }
+
+    #[test]
+    fn dep_list_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for DepList` — asserts the trait-
+        // idiomatic byte-view reverse-projection standard-library impl
+        // and the substrate-primitive [`super::DepList::from_wire`]
+        // `Option<Self>` accessor resolve to the same two-arm
+        // `:`-prefixed kebab-case wire accept-set across every arm the
+        // exhaustive [`super::DepList::ALL`] slice enumerates. Extends
+        // the substrate-wide trait-idiomatic byte-view reverse-
+        // projection axis onto the third caixa-core-internal closed-set
+        // fieldless typed enum peer — mirror of the paired
+        // [`TryFrom<&str> for DepList`] str-view reverse-projection
+        // axis on the same enum, and the byte-view companion of the
+        // pre-existing byte-owned reverse-projection family
+        // ([`AsRef<[u8]>`], [`From<DepList> for Vec<u8>`],
+        // [`From<&DepList> for Vec<u8>`]) on this same enum. Peer of
+        // the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_routes_through_from_wire_accessor`]
+        // (18d1940) on the first-mover [`crate::CaixaKind`] closed-set
+        // typed-enum peer and the sibling
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_bytes_routes_through_from_wire_accessor`]
+        // (d102cb8) on the second-mover [`crate::CaixaDialeto`] peer —
+        // tracks the "route through `from_wire` via `std::str::from_utf8`"
+        // discipline the first-mover established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so
+        // a two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent split
+        // whenever a future call site takes a sibling byte-projection
+        // axis whose parse arm-set carries no compile-time byte-view
+        // surface. This impl closes the byte-view reverse-projection
+        // axis at the substrate-primitive
+        // [`super::DepList::from_wire`] accessor so every future
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer reaches the
+        // same two-arm `:`-prefixed kebab-case wire accept-set through
+        // one trait dispatch.
+        for &variant in super::DepList::ALL {
+            let wire_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                <super::DepList as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on DepList must round-trip \
+                 DepList::{variant:?}.as_str().as_bytes() back to \
+                 Ok(DepList::{variant:?}) — divergence from \
+                 DepList::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <super::DepList as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                super::DepList::from_wire(variant.as_str()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 DepList::{variant:?}.as_str().as_bytes() must \
+                 byte-equal DepList::from_wire on the paired &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection axis
+            // must agree with the paired str-view reverse-projection
+            // axis ([`TryFrom<&str>`]) on every accepted arm — the two
+            // reverse paths share one `:`-prefixed kebab accept-set
+            // through the substrate-primitive `from_wire` accessor.
+            let via_str: Result<super::DepList, ()> =
+                <super::DepList as TryFrom<&str>>::try_from(variant.as_str());
+            let via_bytes: Result<super::DepList, ()> =
+                <super::DepList as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on DepList must agree on DepList::{variant:?} — \
+                 divergence signals the byte-view and str-view reverse \
+                 paths have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
+            // Cross-axis witness against the paired [`AsRef<[u8]>`]
+            // borrowed byte-view axis: feeding the same byte-tail the
+            // forward byte-view axis emits back through the reverse
+            // byte-view axis must round-trip to the originating arm —
+            // locks the forward and reverse byte-view axes together at
+            // the substrate-primitive accessor.
+            let borrowed_bytes: &[u8] = <super::DepList as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                <super::DepList as TryFrom<&[u8]>>::try_from(borrowed_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> fed the AsRef<[u8]>-projected byte-tail \
+                 of DepList::{variant:?} must round-trip to \
+                 Ok(DepList::{variant:?}) — divergence signals the \
+                 forward and reverse byte-view axes have drifted off \
+                 the same substrate-primitive as_str/from_wire accessor \
+                 pair"
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for DepList` —
+        // sweeps two rejection paths the byte-view reverse-projection
+        // axis collapses onto the single unit-error `Err(())` return:
+        // the invalid-UTF-8 rejection path ([`std::str::from_utf8`]
+        // returns `Err` before [`super::DepList::from_wire`] runs) and
+        // the valid-UTF-8-but-unknown-wire rejection path
+        // ([`super::DepList::from_wire`] returns `None` on a byte-
+        // string outside the two-arm `:`-prefixed kebab-case accept-
+        // set). Both must reject, so a future accidental widening of
+        // the trait impl's accept-set (a case-fold path, a silent
+        // acceptance of a `":packages"` rebrand alias, a
+        // `#[serde(rename_all = "…")]` attribute drift that widens the
+        // parse arm-set silently, a stray fallback that maps invalid
+        // UTF-8 onto a default arm rather than the trait-idiomatic
+        // `Err(())`) trips at caixa-core test time. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (18d1940) on the first-mover [`crate::CaixaKind`] peer and
+        // the sibling
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (d102cb8) on the second-mover [`crate::CaixaDialeto`] peer.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without its continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <super::DepList as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on DepList must reject the non-\
+                 UTF-8 byte-sequence {input:?} with Err(()) — silent \
+                 acceptance signals the UTF-8 validation path collapsed \
+                 onto a default arm rather than the trait-idiomatic \
+                 unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates: the empty byte-
+        // string, whitespace-only forms, case-folded variants of
+        // accepted arms, the un-`:`-prefixed bare-kebab
+        // ("deps"/"deps-dev") the sibling
+        // [`super::DepList::from_wire`] doc block flags as a
+        // `:`-prefix-discipline hazard, plausible rebrand aliases the
+        // sibling `dep_list_try_from_str_rejects_unknown_byte_strings`
+        // rejection witness (5b828ed) already pins on the str-view
+        // reverse axis, and whitespace-padded/quoted forms.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\t",
+            b"\n",
+            b":deps ",
+            b" :deps",
+            b":DEPS",
+            b":Deps",
+            b":Deps-Dev",
+            b":deps_dev",
+            b":deps-development",
+            b":dev-deps",
+            b":packages",
+            b":packages-dev",
+            b"deps",
+            b"deps-dev",
+            b"Prod",
+            b"Dev",
+            b"prod",
+            b"dev",
+            b"\":deps\"",
+            b"\":deps-dev\"",
+            b":deps\n",
+            b":deps-dev\n",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <super::DepList as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on DepList must reject the valid-\
+                 UTF-8-but-unknown-wire byte-string {input:?} with \
+                 Err(()) — silent acceptance signals an accept-set \
+                 widening off the paired DepList::from_wire resolver"
+            );
+            // Cross-axis witness: on a byte-string that is valid UTF-8,
+            // the byte-view reverse-projection axis must agree with the
+            // paired str-view reverse-projection axis
+            // ([`TryFrom<&str>`]) — both route through the same
+            // [`super::DepList::from_wire`] resolver, so the two
+            // rejection paths align by construction.
+            if let Ok(s) = std::str::from_utf8(input) {
+                assert_eq!(
+                    <super::DepList as TryFrom<&[u8]>>::try_from(input),
+                    <super::DepList as TryFrom<&str>>::try_from(s),
+                    "TryFrom<&[u8]> and TryFrom<&str> reverse-\
+                     projection axes on DepList must agree on the \
+                     valid-UTF-8 input {input:?} — divergence signals \
+                     the two reverse paths have drifted off the same \
+                     substrate-primitive from_wire accessor"
+                );
+            }
         }
     }
 }
