@@ -2012,6 +2012,101 @@ impl From<&CaixaDialeto> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
+/// second caixa-core-internal closed-set fieldless typed enum peer
+/// ([`CaixaDialeto`]) — the byte-view mirror of the str-view reverse-
+/// projection axis carried by the paired [`TryFrom<&str> for CaixaDialeto`]
+/// impl (which routes through the substrate-primitive
+/// [`CaixaDialeto::from_wire`] `Option<Self>` accessor on the four-arm
+/// `PascalCase` accept-set the sibling [`CaixaDialeto::as_str`] emitter
+/// returns). Routes byte-for-byte through the standard-library
+/// [`std::str::from_utf8`] UTF-8 validator and then through
+/// [`CaixaDialeto::from_wire`] so every consumer that holds a borrowed
+/// [`&[u8]`] and needs to project it back into a typed [`CaixaDialeto`] —
+/// a future `bytes::Bytes::as_ref()`-fed reader that parses a per-caixa
+/// `:dialect` classification tag from an already-borrowed framing byte-
+/// tail (a `tracing::field::valuable::Value::Bytes` recorder on the
+/// caixa-build pipeline's per-file classify emission path, a future audit-
+/// report re-loader binding a prior [`CaixaDialeto::as_str`] output from a
+/// mmap'd byte-slice back through the typed enum for cross-run
+/// comparison), a future admission-webhook rejection body that reads a
+/// `spec.dialeto` field off a raw HTTP body byte-slice before UTF-8
+/// validation commits allocation, a future generic
+/// `<T: for<'a> TryFrom<&'a [u8]>>`-bound loader over any of the
+/// substrate's closed-set typed enums — reaches the same four-arm
+/// `PascalCase` wire accept-set the sibling method-named
+/// [`CaixaDialeto::from_wire`] resolver and the paired trait-idiomatic
+/// [`TryFrom<&str>`] axis already resolve against, rather than an open-
+/// coded per-call-site
+/// `std::str::from_utf8(bytes).ok().and_then(CaixaDialeto::from_wire)`
+/// composition or a
+/// `<CaixaDialeto as TryFrom<&str>>::try_from(std::str::from_utf8(bytes)?)`
+/// two-hop shape whose type bounds have no compile-time link to the
+/// substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-view reverse-
+/// projection* family — opened on the structurally most fundamental
+/// closed-set fieldless typed enum peer ([`crate::CaixaKind`], commit
+/// 18d1940) — onto the second caixa-core-internal closed-set fieldless
+/// typed enum peer, tracking the "route through `from_wire` via
+/// `std::str::from_utf8`" discipline the first-mover established. Rust's
+/// standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a two-hop
+/// composition through [`std::str::from_utf8`] + the paired
+/// [`TryFrom<&str>`] axis is reachable at every call site but has no
+/// compile-time link back to the byte-view reverse-projection axis. Every
+/// future closed-set fieldless typed enum peer on the substrate
+/// ([`crate::dep::DepList`], [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::aplicacao::WitShape`],
+/// and the outside-`caixa-core` peers `PathShapeViolation`,
+/// `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`, `Semantic`,
+/// `FerriteRuntime`) is a future target of the campaign, mirroring the
+/// trajectory the closed byte-owned reverse-projection family walked
+/// arm-by-arm onto each peer.
+///
+/// `type Error = ()` matches the sibling [`CaixaDialeto::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing and
+/// the paired trait-idiomatic [`TryFrom<&str>`] axis's unit-error shape —
+/// the caller picks the diagnostic form appropriate for its use site (a
+/// future `feira dialeto --filter` arg-parse composes its own per-verb
+/// "unknown dialect: <arg> — accepted: {…}" message enumerating
+/// [`CaixaDialeto::ALL`]; a future admission-webhook rejection body wraps
+/// the `Err(())` outcome with the accepted-set enumeration for operator
+/// diagnostics; a `Result::map_err` at the call site lifts the unit-error
+/// to a per-verb error type). Two rejection paths route through the
+/// single unit-error: an invalid UTF-8 byte-sequence
+/// ([`std::str::from_utf8`] returns `Err`) and a valid UTF-8 byte-string
+/// that falls outside the four-arm `PascalCase` accept-set
+/// ([`CaixaDialeto::from_wire`] returns `None`) — both collapse onto
+/// `Err(())` so the trait signature stays consistent with the sibling
+/// str-view reverse axis, and a caller that needs to distinguish the two
+/// failure modes composes [`std::str::from_utf8`] +
+/// [`CaixaDialeto::from_wire`] explicitly.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::from_wire`] across the four-
+/// arm [`CaixaDialeto::ALL`] accept-set on the borrowed byte-slice
+/// surface, plus a cross-axis witness that the byte-view reverse
+/// projection agrees with the paired [`TryFrom<&str>`] str-view reverse
+/// axis on every accepted arm) and
+/// [`tests::caixa_dialeto_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-vocabulary
+/// rejection path).
+impl TryFrom<&[u8]> for CaixaDialeto {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 /// A source that is not a `(defcaixa …)` / `(defmolde …)` form at all.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DialetoError {
@@ -5973,6 +6068,187 @@ mod tests {
                  borrowed-input surface must resolve to the same \
                  as_str dispatch"
             );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for CaixaDialeto` — asserts the trait-
+        // idiomatic byte-view reverse-projection standard-library impl
+        // and the substrate-primitive [`super::CaixaDialeto::from_wire`]
+        // `Option<Self>` accessor resolve to the same four-arm
+        // `PascalCase` wire accept-set across every arm the exhaustive
+        // [`super::CaixaDialeto::ALL`] slice enumerates. Extends the
+        // substrate-wide trait-idiomatic byte-view reverse-projection
+        // axis onto the second caixa-core-internal closed-set fieldless
+        // typed enum peer — mirror of the paired
+        // [`TryFrom<&str> for CaixaDialeto`] str-view reverse-projection
+        // axis on the same enum, and the byte-view companion of the
+        // pre-existing byte-owned reverse-projection family
+        // ([`AsRef<[u8]>`], [`From<CaixaDialeto> for Vec<u8>`],
+        // [`From<&CaixaDialeto> for Vec<u8>`]) on this same enum. Peer
+        // of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_routes_through_from_wire_accessor`]
+        // (18d1940) on the first-mover [`crate::CaixaKind`] closed-set
+        // typed-enum peer — tracks the "route through `from_wire` via
+        // `std::str::from_utf8`" discipline the first-mover established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so
+        // a two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent split
+        // whenever a future call site takes a sibling byte-projection
+        // axis whose parse arm-set carries no compile-time byte-view
+        // surface. This impl closes the byte-view reverse-projection
+        // axis at the substrate-primitive
+        // [`super::CaixaDialeto::from_wire`] accessor so every future
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer reaches the
+        // same four-arm `PascalCase` wire accept-set through one trait
+        // dispatch.
+        for &variant in CaixaDialeto::ALL {
+            let wire_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                <CaixaDialeto as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on CaixaDialeto must round-trip \
+                 CaixaDialeto::{variant:?}.as_str().as_bytes() back to \
+                 Ok(CaixaDialeto::{variant:?}) — divergence from \
+                 CaixaDialeto::from_wire signals a silent detour off \
+                 the substrate-primitive accessor"
+            );
+            assert_eq!(
+                <CaixaDialeto as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                CaixaDialeto::from_wire(variant.as_str()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 CaixaDialeto::{variant:?}.as_str().as_bytes() must \
+                 byte-equal CaixaDialeto::from_wire on the paired &str \
+                 input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection axis
+            // must agree with the paired str-view reverse-projection
+            // axis ([`TryFrom<&str>`]) on every accepted arm — the two
+            // reverse paths share one `PascalCase` accept-set through
+            // the substrate-primitive `from_wire` accessor.
+            let via_str: Result<CaixaDialeto, ()> =
+                <CaixaDialeto as TryFrom<&str>>::try_from(variant.as_str());
+            let via_bytes: Result<CaixaDialeto, ()> =
+                <CaixaDialeto as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on CaixaDialeto must agree on \
+                 CaixaDialeto::{variant:?} — divergence signals the \
+                 byte-view and str-view reverse paths have drifted off \
+                 the same substrate-primitive from_wire accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for CaixaDialeto`
+        // — sweeps two rejection paths the byte-view reverse-projection
+        // axis collapses onto the single unit-error `Err(())` return:
+        // the invalid-UTF-8 rejection path ([`std::str::from_utf8`]
+        // returns `Err` before [`super::CaixaDialeto::from_wire`] runs)
+        // and the valid-UTF-8-but-unknown-wire rejection path
+        // ([`super::CaixaDialeto::from_wire`] returns `None` on a byte-
+        // string outside the four-arm `PascalCase` accept-set). Both
+        // must reject, so a future accidental widening of the trait
+        // impl's accept-set (a case-fold path, a silent acceptance of
+        // the sibling [`super::CaixaDialeto::palavra_canonica`]
+        // `"defcaixa"` / `"defmolde"` byte-shapes on this axis, a
+        // `#[serde(rename_all = "…")]` attribute drift that widens the
+        // parse arm-set silently, a stray fallback that maps invalid
+        // UTF-8 onto a default arm rather than the trait-idiomatic
+        // `Err(())`) trips at caixa-core test time. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (18d1940) on the first-mover [`crate::CaixaKind`] closed-set
+        // typed-enum peer.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without its continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <CaixaDialeto as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on CaixaDialeto must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates: the empty byte-
+        // string, case-folded variants of accepted arms, plausible
+        // typos, the sibling [`super::CaixaDialeto::palavra_canonica`]
+        // / [`super::CaixaDialeto::consumidor`] byte-shapes (a caller
+        // who confuses those distinct axes with the census-facing wire
+        // axis trips here), and whitespace-padded / quoted forms.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"pacote",
+            b"PACOTE",
+            b"molde",
+            b"MoldePositional",
+            b"desconhecido",
+            b"Unknown",
+            b"defcaixa",
+            b"defmolde",
+            b"?",
+            b"caixa-core / feira",
+            b"pleme-doc-gen",
+            b"nobody known",
+            b"Pacote ",
+            b" Pacote",
+            b"Pacote\n",
+            b"\"Pacote\"",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <CaixaDialeto as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on CaixaDialeto must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired CaixaDialeto::from_wire \
+                 resolver"
+            );
+            // Cross-axis witness: on a byte-string that is valid UTF-8,
+            // the byte-view reverse-projection axis must agree with the
+            // paired str-view reverse-projection axis
+            // ([`TryFrom<&str>`]) — both route through the same
+            // [`super::CaixaDialeto::from_wire`] resolver, so the two
+            // rejection paths align by construction.
+            if let Ok(s) = std::str::from_utf8(input) {
+                assert_eq!(
+                    <CaixaDialeto as TryFrom<&[u8]>>::try_from(input),
+                    <CaixaDialeto as TryFrom<&str>>::try_from(s),
+                    "TryFrom<&[u8]> and TryFrom<&str> reverse-\
+                     projection axes on CaixaDialeto must agree on the \
+                     valid-UTF-8 input {input:?} — divergence signals \
+                     the two reverse paths have drifted off the same \
+                     substrate-primitive from_wire accessor"
+                );
+            }
         }
     }
 }
