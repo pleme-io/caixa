@@ -1821,6 +1821,124 @@ impl From<&Severity> for Vec<u8> {
     }
 }
 
+/// Standard-library trait-idiomatic *byte-view reverse projection* on
+/// the [`Severity`] closed-set caixa-lint diagnostic-severity typed
+/// enum — the borrowed byte-slice reverse peer of the byte-view
+/// forward triple ([`AsRef<[u8]>`], [`From<Severity> for Vec<u8>`],
+/// [`From<&Severity> for Vec<u8>`]) lifted on this same enum. Routes
+/// borrowed byte-slice input through [`std::str::from_utf8`] + the
+/// substrate-primitive [`Severity::from_wire`] `Option<Self>`
+/// accessor so every consumer that binds a byte-slice through the
+/// standard-library `impl TryFrom<&[u8]> for Severity` axis
+/// (equivalently `<T: for<'a> TryFrom<&'a [u8]>>`) — a future
+/// [`std::io::Read::read_to_end`]-shape per-`Diagnostic` ingest byte-
+/// source whose framing already carries the canonical four-arm
+/// severity byte-string (`b"error"` / `b"warning"` / `b"info"` /
+/// `b"hint"`) as a bare byte-slice, a future protobuf/CBOR/msgpack
+/// field-decoder whose bytes arm surfaces the severity tag before
+/// UTF-8 validation, a future M4
+/// `mesh.pleme.io/v1alpha1/LintReport` admission-webhook
+/// intercepting the raw per-diagnostic severity request bytes before
+/// the serde derive dispatches, a future `bytes::Bytes::as_ref()`-
+/// shape byte-tail composer folding a wire payload through the byte-
+/// view reverse-projection axis before any UTF-8 round-trip — reaches
+/// the substrate primitive through one trait dispatch rather than an
+/// open-coded per-call-site
+/// `std::str::from_utf8(bytes).ok().and_then(Severity::from_wire)`
+/// composition or a
+/// `<Severity as TryFrom<&str>>::try_from(std::str::from_utf8(bytes)?)`
+/// two-hop shape whose type bounds have no compile-time link back to
+/// the substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-view reverse-
+/// projection* axis onto the *third outside-`caixa-core`* closed-set
+/// fieldless typed-enum peer (and the first inside `caixa-lint`) —
+/// matching the paired [`AsRef<[u8]>`] borrowed byte-view forward
+/// axis's `caixa-lint` position and the paired
+/// [`From<Severity> for Vec<u8>`] byte-owned reverse-projection
+/// axis's `caixa-lint` position on this same enum. Tracks the
+/// trajectory the caixa-core-internal [`caixa_core::CaixaKind`]
+/// `TryFrom<&[u8]>` first-mover impl (18d1940), the second-mover
+/// [`caixa_core::CaixaDialeto`] impl (d102cb8), the third-mover
+/// [`caixa_core::dep::DepList`] impl (b8f25d5), the M2-OTP-shape
+/// supervisor-slot pair ([`caixa_core::supervisor::RestartStrategy`]
+/// — c699a83 — and [`caixa_core::supervisor::RestartPolicy`] —
+/// d9ef5f0), the M3-mesh-primitive-defining
+/// [`caixa_core::aplicacao::PlacementStrategy`] (de03220),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (294c77d), and
+/// [`caixa_core::aplicacao::WitShape`] (de9875c) peers, and the
+/// first-mover outside-`caixa-core`
+/// `caixa_arch::invariants::InvariantKind` impl (40b7417) and
+/// second-mover outside-`caixa-core` `caixa_arch::report::ArchVerdict`
+/// impl (4dbca85) walked before it. Leaves the remaining
+/// outside-`caixa-core` closed-set fieldless typed-enum peers
+/// ([`FixSafety`], [`crate::PathShapeViolation`],
+/// `caixa_theme::Semantic`, `caixa_provedor::FerriteRuntime`) as
+/// the campaign's next mechanical one-lift extensions against the
+/// substrate-primitive `from_wire` accessor they already carry.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a
+/// two-hop composition through [`std::str::from_utf8`] + the paired
+/// [`TryFrom<&str>`] axis is reachable at every call site but has no
+/// compile-time link back to the byte-view reverse-projection axis.
+///
+/// `type Error = ()` matches the sibling [`Severity::from_wire`]'s
+/// `Option<Self>` return-shape's deliberate deferral of error typing
+/// and the paired trait-idiomatic [`TryFrom<&str>`] axis's unit-error
+/// shape — the caller picks the diagnostic form appropriate for its
+/// use site (a future `feira lint --severity
+/// <error|warning|info|hint>` clap-style arg-parse composes its own
+/// per-verb "unknown severity: <arg> — accepted: {error, warning,
+/// info, hint}" message; a future M4
+/// `mesh.pleme.io/v1alpha1/LintReport` admission-webhook rejection
+/// body wraps the `Err(())` outcome with the accepted-set enumeration
+/// for operator diagnostics; a `Result::map_err` at the call site
+/// lifts the unit-error to a per-verb error type). Two rejection
+/// paths route through the single unit-error: an invalid UTF-8 byte-
+/// sequence ([`std::str::from_utf8`] returns `Err`) and a valid
+/// UTF-8 byte-string that falls outside the four-arm severity
+/// accept-set ([`Severity::from_wire`] returns `None`) — both
+/// collapse onto `Err(())` so the trait signature stays consistent
+/// with the sibling str-view reverse axis, and a caller that needs
+/// to distinguish the two failure modes composes
+/// [`std::str::from_utf8`] + [`Severity::from_wire`] explicitly.
+///
+/// Pinned load-bearing by
+/// [`tests::severity_try_from_bytes_routes_through_from_wire_accessor`]
+/// (byte-parity pin against [`Severity::from_wire`] across the four-
+/// arm [`Severity::ALL`] accept-set on the borrowed byte-slice
+/// surface, plus a cross-axis witness that the byte-view reverse
+/// projection agrees with the paired [`TryFrom<&str>`] str-view
+/// reverse axis on every accepted arm, and a forward/reverse byte-
+/// view cross-axis witness that feeding the paired [`AsRef<[u8]>`]
+/// byte-tail and the paired [`From<Severity> for Vec<u8>`] and
+/// [`From<&Severity> for Vec<u8>`] owned byte-tails back through the
+/// new impl round-trips to the originating arm) and
+/// [`tests::severity_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-wire-
+/// vocabulary rejection path — the latter mirrors the corpus the
+/// paired [`TryFrom<&str>`] rejection witness already pins, including
+/// the peer [`FixSafety`] two-arm axis's non-shared canonical tags
+/// `b"safe"` / `b"unsafe"` and the `caixa_arch::invariants::InvariantKind`
+/// three-arm severity axis's non-shared canonical tags `b"safety"` /
+/// `b"compliance"` so a byte-level cross-axis leak trips at
+/// caixa-lint test time rather than at a downstream consumer's
+/// silent misclassification; `b"hint"` overlaps both this axis and
+/// the arch-severity axis by lowercase-tag coincidence and belongs to
+/// this axis, so it is deliberately excluded from the rejection set).
+impl TryFrom<&[u8]> for Severity {
+    type Error = ();
+
+    fn try_from(bytes: &[u8]) -> Result<Self, <Self as TryFrom<&[u8]>>::Error> {
+        std::str::from_utf8(bytes)
+            .ok()
+            .and_then(Self::from_wire)
+            .ok_or(())
+    }
+}
+
 /// A textual edit — replace `span` with `replacement` in the source.
 /// Edits never overlap; the autofix driver sorts them by `span.start`
 /// descending and applies in reverse order so earlier offsets stay
@@ -10218,6 +10336,268 @@ mod tests {
                  FixSafety::{variant:?} — emitter and parser have \
                  drifted off the paired CAIXA_LINT_FIX_SAFETY_WIRE_* \
                  const family"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_try_from_bytes_routes_through_from_wire_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<&[u8]> for Severity` — asserts the trait-
+        // idiomatic byte-view reverse-projection standard-library impl
+        // and the substrate-primitive [`super::Severity::from_wire`]
+        // `Option<Self>` accessor resolve to the same four-arm
+        // canonical-lowercase severity accept-set across every arm the
+        // exhaustive [`super::Severity::ALL`] slice enumerates. Extends
+        // the substrate-wide trait-idiomatic byte-view reverse-
+        // projection axis onto the *third outside-`caixa-core`* closed-
+        // set fieldless typed-enum peer (and the first inside
+        // `caixa-lint`) — matching the paired [`super::Severity`] byte-
+        // view forward triple ([`AsRef<[u8]>`],
+        // [`From<Severity> for Vec<u8>`],
+        // [`From<&Severity> for Vec<u8>`]) and the paired str-view
+        // reverse-projection axis ([`TryFrom<&str> for Severity`])
+        // already walked on this enum, and matching the trajectory the
+        // first-mover outside-`caixa-core`
+        // `caixa_arch::invariants::InvariantKind` `TryFrom<&[u8]>` impl
+        // (40b7417) and second-mover outside-`caixa-core`
+        // `caixa_arch::report::ArchVerdict` `TryFrom<&[u8]>` impl
+        // (4dbca85) walked before it.
+        //
+        // Peer of the sibling
+        // `invariant_kind_try_from_bytes_routes_through_from_wire_accessor`
+        // (40b7417),
+        // `arch_verdict_try_from_bytes_routes_through_from_wire_accessor`
+        // (4dbca85),
+        // `wit_shape_try_from_bytes_routes_through_from_wire_accessor`
+        // (de9875c),
+        // `rate_limit_unit_try_from_bytes_routes_through_from_suffix_accessor`
+        // (294c77d),
+        // `placement_strategy_try_from_bytes_routes_through_from_wire_accessor`
+        // (de03220),
+        // `restart_policy_try_from_bytes_routes_through_from_wire_accessor`
+        // (d9ef5f0),
+        // `restart_strategy_try_from_bytes_routes_through_from_wire_accessor`
+        // (c699a83),
+        // [`caixa_core::kind::tests::caixa_kind_try_from_bytes_routes_through_from_wire_accessor`]
+        // (18d1940),
+        // [`caixa_core::dialeto::tests::caixa_dialeto_try_from_bytes_routes_through_from_wire_accessor`]
+        // (d102cb8), and
+        // [`caixa_core::dep::tests::dep_list_try_from_bytes_routes_through_from_wire_accessor`]
+        // (b8f25d5) — tracks the "route through the substrate-primitive
+        // reverse accessor via `std::str::from_utf8`" discipline the
+        // first-mover established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<&[u8]> for T`, so a
+        // two-hop composition through [`std::str::from_utf8`] + the
+        // paired [`TryFrom<&str>`] axis is reachable through the pre-
+        // existing str-view reverse-projection axis alone. But that
+        // two-hop shape has no compile-time link back to the byte-view
+        // reverse-projection axis, forces every downstream
+        // `<T: for<'a> TryFrom<&'a [u8]>>`-bound consumer to open-code
+        // the composition at every call site, and admits a silent split
+        // whenever a future call site takes a sibling byte-projection
+        // axis whose parse arm-set carries no compile-time byte-view
+        // surface. This impl closes the byte-view reverse-projection
+        // axis at the substrate-primitive [`super::Severity::from_wire`]
+        // accessor so every future `<T: for<'a> TryFrom<&'a [u8]>>`-bound
+        // consumer reaches the same four-arm severity accept-set through
+        // one trait dispatch.
+        for &variant in Severity::ALL {
+            let wire_bytes: &[u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                <Severity as TryFrom<&[u8]>>::try_from(wire_bytes),
+                Ok(variant),
+                "TryFrom<&[u8]> impl on Severity must round-trip \
+                 Severity::{variant:?}.as_str().as_bytes() back to \
+                 Ok(Severity::{variant:?}) — divergence from \
+                 Severity::from_wire signals a silent detour off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                <Severity as TryFrom<&[u8]>>::try_from(wire_bytes).ok(),
+                Severity::from_wire(variant.as_str()),
+                "TryFrom<&[u8]> ok()-projection on \
+                 Severity::{variant:?}.as_str().as_bytes() must byte-\
+                 equal Severity::from_wire on the paired &str input"
+            );
+            // Cross-axis witness: the byte-view reverse-projection axis
+            // must agree with the paired str-view reverse-projection
+            // axis ([`TryFrom<&str>`]) on every accepted arm — the two
+            // reverse paths share one severity accept-set through the
+            // substrate-primitive `from_wire` accessor.
+            let via_str: Result<Severity, ()> =
+                <Severity as TryFrom<&str>>::try_from(variant.as_str());
+            let via_bytes: Result<Severity, ()> =
+                <Severity as TryFrom<&[u8]>>::try_from(wire_bytes);
+            assert_eq!(
+                via_bytes, via_str,
+                "TryFrom<&[u8]> and TryFrom<&str> reverse-projection \
+                 axes on Severity must agree on \
+                 Severity::{variant:?} — divergence signals the \
+                 byte-view and str-view reverse paths have drifted off \
+                 the same substrate-primitive from_wire accessor"
+            );
+            // Forward/reverse byte-view cross-axis witness: feed the
+            // paired [`AsRef<[u8]>`] byte-tail back through the new
+            // impl and assert it round-trips to the originating arm.
+            let via_asref: &[u8] = <Severity as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                <Severity as TryFrom<&[u8]>>::try_from(via_asref),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ AsRef<[u8]> must round-trip \
+                 Severity::{variant:?} — divergence signals the \
+                 forward and reverse byte-view axes have drifted off \
+                 the same substrate-primitive as_str/from_wire pair"
+            );
+            // Byte-owned round-trip witness: feed the paired
+            // [`From<Severity> for Vec<u8>`] owned byte-tail back
+            // through the byte-view reverse impl as a borrowed slice
+            // and assert the round-trip lands on the originating arm —
+            // locks the owned and borrowed byte projections together
+            // at the substrate-primitive accessor.
+            let owned_bytes: Vec<u8> = <Vec<u8> as From<Severity>>::from(variant);
+            assert_eq!(
+                <Severity as TryFrom<&[u8]>>::try_from(owned_bytes.as_slice()),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<Severity> for Vec<u8> must \
+                 round-trip Severity::{variant:?} — divergence \
+                 signals the byte-owned reverse-projection axis has \
+                 drifted off the paired byte-view reverse axis"
+            );
+            // Borrowed-input byte-owned round-trip witness: same
+            // discipline on the paired [`From<&Severity> for Vec<u8>`]
+            // owned byte-tail — closes the four-corner {owned-input,
+            // borrowed-input} × {owned-output byte-vec, borrowed-output
+            // byte-slice} projection square through the new byte-view
+            // reverse impl.
+            let borrowed_owned_bytes: Vec<u8> = <Vec<u8> as From<&Severity>>::from(&variant);
+            assert_eq!(
+                <Severity as TryFrom<&[u8]>>::try_from(borrowed_owned_bytes.as_slice()),
+                Ok(variant),
+                "TryFrom<&[u8]> ∘ From<&Severity> for Vec<u8> must \
+                 round-trip Severity::{variant:?} — divergence \
+                 signals the borrowed-input byte-owned axis has drifted \
+                 off the paired byte-view reverse axis"
+            );
+        }
+    }
+
+    #[test]
+    fn severity_try_from_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<&[u8]> for Severity`
+        // — sweeps two rejection paths the byte-view reverse-projection
+        // axis collapses onto the single unit-error `Err(())` return:
+        // the invalid-UTF-8 rejection path ([`std::str::from_utf8`]
+        // returns `Err` before [`super::Severity::from_wire`] runs) and
+        // the valid-UTF-8-but-unknown-wire rejection path
+        // ([`super::Severity::from_wire`] returns `None` on a byte-
+        // string outside the four-arm severity accept-set). Both must
+        // reject, so a future accidental widening of the trait impl's
+        // accept-set (a case-fold path, a silent inclusion of the pre-
+        // lift PascalCase Debug-derived shapes `"Error"` / `"Warning"`
+        // / `"Info"` / `"Hint"` on the wire axis, a silent overlap with
+        // the peer [`super::FixSafety`] two-arm axis's non-shared
+        // canonical tags `b"safe"` / `b"unsafe"` or the peer
+        // `caixa_arch::invariants::InvariantKind` three-arm severity
+        // axis's non-shared canonical tags `b"safety"` /
+        // `b"compliance"`, a stray fallback that maps invalid UTF-8
+        // onto a default arm rather than the trait-idiomatic `Err(())`)
+        // trips at caixa-lint test time. The shared `b"hint"` arm
+        // between this axis and the arch-severity axis belongs to this
+        // axis, so it is deliberately excluded from the rejection set.
+        //
+        // Non-UTF-8 candidates:
+        //   - a lone 0xFF byte (never valid as a UTF-8 leading byte)
+        //   - a lone 0x80 continuation byte with no leading byte
+        //   - a truncated multi-byte sequence (0xC3 without continuation)
+        //   - a UTF-16 BOM-style byte pair the UTF-8 validator rejects
+        //   - a UTF-16 surrogate half rejected by UTF-8
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80],
+        ];
+        for &input in non_utf8_rejected {
+            assert_eq!(
+                <Severity as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on Severity must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — \
+                 silent acceptance signals the UTF-8 validation path \
+                 collapsed onto a default arm rather than the trait-\
+                 idiomatic unit-error"
+            );
+        }
+        // Valid-UTF-8-but-unknown-wire candidates mirror the corpus the
+        // sibling `severity_try_from_str_rejects_unknown_byte_strings`
+        // str-view rejection witness already pins on the paired
+        // [`TryFrom<&str>`] axis: the empty byte-string, whitespace-
+        // only padding, PascalCase / uppercase rebrand candidates,
+        // Levenshtein-neighbor typos, the peer [`super::FixSafety`]
+        // two-arm axis's non-shared canonical tags (`b"safe"` /
+        // `b"unsafe"`), the peer `caixa_arch::invariants::InvariantKind`
+        // three-arm severity axis's non-shared canonical tags
+        // (`b"safety"` / `b"compliance"`), the peer
+        // `caixa_arch::report::ArchVerdict` two-arm verdict axis's
+        // canonical tags (`b"proven"` / `b"rejected"`), sibling closed-
+        // set-enum canonical tags on other axes (`b"biblioteca"`,
+        // `b"servico"`, `b"one-for-one"`, `b"empty"`), and trailing/
+        // leading-whitespace-padded canonical tags. `b"hint"` is
+        // deliberately excluded — the shared arm between this axis and
+        // the arch-severity axis belongs to this axis.
+        let unknown_wire_rejected: &[&[u8]] = &[
+            b"",
+            b" ",
+            b"\n",
+            b"\t",
+            b"Error",
+            b"ERROR",
+            b"Warning",
+            b"WARNING",
+            b"Info",
+            b"INFO",
+            b"Hint",
+            b"HINT",
+            b"eror",
+            b"warn",
+            b"informational",
+            b"hnt",
+            b"safe",
+            b"unsafe",
+            b"safety",
+            b"compliance",
+            b"proven",
+            b"rejected",
+            b"fatal",
+            b"debug",
+            b"critical",
+            b"biblioteca",
+            b"servico",
+            b"one-for-one",
+            b"empty",
+            b"error ",
+            b" error",
+            b"error\n",
+            b"error\t",
+            b"?",
+            b"\"error\"",
+        ];
+        for &input in unknown_wire_rejected {
+            assert_eq!(
+                <Severity as TryFrom<&[u8]>>::try_from(input),
+                Err(()),
+                "TryFrom<&[u8]> impl on Severity must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired Severity::from_wire \
+                 resolver, or a cross-axis leak from the peer \
+                 super::FixSafety, caixa_arch::invariants::InvariantKind, \
+                 or caixa_arch::report::ArchVerdict axes' non-shared \
+                 arm-sets"
             );
         }
     }
