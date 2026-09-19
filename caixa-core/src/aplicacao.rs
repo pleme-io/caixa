@@ -6229,6 +6229,101 @@ impl std::str::FromStr for RateLimit {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`Vec<u8>` output* byte-owned
+/// forward projection on the M3-mesh `:politicas :rate-limit` compound
+/// primitive [`RateLimit`] — the byte-mirror of the paired
+/// [`std::fmt::Display for RateLimit`] str-view forward-projection axis
+/// (e70cb34) and the byte-owned peer of the paired
+/// [`std::str::FromStr for RateLimit`] str-view reverse-projection axis
+/// (0451942). Opens the `{Self, &Self} → Vec<u8>` pair on the byte-owned
+/// forward-projection axis onto the compound `{rate, window}` primitive
+/// in one lift, extending the same axis the sibling closed-set typed enum
+/// [`RateLimitUnit`] already carries (its
+/// `impl From<RateLimitUnit> for Vec<u8>` routes through
+/// [`RateLimitUnit::as_suffix`] via `.as_bytes().to_vec()`) onto the
+/// compound primitive it labels.
+///
+/// Routes byte-for-byte through the substrate-primitive
+/// [`std::fmt::Display for RateLimit`] impl via
+/// [`ToString::to_string`] + [`String::into_bytes`], so every consumer
+/// that binds a [`RateLimit`] through the standard-library
+/// `impl From<RateLimit> for Vec<u8>` axis (equivalently
+/// `<T: Into<Vec<u8>>>`) — a future
+/// [`std::io::Write::write_all`]-shape per-Aplicacao per-`:politicas
+/// :rate-limit` audit-log byte-sink whose input parameter is an owned
+/// [`Vec<u8>`] payload, a future `bytes::Bytes::from(Vec::<u8>::from(rl))`
+/// composer folding the canonical `<rate>/<unit>` wire form into a
+/// [`bytes::Bytes`] framing surface, a future
+/// `hasher.update(&Vec::<u8>::from(rl))`-shape BLAKE3 content-address
+/// closure that needs the owned byte-tail buffered before folding into
+/// the per-Aplicacao [`crate::Lacre`] closure body, a future per-edge
+/// protobuf/CBOR/msgpack payload composer whose framer takes an owned
+/// [`Vec<u8>`] rather than a borrowed byte-slice, a future M4 admission-
+/// webhook rejection body composer that emits the offending
+/// [`RateLimit`] as a raw byte-tail through an
+/// [`std::io::Write`]-shape sink — reaches the substrate primitive
+/// through one trait dispatch rather than an open-coded per-call-site
+/// `rl.to_string().into_bytes()` composition or a
+/// `format!("{rl}").into_bytes()` two-hop shape whose type bounds have
+/// no compile-time link back to the substrate primitive.
+///
+/// The codec's `render` arm already delegates to
+/// [`std::fmt::Display for RateLimit`] via
+/// [`ToString::to_string`] (e70cb34), so the byte-tail this impl
+/// produces byte-agrees with the codec's serde-side serialize output by
+/// construction — a future edit that split the codec's byte-string from
+/// this impl's would have to also split the codec from the substrate
+/// primitive's Display, which the paired
+/// [`tests::rate_limit_display_matches_codec_render_on_every_canonical_window`]
+/// pin already refuses.
+///
+/// Same "single owner, one substrate-primitive dispatch, every consumer
+/// routes through it" discipline the peer
+/// [`crate::CaixaKind`] / [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`PlacementStrategy`] /
+/// [`crate::dep::DepList`] / [`RateLimitUnit`] paired-primitive
+/// `From<{Self, &Self}> for Vec<u8>` byte-owned forward-projection
+/// axes carry on the sibling closed-set typed-enum discriminator axes —
+/// extended here from the sibling closed-set suffix enum onto the
+/// compound `{rate, window}` primitive it labels.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_from_into_owned_vec_bytes_routes_through_display`]
+/// (byte-parity pin against [`std::fmt::Display for RateLimit`] via
+/// `.to_string().into_bytes()` across every [`RateLimitUnit::ALL`] arm
+/// crossed with a representative scalar-`rate` sweep, plus the paired
+/// owned/borrowed axis-agreement witness and cross-axis witness against
+/// the codec's `render` arm and the paired `FromStr` reverse arm).
+impl From<RateLimit> for Vec<u8> {
+    fn from(rl: RateLimit) -> Vec<u8> {
+        rl.to_string().into_bytes()
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, owned-`Vec<u8>` output* byte-owned
+/// forward projection on the M3-mesh `:politicas :rate-limit` compound
+/// primitive [`RateLimit`] — the borrowed-input peer of
+/// [`From<RateLimit> for Vec<u8>`], closing the `{Self, &Self} → Vec<u8>`
+/// pair on the byte-owned forward-projection axis in one lift. Routes
+/// byte-for-byte through the substrate-primitive
+/// [`std::fmt::Display for RateLimit`] impl so every consumer that holds
+/// a borrowed [`&RateLimit`] and needs an owned [`Vec<u8>`] — a future
+/// `.iter().map(Vec::<u8>::from).collect()` pipe over `&[RateLimit]`
+/// (whose iterator yields `&RateLimit`, not `RateLimit`, so the owned-
+/// input axis alone forces every call site through an explicit
+/// `.copied()` restatement rather than the direct trait-idiomatic
+/// projection), a future admission-webhook diagnostic body composer that
+/// walks a `&Vec<RateLimit>` overlay through an
+/// `Into<Vec<u8>>`-bound per-arm byte-writer to surface the effective
+/// per-`:contratos`-edge rate-limit wire form — reaches the substrate
+/// primitive through one trait dispatch rather than a
+/// `Vec::<u8>::from(*rl)` spurious-`Copy`-deref restatement.
+impl From<&RateLimit> for Vec<u8> {
+    fn from(rl: &RateLimit) -> Vec<u8> {
+        rl.to_string().into_bytes()
+    }
+}
+
 /// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Second`]
 /// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Second`
 /// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
@@ -35580,6 +35675,178 @@ mod tests {
             err.contains("overflows u32"),
             "u32-overflow diagnostic must name the overflow condition; got {err:?}"
         );
+    }
+
+    #[test]
+    fn rate_limit_from_into_owned_vec_bytes_routes_through_display() {
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness helper: a generic
+        // owned-byte-input function accepts a [`super::RateLimit`]
+        // directly through the trait bound, without the caller open-
+        // coding the two-hop `rl.to_string().into_bytes()` composition.
+        // Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_owned_bytes_sink<T: Into<Vec<u8>>>(t: T) -> Vec<u8> {
+            t.into()
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RateLimit> for Vec<u8>` and
+        // `impl From<&RateLimit> for Vec<u8>` — asserts the trait-
+        // idiomatic byte-owned forward-projection standard-library impls
+        // and the substrate-primitive [`std::fmt::Display for RateLimit`]
+        // impl's `.to_string().into_bytes()` byte-tail resolve to the
+        // same canonical `<rate>/<unit>` wire byte-string emit-set across
+        // every closed-set [`super::RateLimitUnit::ALL`] arm crossed with
+        // a representative scalar-`rate` sweep. Locks the byte-owned
+        // forward-projection axis onto the substrate-primitive Display
+        // dispatch: any future silent detour that hand-rolls the
+        // canonical `<rate>/<unit>` byte-string a second time inside the
+        // trait impls would split the byte-owned axis from every
+        // `format!("{rl}")` / `rl.to_string()` consumer, and this pin
+        // trips at caixa-core test time.
+        //
+        // Extends the substrate-wide trait-idiomatic byte-owned forward-
+        // projection axis from the sibling closed-set typed enum
+        // [`super::RateLimitUnit`] (whose paired
+        // `From<{Self, &Self} RateLimitUnit> for Vec<u8>` impls route
+        // through [`super::RateLimitUnit::as_suffix`]) onto the compound
+        // `{rate, window}` primitive it labels — same "single owner, one
+        // substrate-primitive dispatch, every consumer routes through it"
+        // discipline the peer paired-primitive
+        // `From<{Self, &Self}> for Vec<u8>` byte-owned forward-projection
+        // axes carry on the sibling closed-set typed-enum discriminator
+        // axes.
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                let via_owned_from: Vec<u8> = <Vec<u8> as From<super::RateLimit>>::from(rl);
+                let via_borrowed_from: Vec<u8> = <Vec<u8> as From<&super::RateLimit>>::from(&rl);
+                let via_display_bytes: Vec<u8> = rl.to_string().into_bytes();
+                assert_eq!(
+                    via_owned_from, via_display_bytes,
+                    "From<RateLimit> for Vec<u8> impl must byte-equal \
+                     rl.to_string().into_bytes() on RateLimit {{ rate: {rate}, \
+                     unit: {unit:?} }} — divergence signals a silent detour off \
+                     the substrate-primitive Display dispatch"
+                );
+                assert_eq!(
+                    via_borrowed_from, via_display_bytes,
+                    "From<&RateLimit> for Vec<u8> impl must byte-equal \
+                     rl.to_string().into_bytes() on RateLimit {{ rate: {rate}, \
+                     unit: {unit:?} }} — divergence signals a silent detour off \
+                     the substrate-primitive Display dispatch"
+                );
+                assert_eq!(
+                    via_owned_from, via_borrowed_from,
+                    "From<RateLimit> for Vec<u8> and From<&RateLimit> for \
+                     Vec<u8> must byte-equal each other on RateLimit \
+                     {{ rate: {rate}, unit: {unit:?} }} — divergence signals \
+                     the owned-input and borrowed-input paths have drifted \
+                     off the same substrate-primitive Display dispatch"
+                );
+                // Cross-axis witness against the codec's serde-side
+                // serialize output: the codec's `render` arm delegates to
+                // `<RateLimit as Display>::fmt` via `ToString::to_string`
+                // (e70cb34), so the byte-owned forward-projection axis
+                // must byte-equal the (JSON-quote-stripped) wire byte-
+                // string the codec emits on every canonical shape —
+                // locking the byte-owned axis and the codec's serialize
+                // arm together at the substrate-primitive Display
+                // dispatch. A future edit that split either path from
+                // Display would trip both this pin and the paired
+                // [`rate_limit_display_matches_codec_render_on_every_canonical_window`].
+                let policy = MeshPolicy {
+                    rate_limit: Some(rl),
+                    ..Default::default()
+                };
+                let json = serde_json::to_string(&policy).unwrap();
+                let expected_quoted = format!(
+                    "\"{}\"",
+                    std::str::from_utf8(&via_owned_from).expect(
+                        "From<RateLimit> for Vec<u8> byte-tail must be valid \
+                         UTF-8 (the canonical wire form is ASCII-only)"
+                    )
+                );
+                assert!(
+                    json.contains(&expected_quoted),
+                    "codec serialize must byte-agree with From<RateLimit> for \
+                     Vec<u8> on RateLimit {{ rate: {rate}, unit: {unit:?} }} — \
+                     both paths delegate to <RateLimit as Display>::fmt via \
+                     ToString::to_string; got JSON {json}"
+                );
+                // Cross-axis witness against the paired `FromStr`
+                // reverse arm (0451942): the byte-tail this impl
+                // produces round-trips through `std::str::from_utf8` +
+                // `<RateLimit as FromStr>::from_str` back to the
+                // originating [`super::RateLimit`] — closing the
+                // `Self → Vec<u8> → &[u8] → str → Self` cycle at the
+                // substrate primitive. The canonical wire form is
+                // ASCII-only, so the UTF-8 lift is total on every
+                // accepted shape.
+                let bytes_slice: &[u8] = via_owned_from.as_slice();
+                let round_trip_str = std::str::from_utf8(bytes_slice).expect(
+                    "the byte-owned forward-projection byte-tail must be valid \
+                     UTF-8 — the canonical <rate>/<unit> wire form is ASCII-only",
+                );
+                let round_trip: super::RateLimit =
+                    round_trip_str.parse().unwrap_or_else(|e: String| {
+                        panic!(
+                            "the byte-owned forward-projection output {round_trip_str:?} \
+                             must re-parse through FromStr — the canonical form Display \
+                             emits is by definition an accepted input of the paired parse \
+                             arm: {e}"
+                        )
+                    });
+                assert_eq!(
+                    round_trip, rl,
+                    "RateLimit {{ rate: {rate}, unit: {unit:?} }} must round-\
+                     trip Self → Vec<u8> → &[u8] → str → FromStr → Self at the \
+                     substrate primitive — the byte-owned forward-projection \
+                     axis and the paired FromStr reverse-projection axis \
+                     must agree on the same canonical accept-set by \
+                     construction"
+                );
+            }
+        }
+        // `<T: Into<Vec<u8>>>`-bound-consumer witness on both owned and
+        // borrowed input shapes: the generic owned-byte-input function
+        // `generic_owned_bytes_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::RateLimit`] and a `&RateLimit` directly through the
+        // trait bound, without the caller open-coding the two-hop
+        // `rl.to_string().into_bytes()` composition. Matches the shape
+        // any future per-Aplicacao per-`:politicas :rate-limit` audit-
+        // log emit / `bytes::Bytes::from(_)` framer / hasher-update
+        // BLAKE3 closure composes to fold the canonical wire form into a
+        // downstream owned-byte-sink surface.
+        for unit in super::RateLimitUnit::ALL {
+            let rl = super::RateLimit::from_canonical(42, *unit);
+            let via_generic_owned = generic_owned_bytes_sink(rl);
+            // Bind the borrowed-input path through an explicit
+            // `&RateLimit` local so the generic-consumer witness routes
+            // through `From<&RateLimit> for Vec<u8>` (T binds to
+            // `&RateLimit`) rather than clippy-collapsing the borrow onto
+            // the owned-input peer.
+            let rl_ref: &super::RateLimit = &rl;
+            let via_generic_borrowed = generic_owned_bytes_sink(rl_ref);
+            let via_display_bytes = rl.to_string().into_bytes();
+            assert_eq!(
+                via_generic_owned, via_display_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on RateLimit \
+                 {{ rate: 42, unit: {unit:?} }} must yield the same byte-\
+                 tail rl.to_string().into_bytes() returns — divergence \
+                 signals the byte-owned axis fails to bridge a generic \
+                 owned-byte-input trait bound to the substrate-primitive \
+                 Display dispatch"
+            );
+            assert_eq!(
+                via_generic_borrowed, via_display_bytes,
+                "generic `<T: Into<Vec<u8>>>`-bound consumer on &RateLimit \
+                 {{ rate: 42, unit: {unit:?} }} must yield the same byte-\
+                 tail rl.to_string().into_bytes() returns — the borrowed-\
+                 input surface must resolve to the same Display dispatch"
+            );
+        }
     }
 
     #[test]
