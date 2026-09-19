@@ -6324,6 +6324,114 @@ impl From<&RateLimit> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-`String` output* forward projection
+/// on the M3-mesh `:politicas :rate-limit` compound primitive [`RateLimit`]
+/// — routes byte-for-byte through the substrate-primitive
+/// [`std::fmt::Display for RateLimit`] impl (e70cb34) via
+/// [`ToString::to_string`], so every consumer that binds a [`RateLimit`]
+/// through the standard-library `impl From<RateLimit> for String`
+/// (equivalently `<T: Into<String>>`) axis reaches the same canonical
+/// `<rate>/<unit>` wire form the sibling
+/// [`From<RateLimit> for Vec<u8>`] (4a7ac8c) byte-owned forward projection
+/// and the paired [`std::str::FromStr for RateLimit`] (0451942) str-view
+/// reverse projection resolve against. Opens the trait-idiomatic
+/// owned-`String` forward-projection axis on the compound primitive,
+/// mirroring the axis the sibling closed-set typed enum [`RateLimitUnit`]
+/// already carries (its `impl From<RateLimitUnit> for String` routes
+/// through [`RateLimitUnit::as_suffix`] via [`str::to_owned`]) onto the
+/// compound `{rate, window}` primitive it labels.
+///
+/// Unlike the sibling closed-set typed-enum peers whose owned-`String`
+/// forward projection delegates through a `pub const fn` returning
+/// `&'static str` (each enum's `.as_suffix()` / `.as_str()` accessor), the
+/// compound primitive's canonical wire form carries a dynamic rate
+/// magnitude, so the owned-`String` delegate routes through the
+/// substrate-primitive [`std::fmt::Display for RateLimit`] impl via
+/// [`ToString::to_string`] — the same dispatch the paired
+/// [`From<RateLimit> for Vec<u8>`] byte-owned forward projection resolves
+/// through, keeping the owned-`String` forward-projection axis and the
+/// byte-owned forward-projection axis on one substrate-primitive
+/// dispatch.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: fmt::Display> From<T> for String`, so a consumer that holds
+/// an owned [`RateLimit`] and needs an owned [`String`] otherwise picks
+/// between an open-coded `rl.to_string()` at every call site (whose type
+/// bounds have no compile-time link back to the owned-`String`
+/// forward-projection axis) or a `format!("{rl}")` restatement whose
+/// output type is likewise untied from the trait axis. This impl closes
+/// that gap at the substrate-primitive [`std::fmt::Display for RateLimit`]
+/// dispatch, so every future `<T: Into<String>>`-bound owned-string
+/// consumer — a future M4 admission-webhook rejection body composer that
+/// surfaces the offending [`RateLimit`] as an owned diagnostic key, a
+/// future `serde_json::Value::String(rl.into())` structured-payload
+/// composer, a future `HashMap::<String, _>::from_iter(…)` keyed off the
+/// canonical wire form, a future `feira app graph` per-`:politicas`
+/// rate-limit column that folds the canonical wire form into an owned
+/// heap-string carrier — reaches the substrate primitive through one
+/// trait dispatch.
+///
+/// Same "single owner, one substrate-primitive dispatch, every consumer
+/// routes through it" discipline the peer
+/// [`crate::CaixaKind`] / [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`PlacementStrategy`] /
+/// [`crate::dep::DepList`] / [`RateLimitUnit`] / [`WitShape`] /
+/// [`crate::CaixaDialeto`] closed-set typed-enum peers carry on their
+/// respective owned-`String` forward-projection axes — extended here from
+/// the sibling closed-set suffix enum onto the compound `{rate, window}`
+/// primitive it labels, opening the first owned-`String`
+/// forward-projection axis on a caixa-core compound primitive whose
+/// canonical wire form carries a dynamic scalar (the peer sibling-enum
+/// axes all resolve through a `pub const fn` returning `&'static str`;
+/// this compound-primitive axis resolves through the substrate-primitive
+/// [`std::fmt::Display for RateLimit`] impl instead).
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_from_into_owned_string_routes_through_display`]
+/// (byte-parity pin against [`std::fmt::Display for RateLimit`] via
+/// [`ToString::to_string`] across every [`RateLimitUnit::ALL`] arm
+/// crossed with a representative scalar-`rate` sweep, plus the paired
+/// owned/borrowed axis-agreement witness, a cross-axis witness against
+/// the paired [`From<RateLimit> for Vec<u8>`] byte-owned forward
+/// projection through [`String::into_bytes`], and a `Self → String →
+/// Self` round-trip witness through [`std::str::FromStr::from_str`] on
+/// the owned-`String`'s [`String::as_str`] borrow that closes the
+/// forward+reverse pair without an intermediate wire-vocab hop).
+impl From<RateLimit> for String {
+    fn from(rl: RateLimit) -> String {
+        rl.to_string()
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, owned-`String` output* forward
+/// projection on the M3-mesh `:politicas :rate-limit` compound primitive
+/// [`RateLimit`] — the borrowed-input peer of
+/// [`From<RateLimit> for String`], closing the `{Self, &Self} → String`
+/// pair on the owned-`String` forward-projection axis in one lift. Routes
+/// byte-for-byte through the substrate-primitive
+/// [`std::fmt::Display for RateLimit`] impl (e70cb34) so every consumer
+/// that holds a borrowed [`&RateLimit`] and needs an owned [`String`] —
+/// a future `.iter().map(String::from).collect()` pipe over
+/// `&[RateLimit]` (whose iterator yields `&RateLimit`, not `RateLimit`,
+/// so the owned-input axis alone forces every call site through an
+/// explicit `.copied()` / spurious-[`Copy`]-deref restatement rather
+/// than the direct trait-idiomatic projection), a future admission-
+/// webhook diagnostic-body composer that walks a `&Vec<RateLimit>`
+/// overlay through an `Into<String>`-bound per-arm writer to surface the
+/// effective per-`:contratos`-edge rate-limit wire form, a future
+/// caixa-mesh renderer per-Aplicacao Envoy
+/// `local_rate_limit.token_bucket` overlay composer whose borrowed-
+/// iteration axis over declared per-edge rate-limit slots projects to
+/// owned keys by construction — reaches the substrate primitive through
+/// one trait dispatch rather than a
+/// `String::from(*rl)` spurious-[`Copy`]-deref restatement or an
+/// open-coded `rl.to_string()` two-hop shape.
+impl From<&RateLimit> for String {
+    fn from(rl: &RateLimit) -> String {
+        rl.to_string()
+    }
+}
+
 /// Trait-idiomatic *borrowed-input, owned-`RateLimit` output* byte-view
 /// reverse projection on the M3-mesh `:politicas :rate-limit` compound
 /// primitive [`RateLimit`] — the byte-mirror of the paired
@@ -36444,6 +36552,162 @@ mod tests {
              borrowed-input byte-view reverse paths have drifted off the same \
              substrate-primitive UTF-8 + FromStr dispatch"
         );
+    }
+
+    #[test]
+    fn rate_limit_from_into_owned_string_routes_through_display() {
+        // `<T: Into<String>>`-bound-consumer witness helper: a generic
+        // owned-string-input function accepts a [`super::RateLimit`] or a
+        // `&RateLimit` directly through the trait bound, without the
+        // caller open-coding a `rl.to_string()` / `format!("{rl}")`
+        // restatement whose type bounds have no compile-time link back to
+        // the trait axis. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_owned_string_sink<T: Into<String>>(t: T) -> String {
+            t.into()
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RateLimit> for String` and
+        // `impl From<&RateLimit> for String` — asserts the trait-
+        // idiomatic owned-`String` forward-projection standard-library
+        // impls and the substrate-primitive [`std::fmt::Display for
+        // RateLimit`] impl's `.to_string()` byte-tail resolve to the same
+        // canonical `<rate>/<unit>` wire byte-string emit-set across every
+        // closed-set [`super::RateLimitUnit::ALL`] arm crossed with a
+        // representative scalar-`rate` sweep. Locks the owned-`String`
+        // forward-projection axis onto the substrate-primitive Display
+        // dispatch: any future silent detour that hand-rolls the
+        // canonical `<rate>/<unit>` byte-string a second time inside the
+        // trait impls would split the owned-`String` axis from every
+        // `format!("{rl}")` / `rl.to_string()` consumer, and this pin
+        // trips at caixa-core test time.
+        //
+        // Extends the substrate-wide trait-idiomatic owned-`String`
+        // forward-projection axis from the sibling closed-set typed enum
+        // [`super::RateLimitUnit`] (whose paired
+        // `From<{Self, &Self} RateLimitUnit> for String` impls route
+        // through [`super::RateLimitUnit::as_suffix`] via
+        // [`str::to_owned`]) onto the compound `{rate, window}` primitive
+        // it labels — same "single owner, one substrate-primitive
+        // dispatch, every consumer routes through it" discipline the peer
+        // paired-primitive `From<{Self, &Self}> for String` owned-string
+        // forward-projection axes carry on the sibling closed-set
+        // typed-enum discriminator axes.
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                let via_owned_from: String = <String as From<super::RateLimit>>::from(rl);
+                let via_borrowed_from: String = <String as From<&super::RateLimit>>::from(&rl);
+                let via_display: String = rl.to_string();
+                assert_eq!(
+                    via_owned_from, via_display,
+                    "From<RateLimit> for String impl must byte-equal \
+                     rl.to_string() on RateLimit {{ rate: {rate}, \
+                     unit: {unit:?} }} — divergence signals a silent detour off \
+                     the substrate-primitive Display dispatch"
+                );
+                assert_eq!(
+                    via_borrowed_from, via_display,
+                    "From<&RateLimit> for String impl must byte-equal \
+                     rl.to_string() on RateLimit {{ rate: {rate}, \
+                     unit: {unit:?} }} — divergence signals a silent detour off \
+                     the substrate-primitive Display dispatch"
+                );
+                assert_eq!(
+                    via_owned_from, via_borrowed_from,
+                    "From<RateLimit> for String and From<&RateLimit> for \
+                     String must byte-equal each other on RateLimit \
+                     {{ rate: {rate}, unit: {unit:?} }} — divergence signals \
+                     the owned-input and borrowed-input paths have drifted \
+                     off the same substrate-primitive Display dispatch"
+                );
+                // Cross-axis witness against the paired byte-owned
+                // forward-projection axis (4a7ac8c): the owned-`String`
+                // axis and the owned-`Vec<u8>` axis both delegate through
+                // `<RateLimit as Display>::fmt` via
+                // `ToString::to_string`, so `String::into_bytes()` on the
+                // owned-`String` axis must byte-equal the paired
+                // `Vec<u8>` axis by construction. A future edit that
+                // split either path from Display would trip both this pin
+                // and the paired
+                // [`rate_limit_from_into_owned_vec_bytes_routes_through_display`].
+                let via_owned_bytes: Vec<u8> = <Vec<u8> as From<super::RateLimit>>::from(rl);
+                assert_eq!(
+                    via_owned_from.clone().into_bytes(),
+                    via_owned_bytes,
+                    "From<RateLimit> for String and From<RateLimit> for \
+                     Vec<u8> must byte-agree on RateLimit {{ rate: {rate}, \
+                     unit: {unit:?} }} through String::into_bytes — both \
+                     paths delegate to <RateLimit as Display>::fmt via \
+                     ToString::to_string"
+                );
+                // Round-trip witness against the paired [`FromStr`]
+                // reverse arm (0451942) on the owned-`String`'s
+                // `String::as_str` borrow: `Self → String → Self`
+                // round-trips to the originating value on every canonical
+                // shape, closing the forward+reverse pair without the
+                // wire-vocab intermediate hop the peer
+                // [`crate::CaixaKind`] axis pair requires.
+                let round_trip: super::RateLimit =
+                    via_owned_from.as_str().parse().unwrap_or_else(|e: String| {
+                        panic!(
+                            "the owned-`String` forward-projection output \
+                             {via_owned_from:?} must re-parse through FromStr — \
+                             the canonical form Display emits is by definition \
+                             an accepted input of the paired parse arm: {e}"
+                        )
+                    });
+                assert_eq!(
+                    round_trip, rl,
+                    "RateLimit {{ rate: {rate}, unit: {unit:?} }} must round-\
+                     trip Self → String → &str → FromStr → Self at the \
+                     substrate primitive — the owned-`String` forward-\
+                     projection axis and the paired FromStr reverse-projection \
+                     axis must agree on the same canonical accept-set by \
+                     construction"
+                );
+            }
+        }
+        // `<T: Into<String>>`-bound-consumer witness on both owned and
+        // borrowed input shapes: the generic owned-string-input function
+        // `generic_owned_string_sink` (lifted above per
+        // `clippy::items_after_statements`) accepts a
+        // [`super::RateLimit`] and a `&RateLimit` directly through the
+        // trait bound, matching the shape any future per-Aplicacao
+        // per-`:politicas :rate-limit` diagnostic composer /
+        // `serde_json::Value::String(rl.into())` structured-payload
+        // composer / `HashMap::<String, _>::from_iter(…)`-shape owned-key
+        // consumer folds the canonical wire form into a downstream
+        // owned-`String` carrier.
+        for unit in super::RateLimitUnit::ALL {
+            let rl = super::RateLimit::from_canonical(42, *unit);
+            let via_generic_owned = generic_owned_string_sink(rl);
+            // Bind the borrowed-input path through an explicit
+            // `&RateLimit` local so the generic-consumer witness routes
+            // through `From<&RateLimit> for String` (T binds to
+            // `&RateLimit`) rather than clippy-collapsing the borrow onto
+            // the owned-input peer.
+            let rl_ref: &super::RateLimit = &rl;
+            let via_generic_borrowed = generic_owned_string_sink(rl_ref);
+            let via_display = rl.to_string();
+            assert_eq!(
+                via_generic_owned, via_display,
+                "generic `<T: Into<String>>`-bound consumer on RateLimit \
+                 {{ rate: 42, unit: {unit:?} }} must yield the same byte-\
+                 tail rl.to_string() returns — divergence signals the \
+                 owned-`String` axis fails to bridge a generic \
+                 owned-string-input trait bound to the substrate-primitive \
+                 Display dispatch"
+            );
+            assert_eq!(
+                via_generic_borrowed, via_display,
+                "generic `<T: Into<String>>`-bound consumer on &RateLimit \
+                 {{ rate: 42, unit: {unit:?} }} must yield the same byte-\
+                 tail rl.to_string() returns — the borrowed-input surface \
+                 must resolve to the same Display dispatch"
+            );
+        }
     }
 
     #[test]
