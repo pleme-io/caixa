@@ -2105,6 +2105,112 @@ impl TryFrom<Vec<u8>> for WitShape {
     }
 }
 
+/// Trait-idiomatic *owned-`String` input, `Result<Self, ()>` output*
+/// string-owned reverse projection on the M3-mesh `:contratos :wit`
+/// census-label [`WitShape`] closed-set fieldless typed enum on the caixa
+/// surface — the owned-input peer of the paired [`TryFrom<&str> for
+/// WitShape`] str-view reverse-projection axis (5472902), and the
+/// string-owned reverse companion of the pre-existing string-owned
+/// *forward* pair ([`From<WitShape> for String`],
+/// [`From<&WitShape> for String`]) lifted on this same enum. Routes owned
+/// [`String`] input through the paired borrowed-input [`TryFrom<&str>`]
+/// axis via [`String::as_str`] so every consumer that holds an owned
+/// `String` — a future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// admission-webhook body reader that hands the `spec.contratos[i].wit`
+/// census-label scalar off as an owned [`String`] after UTF-8 validation,
+/// a `serde_yaml::from_str` / `serde_json::from_str` de-serialize
+/// round-trip whose composer surfaces the `:contratos :wit` scalar as an
+/// owned [`String`] typed field, a `feira app graph --by-wit-shape`
+/// `clap`-derived arg-parse whose owned-`String` positional lands the
+/// census-label at the typed dispatch, a per-`:contratos`-edge overlay
+/// resolver reading an owned [`String`] out of a `ConfigMap` `data.wit`
+/// scalar, an `<T: TryFrom<String>>`-bound generic loader over any of
+/// the substrate's closed-set typed enums — reaches the same four-arm
+/// census-label accept-set through one trait dispatch.
+///
+/// Extends the substrate-wide trait-idiomatic *string-owned reverse-
+/// projection* family — opened on the compound M3-mesh
+/// `:politicas :rate-limit` primitive [`RateLimit`] (a2e6f02) — onto the
+/// first closed-set fieldless typed-enum peer on the caixa surface, and
+/// specifically the M3-mesh `:contratos :wit` census-label discriminator.
+/// The peers [`crate::CaixaKind`], [`crate::CaixaDialeto`],
+/// [`PlacementStrategy`], [`RateLimitUnit`],
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`], and [`crate::dep::DepList`]
+/// remain the next targets of the campaign, mirroring the trajectory the
+/// closed byte-view / byte-owned reverse-projection families already
+/// walked across the same closed-set peers.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<String> for T`, so a
+/// consumer that holds an owned [`String`] and needs a typed [`WitShape`]
+/// otherwise picks between (a) an open-coded
+/// `<WitShape as TryFrom<&str>>::try_from(s.as_str())` at every call site
+/// whose type bounds have no compile-time link back to the string-owned
+/// reverse-projection axis, (b) a `let s: &str = &s;
+/// WitShape::try_from(s)` two-step whose borrow arithmetic leaks a per-
+/// call-site lifetime dance rather than a single trait dispatch, or (c) a
+/// `String::into_bytes` + [`TryFrom<Vec<u8>>`] detour that reaches the
+/// substrate-primitive `from_wire` accessor through a UTF-8 re-validation
+/// hop the owned-`String` axis already knows to skip. This impl closes
+/// the string-owned reverse-projection axis at the substrate-primitive
+/// [`WitShape::from_wire`] accessor so every future
+/// `<T: TryFrom<String>>`-bound owned-string consumer reaches the same
+/// four-arm census-label accept-set through one trait dispatch.
+///
+/// Deliberately routes through the census-label reverse axis
+/// [`WitShape::from_wire`] (via delegation to the paired
+/// [`TryFrom<&str>`] axis), *not* through the raw `:contratos :wit`
+/// identifier classifier [`WitShape::classify`] — the two axes carry
+/// disjoint accept-sets by construction (the
+/// `wit_shape_from_wire_and_classify_partition_the_axis` cross-axis
+/// partition pin locks it), so an owned-`String` reader that reaches for
+/// the trait-idiomatic reverse projection lands on the same author-
+/// surface-canonical census-label byte-string the codec's parse and
+/// render arms both dispatch on, while raw-identifier classification
+/// stays reachable only through the explicit [`WitShape::classify`]
+/// path.
+///
+/// `type Error = ()` matches the sibling [`TryFrom<&str> for WitShape`],
+/// [`TryFrom<&[u8]> for WitShape`], and [`TryFrom<Vec<u8>> for WitShape`]
+/// unit-error shapes, preserving the trait-family consistency across the
+/// {str-view, byte-view, byte-owned, string-owned} reverse-projection
+/// square. The owned [`String`] input is dropped on the error path (the
+/// standard-library `String::from_utf8` convention of returning the
+/// input in the error deliberately declined — a caller that needs the
+/// string back holds a clone before the call, and the closed-set-enum
+/// use site rarely wants the raw string back past a "did you mean"
+/// diagnostic that operates on the wire vocabulary rather than the
+/// input).
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_try_from_owned_string_routes_through_borrowed_str_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&str>`] axis
+/// across the four-arm [`WitShape::ALL`] accept-set on the owned-
+/// `String` surface, cross-axis witness that the string-owned reverse
+/// projection agrees with the sibling byte-view / byte-owned reverse-
+/// projection axes on every accepted arm through the shared substrate-
+/// primitive [`WitShape::from_wire`] accessor, and a closed-cycle
+/// witness against the paired string-owned forward-projection pair —
+/// `Self → String → TryFrom<String> → Self` round-trips to the
+/// originating arm on every canonical shape) and
+/// [`tests::wit_shape_try_from_owned_string_rejects_unknown_wire_strings`]
+/// (rejection witness against silent accept-set widening — mirrors the
+/// corpus the paired [`TryFrom<&str>`] rejection witness already pins,
+/// including the raw `:contratos :wit` identifiers
+/// [`WitShape::classify`] consumes on the sibling axis so an owned-input
+/// cross-axis leak trips at caixa-core test time rather than at a
+/// downstream consumer's silent misclassification, plus a cross-axis
+/// witness that the owned-`String` reverse-projection axis agrees with
+/// the borrowed `&str` reverse-projection axis on every rejected input).
+impl TryFrom<String> for WitShape {
+    type Error = ();
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&str>>::try_from(s.as_str())
+    }
+}
+
 impl WitContract {
     /// Substrate-canonical per-`:contratos` caller-Servico scalar
     /// accessor every consumer that reads the edge's source endpoint
@@ -23188,6 +23294,214 @@ mod tests {
                  unknown-wire input {input:?} — divergence signals \
                  the owned-input and borrowed-input byte-view reverse \
                  paths have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_try_from_owned_string_routes_through_borrowed_str_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<String> for WitShape` — asserts the trait-
+        // idiomatic string-owned reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&str>`] axis
+        // resolve to the same four-arm census-label accept-set across
+        // every arm the exhaustive [`super::WitShape::ALL`] slice
+        // enumerates. Extends the substrate-wide trait-idiomatic string-
+        // owned reverse-projection axis — opened on the compound
+        // [`super::RateLimit`] primitive (a2e6f02) — onto the first
+        // closed-set fieldless typed-enum peer, the M3-mesh
+        // `:contratos :wit` census-label discriminator. Tracks the
+        // "delegate through `TryFrom<&str>` on the `String::as_str`
+        // borrow" discipline the compound-primitive opener established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a str>> TryFrom<String> for T`,
+        // so an owned-`String` caller otherwise picks between an open-
+        // coded `<T as TryFrom<&str>>::try_from(s.as_str())` at every
+        // call site (whose type bounds have no compile-time link back
+        // to the string-owned reverse-projection axis) or a
+        // `let s: &str = &s; T::try_from(s)` two-step whose borrow
+        // arithmetic leaks a per-call-site lifetime dance. This impl
+        // closes the string-owned reverse-projection axis at the
+        // substrate-primitive [`super::WitShape::from_wire`] accessor
+        // so every future `<T: TryFrom<String>>`-bound owned-string
+        // consumer reaches the same four-arm census-label accept-set
+        // through one trait dispatch.
+        for &variant in WitShape::ALL {
+            let wire_string: String = variant.as_str().to_string();
+            assert_eq!(
+                <WitShape as TryFrom<String>>::try_from(wire_string.clone()),
+                Ok(variant),
+                "TryFrom<String> impl on WitShape must round-trip \
+                 WitShape::{variant:?}.as_str().to_string() back to \
+                 Ok(WitShape::{variant:?}) — divergence from the sibling \
+                 TryFrom<&str> axis signals a silent detour off the \
+                 substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness: the string-owned reverse-projection
+            // axis must agree with the borrowed `&str` reverse-
+            // projection axis on every accepted arm — the two axes
+            // share one census-label vocabulary through the substrate-
+            // primitive `from_wire` accessor, and the owned-input axis
+            // delegates to the borrowed peer by design.
+            let via_owned: Result<WitShape, ()> =
+                <WitShape as TryFrom<String>>::try_from(wire_string.clone());
+            let via_borrowed: Result<WitShape, ()> =
+                <WitShape as TryFrom<&str>>::try_from(wire_string.as_str());
+            assert_eq!(
+                via_owned, via_borrowed,
+                "TryFrom<String> and TryFrom<&str> reverse-projection \
+                 axes on WitShape must agree on WitShape::{variant:?} \
+                 — divergence signals the owned-`String` and borrowed-\
+                 `&str` reverse paths have drifted off the same \
+                 substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness against the paired byte-view and
+            // byte-owned reverse axes — the four reverse paths
+            // (str-view borrowed, string-owned, byte-view borrowed,
+            // byte-owned) share one substrate primitive.
+            let via_bytes_borrowed: Result<WitShape, ()> =
+                <WitShape as TryFrom<&[u8]>>::try_from(wire_string.as_bytes());
+            let via_bytes_owned: Result<WitShape, ()> =
+                <WitShape as TryFrom<Vec<u8>>>::try_from(wire_string.as_bytes().to_vec());
+            assert_eq!(
+                via_owned, via_bytes_borrowed,
+                "TryFrom<String> and TryFrom<&[u8]> reverse-projection \
+                 axes on WitShape must agree on WitShape::{variant:?} \
+                 — divergence signals the string-owned and byte-view \
+                 reverse paths have drifted off the same substrate-\
+                 primitive from_wire accessor"
+            );
+            assert_eq!(
+                via_owned, via_bytes_owned,
+                "TryFrom<String> and TryFrom<Vec<u8>> reverse-projection \
+                 axes on WitShape must agree on WitShape::{variant:?} \
+                 — divergence signals the string-owned and byte-owned \
+                 reverse paths have drifted off the same substrate-\
+                 primitive from_wire accessor"
+            );
+            // Closed-cycle witness against the paired string-owned
+            // forward-projection pair: `Self → String → TryFrom<String>
+            // → Self` round-trips to the originating arm on every
+            // canonical shape. Both the owned-input `From<WitShape> for
+            // String` and the borrowed-input `From<&WitShape> for
+            // String` corners must feed back through the new impl to
+            // `Ok(variant)`.
+            let owned_forward: String = <String as From<WitShape>>::from(variant);
+            let borrowed_forward: String = <String as From<&WitShape>>::from(&variant);
+            assert_eq!(
+                owned_forward, wire_string,
+                "From<WitShape> for String forward projection on \
+                 WitShape::{variant:?} must byte-equal \
+                 variant.as_str().to_string() — divergence signals the \
+                 paired forward pair drifted off the substrate-\
+                 primitive as_str accessor"
+            );
+            assert_eq!(
+                borrowed_forward, wire_string,
+                "From<&WitShape> for String forward projection on \
+                 &WitShape::{variant:?} must byte-equal \
+                 variant.as_str().to_string() — divergence signals the \
+                 paired forward pair drifted off the substrate-\
+                 primitive as_str accessor"
+            );
+            assert_eq!(
+                <WitShape as TryFrom<String>>::try_from(owned_forward.clone()),
+                Ok(variant),
+                "Closed-cycle round-trip on WitShape::{variant:?} \
+                 through From<WitShape> for String then \
+                 TryFrom<String> for WitShape must return Ok(variant) \
+                 — divergence signals the string-owned forward pair \
+                 and the string-owned reverse axis have drifted apart"
+            );
+            assert_eq!(
+                <WitShape as TryFrom<String>>::try_from(borrowed_forward),
+                Ok(variant),
+                "Closed-cycle round-trip on WitShape::{variant:?} \
+                 through From<&WitShape> for String then \
+                 TryFrom<String> for WitShape must return Ok(variant) \
+                 — divergence signals the borrowed-input forward \
+                 corner and the owned-input string reverse corner \
+                 have drifted apart"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_try_from_owned_string_rejects_unknown_wire_strings() {
+        // Rejection witness on the `impl TryFrom<String> for WitShape`
+        // — sweeps the corpus of valid-UTF-8-but-unknown-wire byte-
+        // strings the sibling borrowed [`TryFrom<&str>`] axis already
+        // rejects and asserts every one lands on `Err(())`, so a
+        // future accidental widening of the trait impl's accept-set (a
+        // case-fold path, a silent inclusion of a PascalCase / kebab-
+        // case / snake_case rebrand of the wire byte-string, a silent
+        // overlap with the raw `:contratos :wit` identifier accept-set
+        // the paired [`super::WitShape::classify`] total function
+        // consumes on the sibling axis, a stray fallback that maps a
+        // whitespace-only input onto a default arm rather than the
+        // trait-idiomatic `Err(())`) trips at caixa-core test time.
+        // Peer of the sibling borrowed-input rejection witness
+        // [`wit_shape_try_from_str_rejects_unknown_byte_strings`] on
+        // the same enum, and the sibling byte-view / byte-owned
+        // rejection witnesses
+        // [`wit_shape_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // /
+        // [`wit_shape_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // on the same enum.
+        let unknown_wire_rejected: &[&str] = &[
+            "",
+            " ",
+            "\n",
+            "\t",
+            "Http",
+            "HTTP",
+            "PubSub",
+            "PUBSUB",
+            "Store",
+            "STORE",
+            "Capability",
+            "CAPABILITY",
+            "pub-sub",
+            "pub_sub",
+            "pubSub",
+            "http ",
+            " http",
+            " store ",
+            "capability\n",
+            "http/",
+            "messaging",
+            "cache",
+            "wasi:http/proxy",
+            "wasi:keyvalue/store",
+            "nats:events",
+            "?",
+            "\"http\"",
+        ];
+        for &input in unknown_wire_rejected {
+            let owned: String = input.to_string();
+            assert_eq!(
+                <WitShape as TryFrom<String>>::try_from(owned),
+                Err(()),
+                "TryFrom<String> impl on WitShape must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-\
+                 set widening off the paired WitShape::from_wire \
+                 resolver, or a cross-axis leak from the raw-\
+                 identifier axis WitShape::classify consumes"
+            );
+            // Cross-axis witness against the borrowed str-view axis:
+            // the two paths must agree by construction, since the
+            // owned axis delegates to the borrowed peer.
+            assert_eq!(
+                <WitShape as TryFrom<String>>::try_from(input.to_string()),
+                <WitShape as TryFrom<&str>>::try_from(input),
+                "TryFrom<String> and TryFrom<&str> reverse-projection \
+                 axes on WitShape must agree on the valid-UTF-8-but-\
+                 unknown-wire input {input:?} — divergence signals \
+                 the owned-`String` and borrowed-`&str` reverse paths \
+                 have drifted off the same substrate-primitive \
                  from_wire accessor"
             );
         }
