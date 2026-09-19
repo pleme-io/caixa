@@ -44,6 +44,90 @@ impl From<&str> for CaixaVersion {
     }
 }
 
+/// Substrate-canonical stdlib [`std::str::FromStr`] parse-set entry point on
+/// the [`CaixaVersion`] newtype primitive — closes the canonical
+/// `str::parse::<CaixaVersion>()` axis on the paired [`From<&str> for
+/// CaixaVersion`] / [`From<String> for CaixaVersion`] infallible
+/// forward-projection constructors. Delegates byte-for-byte through the
+/// paired borrowed-input `impl From<&str> for CaixaVersion` immediately
+/// above (which wraps `s.to_string()` into the newtype's inner `String`
+/// slot), so every consumer that reaches [`CaixaVersion`] through the
+/// stdlib `T: FromStr`-bounded parse surface (`str::parse::<CaixaVersion>`,
+/// a `clap::Parser`-derived `#[arg(value_parser)]` on a future `feira
+/// publish --versao <ver>` arg-parse, a `serde_with::DisplayFromStr`
+/// wrapper on the [`crate::Caixa::versao`] field in a downstream typed-YAML
+/// derive, or any generic `fn parse_versao<T: FromStr>(s: &str) -> Result<T,
+/// T::Err>` receiver) routes through the same [`String::to_string`]-shaped
+/// wrap the paired `From<&str>` constructor already exercises. `type Err =
+/// std::convert::Infallible` because the paired `From<&str>` constructor is
+/// total — [`CaixaVersion`] stores the wrapped string raw at rest (the
+/// author surface's single-quoted `:versao "…"` literal round-trips
+/// byte-for-byte) and defers semver validation to the paired
+/// [`CaixaVersion::parse`] `Result<semver::Version, VersionError>`
+/// accessor, so no byte-string the standard-library parse-set entry point
+/// receives can fail construction on this axis (any `&str` is a valid
+/// `CaixaVersion` body at rest; only `.parse::<semver::Version>()` on the
+/// wrapped body can reject a shape the semver grammar refuses). Peer of
+/// the paired `impl FromStr for String` stdlib impl on the standard-library
+/// `String` newtype (whose `Err = Infallible` covers the same "any `&str` is
+/// a valid `String` body" total-wrap discipline the [`CaixaVersion`]
+/// newtype installs on the caixa-core surface). The first standard-library
+/// stdlib-parse-set entry point on the [`CaixaVersion`] newtype beyond the
+/// paired forward-projection [`From<&str>`] / [`From<String>`]
+/// constructors and the sibling [`fmt::Display`] / [`AsRef<str>`] /
+/// [`std::borrow::Borrow<str>`] projections the newtype already carries.
+///
+/// # Compounding
+///
+/// The stdlib parse-set entry point is the canonical Rust-idiomatic axis
+/// generic bounds compose against: `str::parse::<T>()` is a `T: FromStr`-
+/// bounded generic (not a `T: for<'a> TryFrom<&'a str>`-bounded one), so
+/// lifting the axis onto [`CaixaVersion`] unlocks the `.parse::<CaixaVersion>()`
+/// short-form on every future stdlib-shaped consumer without forcing the
+/// caller to spell the paired `From<&str>` constructor at the wire-up site.
+/// A future `clap::Args`-derived `feira publish --versao <ver>` arg-parse
+/// composes `arg.parse::<CaixaVersion>()` directly through the
+/// `#[arg(value_parser = clap::value_parser!(CaixaVersion))]` short-form
+/// (which resolves through the `T: FromStr` bound `clap::value_parser!`
+/// installs on any type carrying the trait), a `serde_with::DisplayFromStr`
+/// wrapper on a future typed-YAML [`crate::Caixa::versao`] field routes
+/// through the same `T: FromStr` bound `serde_with` keys off, and any
+/// generic per-authored-string coalescer over a mixed newtype family
+/// (`Result<T, T::Err>` on a `T: FromStr` bound) picks up
+/// [`CaixaVersion`] as one of its arms by construction.
+///
+/// # Round-trip discipline
+///
+/// The `Err = Infallible` shape witnesses the round-trip discipline the
+/// paired forward-projection [`fmt::Display`] impl closes at compile time:
+/// `s.parse::<CaixaVersion>().unwrap().to_string() == s` for every `&str`
+/// (the fail-before-pass-after pin
+/// [`caixa_version_from_str_round_trips_through_display_on_every_input`]
+/// witnesses this against the sibling `caret_matches_minor_range` /
+/// `star_is_any` / `caixa_version_as_str_accessor_is_const_fn` fixture
+/// bodies covering the semver-shape, prerelease-shape, empty-body,
+/// requirement-shape, and non-semver-junk corners). Any future accidental
+/// narrowing (a stray `parse_semver_first` validation gate slipping onto
+/// the wrap path, a normalization step that would drop whitespace or
+/// canonicalize a prerelease tag) trips the pin at caixa-core build time
+/// under the byte-equality assertion, refusing the divergent shape ahead
+/// of the downstream materializer's admit cycle.
+impl std::str::FromStr for CaixaVersion {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Delegate byte-for-byte through the paired borrowed-input
+        // `impl From<&str> for CaixaVersion` constructor above — the
+        // total-wrap axis every stdlib `T: FromStr`-bounded consumer
+        // reaches [`CaixaVersion`] through resolves to the same
+        // [`String::to_string`]-shaped body the sibling forward-
+        // projection constructor already installs. `type Err =
+        // Infallible` because the paired constructor is total; `Ok`
+        // is the only reachable arm on this axis.
+        Ok(<Self as From<&str>>::from(s))
+    }
+}
+
 /// Substrate-canonical [`AsRef<str>`] projection on the [`CaixaVersion`]
 /// typed newtype — routes through the same [`CaixaVersion::as_str`]
 /// `pub const fn` scalar accessor the sibling [`fmt::Display`] impl
@@ -2303,6 +2387,133 @@ mod tests {
             let via_owned: Rc<str> = Rc::<str>::from(v.clone());
             assert_eq!(via_owned.as_ref(), via_borrowed.as_ref());
             assert_eq!(via_borrowed.as_ref(), versao);
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_str_routes_through_from_str_reference_impl() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl std::str::FromStr for CaixaVersion` — asserts the
+        // stdlib parse-set entry point delegates byte-for-byte through
+        // the paired borrowed-input `impl From<&str> for CaixaVersion`
+        // constructor above (which wraps `s.to_string()` into the
+        // newtype's inner `String` slot), so every consumer that reaches
+        // [`CaixaVersion`] through the standard-library `T: FromStr`-
+        // bounded parse surface (`str::parse::<CaixaVersion>`, the
+        // `<CaixaVersion as std::str::FromStr>::from_str` explicit-trait
+        // spelling on a generic bound, a `clap::value_parser!(CaixaVersion)`
+        // short-form on a future arg-parse, a `serde_with::DisplayFromStr`
+        // wrapper on a downstream typed-YAML derive) routes through the
+        // same wrap the sibling `From<&str>` forward-projection already
+        // installs. Refuses any future silent detour that would route
+        // the stdlib entry point through a divergent projection (a stray
+        // `parse_semver_first` validation gate slipping onto the wrap
+        // path, a normalization step that would drop whitespace or
+        // canonicalize a prerelease tag, a swap onto the paired
+        // [`CaixaVersion::parse`] `Result<semver::Version, VersionError>`
+        // accessor that would narrow the accept-set to the semver
+        // grammar's shape ahead of the wrap). Also witnesses the
+        // `Err = Infallible` type-level shape at compile time under the
+        // explicit `Result<CaixaVersion, std::convert::Infallible>`
+        // annotation the loop body binds against — any future accidental
+        // widening of the error type (a swap onto `type Err =
+        // VersionError`) trips the annotation at caixa-core build time
+        // with E0308 (`expected Infallible, found <T>`), strictly stronger
+        // than a runtime `.unwrap()` on the sibling `.parse()` short-form.
+        //
+        // Sweeps the same fixture bodies the sibling
+        // `caixa_version_as_str_accessor_is_const_fn` /
+        // `caixa_version_from_owned_and_borrowed_into_rc_str_agree_on_every_shape`
+        // pins already cover on the paired scalar-accessor and
+        // owned-vs-borrowed axes: canonical semver, prerelease-shape,
+        // zero-body, and empty-string corners. Extends the sweep with a
+        // requirement-shape (`^0.1`), a star (`*`), and a non-semver junk
+        // body (`not-a-version`) so the total-wrap discipline the
+        // `Err = Infallible` shape witnesses is asserted across the four
+        // canonical axes of the input space: semver-shaped bodies the
+        // paired [`CaixaVersion::parse`] accessor would accept, semver-
+        // requirement-shaped bodies the sibling [`parse_requirement`]
+        // surface consumes, empty bodies (which the wrap accepts but
+        // downstream semver rejects), and non-semver junk (which the
+        // wrap accepts and downstream semver rejects).
+        use std::str::FromStr;
+        for versao in [
+            "0.1.0",
+            "1.2.3-alpha.1",
+            "0.0.0",
+            "",
+            "^0.1",
+            "*",
+            "not-a-version",
+        ] {
+            let via_parse_short_form: Result<CaixaVersion, std::convert::Infallible> =
+                versao.parse::<CaixaVersion>();
+            let via_from_str_explicit: Result<CaixaVersion, std::convert::Infallible> =
+                <CaixaVersion as FromStr>::from_str(versao);
+            let via_from_ref: CaixaVersion = <CaixaVersion as From<&str>>::from(versao);
+            let via_parse_ok: CaixaVersion = via_parse_short_form.unwrap();
+            let via_from_str_ok: CaixaVersion = via_from_str_explicit.unwrap();
+            assert_eq!(
+                via_parse_ok.as_str(),
+                versao,
+                "str::parse::<CaixaVersion>() must byte-equal the input",
+            );
+            assert_eq!(
+                via_from_str_ok.as_str(),
+                versao,
+                "<CaixaVersion as FromStr>::from_str must byte-equal the input",
+            );
+            assert_eq!(
+                via_parse_ok, via_from_ref,
+                "str::parse::<CaixaVersion>() must byte-equal From<&str>",
+            );
+            assert_eq!(
+                via_from_str_ok, via_from_ref,
+                "<CaixaVersion as FromStr>::from_str must byte-equal From<&str>",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_str_round_trips_through_display_on_every_input() {
+        // Fail-before-pass-after round-trip pin: the lifted
+        // `impl std::str::FromStr for CaixaVersion` closes the two-way
+        // canonical wire-form axis with the paired forward-projection
+        // [`fmt::Display`] impl at line 29 —
+        // `s.parse::<CaixaVersion>().unwrap().to_string() == s` for every
+        // `&str` on the total-wrap axis the newtype installs at rest.
+        // Refuses any future silent narrowing on either half (a stray
+        // normalization step slipping onto the [`fmt::Display`] impl that
+        // would canonicalize the wrapped body ahead of `f.write_str`, a
+        // divergent wrap on the `FromStr` impl that would swap the paired
+        // `From<&str>` constructor for a fresh `String::from(s).trim()`-
+        // style body-mutating projection) so the round-trip theorem the
+        // pin states remains machine-checked at caixa-core test time.
+        //
+        // Peer of the sibling `caixa_version_from_str_routes_through_from_str_reference_impl`
+        // pin immediately above (which witnesses the byte-parity axis
+        // against the paired `From<&str>` forward-projection); this pin
+        // witnesses the same axis against the paired `fmt::Display`
+        // forward-projection instead, closing the two-way round-trip
+        // through the standard-library [`fmt::Display`] / [`FromStr`]
+        // pair the substrate reaches [`CaixaVersion`] through on the
+        // canonical wire-form axis.
+        for versao in [
+            "0.1.0",
+            "1.2.3-alpha.1",
+            "0.0.0",
+            "",
+            "^0.1",
+            "*",
+            "not-a-version",
+            "1.2.3+build.42",
+        ] {
+            let parsed: CaixaVersion = versao.parse::<CaixaVersion>().unwrap();
+            let displayed: String = parsed.to_string();
+            assert_eq!(
+                displayed, versao,
+                "CaixaVersion::from_str + Display must round-trip byte-for-byte",
+            );
         }
     }
 }
