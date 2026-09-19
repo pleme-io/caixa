@@ -5941,6 +5941,94 @@ impl RateLimit {
     }
 }
 
+/// Substrate-canonical author-surface wire-form projection on the M3 mesh-slot
+/// `:politicas :rate-limit` compound primitive [`RateLimit`] — routes through
+/// the substrate-primitive [`RateLimit::canonical_unit`] `Duration →
+/// Option<RateLimitUnit>` reverse projection (which itself keys off the
+/// closed-set typed enum's `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection),
+/// then formats `<rate>/<unit>` through the paired [`std::fmt::Display`] impl
+/// on [`RateLimitUnit`] (which delegates to
+/// [`RateLimitUnit::as_suffix`]) on the `Some` arm, or the "non-canonical
+/// fallback" `<rate>/<k>s` shape on the `None` arm — the sibling
+/// [`AplicacaoSpec::validate_politicas`] gate rejects every non-canonical
+/// window before serialize, so a validated [`RateLimit`] structurally never
+/// reaches the fallback arm; the fallback exists only so a programmatic
+/// pre-validate `format!("{rl}")` / [`ToString::to_string`] on a
+/// hand-authored [`RateLimit`] value does not panic.
+///
+/// Pairs the trait-idiomatic wire-form axis the sibling closed-set typed enum
+/// [`RateLimitUnit`] already carries (its [`std::fmt::Display`] routes
+/// through [`RateLimitUnit::as_suffix`]) onto the compound primitive that
+/// holds the `{rate, window}` pair — so every consumer that wants the M3
+/// mesh-slot `:politicas :rate-limit` canonical author-surface wire form
+/// reaches through one substrate-primitive dispatch rather than through
+/// the pre-lift codec-private free `fn render` at
+/// `aplicacao::rate_limit_codec::render` (whose visibility is module-scoped
+/// and whose call sites were serde-only). The codec's `render` arm now
+/// delegates to this impl via [`ToString::to_string`], so serde-side
+/// serialize and every downstream call to `format!("{rl}")` /
+/// `rl.to_string()` byte-agree by construction.
+///
+/// A future consumer that needs the wire form outside serde — a
+/// `feira lint` per-caixa Nord-themed error-column emitter that names the
+/// offending `:politicas :rate-limit` value in a rejected-shape diagnostic,
+/// a future M4 admission-webhook rejection body's per-arm error-frame
+/// composer that stringifies the typed slot into a structured JSON
+/// `code`/`msg` pair, a future per-`:contratos`-edge rate-limit-override
+/// resolver whose diagnostic thread walks the effective typed-slot value
+/// through a `Display`-bound reporter, a future `tracing` structured-log
+/// site that records the effective per-edge policy as a string field —
+/// reaches the wrapped canonical wire form through this one dispatch,
+/// avoiding a pre-lift `<rate>/<unit-suffix>` open-coded restatement that
+/// would silently split from the canonical-unit bijection on any future
+/// axis change (a `"d"` day suffix once Envoy's `rate_limit_action` grows
+/// daily-bucket support, a `"ms"` sub-second window once high-throughput
+/// per-edge policies come into scope per MESH-COMPOSITION §III.2 #3).
+///
+/// Peer of the sibling [`std::fmt::Display`] impl on [`RateLimitUnit`]
+/// (which routes through [`RateLimitUnit::as_suffix`]) on the same
+/// author-surface wire-form axis — extends the axis from the closed-set
+/// suffix enum onto the compound `{rate, window}` primitive it labels.
+/// Same "single owner, one substrate-primitive dispatch, every consumer
+/// routes through it" discipline the peer
+/// [`crate::CaixaKind::as_str`] /
+/// [`crate::supervisor::RestartStrategy::as_str`] /
+/// [`crate::supervisor::RestartPolicy::as_str`] /
+/// [`PlacementStrategy::as_str`] /
+/// [`crate::dep::DepList::as_str`] paired-primitive Display axes carry on
+/// the sibling closed-set typed-enum discriminator axes.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_display_matches_codec_render_on_every_canonical_window`]
+/// (byte-parity pin against `rate_limit_codec::render` via a serialized
+/// [`MeshPolicy`] cross-check across every [`RateLimitUnit::ALL`] arm) and
+/// [`tests::rate_limit_display_round_trips_through_codec_parse_on_canonical_shapes`]
+/// (round-trip pin: for every canonical shape, `rl.to_string()` re-parses
+/// back to the same [`RateLimit`] value through
+/// `rate_limit_codec::deserialize`, closing the two-way `Self → String →
+/// Self` cycle on the same wire form the codec already reads and writes).
+impl std::fmt::Display for RateLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(unit) = self.canonical_unit() {
+            write!(f, "{}/{unit}", self.rate())
+        } else {
+            // Defensive fallback for a non-canonical `:window` on an
+            // un-validated [`RateLimit`]: [`AplicacaoSpec::validate_politicas`]
+            // rejects every such shape through
+            // [`AplicacaoError::PolicyRateLimitWindowNotCanonical`] before
+            // any downstream serialize / render path reaches this arm, so a
+            // validated [`RateLimit`] structurally never lands here. The
+            // emitted `<n>/<k>s` form is *not* round-trippable through the
+            // codec's `parse` arm (which accepts only the closed-set
+            // [`RateLimitUnit`] suffixes, not `<k>s` with an explicit count)
+            // — the validate gate is what makes the round-trip a structural
+            // property; this arm exists only so a programmatic non-validated
+            // `format!("{rl}")` / [`ToString::to_string`] does not panic.
+            write!(f, "{}/{}s", self.rate(), self.window().as_secs())
+        }
+    }
+}
+
 /// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Second`]
 /// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Second`
 /// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
@@ -9161,45 +9249,32 @@ mod rate_limit_codec {
     fn render(rl: RateLimit) -> String {
         // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives at
         // module scope on the closed-set typed enum [`super::RateLimitUnit`];
-        // this render arm reads the `Duration → RateLimitUnit` projection
-        // through the substrate primitive [`super::RateLimit::canonical_unit`]
-        // (returns `None` on every non-canonical window — the sub-second /
-        // non-`{1, 60, 3600}` shapes the validate gate rejects), then
-        // formats the returned typed enum through its
-        // [`std::fmt::Display`] impl (which routes through
-        // [`super::RateLimitUnit::as_suffix`]). Two typed dispatches on
-        // the substrate primitive instead of one runtime `find_map`
-        // walk through the free-helper delegate chain
-        // [`super::rate_limit_window_unit`] (the vestigial free helper's
-        // sole production consumer was this arm; every other consumer of
-        // the `Duration → unit` axis — the validate gate below and the
-        // future M4 per-Aplicacao Envoy config reconciler — now reads
-        // the same typed method).
+        // the substrate primitive [`super::RateLimit::canonical_unit`]
+        // reverse-projects a `Duration` through the closed-set enum's
+        // arm-table (returning `None` on every non-canonical window the
+        // validate gate rejects), and the paired
+        // [`std::fmt::Display for RateLimit`] impl formats `<rate>/<unit>`
+        // through the canonical-window arm and the `<rate>/<k>s`
+        // fallback through the non-canonical arm. This render arm now
+        // delegates to the substrate-primitive Display dispatch
+        // ([`ToString::to_string`] — the standard-library idiom the
+        // paired `impl std::fmt::Display for RateLimit` opens) rather
+        // than re-inlining the canonical-vs-fallback branching, so the
+        // serde-side serialize path and every downstream `format!("{rl}")`
+        // / `rl.to_string()` byte-agree by construction on the same
+        // wire form.
         //
         // A future rate-limit-unit addition (a `"d"` day suffix once
         // Envoy's `rate_limit_action` grows daily-bucket support) is
         // one variant + one arm per method on the closed-set enum, and
         // the compiler enforces exhaustiveness on every consumer's
         // `match self` arms — the codec's `parse` accepted-suffix set,
-        // this render arm's emitted-suffix set, the validate gate's
-        // canonical-window set, and every future per-`:contratos`-edge
-        // rate-limit-override overlay all pick it up by construction.
-        if let Some(unit) = rl.canonical_unit() {
-            format!("{}/{unit}", rl.rate())
-        } else {
-            // Defensive fallback for non-canonical windows. Note:
-            // [`AplicacaoSpec::validate_politicas`] rejects any
-            // non-canonical `:rate-limit :window` via
-            // [`AplicacaoError::PolicyRateLimitWindowNotCanonical`], so
-            // a validated `RateLimit` never reaches this branch. The
-            // emitted `<n>/<k>s` form is *not* round-trippable through
-            // [`parse`] (which accepts only the closed-set
-            // [`super::RateLimitUnit`] suffixes, not `<k>s` with an
-            // explicit count) — the validate gate is what makes the
-            // round-trip a structural property; this branch exists only
-            // so a programmatic non-validated serialize doesn't panic.
-            format!("{}/{}s", rl.rate(), rl.window().as_secs())
-        }
+        // the substrate primitive [`super::RateLimit::canonical_unit`]
+        // the Display impl this arm now delegates to reads through, the
+        // validate gate's canonical-window set, and every future
+        // per-`:contratos`-edge rate-limit-override overlay all pick it
+        // up by construction.
+        rl.to_string()
     }
 }
 
@@ -35193,6 +35268,148 @@ mod tests {
                  {window_secs}s window; the codec render arm reads the same \
                  typed unit through this accessor"
             );
+        }
+    }
+
+    #[test]
+    fn rate_limit_display_matches_codec_render_on_every_canonical_window() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl std::fmt::Display for RateLimit` — asserts the standard-
+        // library trait impl and the codec-private free `fn render`
+        // resolve to the same wire-form byte-string per instance across
+        // every closed-set [`super::RateLimitUnit::ALL`] arm (via a
+        // representative scalar-`rate` sweep). Locks the codec's render
+        // arm's delegation onto the substrate-primitive Display impl:
+        // any future silent detour that hand-rolls the codec's canonical/
+        // fallback branching a second time (a resurrected inline
+        // `format!("{}/{}", …)` restatement inside the codec, a stray
+        // `.as_secs()` recomputation of the canonical unit) would split
+        // the serde-side serialize path's byte-string from every
+        // `format!("{rl}")` / `rl.to_string()` downstream consumer's,
+        // and this pin trips at caixa-core test time.
+        //
+        // The codec's `render` is module-scoped so this pin exercises it
+        // through its sole production consumer — the serialize half of
+        // the `#[serde(with = "rate_limit_codec")]` bind on
+        // `MeshPolicy.rate_limit` — matching the sibling
+        // [`rate_limit_codec_render_routes_through_canonical_unit_and_as_suffix`]
+        // pin's approach on the same access path.
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                let display_output = rl.to_string();
+                let policy = MeshPolicy {
+                    rate_limit: Some(rl),
+                    ..Default::default()
+                };
+                let json = serde_json::to_string(&policy).unwrap();
+                let expected_quoted = format!("\"{display_output}\"");
+                assert!(
+                    json.contains(&expected_quoted),
+                    "RateLimit {{ rate: {rate}, unit: {unit:?} }}.to_string() \
+                     ({display_output:?}) must byte-equal the codec's render \
+                     output (via serialized MeshPolicy: {json})"
+                );
+                let expected_shape = format!("{rate}/{}", unit.as_suffix());
+                assert_eq!(
+                    display_output, expected_shape,
+                    "RateLimit Display must emit <rate>/<unit-suffix> for a \
+                     canonical window on RateLimitUnit::{unit:?} (rate={rate}) \
+                     — routing through canonical_unit + RateLimitUnit::Display"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_display_fallback_matches_codec_render_on_non_canonical_window() {
+        // Fail-before-pass-after byte-parity pin on the fallback arm of
+        // `impl std::fmt::Display for RateLimit` — the non-canonical-
+        // window arm the validate gate rejects before serialize but which
+        // the codec's render must still handle non-panicking so a
+        // programmatic pre-validate `format!("{rl}")` on a hand-authored
+        // [`super::RateLimit`] does not abort. Asserts the standard-library
+        // trait impl and the codec-private free `fn render` resolve to
+        // the same `<rate>/<k>s` fallback byte-string per instance across
+        // a non-canonical-window witness sweep. Any future edit that
+        // splits the canonical/fallback arms across the two paths (a
+        // resurrected inline `<k>s` recomputation inside the codec, a
+        // stray `as_secs` -> `as_millis` typo on one side) trips this pin.
+        //
+        // The fallback shape is *not* round-trippable through the codec's
+        // parse arm (which accepts only the closed-set
+        // [`super::RateLimitUnit`] suffixes, not `<k>s` with an explicit
+        // count) — the validate gate is what makes the round-trip a
+        // structural property; this pin exercises only the non-panicking
+        // byte-parity discipline between the two render paths on the
+        // rejected-window set.
+        for non_canonical_window_secs in [2u64, 30, 120, 86_400] {
+            let rl = RateLimit {
+                rate: 100,
+                window: Duration::from_secs(non_canonical_window_secs),
+            };
+            let display_output = rl.to_string();
+            let policy = MeshPolicy {
+                rate_limit: Some(rl),
+                ..Default::default()
+            };
+            let json = serde_json::to_string(&policy).unwrap();
+            let expected_quoted = format!("\"{display_output}\"");
+            assert!(
+                json.contains(&expected_quoted),
+                "RateLimit {{ rate: 100, window: {non_canonical_window_secs}s }}\
+                 .to_string() ({display_output:?}) must byte-equal the codec's \
+                 fallback render output on a non-canonical window (via \
+                 serialized MeshPolicy: {json})"
+            );
+            let expected_shape = format!("100/{non_canonical_window_secs}s");
+            assert_eq!(
+                display_output, expected_shape,
+                "RateLimit Display fallback must emit <rate>/<k>s for a \
+                 non-canonical {non_canonical_window_secs}s window"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_display_round_trips_through_codec_parse_on_canonical_shapes() {
+        // Round-trip pin on the lifted `impl std::fmt::Display for
+        // RateLimit`: for every canonical shape (every
+        // [`super::RateLimitUnit::ALL`] arm crossed with a representative
+        // scalar-`rate` sweep), the two-way `Self → String → Self` cycle
+        // through the substrate-primitive Display impl (forward arm) and
+        // the codec's parse (reverse arm, via deserialize) recovers the
+        // same [`super::RateLimit`] value. Locks the canonical Display
+        // output as an accepted input of the codec's parse arm — the
+        // structural property the paired `impl std::fmt::Display for
+        // RateLimitUnit` axis carries on the closed-set enum,
+        // extended here onto the compound `{rate, window}` primitive
+        // it labels.
+        //
+        // A future detour that split the two arms (a Display arm that
+        // emits `<rate>/<unit>` but a parse arm that no longer accepts
+        // one of the closed-set [`super::RateLimitUnit::SUFFIXES`]
+        // arms, or vice versa) would silently break this round-trip.
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                let wire = rl.to_string();
+                let policy = MeshPolicy {
+                    rate_limit: Some(rl),
+                    ..Default::default()
+                };
+                let json = serde_json::to_string(&policy).unwrap();
+                let round_trip: MeshPolicy = serde_json::from_str(&json).unwrap();
+                assert_eq!(
+                    round_trip.rate_limit,
+                    Some(rl),
+                    "RateLimit {{ rate: {rate}, unit: {unit:?} }} must \
+                     round-trip through its Display wire form {wire:?} \
+                     via the codec's deserialize arm — the paired parse \
+                     accept-set contains every Display output on the \
+                     canonical arm"
+                );
+            }
         }
     }
 
