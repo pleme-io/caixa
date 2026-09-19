@@ -3480,6 +3480,107 @@ impl TryFrom<Vec<u8>> for RestartPolicy {
     }
 }
 
+/// Trait-idiomatic *owned-`String` input, `Result<Self, ()>` output*
+/// string-owned reverse projection on the second (and final) M2-OTP-shape
+/// supervisor-slot closed-set fieldless typed enum peer on the caixa
+/// surface ([`RestartPolicy`]) — the owned-input peer of the paired
+/// [`TryFrom<&str> for RestartPolicy`] str-view reverse-projection axis,
+/// and the string-owned reverse companion of the pre-existing string-owned
+/// *forward* pair ([`From<RestartPolicy> for String`],
+/// [`From<&RestartPolicy> for String`]) already lifted on this same enum.
+/// Routes owned [`String`] input through the paired borrowed-input
+/// [`TryFrom<&str>`] axis via [`String::as_str`] so every consumer that
+/// holds an owned `String` — a future M4 `mesh.pleme.io/v1alpha1/Supervisor`
+/// CR admission-webhook body reader that hands the
+/// `spec.children[].restart` `PascalCase` scalar off as an owned [`String`]
+/// after UTF-8 validation, a `serde_yaml::from_str` / `serde_json::from_str`
+/// de-serialize round-trip whose composer surfaces the `:children :restart`
+/// scalar as an owned [`String`] typed field, a
+/// `feira supervisor --restart <Permanent|Temporary|Transient>`
+/// `clap`-derived arg-parse whose owned-`String` positional lands the
+/// canonical arm at the typed dispatch, a per-`:children`-slot overlay
+/// resolver reading an owned [`String`] out of a `ConfigMap`
+/// `data.children-restart` scalar, an `<T: TryFrom<String>>`-bound generic
+/// loader over any of the substrate's closed-set typed enums — reaches the
+/// same three-arm `PascalCase` accept-set through one trait dispatch.
+///
+/// Extends the substrate-wide trait-idiomatic *string-owned reverse-
+/// projection* family — opened on the compound M3-mesh
+/// `:politicas :rate-limit` primitive [`crate::aplicacao::RateLimit`]
+/// (a2e6f02), lifted onto the first closed-set fieldless typed-enum peer
+/// [`crate::aplicacao::WitShape`] (e6aac29), extended onto the second
+/// closed-set fieldless typed-enum peer [`crate::aplicacao::RateLimitUnit`]
+/// (94a9c5e), extended onto the third closed-set fieldless typed-enum peer
+/// [`crate::aplicacao::PlacementStrategy`] (d81a70a), extended onto the
+/// first M2-OTP-shape supervisor-slot closed-set fieldless typed-enum peer
+/// [`RestartStrategy`] (78fe8c8) — onto the second (and final) M2-OTP-shape
+/// supervisor-slot closed-set fieldless typed-enum peer, the per-`:children`
+/// restart-decision-policy discriminator. This closes the string-owned
+/// reverse-projection axis on the M2-OTP-shape `:supervisor :estrategia` +
+/// `:children :restart` slot pair, mirroring the trajectory the byte-view
+/// / byte-owned / str-view reverse-projection families already walked
+/// across the same slot pair. The peers [`crate::CaixaKind`],
+/// [`crate::CaixaDialeto`], and [`crate::dep::DepList`] remain the next
+/// targets of the campaign.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<String> for T`, so a consumer
+/// that holds an owned [`String`] and needs a typed [`RestartPolicy`]
+/// otherwise picks between (a) an open-coded
+/// `<RestartPolicy as TryFrom<&str>>::try_from(s.as_str())` at every call
+/// site whose type bounds have no compile-time link back to the string-
+/// owned reverse-projection axis, (b) a `let s: &str = &s;
+/// RestartPolicy::try_from(s)` two-step whose borrow arithmetic leaks a
+/// per-call-site lifetime dance rather than a single trait dispatch, or
+/// (c) a `String::into_bytes` + [`TryFrom<Vec<u8>>`] detour that reaches
+/// the substrate-primitive `from_wire` accessor through a UTF-8 re-
+/// validation hop the owned-`String` axis already knows to skip. This
+/// impl closes the string-owned reverse-projection axis at the substrate-
+/// primitive [`RestartPolicy::from_wire`] accessor so every future
+/// `<T: TryFrom<String>>`-bound owned-string consumer reaches the same
+/// three-arm `PascalCase` accept-set through one trait dispatch.
+///
+/// `type Error = ()` matches the sibling [`TryFrom<&str> for
+/// RestartPolicy`], [`TryFrom<&[u8]> for RestartPolicy`], and
+/// [`TryFrom<Vec<u8>> for RestartPolicy`] unit-error shapes, preserving
+/// the trait-family consistency across the {str-view, byte-view, byte-
+/// owned, string-owned} reverse-projection square. The owned [`String`]
+/// input is dropped on the error path (the standard-library
+/// `String::from_utf8` convention of returning the input in the error
+/// deliberately declined — a caller that needs the string back holds a
+/// clone before the call, and the closed-set-enum use site rarely wants
+/// the raw string back past a "did you mean" diagnostic that operates on
+/// the wire vocabulary rather than the input).
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_try_from_owned_string_routes_through_borrowed_str_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&str>`] axis
+/// across the three-arm [`RestartPolicy::ALL`] accept-set on the owned-
+/// `String` surface, cross-axis witness that the string-owned reverse
+/// projection agrees with the sibling byte-view / byte-owned reverse-
+/// projection axes on every accepted arm through the shared substrate-
+/// primitive [`RestartPolicy::from_wire`] accessor, and a closed-cycle
+/// witness against the paired string-owned forward-projection pair —
+/// `Self → String → TryFrom<String> → Self` round-trips to the
+/// originating arm on every canonical `PascalCase` scalar) and
+/// [`tests::restart_policy_try_from_owned_string_rejects_unknown_wire_strings`]
+/// (rejection witness against silent accept-set widening — mirrors the
+/// corpus the paired [`TryFrom<&str>`] rejection witness already pins,
+/// including empty / whitespace-only inputs, the sibling kebab-case
+/// dispatcher-catalog byte-strings on the two-axis wire/catalog split so
+/// a caller that confuses the two axes trips here rather than at a
+/// downstream K8s-CR round-trip miss, case-fold rebrand candidates,
+/// whitespace-padded / trailing-newline / quote-wrapped forms, and
+/// English-rebrand candidates, with per-input cross-axis parity against
+/// the borrowed [`TryFrom<&str>`] reverse-projection axis).
+impl TryFrom<String> for RestartPolicy {
+    type Error = ();
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&str>>::try_from(s.as_str())
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -17335,6 +17436,210 @@ mod tests {
                 <RestartStrategy as TryFrom<&str>>::try_from(input),
                 "TryFrom<String> and TryFrom<&str> reverse-projection \
                  axes on RestartStrategy must agree on the valid-UTF-8-\
+                 but-unknown-wire input {input:?} — divergence signals \
+                 the owned-`String` and borrowed-`&str` reverse paths \
+                 have drifted off the same substrate-primitive from_wire \
+                 accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_try_from_owned_string_routes_through_borrowed_str_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<String> for RestartPolicy` — asserts the trait-
+        // idiomatic string-owned reverse-projection standard-library impl
+        // and the sibling borrowed-input [`TryFrom<&str>`] axis resolve
+        // to the same three-arm `PascalCase` wire accept-set across every
+        // arm the exhaustive [`RestartPolicy::ALL`] slice enumerates.
+        // Extends the substrate-wide trait-idiomatic string-owned reverse-
+        // projection axis onto the second (and final) M2-OTP-shape
+        // supervisor-slot closed-set fieldless typed-enum peer — owned-
+        // input mirror of the paired [`TryFrom<&str>`] str-view reverse-
+        // projection axis, and string-owned reverse companion of the
+        // pre-existing string-owned *forward*-projection pair
+        // ([`From<RestartPolicy> for String`],
+        // [`From<&RestartPolicy> for String`]) on this same enum. Peer
+        // of the sibling first-mover
+        // [`crate::aplicacao::tests::rate_limit_try_from_owned_string_routes_through_borrowed_str_view_axis`]
+        // (a2e6f02) on the compound [`crate::aplicacao::RateLimit`]
+        // primitive, and the sibling
+        // [`restart_strategy_try_from_owned_string_routes_through_borrowed_str_view_axis`]
+        // (78fe8c8) on the sibling first M2-OTP-shape supervisor-slot
+        // [`RestartStrategy`] peer — tracks the "delegate through
+        // `TryFrom<&str>` on the `String::as_str` borrow" discipline the
+        // compound-primitive opener and closed-set-peer first-mover
+        // established. This closes the string-owned reverse-projection
+        // axis on the M2-OTP-shape `:supervisor :estrategia` +
+        // `:children :restart` slot pair.
+        for &variant in RestartPolicy::ALL {
+            let wire_string: String = variant.as_str().to_string();
+            assert_eq!(
+                <RestartPolicy as TryFrom<String>>::try_from(wire_string.clone()),
+                Ok(variant),
+                "TryFrom<String> impl on RestartPolicy must round-trip \
+                 RestartPolicy::{variant:?}.as_str().to_string() back \
+                 to Ok(RestartPolicy::{variant:?}) — divergence from \
+                 the sibling TryFrom<&str> axis signals a silent detour \
+                 off the substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness: the string-owned reverse-projection
+            // axis must agree with the borrowed `&str` reverse-projection
+            // axis on every accepted arm — the two axes share one
+            // `PascalCase` wire vocabulary through the substrate-
+            // primitive `from_wire` accessor, and the owned-input axis
+            // delegates to the borrowed peer by design.
+            let via_owned: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<String>>::try_from(wire_string.clone());
+            let via_borrowed: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<&str>>::try_from(wire_string.as_str());
+            assert_eq!(
+                via_owned, via_borrowed,
+                "TryFrom<String> and TryFrom<&str> reverse-projection \
+                 axes on RestartPolicy must agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 owned-`String` and borrowed-`&str` reverse paths have \
+                 drifted off the same substrate-primitive from_wire \
+                 accessor"
+            );
+            // Cross-axis witness against the paired byte-view and byte-
+            // owned reverse axes — the four reverse paths (str-view
+            // borrowed, string-owned, byte-view borrowed, byte-owned)
+            // share one substrate primitive.
+            let via_bytes_borrowed: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<&[u8]>>::try_from(wire_string.as_bytes());
+            let via_bytes_owned: Result<RestartPolicy, ()> =
+                <RestartPolicy as TryFrom<Vec<u8>>>::try_from(wire_string.as_bytes().to_vec());
+            assert_eq!(
+                via_owned, via_bytes_borrowed,
+                "TryFrom<String> and TryFrom<&[u8]> reverse-projection \
+                 axes on RestartPolicy must agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 string-owned and byte-view reverse paths have drifted \
+                 off the same substrate-primitive from_wire accessor"
+            );
+            assert_eq!(
+                via_owned, via_bytes_owned,
+                "TryFrom<String> and TryFrom<Vec<u8>> reverse-projection \
+                 axes on RestartPolicy must agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 string-owned and byte-owned reverse paths have drifted \
+                 off the same substrate-primitive from_wire accessor"
+            );
+            // Closed-cycle witness against the paired string-owned
+            // forward-projection pair: `Self → String → TryFrom<String>
+            // → Self` round-trips to the originating arm on every
+            // canonical `PascalCase` scalar. Both the owned-input
+            // `From<RestartPolicy> for String` and the borrowed-input
+            // `From<&RestartPolicy> for String` corners must feed back
+            // through the new impl to `Ok(variant)`.
+            let owned_forward: String = <String as From<RestartPolicy>>::from(variant);
+            let borrowed_forward: String = <String as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                owned_forward, wire_string,
+                "From<RestartPolicy> for String forward projection on \
+                 RestartPolicy::{variant:?} must byte-equal \
+                 variant.as_str().to_string() — divergence signals the \
+                 paired forward pair drifted off the substrate-primitive \
+                 as_str accessor"
+            );
+            assert_eq!(
+                borrowed_forward, wire_string,
+                "From<&RestartPolicy> for String forward projection on \
+                 &RestartPolicy::{variant:?} must byte-equal \
+                 variant.as_str().to_string() — divergence signals the \
+                 paired forward pair drifted off the substrate-primitive \
+                 as_str accessor"
+            );
+            assert_eq!(
+                <RestartPolicy as TryFrom<String>>::try_from(owned_forward.clone()),
+                Ok(variant),
+                "Closed-cycle round-trip on RestartPolicy::{variant:?} \
+                 through From<RestartPolicy> for String then \
+                 TryFrom<String> for RestartPolicy must return \
+                 Ok(variant) — divergence signals the string-owned \
+                 forward pair and the string-owned reverse axis have \
+                 drifted apart"
+            );
+            assert_eq!(
+                <RestartPolicy as TryFrom<String>>::try_from(borrowed_forward),
+                Ok(variant),
+                "Closed-cycle round-trip on RestartPolicy::{variant:?} \
+                 through From<&RestartPolicy> for String then \
+                 TryFrom<String> for RestartPolicy must return \
+                 Ok(variant) — divergence signals the borrowed-input \
+                 forward corner and the owned-input string reverse \
+                 corner have drifted apart"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_try_from_owned_string_rejects_unknown_wire_strings() {
+        // Rejection witness on the `impl TryFrom<String> for
+        // RestartPolicy` — sweeps the corpus of valid-UTF-8-but-
+        // unknown-wire byte-strings the sibling borrowed [`TryFrom<&str>`]
+        // axis already rejects and asserts every one lands on `Err(())`,
+        // so a future accidental widening of the trait impl's accept-set
+        // (a case-fold path, a silent inclusion of the kebab-case
+        // dispatcher-catalog byte-strings on the sibling axis that would
+        // collide the two-axis wire/catalog split the sibling
+        // [`RestartPolicy::from_wire`] doc block makes load-bearing, a
+        // stray fallback that maps whitespace-padded canonical scalars
+        // onto their unpadded arm rather than the trait-idiomatic
+        // `Err(())`) trips at caixa-core test time. Peer of the sibling
+        // borrowed-input rejection witness
+        // [`restart_policy_try_from_str_rejects_unknown_byte_strings`]
+        // on the same enum, and the sibling byte-view / byte-owned
+        // rejection witnesses
+        // [`restart_policy_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (d9ef5f0) /
+        // [`restart_policy_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (7592085) on the same enum.
+        let unknown_wire_rejected: &[&str] = &[
+            "",
+            " ",
+            "\n",
+            "\t",
+            "permanent",
+            "temporary",
+            "transient",
+            "PERMANENT",
+            "TEMPORARY",
+            "TRANSIENT",
+            "Permanents",
+            "Permanent ",
+            " Permanent",
+            " Temporary ",
+            "Permanent\n",
+            "Transient\t",
+            "\"Permanent\"",
+            "Ephemeral",
+            "Always",
+            "Never",
+            "OnAbnormalExit",
+            "intrinsic",
+            "?",
+        ];
+        for &input in unknown_wire_rejected {
+            let owned: String = input.to_string();
+            assert_eq!(
+                <RestartPolicy as TryFrom<String>>::try_from(owned),
+                Err(()),
+                "TryFrom<String> impl on RestartPolicy must reject the \
+                 valid-UTF-8-but-unknown-wire byte-string {input:?} with \
+                 Err(()) — silent acceptance signals an accept-set \
+                 widening off the paired RestartPolicy::from_wire \
+                 resolver"
+            );
+            // Cross-axis witness against the borrowed str-view axis:
+            // the two paths must agree by construction, since the owned
+            // axis delegates to the borrowed peer.
+            assert_eq!(
+                <RestartPolicy as TryFrom<String>>::try_from(input.to_string()),
+                <RestartPolicy as TryFrom<&str>>::try_from(input),
+                "TryFrom<String> and TryFrom<&str> reverse-projection \
+                 axes on RestartPolicy must agree on the valid-UTF-8-\
                  but-unknown-wire input {input:?} — divergence signals \
                  the owned-`String` and borrowed-`&str` reverse paths \
                  have drifted off the same substrate-primitive from_wire \
