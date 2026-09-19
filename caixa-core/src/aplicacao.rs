@@ -8751,6 +8751,102 @@ impl TryFrom<&[u8]> for RateLimitUnit {
     }
 }
 
+/// Trait-idiomatic *owned-byte-vec input, `Result<Self, ()>` output*
+/// byte-owned reverse projection on the second M3-mesh-primitive-defining
+/// `:politicas :rate-limit :window` canonical-suffix [`RateLimitUnit`]
+/// closed-set fieldless typed enum on the caixa surface — the owned-input
+/// mirror of the paired [`TryFrom<&[u8]> for RateLimitUnit`] byte-view
+/// reverse-projection axis (294c77d), and the byte-owned reverse companion
+/// of the pre-existing byte-owned *forward* pair
+/// ([`From<RateLimitUnit> for Vec<u8>`], [`From<&RateLimitUnit> for Vec<u8>`])
+/// lifted on this same enum. Routes owned [`Vec<u8>`] input through the
+/// paired borrowed-input [`TryFrom<&[u8]>`] axis via
+/// [`Vec::as_slice`] so every consumer that holds an owned byte-vec —
+/// a future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook
+/// body reader that hands the `spec.politicas.rate-limit :window` suffix
+/// byte-tail off as a [`Vec<u8>`] before UTF-8 validation commits
+/// allocation, a `bytes::Bytes::to_vec()`-shape wire-body composer
+/// walking a prior audit's per-Aplicacao rejection payload back to the
+/// typed enum, a `std::io::Read::read_to_end`-shape audit-log source
+/// whose framing yields an owned byte-vec per per-`:politicas
+/// :rate-limit :window` scalar, an `<T: TryFrom<Vec<u8>>>`-bound generic
+/// loader over any of the substrate's closed-set typed enums — reaches
+/// the same three-arm canonical-suffix accept-set through one trait
+/// dispatch.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-owned reverse-
+/// projection* family — opened on the structurally most fundamental
+/// closed-set fieldless typed-enum peer ([`crate::CaixaKind`], commit
+/// 99c2849), extended onto the second caixa-core-internal peer
+/// ([`crate::CaixaDialeto`], commit 83a1526) and the third
+/// ([`crate::dep::DepList`], commit 42091cb), onto the M2-OTP-shape
+/// supervisor-slot pair ([`crate::supervisor::RestartStrategy`], commit
+/// 34951fe; [`crate::supervisor::RestartPolicy`], commit 7592085), and
+/// onto the first M3-mesh-primitive-defining slot enum
+/// ([`PlacementStrategy`], commit a94ed6a) — onto the second M3-mesh-
+/// primitive-defining closed-set fieldless typed-enum peer, tracking the
+/// "delegate through `TryFrom<&[u8]>` on the `Vec<u8>::as_slice` borrow"
+/// discipline the first-mover established. Every remaining closed-set
+/// fieldless typed-enum peer on the substrate ([`WitShape`],
+/// [`crate::render::PathShapeViolation`], and the outside-`caixa-core`
+/// peers `InvariantKind`, `ArchVerdict`, `Severity`, `FixSafety`,
+/// `Semantic`, `FerriteRuntime`) is a future target of the campaign,
+/// mirroring the trajectory the closed byte-view reverse-projection
+/// family (`TryFrom<&[u8]>`) and the closed byte-owned forward-projection
+/// family (`From<{Self, &Self}> for Vec<u8>`) already walked.
+///
+/// `type Error = ()` matches the sibling [`TryFrom<&[u8]> for
+/// RateLimitUnit`] unit-error shape, preserving the trait-family
+/// consistency across the borrowed-and-owned byte-view reverse-projection
+/// pair. The owned [`Vec<u8>`] input is dropped on the error path (the
+/// standard-library `String::from_utf8` convention of returning the input
+/// in the error deliberately declined — a caller that needs the bytes back
+/// holds a clone before the call, and the closed-set-enum use site rarely
+/// wants the raw bytes back past a "did you mean" diagnostic that operates
+/// on the wire vocabulary rather than the input).
+///
+/// Deliberately routes through the canonical-suffix reverse axis
+/// [`RateLimitUnit::from_suffix`] (via delegation to the paired
+/// [`TryFrom<&[u8]>`] axis), not the second-magnitude
+/// [`RateLimitUnit::from_window`] reverse axis — every closed-set byte-
+/// projection path on the caixa surface lands on the same author-surface-
+/// canonical byte-string the codec's parse and render arms both dispatch
+/// on, while the token-bucket-refill period stays reachable only through
+/// the explicit [`RateLimitUnit::window`] / [`RateLimitUnit::from_window`]
+/// paths.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&[u8]>`] axis
+/// across the three-arm [`RateLimitUnit::ALL`] accept-set on the owned
+/// byte-vec surface, cross-axis witness that the byte-owned reverse
+/// projection agrees with the paired str-view reverse-projection axis
+/// ([`TryFrom<&str>`]) on every accepted arm through the shared
+/// substrate-primitive [`RateLimitUnit::from_suffix`] accessor, and a
+/// four-corner {owned-input, borrowed-input} × {`From<Self>` → `Vec<u8>`,
+/// `From<&Self>` → `Vec<u8>`} round-trip witness available on this enum
+/// because [`RateLimitUnit::as_suffix`] and [`RateLimitUnit::from_suffix`]
+/// share one canonical-suffix byte-vocabulary — unlike the sibling
+/// [`crate::CaixaKind`] which its peer test deliberately declines the
+/// four-corner witness on because the wire/diagnostic split makes the
+/// forward and reverse pairs speak different byte-strings) and
+/// [`tests::rate_limit_unit_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the unknown-suffix
+/// rejection path — the latter includes uppercase / long-form English
+/// rebrand / trajectory-item (`"ms"`, `"d"`, `"week"`) candidates the
+/// paired borrowed-byte-view rejection witness pins, plus a cross-axis
+/// witness that the owned byte-vec reverse-projection axis agrees with
+/// the borrowed byte-slice reverse-projection axis on every rejected
+/// input).
+impl TryFrom<Vec<u8>> for RateLimitUnit {
+    type Error = ();
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&[u8]>>::try_from(bytes.as_slice())
+    }
+}
+
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -36125,6 +36221,253 @@ mod tests {
                      substrate-primitive from_suffix accessor"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_try_from_vec_bytes_routes_through_borrowed_byte_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<Vec<u8>> for RateLimitUnit` — asserts the trait-
+        // idiomatic owned-byte-vec reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&[u8]>`] axis
+        // resolve to the same three-arm canonical-suffix accept-set
+        // across every arm the exhaustive [`super::RateLimitUnit::ALL`]
+        // slice enumerates. Extends the substrate-wide trait-idiomatic
+        // byte-owned reverse-projection axis onto the second M3-mesh-
+        // primitive-defining closed-set fieldless typed-enum peer —
+        // owned-input mirror of the paired [`TryFrom<&[u8]>`] byte-view
+        // reverse-projection axis (294c77d), and byte-owned reverse
+        // companion of the pre-existing byte-owned *forward*-projection
+        // pair ([`From<RateLimitUnit> for Vec<u8>`],
+        // [`From<&RateLimitUnit> for Vec<u8>`]) on this same enum.
+        // Peer of the sibling first-mover
+        // [`crate::kind::tests::caixa_kind_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (99c2849) on the [`crate::CaixaKind`] closed-set typed-enum
+        // peer, the sibling second-mover
+        // [`crate::dialeto::tests::caixa_dialeto_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (83a1526), the sibling third-mover
+        // [`crate::dep::tests::dep_list_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (42091cb), the M2-OTP-shape supervisor-slot pair
+        // [`crate::supervisor::tests::restart_strategy_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (34951fe) /
+        // [`crate::supervisor::tests::restart_policy_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (7592085), and the first-M3-mesh-mover
+        // [`placement_strategy_try_from_vec_bytes_routes_through_borrowed_byte_view_axis`]
+        // (a94ed6a) — tracks the "delegate through `TryFrom<&[u8]>` on
+        // the `Vec<u8>::as_slice` borrow" discipline the first-mover
+        // established.
+        //
+        // Rust's standard library carries no blanket
+        // `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`,
+        // so an owned-byte-vec caller otherwise picks between an open-
+        // coded `<T as TryFrom<&[u8]>>::try_from(bytes.as_slice())` at
+        // every call site whose type bounds have no compile-time link
+        // back to the byte-owned reverse-projection axis, or a
+        // `String::from_utf8(bytes)` two-hop shape whose error surface
+        // leaks the standard-library `FromUtf8Error` type. This impl
+        // closes the byte-owned reverse-projection axis at the
+        // substrate-primitive [`super::RateLimitUnit::from_suffix`]
+        // accessor so every future `<T: TryFrom<Vec<u8>>>`-bound owned-
+        // byte-vec consumer reaches the same three-arm canonical-suffix
+        // accept-set through one trait dispatch.
+        for &variant in super::RateLimitUnit::ALL {
+            let suffix_bytes: Vec<u8> = variant.as_suffix().as_bytes().to_vec();
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(suffix_bytes.clone()),
+                Ok(variant),
+                "TryFrom<Vec<u8>> impl on RateLimitUnit must round-trip \
+                 RateLimitUnit::{variant:?}.as_suffix().as_bytes().to_vec() \
+                 back to Ok(RateLimitUnit::{variant:?}) — divergence \
+                 from the sibling TryFrom<&[u8]> axis signals a silent \
+                 detour off the substrate-primitive from_suffix accessor"
+            );
+            // Cross-axis witness: the owned-byte-vec reverse-projection
+            // axis must agree with the borrowed byte-slice reverse-
+            // projection axis on every accepted arm — the two axes share
+            // one canonical-suffix vocabulary through the substrate-
+            // primitive `from_suffix` accessor, and the owned-input axis
+            // delegates to the borrowed peer by design.
+            let via_owned: Result<super::RateLimitUnit, ()> =
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(suffix_bytes.clone());
+            let via_borrowed: Result<super::RateLimitUnit, ()> =
+                <super::RateLimitUnit as TryFrom<&[u8]>>::try_from(suffix_bytes.as_slice());
+            assert_eq!(
+                via_owned, via_borrowed,
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on RateLimitUnit must agree on \
+                 RateLimitUnit::{variant:?} — divergence signals the \
+                 owned-input and borrowed-input byte-view reverse paths \
+                 have drifted off the same substrate-primitive \
+                 from_suffix accessor"
+            );
+            // Cross-axis witness against the paired str-view reverse
+            // axis ([`TryFrom<&str>`]) — the three reverse paths (str-
+            // view, byte-view borrowed, byte-view owned) share one
+            // substrate primitive.
+            let via_str: Result<super::RateLimitUnit, ()> =
+                <super::RateLimitUnit as TryFrom<&str>>::try_from(variant.as_suffix());
+            assert_eq!(
+                via_owned, via_str,
+                "TryFrom<Vec<u8>> and TryFrom<&str> reverse-projection \
+                 axes on RateLimitUnit must agree on \
+                 RateLimitUnit::{variant:?} — divergence signals the \
+                 byte-owned and str-view reverse paths have drifted off \
+                 the same substrate-primitive from_suffix accessor"
+            );
+            // Four-corner witness: because [`RateLimitUnit`] carries
+            // no wire-vs-diagnostic split (as_suffix and from_suffix
+            // share one canonical-suffix byte-vocabulary — unlike the
+            // sibling [`crate::CaixaKind`] whose peer test deliberately
+            // declines this witness), the byte-owned reverse-projection
+            // axis on this enum *does* round-trip against the paired
+            // byte-owned forward-projection pair. Pin every corner of
+            // the {owned-input, borrowed-input} × {From<Self> → Vec<u8>,
+            // From<&Self> → Vec<u8>} square onto the same Ok(variant)
+            // return so a future accident that drops one corner off the
+            // substrate-primitive accessor trips here.
+            let owned_forward: Vec<u8> = <Vec<u8> as From<super::RateLimitUnit>>::from(variant);
+            let borrowed_forward: Vec<u8> =
+                <Vec<u8> as From<&super::RateLimitUnit>>::from(&variant);
+            assert_eq!(
+                owned_forward, suffix_bytes,
+                "From<RateLimitUnit> for Vec<u8> forward projection \
+                 on RateLimitUnit::{variant:?} must byte-equal \
+                 variant.as_suffix().as_bytes().to_vec() — divergence \
+                 signals the paired forward pair drifted off the \
+                 substrate-primitive as_suffix accessor"
+            );
+            assert_eq!(
+                borrowed_forward, suffix_bytes,
+                "From<&RateLimitUnit> for Vec<u8> forward projection \
+                 on &RateLimitUnit::{variant:?} must byte-equal \
+                 variant.as_suffix().as_bytes().to_vec() — divergence \
+                 signals the paired forward pair drifted off the \
+                 substrate-primitive as_suffix accessor"
+            );
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(owned_forward.clone()),
+                Ok(variant),
+                "Four-corner round-trip on RateLimitUnit::{variant:?} \
+                 through From<RateLimitUnit> for Vec<u8> then \
+                 TryFrom<Vec<u8>> for RateLimitUnit must return \
+                 Ok(variant) — divergence signals the byte-owned \
+                 forward pair and the byte-owned reverse axis have \
+                 drifted apart"
+            );
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(borrowed_forward),
+                Ok(variant),
+                "Four-corner round-trip on RateLimitUnit::{variant:?} \
+                 through From<&RateLimitUnit> for Vec<u8> then \
+                 TryFrom<Vec<u8>> for RateLimitUnit must return \
+                 Ok(variant) — divergence signals the borrowed-input \
+                 forward corner and the owned-input reverse corner \
+                 have drifted apart"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes() {
+        // Rejection witness on the `impl TryFrom<Vec<u8>> for
+        // RateLimitUnit` — sweeps the same two rejection paths the
+        // sibling borrowed `TryFrom<&[u8]>` axis collapses onto the
+        // single unit-error return: the invalid-UTF-8 rejection path
+        // (`std::str::from_utf8` on the underlying byte-slice returns
+        // `Err` before [`super::RateLimitUnit::from_suffix`] runs) and
+        // the valid-UTF-8-but-unknown-suffix rejection path
+        // ([`super::RateLimitUnit::from_suffix`] returns `None` on a
+        // byte-string outside the three-arm canonical-suffix accept-set).
+        // Both must reject so a future accidental widening of the trait
+        // impl's accept-set (a case-fold path, a silent inclusion of the
+        // long-form English rebrand of the canonical suffix like
+        // `"second"` / `"minute"` / `"hour"` that would collide the
+        // one-letter-suffix discipline the sibling
+        // [`super::RateLimitUnit::from_suffix`] carries, a silent
+        // acceptance of the trajectory-item `"ms"` / `"d"` / `"week"`
+        // suffixes the paired byte-view rejection witness pins, a stray
+        // fallback that maps invalid UTF-8 onto a default arm rather
+        // than the trait-idiomatic `Err(())`) trips at caixa-core test
+        // time. Peer of the sibling borrowed-input rejection witness
+        // [`rate_limit_unit_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (294c77d) on the same enum, the first-M3-mesh-mover
+        // [`placement_strategy_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (a94ed6a), the M2-OTP-shape supervisor-slot pair
+        // [`crate::supervisor::tests::restart_strategy_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (34951fe) /
+        // [`crate::supervisor::tests::restart_policy_try_from_vec_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (7592085) rejection witnesses.
+        let non_utf8_rejected: &[&[u8]] = &[
+            &[0xFF],
+            &[0x80],
+            &[0xC3],
+            &[0xFF, 0xFE],
+            &[0xED, 0xA0, 0x80], // UTF-16 surrogate half — rejected by UTF-8
+        ];
+        for &input in non_utf8_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on RateLimitUnit must reject the \
+                 non-UTF-8 byte-sequence {input:?} with Err(()) — silent \
+                 acceptance signals the UTF-8 validation path collapsed \
+                 onto a default arm rather than the trait-idiomatic \
+                 unit-error"
+            );
+            // Cross-axis witness: the owned-input axis must agree with
+            // the borrowed-input axis on every rejected input.
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <super::RateLimitUnit as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on RateLimitUnit must agree on the non-UTF-8 input \
+                 {input:?} — divergence signals the owned-input and \
+                 borrowed-input byte-view reverse paths have drifted off \
+                 the same substrate-primitive from_suffix accessor"
+            );
+        }
+        // Valid-UTF-8-but-unknown-suffix candidates mirror the corpus
+        // the sibling borrowed-input rejection witness
+        // [`rate_limit_unit_try_from_bytes_rejects_unknown_and_non_utf8_bytes`]
+        // (294c77d) already pins on the paired byte-view axis: the
+        // empty byte-string, whitespace-only padding, uppercase rebrand
+        // candidates, long-form English rebrand candidates (`"second"`,
+        // `"minute"`, `"hour"`), trailing/leading-whitespace-padded
+        // canonical suffixes, sub-second and multi-day trajectory-item
+        // candidates (`"ms"`, `"d"`, `"week"`), digits-prefixed shapes
+        // that would collide with the `<n>/<unit>` parent codec, the
+        // quoted-shape (`b"\"s\""`) that would signal a stray serde-
+        // quote survival, and the `?` sentinel.
+        let unknown_suffix_rejected: &[&[u8]] = &[
+            b"", b" ", b"\n", b"\t", b"S", b"M", b"H", b"s ", b" s", b"m ", b" h", b"s\n",
+            b"second", b"minute", b"hour", b"sec", b"min", b"hr", b"d", b"ms", b"ns", b"us",
+            b"week", b"1s", b"1m", b"1h", b"100/s", b"s/", b"?", b"\"s\"",
+        ];
+        for &input in unknown_suffix_rejected {
+            let owned: Vec<u8> = input.to_vec();
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(owned),
+                Err(()),
+                "TryFrom<Vec<u8>> impl on RateLimitUnit must reject the \
+                 valid-UTF-8-but-unknown-suffix byte-string {input:?} \
+                 with Err(()) — silent acceptance signals an accept-set \
+                 widening off the paired RateLimitUnit::from_suffix \
+                 resolver"
+            );
+            // Cross-axis witness against the borrowed byte-view axis:
+            // the two paths must agree by construction, since the owned
+            // axis delegates to the borrowed peer.
+            assert_eq!(
+                <super::RateLimitUnit as TryFrom<Vec<u8>>>::try_from(input.to_vec()),
+                <super::RateLimitUnit as TryFrom<&[u8]>>::try_from(input),
+                "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection \
+                 axes on RateLimitUnit must agree on the valid-UTF-8-\
+                 but-unknown-suffix input {input:?} — divergence signals \
+                 the owned-input and borrowed-input byte-view reverse \
+                 paths have drifted off the same substrate-primitive \
+                 from_suffix accessor"
+            );
         }
     }
 
