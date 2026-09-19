@@ -6715,6 +6715,100 @@ impl TryFrom<Vec<u8>> for RateLimit {
     }
 }
 
+/// Trait-idiomatic *owned-`String` input, owned `RateLimit` output* string-
+/// owned reverse projection on the M3-mesh `:politicas :rate-limit` compound
+/// primitive [`RateLimit`] — the owned-input peer of the paired
+/// [`TryFrom<&str> for RateLimit`] str-view reverse-projection axis (f2cfba2),
+/// closing the str-view reverse-projection *square*
+/// ({owned-input `String`, borrowed-input `&str`} × {owned-output
+/// `RateLimit`, method-named [`FromStr`] dispatch}) on the compound
+/// `{rate, window}` primitive in one lift. Routes byte-for-byte through
+/// [`<Self as TryFrom<&str>>::try_from`] on the [`String::as_str`] borrow so
+/// the owned-input surface reaches the same
+/// [`std::str::FromStr for RateLimit`] resolution chain the borrowed-input
+/// peer already carries — one substrate-primitive accessor, one trait
+/// dispatch, no per-consumer detour.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<String> for T`, so a consumer
+/// that holds an owned [`String`] and needs a typed [`RateLimit`] otherwise
+/// picks between (a) an open-coded
+/// `<RateLimit as TryFrom<&str>>::try_from(s.as_str())` at every call site
+/// (whose type bounds have no compile-time link back to the string-owned
+/// reverse-projection axis), (b) an intermediate `str::parse::<RateLimit>()`
+/// restatement whose method-named [`FromStr`] shape hides the trait-family
+/// consistency the substrate-wide trait-idiomatic axes maintain, or (c) a
+/// `let s: &str = &s; RateLimit::try_from(s)` two-step whose borrow arithmetic
+/// leaks a per-call-site lifetime dance rather than a single trait dispatch.
+/// This impl closes the owned-`String` reverse-projection axis at the
+/// substrate-primitive [`std::fmt::Display for RateLimit`] +
+/// [`std::str::FromStr for RateLimit`] canonical-wire-form pair so every
+/// future `<T: TryFrom<String>>`-bound owned-string consumer — a future
+/// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook body reader
+/// that hands the `spec.politicas.rateLimit` scalar off as an owned
+/// [`String`] rather than a borrowed `&str`, a future `feira app policy`
+/// verb whose `clap`-derived arg surface hands the parser an owned
+/// [`String`] rather than a `&str`, a `serde_yaml::from_str` /
+/// `serde_json::from_str` de-serialize round-trip that hands the composer
+/// an owned [`String`] typed field from a `spec.politicas.rateLimit` scalar,
+/// a per-`:contratos`-edge rate-limit-override overlay resolver reading
+/// an owned [`String`] out of a `ConfigMap` `data.rate-limit` scalar, an
+/// `<T: TryFrom<String>>`-bound generic loader over any of the substrate's
+/// typed-slot primitives — reaches the same canonical `<rate>/<unit>`
+/// accept-set through one trait dispatch.
+///
+/// Opens the substrate-wide trait-idiomatic *string-owned reverse-
+/// projection* family (the borrowed [`TryFrom<&str>`] family already lives
+/// across [`crate::CaixaKind`] / [`crate::CaixaDialeto`] /
+/// [`PlacementStrategy`] / [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`RateLimitUnit`] / [`WitShape`]
+/// / [`crate::dep::DepList`] — the peer owned-input [`TryFrom<String>`]
+/// axis lands here first onto the compound `{rate, window}` primitive
+/// ahead of a sibling extension roster the closed-set fieldless typed-enum
+/// peers will pick up later on the same axis). Tracks the "delegate through
+/// [`TryFrom<&str>`] on the [`String::as_str`] borrow" discipline the
+/// sibling byte-owned peer [`TryFrom<Vec<u8>>`] already established (which
+/// itself delegates through [`TryFrom<&[u8]>`] on the [`Vec::as_slice`]
+/// borrow) — same "single owner, one substrate-primitive dispatch, every
+/// consumer routes through it" shape the byte-owned reverse-projection
+/// square already carries on the byte side.
+///
+/// `type Error = String` matches the paired [`TryFrom<&str> for RateLimit`]
+/// error shape verbatim (which itself matches the paired
+/// [`FromStr::Err`] shape verbatim), preserving the trait-family
+/// consistency across the owned-and-borrowed string-view reverse-projection
+/// pair. The owned [`String`] input is dropped on the error path (the
+/// standard-library `String::from_utf8` convention of returning the input
+/// in the error deliberately declined — a caller that needs the string
+/// back holds a clone before the call, and the compound-primitive use site
+/// rarely wants the raw string back past a "did you mean" diagnostic that
+/// operates on the wire vocabulary rather than the input).
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_try_from_owned_string_routes_through_borrowed_str_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&str>`] axis
+/// across every [`RateLimitUnit::ALL`] arm crossed with a representative
+/// scalar-`rate` sweep on the owned-`String` surface, cross-axis witness
+/// that the string-owned reverse projection agrees with the paired
+/// [`FromStr`] str-view reverse-projection axis on every accepted arm
+/// through the shared substrate-primitive [`Display`] / [`FromStr`]
+/// canonical wire form, and a closed-cycle witness against the paired
+/// string-owned forward-projection pair — `Self → String → TryFrom<String>
+/// → Self` round-trips to the originating value on every canonical shape)
+/// and
+/// [`tests::rate_limit_try_from_owned_string_rejects_non_canonical_shapes`]
+/// (rejection witness against silent accept-set widening — forwards the
+/// paired [`TryFrom<&str>`] diagnostic verbatim so the string-owned and
+/// str-view-borrowed reverse-projection arms produce the same
+/// self-locating wording on every non-canonical rejection shape).
+impl TryFrom<String> for RateLimit {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&str>>::try_from(s.as_str())
+    }
+}
+
 /// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Second`]
 /// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Second`
 /// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
@@ -37002,6 +37096,244 @@ mod tests {
             via_try_from.contains("overflows u32"),
             "u32-overflow diagnostic must name the overflow condition; got \
              {via_try_from:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_try_from_owned_string_routes_through_borrowed_str_view_axis() {
+        // `<T: TryFrom<String, Error = String>>`-bound-consumer witness
+        // helper: a generic owned-`String`-input function accepts a
+        // [`String`] and reaches the substrate primitive through exactly
+        // one trait dispatch. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_owned_string_source<T>(s: String) -> Result<T, String>
+        where
+            T: TryFrom<String, Error = String>,
+        {
+            T::try_from(s)
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<String> for RateLimit` — asserts the trait-
+        // idiomatic owned-`String` reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&str>`] axis
+        // (f2cfba2) resolve to the same [`super::RateLimit`] value on
+        // every canonical `<rate>/<unit>` wire form across every
+        // closed-set [`super::RateLimitUnit::ALL`] arm crossed with a
+        // representative scalar-`rate` sweep. Locks the trait-idiomatic
+        // owned-string axis onto the substrate-primitive borrowed-str-
+        // view axis: any future silent detour that hand-rolled the
+        // whitespace-reject / digit-only / leading-zero / suffix-lookup
+        // gate ladder a second time inside the owned-string trait impl
+        // would split the owned-input surface from every
+        // `<T: TryFrom<&str>>`-bound consumer, and this pin trips at
+        // caixa-core test time.
+        //
+        // Opens the substrate-wide trait-idiomatic string-owned reverse-
+        // projection axis (the borrowed [`TryFrom<&str>`] family already
+        // lives across [`super::CaixaKind`], [`super::CaixaDialeto`],
+        // [`super::PlacementStrategy`], [`super::RestartStrategy`],
+        // [`super::RestartPolicy`], [`super::RateLimitUnit`],
+        // [`super::WitShape`], [`super::DepList`] — the peer owned-input
+        // [`TryFrom<String>`] axis lands here first onto the compound
+        // `{rate, window}` primitive) — same "delegate through
+        // `TryFrom<&str>` on the `String::as_str` borrow" discipline the
+        // sibling byte-owned peer `TryFrom<Vec<u8>>` already established
+        // on the byte side (which itself delegates through
+        // `TryFrom<&[u8]>` on the `Vec::as_slice` borrow).
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                let wire: String = rl.to_string();
+
+                // Trait-idiomatic owned-`String` reverse-projection
+                // dispatch: `<RateLimit as TryFrom<String>>::try_from(wire.clone())`
+                // reaches the substrate primitive through one trait
+                // dispatch and resolves to the originating value.
+                let via_try_from_owned: super::RateLimit =
+                    <super::RateLimit as TryFrom<String>>::try_from(wire.clone()).unwrap_or_else(
+                        |e| {
+                            panic!(
+                                "TryFrom<String> for RateLimit must accept the canonical \
+                                 wire form {wire:?} for RateLimit \
+                                 {{ rate: {rate}, unit: {unit:?} }}: {e}"
+                            )
+                        },
+                    );
+                assert_eq!(
+                    via_try_from_owned, rl,
+                    "TryFrom<String> for RateLimit must resolve the canonical wire \
+                     form {wire:?} to the originating RateLimit \
+                     {{ rate: {rate}, unit: {unit:?} }} — divergence signals the \
+                     string-owned reverse-projection axis has drifted off the paired \
+                     TryFrom<&str> dispatch"
+                );
+
+                // Byte-parity pin: the owned-`String` trait dispatch and
+                // the sibling borrowed-`&str` trait dispatch resolve to
+                // the same value.
+                let via_borrowed_str: super::RateLimit =
+                    <super::RateLimit as TryFrom<&str>>::try_from(wire.as_str())
+                        .expect("borrowed str-view axis must accept every canonical arm");
+                assert_eq!(
+                    via_try_from_owned, via_borrowed_str,
+                    "owned-String and borrowed-&str reverse axes must agree on RateLimit \
+                     {{ rate: {rate}, unit: {unit:?} }} — divergence signals a silent \
+                     detour off the substrate-primitive TryFrom<&str> dispatch"
+                );
+
+                // Cross-axis witness: the owned-`String` trait dispatch
+                // and the method-named [`FromStr::from_str`] dispatch
+                // resolve to the same value through the shared
+                // substrate-primitive [`Display`] / [`FromStr`]
+                // canonical wire form.
+                let via_from_str: super::RateLimit = wire
+                    .parse::<super::RateLimit>()
+                    .expect("FromStr must accept every canonical arm");
+                assert_eq!(
+                    via_try_from_owned, via_from_str,
+                    "owned-String reverse axis and str-view FromStr axis must agree on \
+                     RateLimit {{ rate: {rate}, unit: {unit:?} }} — divergence signals a \
+                     silent widening of one arm's accept-set past the other's"
+                );
+
+                // Closed-cycle witness against the paired
+                // [`From<{Self, &Self} RateLimit> for String`] string-
+                // owned forward-projection axis (5ee33a1): the owned
+                // string the forward arm emits re-parses through the
+                // owned-input trait-idiomatic reverse arm back to the
+                // originating value — closing the
+                // `Self → String → TryFrom<String> → Self` cycle at the
+                // substrate primitive.
+                let owned_forward: String = <String as From<super::RateLimit>>::from(rl);
+                let borrowed_forward: String = <String as From<&super::RateLimit>>::from(&rl);
+                assert_eq!(
+                    <super::RateLimit as TryFrom<String>>::try_from(owned_forward)
+                        .expect("string-owned forward output must round-trip"),
+                    rl,
+                    "Self → String → TryFrom<String> → Self cycle must close on \
+                     RateLimit {{ rate: {rate}, unit: {unit:?} }}"
+                );
+                assert_eq!(
+                    <super::RateLimit as TryFrom<String>>::try_from(borrowed_forward)
+                        .expect("string-owned forward output must round-trip"),
+                    rl,
+                    "&Self → String → TryFrom<String> → Self cycle must close on \
+                     RateLimit {{ rate: {rate}, unit: {unit:?} }}"
+                );
+
+                // `<T: TryFrom<String, Error = String>>`-bound consumer
+                // witness on the owned-string input surface — matches
+                // the shape any future admission-webhook body reader /
+                // `clap`-derived arg parser / `serde` de-serialize
+                // round-trip / per-`:contratos`-edge overlay resolver
+                // that holds a `spec.politicas.rateLimit: String` field
+                // reads through to reach the substrate primitive through
+                // one trait dispatch.
+                let via_generic: super::RateLimit =
+                    generic_owned_string_source::<super::RateLimit>(wire.clone()).unwrap_or_else(
+                        |e| {
+                            panic!(
+                                "generic <T: TryFrom<String, Error = String>>-bound \
+                                 consumer on wire form {wire:?} for RateLimit \
+                                 {{ rate: {rate}, unit: {unit:?} }} must resolve \
+                                 through the substrate primitive: {e}"
+                            )
+                        },
+                    );
+                assert_eq!(
+                    via_generic, rl,
+                    "generic <T: TryFrom<String, Error = String>>-bound consumer on \
+                     RateLimit {{ rate: {rate}, unit: {unit:?} }} must yield the same \
+                     value the direct trait dispatch returns — divergence signals the \
+                     string-owned axis fails to bridge a generic owned-string-input \
+                     trait bound to the substrate primitive"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_try_from_owned_string_rejects_non_canonical_shapes() {
+        // Paired rejection witness for `impl TryFrom<String> for RateLimit`
+        // — asserts the owned-string reverse-projection arm and the
+        // sibling borrowed-`&str` reverse-projection arm produce byte-
+        // identical diagnostics on every non-canonical shape, so a
+        // future silent widening of one arm's accept-set past the other's
+        // is a test-time failure at caixa-core rather than a per-consumer
+        // canonical-form drift far from the substrate primitive. Locks
+        // the string-owned and str-view reverse-projection arms onto the
+        // same accept-set and the same diagnostic shape by construction.
+        //
+        // Every rejected shape is the same set the paired
+        // [`rate_limit_try_from_str_rejects_non_canonical_shapes`] and
+        // [`rate_limit_from_str_rejects_non_canonical_shapes`] pins refuse
+        // — (a) whitespace-carrying, (b) fractional / signed-magnitude,
+        // (c) leading-zero-padded, (d) missing the `/` separator, or (e)
+        // suffix-outside the closed-set [`super::RateLimitUnit`].
+        for bad in [
+            " 100/s", "100/s ", "100 /s", "100/ s", "100 / s", "100/s\n", "\t100/s", "1.5/s",
+            "+100/s", "-1/s", "0100/s", "00/s", "007/h", "100", "abc", "100/d", "100/ms", "100/x",
+            "",
+        ] {
+            let via_try_from_owned = <super::RateLimit as TryFrom<String>>::try_from(
+                bad.to_owned(),
+            )
+            .expect_err(&format!(
+                "TryFrom<String> for RateLimit must reject non-canonical shape {bad:?}"
+            ));
+            let via_borrowed_str = <super::RateLimit as TryFrom<&str>>::try_from(bad).expect_err(
+                &format!("TryFrom<&str> for RateLimit must reject non-canonical shape {bad:?}"),
+            );
+            assert_eq!(
+                via_try_from_owned, via_borrowed_str,
+                "TryFrom<String> for RateLimit's rejection diagnostic must byte-equal \
+                 the paired TryFrom<&str> arm's diagnostic verbatim on {bad:?} — the \
+                 owned-string and borrowed-&str reverse-projection arms must forward \
+                 the same self-locating wording on every non-canonical rejection shape \
+                 by construction"
+            );
+            let via_from_str = bad
+                .parse::<super::RateLimit>()
+                .expect_err(&format!("FromStr for RateLimit must reject {bad:?}"));
+            assert_eq!(
+                via_try_from_owned, via_from_str,
+                "TryFrom<String> for RateLimit's rejection diagnostic must byte-equal \
+                 the paired FromStr arm's diagnostic verbatim on {bad:?} — the \
+                 string-owned reverse-projection arm must forward the same \
+                 self-locating wording every other reverse-projection arm carries"
+            );
+            assert!(
+                !via_try_from_owned.is_empty(),
+                "TryFrom<String> rejection of {bad:?} must carry a non-empty \
+                 diagnostic — the paired TryFrom<&str> arm surfaces this same error \
+                 through `type Error = String`"
+            );
+        }
+
+        // And a value whose magnitude overflows u32 must land on the
+        // digit-only-overflow arm rather than the non-canonical arm —
+        // the diagnostic partitioning between "canonical-form drift"
+        // and "u32 overflow" stays stable on the substrate primitive
+        // through the string-owned trait-idiomatic axis as well.
+        let overflow = "4294967296/s"; // u32::MAX + 1
+        let via_try_from_owned =
+            <super::RateLimit as TryFrom<String>>::try_from(overflow.to_owned()).expect_err(
+                "TryFrom<String> for RateLimit must reject a magnitude that overflows u32 \
+                 with an overflow-shaped diagnostic through the paired TryFrom<&str> arm",
+            );
+        let via_borrowed_str = <super::RateLimit as TryFrom<&str>>::try_from(overflow)
+            .expect_err("TryFrom<&str> for RateLimit must reject a magnitude that overflows u32");
+        assert_eq!(
+            via_try_from_owned, via_borrowed_str,
+            "TryFrom<String> and TryFrom<&str> must produce the same overflow-shaped \
+             diagnostic on {overflow:?} — the two string-view reverse-projection arms \
+             must partition the diagnostic space identically"
+        );
+        assert!(
+            via_try_from_owned.contains("overflows u32"),
+            "u32-overflow diagnostic must name the overflow condition; got \
+             {via_try_from_owned:?}"
         );
     }
 
