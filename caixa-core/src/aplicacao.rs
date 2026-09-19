@@ -1825,6 +1825,93 @@ impl From<&WitShape> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:contratos :wit`
+/// census-label [`WitShape`] closed-set fieldless typed enum — the
+/// single-threaded reference-counted peer of the paired owned-input
+/// [`From<WitShape> for std::sync::Arc<str>`] impl on the sibling
+/// atomically-reference-counted [`std::sync::Arc<str>`] axis. Routes
+/// byte-for-byte through the substrate-primitive [`WitShape::as_str`]
+/// `pub const fn` accessor via [`std::rc::Rc::<str>::from`] on the
+/// returned `&'static str`.
+///
+/// Rust's standard library carries `impl From<&str> for std::rc::Rc<str>`
+/// and `impl From<String> for std::rc::Rc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor a `From<&T>`
+/// blanket), and the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`]
+/// trait tables are disjoint — so a single-threaded caixa-mesh render
+/// pass that shares the `:contratos :wit` census-label byte-string across
+/// intra-render tree nodes through the cheaper non-atomic
+/// [`std::rc::Rc<str>`] refcount (the atomically-reference-counted
+/// [`std::sync::Arc<str>`] return-shape cannot provide within a single-
+/// threaded render pass) reaches the substrate primitive through this
+/// impl and no other.
+///
+/// Extends the trait-idiomatic [`std::rc::Rc<str>`] forward-projection
+/// axis onto the second M3-mesh-primitive-defining slot enum, after
+/// opening on [`PlacementStrategy`] as the first M3-mesh peer and ahead
+/// of [`RateLimitUnit`] which closed the M3-mesh-primitive tier's third
+/// corner. Fills the previously-skipped M3-mesh middle peer so the
+/// [`std::rc::Rc<str>`] forward-projection matrix is complete across
+/// all three M3-mesh-primitive-defining slot enums the caixa-mesh
+/// renderer keys off end-to-end.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_from_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`WitShape::as_str`] across the four-arm
+/// [`WitShape::ALL`] emit-set on the owned-input surface, plus a
+/// blanket-derived [`Into`] shape witness and cross-axis byte-parity
+/// pins against the sibling owned-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` return-shape
+/// axes).
+impl From<WitShape> for std::rc::Rc<str> {
+    fn from(shape: WitShape) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(shape.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M3-mesh-primitive-defining `:contratos :wit`
+/// census-label [`WitShape`] closed-set fieldless typed enum — the
+/// borrowed-input companion to the paired owned-input
+/// [`From<WitShape> for std::rc::Rc<str>`] impl immediately above,
+/// closing the `{Self, &Self}` input-shape corner of the
+/// [`std::rc::Rc<str>`] axis on this enum. Routes byte-for-byte through
+/// the substrate-primitive [`WitShape::as_str`] `pub const fn` accessor
+/// via [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so a
+/// `WitShape::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped pipe
+/// (whose iterator over `&'static [WitShape]` yields `&WitShape` by
+/// construction) reaches the same four `"http"` / `"pubsub"` / `"store"`
+/// / `"capability"` census-label byte-strings the paired owned-input
+/// axis and the sibling `{Self, &Self} × {&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` forward-projection
+/// corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface — without it, the
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe would force a spurious
+/// [`Copy`] deref or a `.copied()` restatement whose type bounds have
+/// no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::wit_shape_from_borrowed_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`WitShape::as_str`] across the four-arm
+/// [`WitShape::ALL`] emit-set on the borrowed-input surface, plus a
+/// blanket-derived [`Into`] shape witness, a cross-axis partition pin
+/// against the paired owned-input [`From<WitShape> for std::rc::Rc<str>`]
+/// and the sibling borrowed-input `{&'static str, String,
+/// Cow<'static, str>, Box<str>, std::sync::Arc<str>}` return-shape
+/// axes, and a `.iter().map(std::rc::Rc::<str>::from)` pipe witness
+/// over [`WitShape::ALL`] that resolves through the borrowed-input axis
+/// without a spurious [`Copy`] deref).
+impl From<&WitShape> for std::rc::Rc<str> {
+    fn from(shape: &WitShape) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(shape.as_str())
+    }
+}
+
 /// Trait-idiomatic byte-view surface on the M3-mesh `:contratos :wit`
 /// pre-projection WIT-shape classifier typed enum.
 ///
@@ -22776,6 +22863,182 @@ mod tests {
              only be reachable through the owned-input \
              `From<WitShape> for std::sync::Arc<str>` axis by first \
              calling `.copied()` on the iterator)"
+        );
+    }
+
+    #[test]
+    fn wit_shape_from_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<WitShape> for std::rc::Rc<str>` — asserts the
+        // owned-input standard-library trait impl and the substrate-
+        // primitive [`super::WitShape::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm emit-set across every arm the
+        // exhaustive [`super::WitShape::ALL`] slice enumerates, and
+        // cross-witnesses against every sibling owned-input `{&'static
+        // str, String, Cow<'static, str>, Box<str>, std::sync::Arc<str>}`
+        // return-shape axis so the six return-shape paths on the owned-
+        // input surface lock together by construction.
+        for &variant in WitShape::ALL {
+            let via_trait: std::rc::Rc<str> = <std::rc::Rc<str> as From<WitShape>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<WitShape> for std::rc::Rc<str> impl must \
+                 round-trip WitShape::{variant:?} to the same inline \
+                 census-label byte-string WitShape::as_str returns"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on WitShape::{variant:?} \
+                 must byte-equal WitShape::as_str on the same input"
+            );
+            let owned_static: &'static str = <&'static str as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<WitShape> for std::rc::Rc<str> and \
+                 From<WitShape> for &'static str must resolve \
+                 identically on WitShape::{variant:?}"
+            );
+            let owned_string: String = <String as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<WitShape> for std::rc::Rc<str> and \
+                 From<WitShape> for String must resolve identically on \
+                 WitShape::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<WitShape> for std::rc::Rc<str> and \
+                 From<WitShape> for Cow<'static, str> must resolve \
+                 identically on WitShape::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<WitShape> for std::rc::Rc<str> and \
+                 From<WitShape> for Box<str> must resolve identically \
+                 on WitShape::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<WitShape> for std::rc::Rc<str> and \
+                 From<WitShape> for std::sync::Arc<str> must resolve \
+                 identically on WitShape::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_borrowed_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&WitShape> for std::rc::Rc<str>` — asserts the
+        // borrowed-input standard-library trait impl and the substrate-
+        // primitive [`super::WitShape::as_str`] `pub const fn` accessor
+        // resolve to the same four-arm emit-set across every arm the
+        // exhaustive [`super::WitShape::ALL`] slice enumerates. Closes
+        // the `{Self, &Self}` input-shape corner of the
+        // [`std::rc::Rc<str>`] axis on this enum, cross-witnesses
+        // against the paired owned-input axis and every sibling
+        // borrowed-input return-shape axis, and locks the
+        // `.iter().map(std::rc::Rc::<str>::from)` pipe over
+        // [`super::WitShape::ALL`] to the substrate-primitive accessor
+        // without a spurious [`Copy`] deref.
+        for &variant in WitShape::ALL {
+            let via_trait: std::rc::Rc<str> = <std::rc::Rc<str> as From<&WitShape>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&WitShape> for std::rc::Rc<str> impl must \
+                 round-trip &WitShape::{variant:?} to the same inline \
+                 census-label byte-string WitShape::as_str returns"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on &WitShape::{variant:?} \
+                 must byte-equal WitShape::as_str on the same input"
+            );
+            let owned_rc: std::rc::Rc<str> = <std::rc::Rc<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&WitShape> for std::rc::Rc<str> and \
+                 From<WitShape> for std::rc::Rc<str> must resolve \
+                 identically on WitShape::{variant:?}"
+            );
+            let borrowed_static: &'static str = <&'static str as From<&WitShape>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&WitShape> for std::rc::Rc<str> and \
+                 From<&WitShape> for &'static str must resolve \
+                 identically on WitShape::{variant:?}"
+            );
+            let borrowed_string: String = <String as From<&WitShape>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&WitShape> for std::rc::Rc<str> and \
+                 From<&WitShape> for String must resolve identically \
+                 on WitShape::{variant:?}"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&WitShape>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&WitShape> for std::rc::Rc<str> and \
+                 From<&WitShape> for Cow<'static, str> must resolve \
+                 identically on WitShape::{variant:?}"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&WitShape>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&WitShape> for std::rc::Rc<str> and \
+                 From<&WitShape> for Box<str> must resolve identically \
+                 on WitShape::{variant:?}"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&WitShape>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&WitShape> for std::rc::Rc<str> and \
+                 From<&WitShape> for std::sync::Arc<str> must resolve \
+                 identically on WitShape::{variant:?}"
+            );
+        }
+        let via_iter: Vec<std::rc::Rc<str>> =
+            WitShape::ALL.iter().map(std::rc::Rc::<str>::from).collect();
+        let via_method: Vec<std::rc::Rc<str>> = WitShape::ALL
+            .iter()
+            .map(|s| std::rc::Rc::<str>::from(s.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over WitShape::ALL \
+             — a call site whose iteration axis holds `&WitShape` by \
+             construction — must byte-equal `.iter().map(|s| \
+             std::rc::Rc::<str>::from(s.as_str()))` on every arm — the \
+             borrowed-input std::rc::Rc<str> `From<&WitShape> for \
+             std::rc::Rc<str>` axis is what makes the \
+             `std::rc::Rc::<str>::from` composition route through the \
+             substrate-primitive `WitShape::as_str` accessor without a \
+             spurious `Copy` deref"
         );
     }
 
