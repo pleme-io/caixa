@@ -6029,6 +6029,206 @@ impl std::fmt::Display for RateLimit {
     }
 }
 
+/// Trait-idiomatic *string-input, standard-library-canonical* reverse
+/// projection on the M3-mesh `:politicas :rate-limit` compound primitive
+/// [`RateLimit`] — the paired counterpart to the sibling
+/// [`std::fmt::Display for RateLimit`] forward-projection axis. Reads the
+/// canonical author-surface wire form `<integer>/<s|m|h>` (MESH-COMPOSITION
+/// §III.2 #3) back into the typed [`RateLimit`] through the
+/// standard-library [`str::parse`] idiom (`s.parse::<RateLimit>()`), routing
+/// the `&str → Duration` window projection through the substrate-primitive
+/// [`RateLimitUnit::window_from_suffix`] closed-set dispatch and the
+/// magnitude through the canonical [`crate::render::reject_whitespace`] /
+/// [`crate::render::is_digit_only_magnitude`] /
+/// [`crate::render::is_leading_zero_padded_magnitude`] typed-magnitude gates
+/// every peer typed-magnitude codec in caixa-core shares.
+///
+/// `type Err = String` matches the wire-form-parse error family the sibling
+/// [`crate::render::deserialize_option_via_str`] adapter's `E: Display`
+/// bound accepts, so the codec's serde-side `deserialize` arm now delegates
+/// through this impl (`s.parse::<RateLimit>()`) rather than through the
+/// pre-lift module-private free helper `rate_limit_codec::parse` — the
+/// substrate primitive (this impl and the paired
+/// [`std::fmt::Display for RateLimit`]) is the single source of truth for
+/// the `:politicas :rate-limit` wire form on both arms, and every consumer
+/// (serde, a future `feira lint` diagnostic that reads a rejected
+/// `:rate-limit` scalar back into its typed shape, a future M4
+/// admission-webhook rejection body that echoes the offending value
+/// through the canonical parse arm, a future per-`:contratos`-edge
+/// rate-limit-override resolver reading an operator overlay from a
+/// per-cluster `ConfigMap` into a typed [`RateLimit`]) reaches through one
+/// substrate-primitive dispatch on the reverse arm just as the codec's
+/// `render` arm now reaches through [`std::fmt::Display for RateLimit`] on
+/// the forward arm. Closes the two-way `String → Self → String` cycle on
+/// the wire-form axis at the substrate primitive rather than at the
+/// codec's module boundary.
+///
+/// Pairs the trait-idiomatic reverse-projection axis the sibling closed-set
+/// typed enum [`RateLimitUnit`] already carries (its
+/// [`std::str::FromStr`] impl routes through
+/// [`RateLimitUnit::from_suffix`]) onto the compound primitive that holds
+/// the `{rate, window}` pair. Same "single owner, one substrate-primitive
+/// dispatch, every consumer routes through it" discipline the peer
+/// [`crate::CaixaKind`] / [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] / [`PlacementStrategy`] /
+/// [`crate::dep::DepList`] paired-primitive `FromStr` axes carry on the
+/// sibling closed-set typed-enum discriminator axes.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_from_str_matches_codec_deserialize_on_every_canonical_shape`]
+/// (byte-parity pin against `rate_limit_codec::deserialize` via a
+/// serialized [`MeshPolicy`] cross-check across every [`RateLimitUnit::ALL`]
+/// arm — asserts the codec now routes through the substrate primitive on
+/// the parse arm), and
+/// [`tests::rate_limit_from_str_round_trips_through_display_on_canonical_shapes`]
+/// (round-trip pin: for every canonical shape, `rl.to_string().parse::<RateLimit>()`
+/// recovers the original value — closes the two-way cycle at the substrate
+/// primitive), and
+/// [`tests::rate_limit_from_str_rejects_non_canonical_shapes`] (rejection
+/// witness against silent accept-set widening on whitespace / non-digit /
+/// leading-zero / unknown-suffix / missing-separator shapes).
+impl std::str::FromStr for RateLimit {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Paired whitespace-rejection arm — same canonical-form
+        // render-determinism discipline as the peer
+        // `limits::parse_byte_size` / `limits::parse_duration` /
+        // `limits::parse_millicores` /
+        // `supervisor::duration_codec::parse` sites: the ASCII byte-scan
+        // closes the WhatWG-conformant whitespace bytes (`0x20`, `0x09`,
+        // `0x0A`, `0x0C`, `0x0D`), the non-ASCII `char::is_whitespace`
+        // scan closes the strictly-complementary Unicode `White_Space`
+        // class (NBSP `\u{00A0}`, LINE SEPARATOR `\u{2028}`, EM-SPACE
+        // `\u{2003}`, and the peer typography codepoints) that
+        // `str::trim` at parse entry silently strips. Either drift class
+        // would round-trip through the paired [`std::fmt::Display for
+        // RateLimit`] arm to a *different* canonical form on next emit —
+        // breaking the THEORY.md Part V render-determinism contract on
+        // `:politicas :rate-limit`.
+        crate::render::reject_whitespace::<String, _, _>(
+            s,
+            |b| {
+                format!(
+                    "rate-limit: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
+                 authoring form for `:politicas :rate-limit` is `<integer>/<s|m|h>` (e.g. \
+                 `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) with no whitespace bytes \
+                 anywhere. A whitespace-carrying shape (`\" 100/s\"`, `\"100/s \"`, \
+                 `\"100 /s\"`, `\"100/ s\"`, `\"100 / s\"`, `\"100/s\\n\"`, `\"\\t100/s\"`) \
+                 round-trips through `render` to a *different* canonical form (`\"100/s\"`) \
+                 on first serialize — breaking the THEORY.md Part V render-determinism \
+                 contract every typed slot carries. Strip every whitespace byte (write \
+                 `\"100/s\"` verbatim)"
+                )
+            },
+            |ch| {
+                format!(
+                    "rate-limit: value {s:?} contains non-ASCII Unicode whitespace character \
+                 {ch:?} (U+{cp:04X}) — the canonical authoring form for `:politicas \
+                 :rate-limit` is `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, \
+                 `\"10000/h\"`) with no whitespace characters anywhere (ASCII or Unicode). \
+                 A non-ASCII-whitespace-carrying shape (`\"\\u{{00A0}}100/s\"`, \
+                 `\"100/s\\u{{2028}}\"`, `\"100\\u{{2003}}/s\"`) survives the ASCII \
+                 byte-scan but `str::trim` (which uses `char::is_whitespace` — the \
+                 Unicode `White_Space` property, strictly wider than the ASCII byte set) \
+                 silently strips it at parse entry, and the value round-trips through \
+                 `render` to a *different* canonical form (`\"100/s\"`) on first \
+                 serialize — breaking the THEORY.md Part V render-determinism contract \
+                 every typed slot carries. Strip every non-ASCII whitespace character \
+                 (write `\"100/s\"` verbatim with only ASCII bytes)",
+                    cp = ch as u32
+                )
+            },
+        )?;
+        let trimmed = s.trim();
+        let (rate_str, unit) = trimmed
+            .split_once('/')
+            .ok_or_else(|| format!("rate-limit must be `<n>/<unit>`, got {trimmed:?}"))?;
+        let rate_trim = rate_str.trim();
+        // Strict canonical form: every byte of the magnitude is an
+        // ASCII digit (no `.`, no `+`, no `-`). On non-digit-only
+        // inputs the gate distinguishes "non-canonical-but-numeric"
+        // (parses as f64 or i64 — surfaced with a self-locating
+        // diagnostic naming the canonical authoring form and the
+        // round-trip drift the rejected shape would produce on first
+        // serialize) from "garbage" (parses as neither — surfaced with
+        // the existing narrower `"not a u32"` wording so its diagnostic
+        // shape remains stable for the parser-shape footgun case).
+        let digit_only = crate::render::is_digit_only_magnitude(rate_trim);
+        if !digit_only {
+            let numeric = rate_trim.parse::<f64>().is_ok() || rate_trim.parse::<i64>().is_ok();
+            if numeric {
+                return Err(format!(
+                    "rate-limit: rate {rate_trim:?} is not a non-negative integer — the \
+                     canonical authoring form for `:politicas :rate-limit` is \
+                     `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) \
+                     with no decimal point and no leading `+` / `-` sign. A fractional / \
+                     signed magnitude (`\"1.5/s\"`, `\"+100/s\"`, `\"-1/s\"`) round-trips \
+                     through `render` to a *different* canonical form (`\"1/s\"`, \
+                     `\"100/s\"`, parser-reject) on first serialize — breaking the \
+                     THEORY.md Part V render-determinism contract every typed slot \
+                     carries. Pick an integer rate that fits the desired window \
+                     (write `\"6000/m\"` instead of `\"1.66/s\"`)"
+                ));
+            }
+            return Err(format!("rate-limit rate {rate_str:?} not a u32"));
+        }
+        // Leading-zero arm — peer with the `"+100/s"` arm above on the
+        // same canonical-form render-determinism axis. The digit-only
+        // gate accepts `"0100/s"`, `"00/s"`, `"007/h"` as
+        // `u32::from_str` parses them losslessly (= 100, 0, 7), but the
+        // paired Display arm emits the leading-zero-stripped form
+        // (`"100/s"`, `"0/s"`, `"7/h"`) — a *different* canonical string
+        // on the next emit, breaking the THEORY.md Part V
+        // render-determinism contract the same way `"+100/s"` did before
+        // the leading-`+` arm landed. The single-byte magnitude `"0"`
+        // itself round-trips losslessly through Display (`"0/s"`) — the
+        // downstream [`AplicacaoError::PolicyRateLimitZero`] gate is what
+        // refuses rate-zero authoring, so `"0/s"` stays in the accepted
+        // set at this parse layer and the diagnostic partitioning
+        // between canonical-form drift (this arm) and semantic-zero
+        // (the downstream gate) remains stable.
+        if crate::render::is_leading_zero_padded_magnitude(rate_trim) {
+            return Err(format!(
+                "rate-limit: rate {rate_trim:?} has a non-canonical leading zero — the \
+                 canonical authoring form for `:politicas :rate-limit` is \
+                 `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) \
+                 with no leading-zero padding on the magnitude. A leading-zero magnitude \
+                 (`\"0100/s\"`, `\"00/s\"`, `\"007/h\"`) round-trips through `render` to \
+                 a *different* canonical form (`\"100/s\"`, `\"0/s\"`, `\"7/h\"`) on \
+                 first serialize — breaking the THEORY.md Part V render-determinism \
+                 contract every typed slot carries. Strip the leading zeros (write \
+                 `\"100/s\"` instead of `\"0100/s\"`)"
+            ));
+        }
+        // The digit-only gate guarantees every byte is `[0-9]`, and the
+        // leading-zero arm above guarantees the magnitude is either the
+        // single byte `"0"` or starts with `[1-9]`, so the only way
+        // `u32::from_str` can fail here is overflow (the magnitude
+        // exceeds `u32::MAX`). Surface that with an overflow-shaped
+        // wording so the diagnostic names the offending magnitude
+        // verbatim rather than collapsing onto the non-canonical arm.
+        let rate: u32 = rate_trim.parse::<u32>().map_err(|_| {
+            format!("rate-limit rate {rate_trim:?} (digit-only magnitude overflows u32)")
+        })?;
+        // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives on
+        // the closed-set typed enum [`RateLimitUnit`]; this parse arm
+        // reads the `&str → Duration` projection through the substrate
+        // primitive [`RateLimitUnit::window_from_suffix`] rather than
+        // through a vestigial module-private free helper. One typed
+        // dispatch on the substrate primitive; the sole production
+        // consumer of the `&str → Duration` axis (this parse arm) now
+        // reaches for exactly one typed method on the closed-set enum,
+        // sibling to the paired Display impl's
+        // [`RateLimit::canonical_unit`] dispatch on the reverse
+        // `Duration → RateLimitUnit` axis.
+        let unit = unit.trim();
+        let window = RateLimitUnit::window_from_suffix(unit)
+            .ok_or_else(|| format!("unknown rate-limit window unit {unit:?}"))?;
+        Ok(RateLimit { rate, window })
+    }
+}
+
 /// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Second`]
 /// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Second`
 /// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
@@ -9013,14 +9213,16 @@ fn validate_entrada_path(path: &str) -> Result<(), AplicacaoError> {
 }
 
 mod rate_limit_codec {
-    // `Duration` is no longer named here — the codec routes through
-    // the substrate primitive [`super::RateLimitUnit::window_from_suffix`]
-    // (parse arm, `&str → Duration`) and [`super::RateLimit::canonical_unit`]
-    // (render arm, `Duration → RateLimitUnit`) typed dispatches that carry
-    // the canonical `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection on the
-    // closed-set enum's arm-table rather than through vestigial free-helper
-    // delegates.
-    use super::{RateLimit, RateLimitUnit};
+    // The codec now routes both wire-form arms through the substrate
+    // primitive [`super::RateLimit`]: the parse arm delegates to
+    // `<super::RateLimit as std::str::FromStr>::from_str` via
+    // `s.parse::<super::RateLimit>()`, and the render arm delegates to
+    // `<super::RateLimit as std::fmt::Display>` via `ToString::to_string`.
+    // The canonical `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives
+    // on the closed-set typed enum [`super::RateLimitUnit`] which those
+    // substrate-primitive impls dispatch on; no free-helper delegate
+    // survives at this codec layer.
+    use super::RateLimit;
     use serde::{Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(v: &Option<RateLimit>, s: S) -> Result<S::Ok, S::Error> {
@@ -9040,210 +9242,24 @@ mod rate_limit_codec {
     }
 
     fn parse(s: &str) -> Result<RateLimit, String> {
-        // Paired whitespace-rejection arm — same canonical-form
-        // render-determinism discipline as the peer
-        // `limits::parse_byte_size` / `limits::parse_duration` /
-        // `limits::parse_millicores` /
-        // `supervisor::duration_codec::parse` sites: the ASCII
-        // byte-scan closes the WhatWG-conformant whitespace bytes
-        // (`0x20`, `0x09`, `0x0A`, `0x0C`, `0x0D`), the non-ASCII
-        // `char::is_whitespace` scan closes the strictly-complementary
-        // Unicode `White_Space` class (NBSP `\u{00A0}`, LINE SEPARATOR
-        // `\u{2028}`, EM-SPACE `\u{2003}`, and the peer typography
-        // codepoints) that `str::trim` at parse entry silently strips.
-        // Either drift class would round-trip through `render` to a
-        // *different* canonical form on next emit — breaking the
-        // THEORY.md Part V render-determinism contract on
-        // `:politicas :rate-limit`.
+        // The wire-form parser lives on the substrate primitive
+        // [`std::str::FromStr for super::RateLimit`] — this arm now
+        // delegates through the standard-library idiom
+        // `s.parse::<RateLimit>()` rather than re-inlining the
+        // whitespace / digit-only / leading-zero / suffix-lookup
+        // gate ladder. Serde-side deserialize and every downstream
+        // caller of `<RateLimit as FromStr>::from_str` / `str::parse`
+        // byte-agree by construction on the same accept-set — a future
+        // detour that split the two arms (a codec arm that accepts one
+        // more shape than the substrate primitive, or vice versa) would
+        // silently break the round-trip against the paired
+        // [`std::fmt::Display for super::RateLimit`] emit path.
         //
-        // Routed through the lifted [`crate::render::reject_whitespace`]
-        // primitive — the substrate-side single-owner paired-arm gate
-        // every typed-magnitude codec in caixa-core shares.
-        crate::render::reject_whitespace::<String, _, _>(
-            s,
-            |b| {
-                format!(
-                    "rate-limit: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
-                 authoring form for `:politicas :rate-limit` is `<integer>/<s|m|h>` (e.g. \
-                 `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) with no whitespace bytes \
-                 anywhere. A whitespace-carrying shape (`\" 100/s\"`, `\"100/s \"`, \
-                 `\"100 /s\"`, `\"100/ s\"`, `\"100 / s\"`, `\"100/s\\n\"`, `\"\\t100/s\"`) \
-                 round-trips through `render` to a *different* canonical form (`\"100/s\"`) \
-                 on first serialize — breaking the THEORY.md Part V render-determinism \
-                 contract every typed slot carries. Strip every whitespace byte (write \
-                 `\"100/s\"` verbatim)"
-                )
-            },
-            |ch| {
-                format!(
-                    "rate-limit: value {s:?} contains non-ASCII Unicode whitespace character \
-                 {ch:?} (U+{cp:04X}) — the canonical authoring form for `:politicas \
-                 :rate-limit` is `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, \
-                 `\"10000/h\"`) with no whitespace characters anywhere (ASCII or Unicode). \
-                 A non-ASCII-whitespace-carrying shape (`\"\\u{{00A0}}100/s\"`, \
-                 `\"100/s\\u{{2028}}\"`, `\"100\\u{{2003}}/s\"`) survives the ASCII \
-                 byte-scan but `str::trim` (which uses `char::is_whitespace` — the \
-                 Unicode `White_Space` property, strictly wider than the ASCII byte set) \
-                 silently strips it at parse entry, and the value round-trips through \
-                 `render` to a *different* canonical form (`\"100/s\"`) on first \
-                 serialize — breaking the THEORY.md Part V render-determinism contract \
-                 every typed slot carries. Strip every non-ASCII whitespace character \
-                 (write `\"100/s\"` verbatim with only ASCII bytes)",
-                    cp = ch as u32
-                )
-            },
-        )?;
-        let s = s.trim();
-        let (rate_str, unit) = s
-            .split_once('/')
-            .ok_or_else(|| format!("rate-limit must be `<n>/<unit>`, got {s:?}"))?;
-        let rate_trim = rate_str.trim();
-        // The canonical authoring form for `:politicas :rate-limit` is
-        // `<integer>/<s|m|h>` — every magnitude [`render`] emits is a
-        // non-negative integer with no decimal point and no leading
-        // sign, so the parser's accepted set must match for
-        // serialize/deserialize to round-trip without canonical-form
-        // drift. Until this gate landed the parser accepted any
-        // `u32::from_str`-shaped magnitude — and current Rust
-        // `u32::from_str` permissively accepts a leading `+` (`"+100"`
-        // → 100), so `"+100/s"` parsed to `RateLimit { 100, 1s }` and
-        // serde silently round-tripped to `"100/s"` on the next emit
-        // (a *different* canonical string) — breaking the THEORY.md
-        // Part V render-determinism contract on the fifth typed-codec
-        // surface in caixa-core (peer with the four duration codecs the
-        // 1c55a2a / 818dd38 / d1fd67b / 737a676 / d53c922 trajectory
-        // already covered: `supervisor::duration_codec` backing three
-        // typed-duration slots, `limits::parse_duration` backing
-        // `:limits :wall-clock`, `limits::parse_byte_size` backing
-        // `:limits :memory`). The fractional / decimal-shaped sibling
-        // (`"1.5/s"`, `"1.0/s"`, `"0.5/m"`) lands on `u32::from_str`'s
-        // existing rejection arm, but the diagnostic is value-laundered
-        // (the bare `"rate-limit rate \"1.5\" not a u32"` wording
-        // doesn't name the canonical-form remediation or the round-trip
-        // drift the next emit would produce); this gate lifts the
-        // fractional arm onto the same canonical-form diagnostic the
-        // peer codecs carry.
-        //
-        // Strict canonical form: every byte of the magnitude is an
-        // ASCII digit (no `.`, no `+`, no `-`). On non-digit-only
-        // inputs the gate distinguishes "non-canonical-but-numeric"
-        // (parses as f64 or i64 — surfaced with a self-locating
-        // diagnostic naming the canonical authoring form and the
-        // round-trip drift the rejected shape would produce on first
-        // serialize) from "garbage" (parses as neither — surfaced with
-        // the existing narrower `"not a u32"` wording so its
-        // diagnostic shape remains stable for the parser-shape footgun
-        // case).
-        //
-        // Routed through the lifted
-        // [`crate::render::is_digit_only_magnitude`] predicate — the
-        // same source of truth the four peer typed-magnitude codec
-        // sites share.
-        let digit_only = crate::render::is_digit_only_magnitude(rate_trim);
-        if !digit_only {
-            let numeric = rate_trim.parse::<f64>().is_ok() || rate_trim.parse::<i64>().is_ok();
-            if numeric {
-                return Err(format!(
-                    "rate-limit: rate {rate_trim:?} is not a non-negative integer — the \
-                     canonical authoring form for `:politicas :rate-limit` is \
-                     `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) \
-                     with no decimal point and no leading `+` / `-` sign. A fractional / \
-                     signed magnitude (`\"1.5/s\"`, `\"+100/s\"`, `\"-1/s\"`) round-trips \
-                     through `render` to a *different* canonical form (`\"1/s\"`, \
-                     `\"100/s\"`, parser-reject) on first serialize — breaking the \
-                     THEORY.md Part V render-determinism contract every typed slot \
-                     carries. Pick an integer rate that fits the desired window \
-                     (write `\"6000/m\"` instead of `\"1.66/s\"`)"
-                ));
-            }
-            return Err(format!("rate-limit rate {rate_str:?} not a u32"));
-        }
-        // Leading-zero arm — peer with the prior `"+100/s"` arm above
-        // (4eeae98's predecessor) on the same canonical-form
-        // render-determinism axis. The digit-only gate accepts
-        // `"0100/s"`, `"00/s"`, `"007/h"` as `u32::from_str` parses
-        // them losslessly (= 100, 0, 7), but `render` emits the
-        // leading-zero-stripped form (`"100/s"`, `"0/s"`, `"7/h"`) —
-        // a *different* canonical string on the next emit, breaking
-        // the THEORY.md Part V render-determinism contract the same
-        // way `"+100/s"` did before the leading-`+` arm landed. The
-        // single-byte magnitude `"0"` itself round-trips losslessly
-        // through `render` (`render(0)` emits `"0/s"`) — the
-        // downstream [`AplicacaoError::PolicyRateLimitZero`] gate is
-        // what refuses rate-zero authoring, so `"0/s"` stays in the
-        // accepted set at this codec layer and the diagnostic
-        // partitioning between canonical-form drift (this arm) and
-        // semantic-zero (the downstream gate) remains stable.
-        // Peer with the future leading-zero arms on the three peer
-        // typed-magnitude codecs the trajectory acknowledges:
-        // `supervisor::duration_codec`, `limits::parse_duration`,
-        // `limits::parse_byte_size` — each carries the same
-        // canonical-form-drift class today; this gate lands the
-        // discipline on the fourth typed-magnitude codec in
-        // caixa-core first because the peer `"+100/s"` arm above is
-        // the closest predecessor on the trajectory.
-        //
-        // Routed through the lifted
-        // [`crate::render::is_leading_zero_padded_magnitude`]
-        // predicate — the same source of truth the four peer
-        // typed-magnitude codec sites share.
-        if crate::render::is_leading_zero_padded_magnitude(rate_trim) {
-            return Err(format!(
-                "rate-limit: rate {rate_trim:?} has a non-canonical leading zero — the \
-                 canonical authoring form for `:politicas :rate-limit` is \
-                 `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) \
-                 with no leading-zero padding on the magnitude. A leading-zero magnitude \
-                 (`\"0100/s\"`, `\"00/s\"`, `\"007/h\"`) round-trips through `render` to \
-                 a *different* canonical form (`\"100/s\"`, `\"0/s\"`, `\"7/h\"`) on \
-                 first serialize — breaking the THEORY.md Part V render-determinism \
-                 contract every typed slot carries. Strip the leading zeros (write \
-                 `\"100/s\"` instead of `\"0100/s\"`)"
-            ));
-        }
-        // The digit-only gate guarantees every byte is `[0-9]`, and
-        // the leading-zero arm above guarantees the magnitude is
-        // either the single byte `"0"` or starts with `[1-9]`, so
-        // the only way `u32::from_str` can fail here is overflow
-        // (the magnitude exceeds `u32::MAX`). Surface that with an
-        // overflow-shaped wording so the diagnostic names the
-        // offending magnitude verbatim rather than collapsing onto
-        // the non-canonical arm. Same shape
-        // `supervisor::duration_codec` (1c55a2a) carries on the peer
-        // duration-codec axis.
-        let rate: u32 = rate_trim.parse::<u32>().map_err(|_| {
-            format!("rate-limit rate {rate_trim:?} (digit-only magnitude overflows u32)")
-        })?;
-        // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives on
-        // the closed-set typed enum [`super::RateLimitUnit`]; this parse
-        // arm reads the `&str → Duration` projection through the
-        // substrate primitive [`super::RateLimitUnit::window_from_suffix`]
-        // (a two-step typed dispatch composing [`super::RateLimitUnit::from_suffix`]
-        // with [`super::RateLimitUnit::window`]) rather than the vestigial
-        // module-private `rate_limit_window_from_unit` free helper the
-        // predecessor 61421a6 left as the last unlifted delegate on this
-        // axis. One typed dispatch on the substrate primitive instead of
-        // one runtime call through the free-helper delegate; the sole
-        // production consumer of the `&str → Duration` axis (this parse
-        // arm) now reaches for exactly one typed method on the closed-set
-        // enum, sibling to the codec's render arm's
-        // [`super::RateLimit::canonical_unit`] dispatch on the paired
-        // `Duration → RateLimitUnit` axis and to the validate gate's
-        // [`super::RateLimit::canonical_unit`] shape-probe on the
-        // canonical-window axis. A future rate-limit-unit addition (a
-        // `"d"` day suffix once Envoy's `rate_limit_action` grows
-        // daily-bucket support, a `"ms"` sub-second window once
-        // high-throughput per-edge policies come into scope per
-        // MESH-COMPOSITION §III.2 #3) is one variant + one arm per method
-        // on the closed-set enum, and the compiler enforces exhaustiveness
-        // on every consumer's `match self` arms — this parse arm's
-        // accepted-suffix set, the render arm's emitted-suffix set, the
-        // validate gate's canonical-window set, and every future
-        // per-`:contratos`-edge rate-limit-override overlay all pick it up
-        // by construction.
-        let unit = unit.trim();
-        let window = RateLimitUnit::window_from_suffix(unit)
-            .ok_or_else(|| format!("unknown rate-limit window unit {unit:?}"))?;
-        Ok(RateLimit { rate, window })
+        // Symmetric with the paired [`render`] arm's delegation to the
+        // Display impl via [`ToString::to_string`] — both arms of the
+        // wire form now flow through the substrate primitive rather
+        // than through a codec-private free helper.
+        s.parse::<RateLimit>()
     }
 
     fn render(rl: RateLimit) -> String {
@@ -35411,6 +35427,159 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn rate_limit_from_str_matches_codec_deserialize_on_every_canonical_shape() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl std::str::FromStr for RateLimit` — asserts the
+        // standard-library trait impl and the codec-private
+        // `rate_limit_codec::parse` (via `deserialize`) resolve to the
+        // same [`super::RateLimit`] value per canonical wire-form input
+        // across every closed-set [`super::RateLimitUnit::ALL`] arm.
+        // Locks the codec's parse arm's delegation onto the
+        // substrate-primitive `FromStr` impl: any future silent detour
+        // that hand-rolls the whitespace-reject / digit-only /
+        // leading-zero / suffix-lookup gate ladder a second time inside
+        // the codec would split the serde-side deserialize path's
+        // accept-set from every `s.parse::<RateLimit>()` downstream
+        // consumer's, and this pin trips at caixa-core test time.
+        //
+        // Sibling to the paired
+        // [`rate_limit_display_matches_codec_render_on_every_canonical_window`]
+        // pin on the forward arm — extends the same "substrate primitive
+        // is single source of truth, codec delegates" discipline onto the
+        // reverse `String → Self` arm, closing the two-way cycle at the
+        // substrate primitive.
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let expected = super::RateLimit::from_canonical(rate, *unit);
+                let wire = format!("{rate}/{}", unit.as_suffix());
+                let via_from_str: super::RateLimit = wire.parse().unwrap_or_else(|e: String| {
+                    panic!("FromStr must accept canonical wire form {wire:?}: {e}")
+                });
+                assert_eq!(
+                    via_from_str, expected,
+                    "FromStr must parse {wire:?} to RateLimit {{ rate: {rate}, \
+                     unit: {unit:?} }}"
+                );
+                let json = format!("{{\"rateLimit\":\"{wire}\"}}");
+                let via_codec: MeshPolicy = serde_json::from_str(&json).unwrap();
+                assert_eq!(
+                    via_codec.rate_limit,
+                    Some(expected),
+                    "codec deserialize must byte-agree with FromStr on canonical \
+                     wire form {wire:?} — the codec's parse arm now delegates \
+                     through <RateLimit as FromStr>::from_str"
+                );
+                assert_eq!(
+                    via_codec.rate_limit,
+                    Some(via_from_str),
+                    "codec deserialize and FromStr must resolve {wire:?} to the \
+                     same RateLimit value — a future detour that split the two \
+                     paths (a codec arm that widened its accept-set past FromStr, \
+                     or vice versa) trips this pin"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_from_str_round_trips_through_display_on_canonical_shapes() {
+        // Round-trip pin on the lifted `impl std::str::FromStr for
+        // RateLimit`: for every canonical shape (every
+        // [`super::RateLimitUnit::ALL`] arm crossed with a
+        // representative scalar-`rate` sweep), the two-way
+        // `Self → String → Self` cycle through the paired
+        // [`std::fmt::Display for super::RateLimit`] (forward arm) and
+        // this `FromStr` (reverse arm) recovers the same
+        // [`super::RateLimit`] value. Closes the two-way wire-form
+        // cycle on the substrate primitive itself, without routing
+        // through the codec — the Display/FromStr pair is the
+        // standard-library idiom every non-serde consumer reaches for
+        // (`format!("{rl}")` on the emit side, `s.parse::<RateLimit>()`
+        // on the parse side), and this pin locks the two arms agree on
+        // the same canonical form.
+        //
+        // Sibling to the paired
+        // [`rate_limit_display_round_trips_through_codec_parse_on_canonical_shapes`]
+        // pin — that pin closes the cycle through the codec's
+        // deserialize arm (which now delegates through this FromStr);
+        // this pin closes the cycle through FromStr directly, so a
+        // future edit that split the codec's delegation from the
+        // substrate primitive's `FromStr::from_str` would trip either
+        // this pin (if the codec still routes correctly) or the sibling
+        // (if it does not).
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                let wire = rl.to_string();
+                let round_trip: super::RateLimit = wire.parse().unwrap_or_else(|e: String| {
+                    panic!(
+                        "Display output {wire:?} must re-parse through FromStr — \
+                         the canonical form the emit arm produces is by definition \
+                         an accepted input of the parse arm: {e}"
+                    )
+                });
+                assert_eq!(
+                    round_trip, rl,
+                    "RateLimit {{ rate: {rate}, unit: {unit:?} }} must round-trip \
+                     Self → Display → FromStr → Self at the substrate primitive"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_from_str_rejects_non_canonical_shapes() {
+        // Rejection witness on the lifted `impl std::str::FromStr for
+        // RateLimit` — asserts the substrate primitive's `FromStr`
+        // impl rejects the same non-canonical wire forms the codec's
+        // `deserialize` arm previously rejected inline, so a future
+        // silent widening of the accept-set on either side is a test-
+        // time failure at caixa-core rather than a per-consumer
+        // canonical-form drift far from the substrate primitive.
+        //
+        // Every rejected shape is either: (a) whitespace-carrying
+        // (round-trips through Display to a different canonical
+        // form), (b) fractional / signed-magnitude (same class), (c)
+        // leading-zero-padded, (d) missing the `/` separator, or (e)
+        // suffix-outside the closed-set [`super::RateLimitUnit`].
+        // Pairs with the paired forward-arm pins:
+        // any shape rejected here must not appear as a Display output
+        // — otherwise the round-trip breaks.
+        for bad in [
+            " 100/s", "100/s ", "100 /s", "100/ s", "100 / s", "100/s\n", "\t100/s",
+            // Fractional / signed magnitude
+            "1.5/s", "+100/s", "-1/s", // Leading-zero-padded
+            "0100/s", "00/s", "007/h", // Missing separator
+            "100", "abc", // Unknown suffix
+            "100/d", "100/ms", "100/x", // Empty
+            "",
+        ] {
+            let err = bad
+                .parse::<super::RateLimit>()
+                .expect_err(&format!("FromStr must reject non-canonical shape {bad:?}"));
+            assert!(
+                !err.is_empty(),
+                "FromStr rejection of {bad:?} must carry a non-empty diagnostic — \
+                 the codec's deserialize arm now surfaces this same error through \
+                 serde::de::Error::custom"
+            );
+        }
+        // And a value whose magnitude overflows u32 must land on the
+        // digit-only-overflow arm rather than the non-canonical arm —
+        // the diagnostic partitioning between "canonical-form drift"
+        // and "u32 overflow" stays stable on the substrate primitive.
+        let overflow = "4294967296/s"; // u32::MAX + 1
+        let err = overflow.parse::<super::RateLimit>().expect_err(
+            "FromStr must reject a magnitude that overflows u32 with an \
+             overflow-shaped diagnostic",
+        );
+        assert!(
+            err.contains("overflows u32"),
+            "u32-overflow diagnostic must name the overflow condition; got {err:?}"
+        );
     }
 
     #[test]
