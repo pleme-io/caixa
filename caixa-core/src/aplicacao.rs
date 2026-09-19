@@ -6426,6 +6426,100 @@ impl TryFrom<&[u8]> for RateLimit {
     }
 }
 
+/// Trait-idiomatic *owned byte-vec input, owned `RateLimit` output* byte-owned
+/// reverse projection on the M3-mesh `:politicas :rate-limit` compound
+/// primitive [`RateLimit`] — the owned-input peer of
+/// [`TryFrom<&[u8]> for RateLimit`] (83f2d73), closing the byte-view reverse-
+/// projection *square* ({owned-input, borrowed-input} × {owned-output
+/// byte-vec, borrowed-output byte-slice}) on the compound `{rate, window}`
+/// primitive in one lift. Routes byte-for-byte through
+/// [`<Self as TryFrom<&[u8]>>::try_from`] on the [`Vec<u8>::as_slice`] borrow
+/// so the owned-input surface reaches the same [`std::str::from_utf8`] +
+/// [`std::str::FromStr for RateLimit`] resolution chain the borrowed-input
+/// peer already carries — one substrate-primitive accessor, one trait
+/// dispatch, no per-consumer detour.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a [u8]>> TryFrom<Vec<u8>> for T`, so a consumer
+/// that holds an owned [`Vec<u8>`] and needs a typed [`RateLimit`] otherwise
+/// picks between (a) an open-coded
+/// `<RateLimit as TryFrom<&[u8]>>::try_from(bytes.as_slice())` at every call
+/// site (whose type bounds have no compile-time link back to the byte-owned
+/// reverse-projection axis), (b) a `String::from_utf8(bytes)` +
+/// `str::parse::<RateLimit>()` two-hop composition whose error surface leaks
+/// the standard-library [`std::string::FromUtf8Error`] (widening the sibling
+/// [`TryFrom<&[u8]>`] axis's `String` diagnostic) and silently allocates a
+/// [`String`] on inputs that will never make it past the wire vocabulary, or
+/// (c) an intermediate
+/// `<RateLimit as TryFrom<&str>>::try_from(std::str::from_utf8(&bytes)?)`
+/// three-hop shape. This impl closes the owned-byte-vec reverse-projection
+/// axis at the substrate-primitive [`std::fmt::Display for RateLimit`] +
+/// [`std::str::FromStr for RateLimit`] canonical-wire-form pair so every
+/// future `<T: TryFrom<Vec<u8>>>`-bound owned-byte-vec consumer — a future
+/// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook body reader
+/// that hands the `spec.politicas.rateLimit` byte-tail off as a [`Vec<u8>`]
+/// before UTF-8 validation commits allocation, a `bytes::Bytes::to_vec()`-
+/// shape wire-body composer walking a prior audit's per-`:contratos`-edge
+/// rejection payload back to the typed compound primitive, a
+/// `std::io::Read::read_to_end`-shape audit-log source whose framing yields
+/// an owned byte-vec per per-policy scalar, an
+/// `<T: TryFrom<Vec<u8>>>`-bound generic loader over any of the substrate's
+/// closed-set typed primitives — reaches the same canonical `<rate>/<unit>`
+/// accept-set through one trait dispatch.
+///
+/// Extends the substrate-wide trait-idiomatic *byte-owned reverse-projection*
+/// family — opened on the structurally most fundamental closed-set fieldless
+/// typed enum peer ([`crate::CaixaKind`], commit 99c2849), extended onto the
+/// second caixa-core-internal peer ([`crate::CaixaDialeto`], commit 83a1526),
+/// the third ([`crate::dep::DepList`], commit 42091cb), and closed on the
+/// M2-OTP-shape supervisor-slot pair
+/// ([`crate::supervisor::RestartStrategy`], commit 34951fe;
+/// [`crate::supervisor::RestartPolicy`], commit 7592085) — onto the first
+/// caixa-core compound `{rate, window}` primitive (the peer `TryFrom<Vec<u8>>`
+/// impls on the sibling fieldless typed-enum peers all resolve against a
+/// closed `PascalCase` or lowercase-label wire accept-set, not a compound
+/// numeric-plus-suffix wire form). Tracks the "delegate through
+/// `TryFrom<&[u8]>` on the `Vec<u8>::as_slice` borrow" discipline the
+/// first-mover established.
+///
+/// `type Error = String` matches the sibling [`TryFrom<&[u8]> for RateLimit`]
+/// error shape, preserving the trait-family consistency across the
+/// borrowed-and-owned byte-view reverse-projection pair. The owned
+/// [`Vec<u8>`] input is dropped on the error path (the standard-library
+/// `String::from_utf8` convention of returning the input in the error
+/// deliberately declined — a caller that needs the bytes back holds a clone
+/// before the call, and the compound-primitive use site rarely wants the raw
+/// bytes back past a "did you mean" diagnostic that operates on the wire
+/// vocabulary rather than the input).
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_try_from_owned_bytes_routes_through_borrowed_byte_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&[u8]>`] axis
+/// across every [`RateLimitUnit::ALL`] arm crossed with a representative
+/// scalar-`rate` sweep on the owned byte-vec surface, cross-axis witness
+/// that the byte-owned reverse projection agrees with the paired str-view
+/// reverse-projection axis ([`FromStr`]) on every accepted arm through the
+/// shared substrate-primitive [`Display`] / [`FromStr`] canonical wire form,
+/// and a closed-cycle witness against the paired byte-owned forward-
+/// projection pair — `Self → Vec<u8> → TryFrom<Vec<u8>> → Self` round-trips
+/// to the originating value on every canonical shape) and
+/// [`tests::rate_limit_try_from_owned_bytes_rejects_non_utf8_and_non_canonical_shapes`]
+/// (rejection witness against silent accept-set widening on both the
+/// non-UTF-8 byte-sequence rejection path and the canonical-form-invalid
+/// rejection path — the latter forwards the paired [`FromStr::Err`]
+/// diagnostic verbatim so the byte-owned, byte-view-borrowed, and str-view
+/// reverse-projection arms produce the same self-locating wording on every
+/// non-UTF-8-related rejection shape, plus a cross-axis witness that the
+/// owned byte-vec reverse-projection axis agrees with the borrowed byte-
+/// slice reverse-projection axis on every rejected input).
+impl TryFrom<Vec<u8>> for RateLimit {
+    type Error = String;
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&[u8]>>::try_from(bytes.as_slice())
+    }
+}
+
 /// Canonical author-surface suffix byte-string for the [`RateLimitUnit::Second`]
 /// arm — the paired output of [`RateLimitUnit::as_suffix`] on the `Second`
 /// variant, and the accepted input of [`RateLimitUnit::from_suffix`] on the
@@ -36150,6 +36244,205 @@ mod tests {
              byte-equal the paired FromStr arm's diagnostic verbatim — the \
              byte-view reverse axis must forward the str-view diagnostic on \
              every non-UTF-8-related rejection shape"
+        );
+    }
+
+    /// Byte-parity witness helper for the newly lifted
+    /// `impl TryFrom<Vec<u8>> for RateLimit` per-`(unit, rate)` arm —
+    /// factored out of the per-arm body so the driving test stays under
+    /// `clippy::too_many_lines` while the four cross-axis witnesses (owned
+    /// vs. borrowed byte-view, owned vs. str-view [`FromStr`], the paired
+    /// byte-owned forward-projection round-trip pair, and a generic
+    /// `<T: TryFrom<Vec<u8>, Error = String>>`-bound consumer) share one
+    /// call site per arm. Every witness resolves against the shared
+    /// substrate-primitive [`super::RateLimit`] [`Display`] + [`FromStr`]
+    /// canonical wire form.
+    fn assert_rate_limit_owned_bytes_reverse_axis_on_arm(
+        rl: super::RateLimit,
+        rate: u32,
+        unit: super::RateLimitUnit,
+    ) {
+        fn generic_owned_bytes_source<T>(bytes: Vec<u8>) -> Result<T, String>
+        where
+            T: TryFrom<Vec<u8>, Error = String>,
+        {
+            T::try_from(bytes)
+        }
+        let wire_bytes: Vec<u8> = rl.to_string().into_bytes();
+        let via_try_from_owned: super::RateLimit =
+            <super::RateLimit as TryFrom<Vec<u8>>>::try_from(wire_bytes.clone()).unwrap_or_else(
+                |e| {
+                    panic!(
+                        "TryFrom<Vec<u8>> for RateLimit must accept the canonical \
+                         wire byte-string {wire_bytes:?} for RateLimit \
+                         {{ rate: {rate}, unit: {unit:?} }}: {e}"
+                    )
+                },
+            );
+        assert_eq!(
+            via_try_from_owned, rl,
+            "TryFrom<Vec<u8>> for RateLimit must resolve the canonical wire \
+             byte-string {wire_bytes:?} to RateLimit {{ rate: {rate}, unit: {unit:?} }}"
+        );
+        let via_borrowed: super::RateLimit =
+            <super::RateLimit as TryFrom<&[u8]>>::try_from(wire_bytes.as_slice())
+                .expect("borrowed byte-view axis must accept every canonical arm");
+        assert_eq!(
+            via_try_from_owned, via_borrowed,
+            "owned and borrowed byte-view reverse axes must agree on RateLimit \
+             {{ rate: {rate}, unit: {unit:?} }}"
+        );
+        let via_from_str: super::RateLimit = rl
+            .to_string()
+            .parse::<super::RateLimit>()
+            .expect("FromStr must accept every canonical arm");
+        assert_eq!(
+            via_try_from_owned, via_from_str,
+            "owned byte-view and str-view reverse axes must agree on RateLimit \
+             {{ rate: {rate}, unit: {unit:?} }}"
+        );
+        let owned_forward: Vec<u8> = <Vec<u8> as From<super::RateLimit>>::from(rl);
+        let borrowed_forward: Vec<u8> = <Vec<u8> as From<&super::RateLimit>>::from(&rl);
+        assert_eq!(
+            <super::RateLimit as TryFrom<Vec<u8>>>::try_from(owned_forward)
+                .expect("byte-owned forward output must round-trip"),
+            rl,
+            "Self → Vec<u8> → TryFrom<Vec<u8>> → Self cycle must close on \
+             RateLimit {{ rate: {rate}, unit: {unit:?} }}"
+        );
+        assert_eq!(
+            <super::RateLimit as TryFrom<Vec<u8>>>::try_from(borrowed_forward)
+                .expect("byte-owned forward output must round-trip"),
+            rl,
+            "&Self → Vec<u8> → TryFrom<Vec<u8>> → Self cycle must close on \
+             RateLimit {{ rate: {rate}, unit: {unit:?} }}"
+        );
+        let via_generic: super::RateLimit =
+            generic_owned_bytes_source::<super::RateLimit>(wire_bytes).unwrap_or_else(|e| {
+                panic!(
+                    "generic <T: TryFrom<Vec<u8>, Error = String>>-bound consumer must \
+                     resolve RateLimit {{ rate: {rate}, unit: {unit:?} }}: {e}"
+                )
+            });
+        assert_eq!(
+            via_generic, rl,
+            "generic owned-byte-vec consumer must yield the same value as the direct \
+             trait dispatch on RateLimit {{ rate: {rate}, unit: {unit:?} }}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_try_from_owned_bytes_routes_through_borrowed_byte_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<Vec<u8>> for RateLimit` — asserts the trait-
+        // idiomatic owned-byte-vec reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&[u8]>`] axis
+        // (83f2d73) resolve to the same [`super::RateLimit`] value on
+        // every canonical `<rate>/<unit>` wire byte-string across every
+        // closed-set [`super::RateLimitUnit::ALL`] arm crossed with a
+        // representative scalar-`rate` sweep. Every witness runs through
+        // the module-level helper
+        // [`assert_rate_limit_owned_bytes_reverse_axis_on_arm`] so the
+        // four cross-axis witnesses (owned-vs-borrowed byte-view, owned-
+        // vs-str-view [`FromStr`], the paired byte-owned forward-
+        // projection round-trip pair, and a generic
+        // `<T: TryFrom<Vec<u8>, Error = String>>`-bound consumer) share
+        // one call site per arm.
+        //
+        // Extends the substrate-wide trait-idiomatic byte-owned reverse-
+        // projection family — opened on [`crate::CaixaKind`] (99c2849),
+        // [`crate::CaixaDialeto`] (83a1526), [`crate::dep::DepList`]
+        // (42091cb), and closed on the M2-OTP-shape supervisor-slot pair
+        // ([`crate::supervisor::RestartStrategy`], 34951fe;
+        // [`crate::supervisor::RestartPolicy`], 7592085) — onto the first
+        // caixa-core compound `{rate, window}` primitive.
+        for unit in super::RateLimitUnit::ALL {
+            for rate in [1u32, 100, u32::MAX] {
+                let rl = super::RateLimit::from_canonical(rate, *unit);
+                assert_rate_limit_owned_bytes_reverse_axis_on_arm(rl, rate, *unit);
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_try_from_owned_bytes_rejects_non_utf8_and_non_canonical_shapes() {
+        // Paired rejection witness for `impl TryFrom<Vec<u8>> for
+        // RateLimit` — partitions the two rejection paths (UTF-8-invalid
+        // and canonical-form-invalid) that the byte-view reverse-
+        // projection axis's two-hop composition (`std::str::from_utf8` +
+        // [`FromStr::from_str`]) surfaces onto the owned-input surface,
+        // and locks each onto its own diagnostic shape by delegation to
+        // the paired borrowed [`TryFrom<&[u8]>`] peer. Peer of the
+        // accept-set witness
+        // [`rate_limit_try_from_owned_bytes_routes_through_borrowed_byte_view_axis`]
+        // above.
+
+        // UTF-8-rejection witness: an owned byte-vec carrying an invalid
+        // UTF-8 continuation byte (`0xFF`) rejects with the paired
+        // borrowed peer's self-locating diagnostic forwarded verbatim
+        // through the delegation.
+        let non_utf8_bytes: Vec<u8> = vec![b'1', b'0', b'0', b'/', 0xFF];
+        let non_utf8_err = <super::RateLimit as TryFrom<Vec<u8>>>::try_from(non_utf8_bytes.clone())
+            .expect_err(
+                "TryFrom<Vec<u8>> for RateLimit must reject owned byte-vecs \
+                 carrying invalid UTF-8 continuation bytes — the canonical wire \
+                 form is ASCII-only",
+            );
+        assert!(
+            non_utf8_err.contains("rate-limit: byte-slice is not valid UTF-8"),
+            "TryFrom<Vec<u8>> for RateLimit's UTF-8-rejection diagnostic must \
+             self-locate onto the byte-view input surface through delegation to \
+             the paired borrowed peer — got {non_utf8_err:?}"
+        );
+        // Cross-axis witness: the owned-input axis must agree with the
+        // borrowed-input axis on every rejected input.
+        assert_eq!(
+            <super::RateLimit as TryFrom<Vec<u8>>>::try_from(non_utf8_bytes.clone()),
+            <super::RateLimit as TryFrom<&[u8]>>::try_from(non_utf8_bytes.as_slice()),
+            "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection axes on \
+             RateLimit must agree on the non-UTF-8 input {non_utf8_bytes:?} — \
+             divergence signals the owned-input and borrowed-input byte-view \
+             reverse paths have drifted off the same substrate-primitive UTF-8 \
+             + FromStr dispatch"
+        );
+
+        // Canonical-form-rejection witness: an owned byte-vec carrying
+        // valid UTF-8 that lies outside the paired FromStr arm's accept-
+        // set (`"100/x"` — unknown suffix) rejects with the paired
+        // FromStr arm's own diagnostic verbatim, forwarded through both
+        // the trait dispatch and the delegation. Locks the three reverse-
+        // projection paths (str-view, byte-view borrowed, byte-view owned)
+        // onto the same accept-set and the same diagnostic shape on every
+        // non-UTF-8-related rejection path.
+        let bad_suffix_bytes: Vec<u8> = b"100/x".to_vec();
+        let bad_suffix_via_owned =
+            <super::RateLimit as TryFrom<Vec<u8>>>::try_from(bad_suffix_bytes.clone()).expect_err(
+                "TryFrom<Vec<u8>> for RateLimit must reject owned byte-vecs carrying \
+             valid UTF-8 outside the paired FromStr accept-set — `100/x` carries \
+             an unknown window suffix",
+            );
+        let bad_suffix_via_from_str = "100/x"
+            .parse::<super::RateLimit>()
+            .expect_err("FromStr for RateLimit must reject `100/x` — unknown window suffix");
+        assert_eq!(
+            bad_suffix_via_owned, bad_suffix_via_from_str,
+            "TryFrom<Vec<u8>> for RateLimit's FromStr-rejection diagnostic must \
+             byte-equal the paired FromStr arm's diagnostic verbatim — the \
+             byte-owned reverse axis must forward the str-view diagnostic on \
+             every non-UTF-8-related rejection shape through the paired \
+             borrowed peer"
+        );
+        // Cross-axis witness against the paired borrowed byte-view axis:
+        // the two byte-view paths must agree by construction, since the
+        // owned axis delegates to the borrowed peer.
+        assert_eq!(
+            <super::RateLimit as TryFrom<Vec<u8>>>::try_from(bad_suffix_bytes.clone()),
+            <super::RateLimit as TryFrom<&[u8]>>::try_from(bad_suffix_bytes.as_slice()),
+            "TryFrom<Vec<u8>> and TryFrom<&[u8]> reverse-projection axes on \
+             RateLimit must agree on the valid-UTF-8-but-non-canonical input \
+             {bad_suffix_bytes:?} — divergence signals the owned-input and \
+             borrowed-input byte-view reverse paths have drifted off the same \
+             substrate-primitive UTF-8 + FromStr dispatch"
         );
     }
 
