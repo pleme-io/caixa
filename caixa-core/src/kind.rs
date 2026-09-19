@@ -2079,6 +2079,134 @@ impl TryFrom<Vec<u8>> for CaixaKind {
     }
 }
 
+/// Trait-idiomatic *owned-`String` input, `Result<Self, ()>` output*
+/// string-owned reverse projection on the structurally most fundamental
+/// closed-set fieldless typed enum on the caixa surface ([`CaixaKind`]) —
+/// the owned-input peer of the paired [`TryFrom<&str> for CaixaKind`]
+/// str-view reverse-projection axis (3c83606), and the string-owned
+/// reverse companion of the pre-existing string-owned *forward*-projection
+/// pair ([`From<CaixaKind> for String`], [`From<&CaixaKind> for String`])
+/// already lifted on this same enum. Routes owned [`String`] input
+/// byte-for-byte through the paired borrowed-input [`TryFrom<&str>`] axis
+/// via [`String::as_str`] so every consumer that holds an owned [`String`]
+/// and needs a typed [`CaixaKind`] — a future M4
+/// `pleme.io/v1alpha1/Caixa` CR admission-webhook body reader that hands
+/// the `spec.kind` `PascalCase` scalar off as an owned [`String`] after
+/// UTF-8 validation, a `serde_yaml::from_str` / `serde_json::from_str`
+/// de-serialize round-trip whose composer surfaces the `:kind` scalar as
+/// an owned [`String`] typed field, a
+/// `feira init --kind <Biblioteca|Binario|Servico|Supervisor|Aplicacao|Acao>`
+/// `clap`-derived arg-parse whose owned-`String` positional lands the
+/// canonical arm at the typed dispatch, a per-caixa overlay resolver
+/// reading an owned [`String`] out of a `ConfigMap` `data.kind` scalar,
+/// an `<T: TryFrom<String>>`-bound generic loader over any of the
+/// substrate's closed-set typed enums — reaches the same six-arm
+/// `PascalCase` wire accept-set through one trait dispatch off the shared
+/// [`CaixaKind::from_wire`] substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic *string-owned reverse-
+/// projection* family — opened on the compound M3-mesh
+/// `:politicas :rate-limit` primitive [`crate::aplicacao::RateLimit`]
+/// (a2e6f02), lifted onto the first closed-set fieldless typed-enum peer
+/// [`crate::aplicacao::WitShape`] (e6aac29), extended onto the second
+/// closed-set fieldless typed-enum peer [`crate::aplicacao::RateLimitUnit`]
+/// (94a9c5e), extended onto the third closed-set fieldless typed-enum peer
+/// [`crate::aplicacao::PlacementStrategy`] (d81a70a), extended onto the
+/// first M2-OTP-shape supervisor-slot closed-set fieldless typed-enum peer
+/// [`crate::supervisor::RestartStrategy`] (78fe8c8), and closed on the
+/// M2-OTP-shape supervisor-slot pair by
+/// [`crate::supervisor::RestartPolicy`] (35dea5a) — onto the structurally
+/// most fundamental caixa-core enum peer, the per-caixa
+/// `:kind Biblioteca | Binario | Servico | Supervisor | Aplicacao | Acao`
+/// discriminator every future `pleme.io/v1alpha1/Caixa` CR materializer's
+/// per-kind dispatch and every future `feira init` per-kind arg-parse
+/// dispatches through. This closes the string-owned reverse-projection
+/// axis on the structurally most fundamental caixa-core enum peer,
+/// mirroring the trajectory the byte-view (18d1940) / byte-owned (99c2849)
+/// / str-view (3c83606) reverse-projection families already walked on
+/// this same enum. The peers [`crate::dialeto::CaixaDialeto`] and
+/// [`crate::dep::DepList`] remain the next targets of the campaign.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: for<'a> TryFrom<&'a str>> TryFrom<String> for T`, so a
+/// consumer that holds an owned [`String`] and needs a typed
+/// [`CaixaKind`] otherwise picks between (a) an open-coded
+/// `<CaixaKind as TryFrom<&str>>::try_from(s.as_str())` at every call
+/// site whose type bounds have no compile-time link back to the string-
+/// owned reverse-projection axis, (b) a `let s: &str = &s;
+/// CaixaKind::try_from(s)` two-step whose borrow arithmetic leaks a
+/// per-call-site lifetime dance rather than a single trait dispatch, or
+/// (c) a `String::into_bytes` + [`TryFrom<Vec<u8>>`] detour that reaches
+/// the substrate-primitive `from_wire` accessor through a UTF-8 re-
+/// validation hop the owned-`String` axis already knows to skip. This
+/// impl closes the string-owned reverse-projection axis at the
+/// substrate-primitive [`CaixaKind::from_wire`] accessor so every future
+/// `<T: TryFrom<String>>`-bound owned-string consumer reaches the same
+/// six-arm `PascalCase` accept-set through one trait dispatch.
+///
+/// `type Error = ()` matches the sibling [`TryFrom<&str> for CaixaKind`],
+/// [`TryFrom<&[u8]> for CaixaKind`], and [`TryFrom<Vec<u8>> for CaixaKind`]
+/// unit-error shapes, preserving the trait-family consistency across the
+/// {str-view, byte-view, byte-owned, string-owned} reverse-projection
+/// square. The owned [`String`] input is dropped on the error path (the
+/// standard-library `String::from_utf8` convention of returning the input
+/// in the error deliberately declined — a caller that needs the string
+/// back holds a clone before the call, and the closed-set-enum use site
+/// rarely wants the raw string back past a "did you mean" diagnostic that
+/// operates on the wire vocabulary rather than the input).
+///
+/// Unlike the peer M2 OTP-shape axis pair
+/// ([`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] whose paired string-owned
+/// *forward* projection ([`From<Self> for String`]) and the
+/// string-owned *reverse* projection here share one `PascalCase`
+/// vocabulary by construction, so the owned-[`String`] forward + reverse
+/// round-trip composes directly through the owned-[`String`]'s
+/// [`String::as_str`] borrow), the [`CaixaKind`] string-owned forward and
+/// reverse axes land on *different* byte-strings by design — the paired
+/// [`From<CaixaKind> for String`] / [`From<&CaixaKind> for String`]
+/// forward axes emit lowercase Portuguese diagnostic bytes
+/// (`"biblioteca"`) while this reverse axis parses `PascalCase` wire
+/// bytes (`"Biblioteca"`) through the substrate-primitive
+/// [`CaixaKind::from_wire`] accessor. The closed-cycle round-trip witness
+/// therefore crosses through [`CaixaKind::wire_name`] as the reverse-axis
+/// vocabulary rather than composing the owned-[`String`] forward emit
+/// directly — the two-axis wire/diagnostic split the sibling
+/// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+/// pin makes load-bearing is preserved here by construction.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_try_from_owned_string_routes_through_borrowed_str_view_axis`]
+/// (byte-parity pin against the paired borrowed [`TryFrom<&str>`] axis
+/// across the six-arm [`CaixaKind::ALL`] accept-set on the owned-`String`
+/// surface, cross-axis witness that the string-owned reverse projection
+/// agrees with the sibling byte-view and byte-owned reverse-projection
+/// axes on every accepted arm through the shared substrate-primitive
+/// [`CaixaKind::from_wire`] accessor, and a wire-vocab round-trip witness
+/// through [`CaixaKind::wire_name`] + [`TryFrom<String>`] that closes the
+/// two-way `Self → wire-String → TryFrom<String> → Self` round-trip on
+/// the trait-idiomatic owned-[`String`] reverse axis via the wire
+/// vocabulary rather than the emit vocabulary — the two-axis split by
+/// design) and
+/// [`tests::caixa_kind_try_from_owned_string_rejects_unknown_wire_strings`]
+/// (rejection witness against silent accept-set widening — mirrors the
+/// corpus the paired [`TryFrom<&str>`] rejection witness already pins,
+/// including empty / whitespace-only inputs, the six-arm lowercase
+/// Portuguese diagnostic byte-strings the peer [`CaixaKind::as_str`]
+/// emitter surfaces on the two-axis wire/diagnostic split so a caller
+/// that confuses the two axes trips here rather than at a downstream K8s-
+/// CR round-trip miss, case-fold rebrand candidates, whitespace-padded /
+/// trailing-newline / quote-wrapped forms, and English-rebrand candidates,
+/// with per-input cross-axis parity against the borrowed [`TryFrom<&str>`]
+/// reverse-projection axis).
+impl TryFrom<String> for CaixaKind {
+    type Error = ();
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        <Self as TryFrom<&str>>::try_from(s.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5885,6 +6013,200 @@ mod tests {
                  owned-input and borrowed-input byte-view reverse \
                  paths have drifted off the same substrate-primitive \
                  from_wire accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_owned_string_routes_through_borrowed_str_view_axis() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl TryFrom<String> for CaixaKind` — asserts the trait-
+        // idiomatic string-owned reverse-projection standard-library
+        // impl and the sibling borrowed-input [`TryFrom<&str>`] axis
+        // resolve to the same six-arm `PascalCase` wire accept-set
+        // across every arm the exhaustive [`super::CaixaKind::ALL`]
+        // slice enumerates. Extends the substrate-wide trait-idiomatic
+        // string-owned reverse-projection axis onto the structurally
+        // most fundamental caixa-core enum peer — owned-input mirror
+        // of the paired [`TryFrom<&str>`] str-view reverse-projection
+        // axis (3c83606), and string-owned reverse companion of the
+        // pre-existing string-owned *forward*-projection pair
+        // ([`From<CaixaKind> for String`], [`From<&CaixaKind> for
+        // String`]) on this same enum. Peer of the sibling first-mover
+        // [`crate::aplicacao::tests::rate_limit_try_from_owned_string_routes_through_borrowed_str_view_axis`]
+        // (a2e6f02) on the compound [`crate::aplicacao::RateLimit`]
+        // primitive, and the sibling
+        // `restart_strategy_try_from_owned_string_routes_through_borrowed_str_view_axis`
+        // (78fe8c8) / `restart_policy_try_from_owned_string_routes_through_borrowed_str_view_axis`
+        // (35dea5a) on the M2-OTP-shape supervisor-slot pair — tracks
+        // the "delegate through `TryFrom<&str>` on the `String::as_str`
+        // borrow" discipline the compound-primitive opener and closed-
+        // set-peer first-mover established. This closes the string-
+        // owned reverse-projection axis on the structurally most
+        // fundamental caixa-core enum peer, mirroring the trajectory
+        // the byte-view (18d1940) / byte-owned (99c2849) / str-view
+        // (3c83606) reverse-projection families already walked on this
+        // same enum.
+        for &variant in CaixaKind::ALL {
+            let wire_string: String = variant.wire_name().to_string();
+            assert_eq!(
+                <CaixaKind as TryFrom<String>>::try_from(wire_string.clone()),
+                Ok(variant),
+                "TryFrom<String> impl on CaixaKind must round-trip \
+                 CaixaKind::{variant:?}.wire_name().to_string() back \
+                 to Ok(CaixaKind::{variant:?}) — divergence from the \
+                 sibling TryFrom<&str> axis signals a silent detour \
+                 off the substrate-primitive from_wire accessor"
+            );
+            // Cross-axis witness: the string-owned reverse-projection
+            // axis must agree with the borrowed `&str` reverse-projection
+            // axis on every accepted arm — the two axes share one
+            // `PascalCase` wire vocabulary through the substrate-
+            // primitive `from_wire` accessor, and the owned-input axis
+            // delegates to the borrowed peer by design.
+            let via_owned: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<String>>::try_from(wire_string.clone());
+            let via_borrowed: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<&str>>::try_from(wire_string.as_str());
+            assert_eq!(
+                via_owned, via_borrowed,
+                "TryFrom<String> and TryFrom<&str> reverse-projection \
+                 axes on CaixaKind must agree on \
+                 CaixaKind::{variant:?} — divergence signals the \
+                 owned-`String` and borrowed-`&str` reverse paths have \
+                 drifted off the same substrate-primitive from_wire \
+                 accessor"
+            );
+            // Cross-axis witness against the paired byte-view reverse-
+            // projection axis ([`TryFrom<&[u8]>`]) on every accepted
+            // arm — the four reverse paths (str-view borrowed, str-
+            // owned, byte-view borrowed, byte-owned) share one
+            // substrate primitive.
+            let via_byte_slice: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<&[u8]>>::try_from(wire_string.as_bytes());
+            assert_eq!(
+                via_owned, via_byte_slice,
+                "TryFrom<String> and TryFrom<&[u8]> reverse-projection \
+                 axes on CaixaKind must agree on \
+                 CaixaKind::{variant:?} — divergence signals the \
+                 string-owned and byte-view borrowed reverse paths \
+                 have drifted off the same substrate-primitive \
+                 from_wire accessor"
+            );
+            // Cross-axis witness against the sibling byte-owned
+            // reverse-projection axis ([`TryFrom<Vec<u8>>`]) on every
+            // accepted arm — the two owned-input axes share one
+            // `PascalCase` wire vocabulary.
+            let via_byte_vec: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<Vec<u8>>>::try_from(wire_string.as_bytes().to_vec());
+            assert_eq!(
+                via_owned, via_byte_vec,
+                "TryFrom<String> and TryFrom<Vec<u8>> reverse-\
+                 projection axes on CaixaKind must agree on \
+                 CaixaKind::{variant:?} — divergence signals the \
+                 string-owned and byte-owned reverse paths have \
+                 drifted off the same substrate-primitive from_wire \
+                 accessor"
+            );
+            // Closed-cycle wire-vocab round-trip witness — because the
+            // paired string-owned *forward*-projection pair
+            // ([`From<CaixaKind> for String`] / [`From<&CaixaKind> for
+            // String`]) emits the lowercase-Portuguese diagnostic
+            // vocabulary while this reverse axis parses the `PascalCase`
+            // wire vocabulary, the closed cycle crosses through
+            // [`CaixaKind::wire_name`] as the reverse-axis vocabulary
+            // rather than composing the owned-`String` forward emit
+            // directly. The two-axis split the sibling
+            // `caixa_kind_display_matches_as_str_and_not_serialize_wire`
+            // pin makes load-bearing is preserved here by construction.
+            let wire_owned: String = variant.wire_name().to_string();
+            let re_parsed: Result<CaixaKind, ()> =
+                <CaixaKind as TryFrom<String>>::try_from(wire_owned);
+            assert_eq!(
+                re_parsed,
+                Ok(variant),
+                "closed-cycle wire-vocab round-trip on CaixaKind must \
+                 return the originating variant CaixaKind::{variant:?} \
+                 when the reverse axis parses the same `PascalCase` \
+                 wire byte-string CaixaKind::wire_name() emits — \
+                 divergence signals the string-owned reverse-projection \
+                 axis has drifted off the substrate-primitive \
+                 from_wire accessor's `PascalCase` accept-set"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_try_from_owned_string_rejects_unknown_wire_strings() {
+        // Rejection witness on the `impl TryFrom<String> for CaixaKind`
+        // — mirrors the rejection corpus the paired borrowed
+        // [`TryFrom<&str>`] axis already pins on the owned-`String`
+        // surface. Every non-`PascalCase`-wire byte-string must land on
+        // `Err(())` so a future accidental widening of the trait impl's
+        // accept-set (a stray `_ if s.eq_ignore_ascii_case("Biblioteca")
+        // => Ok(…)` case-fold path, a silent inclusion of the lowercase
+        // Portuguese [`super::CaixaKind::as_str`] surface onto the wire
+        // axis that would collide the two-axis wire/diagnostic split
+        // the sibling
+        // `caixa_kind_display_matches_as_str_and_not_serialize_wire` pin
+        // makes load-bearing, an `Option::unwrap_or_default`-shape
+        // fallback that maps unknown inputs onto a default arm rather
+        // than the trait-idiomatic `Err(())`) trips at caixa-core test
+        // time. Sweep includes the empty string, the six-arm lowercase
+        // Portuguese diagnostic byte-strings the peer
+        // [`super::CaixaKind::as_str`] axis emits (a caller who
+        // confuses the wire axis with the diagnostic axis trips here),
+        // uppercase and mixed-case folds of the PascalCase arms, a
+        // small residual of plausible-but-wrong strings, and
+        // whitespace-padded / trailing-newline / quote-wrapped forms.
+        let rejected: &[&str] = &[
+            "",
+            "biblioteca",
+            "binario",
+            "servico",
+            "supervisor",
+            "aplicacao",
+            "acao",
+            "BIBLIOTECA",
+            "BINARIO",
+            "SERVICO",
+            "SUPERVISOR",
+            "APLICACAO",
+            "ACAO",
+            "biBlioteca",
+            "Bibliotecas",
+            "Servicos",
+            "library",
+            "binary",
+            "service",
+            "application",
+            " Biblioteca",
+            "Biblioteca ",
+            "Biblioteca\n",
+            "\"Biblioteca\"",
+        ];
+        for &input in rejected {
+            let owned: String = input.to_string();
+            assert_eq!(
+                <CaixaKind as TryFrom<String>>::try_from(owned),
+                Err(()),
+                "TryFrom<String> impl on CaixaKind must reject the \
+                 non-wire byte-string {input:?} with Err(()) — silent \
+                 acceptance signals an accept-set widening off the \
+                 paired CaixaKind::from_wire resolver"
+            );
+            // Cross-axis witness: the owned-`String` axis must agree
+            // with the borrowed-`&str` axis on every rejected input —
+            // the two paths share one substrate-primitive resolver by
+            // construction.
+            assert_eq!(
+                <CaixaKind as TryFrom<String>>::try_from(input.to_string()),
+                <CaixaKind as TryFrom<&str>>::try_from(input),
+                "TryFrom<String> and TryFrom<&str> reverse-projection \
+                 axes on CaixaKind must agree on the non-wire input \
+                 {input:?} — divergence signals the owned-`String` and \
+                 borrowed-`&str` reverse paths have drifted off the \
+                 same substrate-primitive from_wire accessor"
             );
         }
     }
