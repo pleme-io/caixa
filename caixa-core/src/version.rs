@@ -1040,6 +1040,139 @@ impl AsRef<[u8]> for CaixaVersion {
     }
 }
 
+/// Trait-idiomatic *owned-input, owned-[`Vec<u8>`] output* byte-owned
+/// forward projection on the [`CaixaVersion`] newtype primitive — the
+/// byte-mirror of the pre-existing owned-input [`From<CaixaVersion> for
+/// String`] str-owned forward-projection axis and the owned-heap peer of
+/// the borrow-projection [`AsRef<[u8]>`] byte-view axis (the prior lift on
+/// this same primitive) that only surfaces a `&[u8]` view without an
+/// owned-heap byte-tail.
+///
+/// Routes the wrapped [`String`] storage through
+/// [`String::into_bytes`] verbatim ([`Self::0`], a move of the pre-existing
+/// heap allocation reused byte-for-byte as the [`Vec<u8>`] backing buffer —
+/// no re-copy of the per-instance version body's bytes, no allocating
+/// detour through `.as_str().as_bytes().to_vec()`), so every consumer
+/// that binds a [`CaixaVersion`] through the standard-library `.into()` /
+/// [`From<Self> for Vec<u8>`] (equivalently [`Into<Vec<u8>>`]) axis
+/// reaches the wrapped byte-string through one substrate-primitive
+/// dispatch on the exact same heap allocation the manifest-parse forward
+/// [`From<String> for CaixaVersion`] constructor accepted.
+///
+/// A future consumer that wants an owned [`Vec<u8>`] byte-tail on a
+/// [`CaixaVersion`] — a future
+/// [`std::io::Write::write_all`]-shape per-caixa `:versao` audit-log
+/// byte-sink whose input parameter is an owned [`Vec<u8>`] payload, a
+/// future `bytes::Bytes::from(Vec::<u8>::from(v))` composer folding the
+/// canonical `SemVer` wire form into a [`bytes::Bytes`] framing surface,
+/// a future `hasher.update(&Vec::<u8>::from(v))`-shape BLAKE3 content-
+/// address closure that needs the owned byte-tail buffered before folding
+/// into the per-caixa [`crate::Lacre`] closure body, a future per-caixa
+/// protobuf/CBOR/msgpack payload composer whose framer takes an owned
+/// [`Vec<u8>`] rather than a borrowed byte-slice, a future M4 admission-
+/// webhook rejection body composer that emits the offending
+/// [`CaixaVersion`] as a raw byte-tail through an
+/// [`std::io::Write`]-shape sink — reaches the substrate primitive
+/// through one trait dispatch, avoiding the pre-lift open-coded
+/// `v.as_str().as_bytes().to_vec()` two-hop composition (a fresh heap
+/// allocation copied byte-by-byte off the wrapper's own storage) or the
+/// `String::from(v).into_bytes()` two-hop reverse-then-move shape whose
+/// intermediate `String` step carries no compile-time link back to the
+/// byte-view axis.
+///
+/// Peer of the pre-existing byte-view [`AsRef<[u8]>`] impl on the same
+/// primitive — both project the wrapped [`String`] onto its byte-tail,
+/// but the [`AsRef<[u8]>`] axis surfaces a borrowed `&[u8]` view for
+/// consumers that never take ownership while this impl surfaces an owned
+/// [`Vec<u8>`] for consumers whose framing / sink / hasher / channel
+/// surfaces demand a heap-owned buffer. Rust's standard library
+/// deliberately splits the two axes on the two bounds they carry
+/// (`impl AsRef<[u8]> for String` for the borrowed-view surface,
+/// `impl From<String> for Vec<u8>` via [`String::into_bytes`] for the
+/// owned-heap surface), so a newtype that carries one but not the other
+/// splits off the convention that lets every [`String`]-shaped consumer
+/// swap the newtype in without re-shaping its bounds.
+///
+/// Opens the trait-idiomatic *owned-input, [`Vec<u8>`]* byte-owned
+/// forward-projection axis on the substrate's core String-wrapper newtype
+/// primitive [`CaixaVersion`], mirroring the paired
+/// `From<{Self, &Self}> for Vec<u8>` axis every sibling closed-set
+/// fieldless typed enum peer on the substrate already carries
+/// ([`crate::CaixaKind`], [`crate::CaixaDialeto`], [`crate::dep::DepList`],
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`], [`crate::aplicacao::WitShape`],
+/// [`crate::aplicacao::RateLimitUnit`],
+/// [`crate::aplicacao::PlacementStrategy`], and the compound sibling
+/// [`crate::aplicacao::RateLimit`] at aplicacao.rs:6743 which routes
+/// through its paired [`fmt::Display`] via `.to_string().into_bytes()`),
+/// now extended onto the substrate's core String-wrapper newtype
+/// primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_from_into_owned_vec_bytes_returns_wrapped_body`]
+/// (byte-parity pin against [`CaixaVersion::as_str`] `.as_bytes()` on the
+/// same instance, plus a round-trip witness through the paired
+/// [`From<String> for CaixaVersion`] constructor after re-materializing
+/// the [`Vec<u8>`] through [`String::from_utf8`]) and
+/// [`tests::caixa_version_from_owned_and_borrowed_into_vec_bytes_agree_on_every_shape`]
+/// (cross-axis partition pin against the paired borrowed-input impl and
+/// against the pre-existing byte-view [`AsRef<[u8]>`] axis on the same
+/// instance, closing the "owned-input move vs. borrowed-input clone" and
+/// "owned-heap vs. borrowed-view" bifurcations on the same wrapped body).
+impl From<CaixaVersion> for Vec<u8> {
+    fn from(v: CaixaVersion) -> Vec<u8> {
+        v.0.into_bytes()
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, owned-[`Vec<u8>`] output* byte-owned
+/// forward projection on the [`CaixaVersion`] newtype primitive — the
+/// borrowed-input companion to the paired owned-input
+/// [`From<CaixaVersion> for Vec<u8>`] impl immediately above. Routes
+/// byte-for-byte through the substrate-primitive
+/// [`CaixaVersion::as_str`] `pub const fn` accessor (via
+/// [`str::as_bytes`] + [`slice::to_vec`]) so every consumer that holds a
+/// borrowed [`&CaixaVersion`] and needs an owned [`Vec<u8>`] — a
+/// `[…].iter().map(Vec::<u8>::from).collect::<Vec<_>>()` per-instance
+/// materializer over `&[CaixaVersion]` (whose iterator yields
+/// `&CaixaVersion`, not `CaixaVersion`, so the owned-input
+/// [`From<CaixaVersion> for Vec<u8>`] axis alone forces every call site
+/// through an explicit `.clone()` restatement whose intermediate
+/// [`CaixaVersion`] allocation is discarded on the very next call), a
+/// future admission-webhook diagnostic body composer that walks a
+/// `&Vec<CaixaVersion>` overlay through an [`Into<Vec<u8>>`]-bound per-
+/// arm byte-writer to surface each offending `:versao` wire form, a
+/// future per-`Membro :versao`-shape audit-log byte-writer that folds
+/// each Aplicacao's member-versao byte-tail into an owned [`Vec<u8>`]
+/// sink without moving out of the borrowed [`AplicacaoSpec::membros`]
+/// slice — reaches the wrapped byte-string through this one dispatch on
+/// the substrate primitive.
+///
+/// Second corner on the `{Self, &Self} → Vec<u8>` byte-owned forward-
+/// projection family opened on the paired owned-input
+/// [`From<CaixaVersion> for Vec<u8>`] impl immediately above. Rust's
+/// `From` trait does not derive the `From<&Self>` sibling from a
+/// `From<Self>` impl (the blanket
+/// `impl<T, U> From<&T> for U where T: Clone, U: From<T>` does not exist
+/// in `core`), so every newtype that carries the owned-input byte-owned
+/// forward axis but not the borrowed-input axis forces every borrowed
+/// call site through a `.clone()` / `<Vec<u8>>::from(v.clone())` detour
+/// whose type bounds have no compile-time link back to the newtype.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_from_borrowed_into_owned_vec_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaVersion::as_str`] `.as_bytes()` via a
+/// borrowed input, plus a source-survival witness against silent move-
+/// out) and
+/// [`tests::caixa_version_from_owned_and_borrowed_into_vec_bytes_agree_on_every_shape`]
+/// (cross-corner partition pin between owned-input move and borrowed-
+/// input clone on the same wrapped body through the [`Vec<u8>`] axis).
+impl From<&CaixaVersion> for Vec<u8> {
+    fn from(v: &CaixaVersion) -> Vec<u8> {
+        v.as_str().as_bytes().to_vec()
+    }
+}
+
 /// Canonical Zig-style git-tag prefix every `feira publish` run writes
 /// and every downstream consumer of a published caixa reads. A caixa
 /// published at `:versao "0.1.0"` lands as a git tag `v0.1.0` on the
@@ -2728,6 +2861,146 @@ mod tests {
             mock_hasher.update(&v);
             let folded_bytes = mock_hasher.finalize();
             assert_eq!(folded_bytes, via_method_bytes);
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_into_owned_vec_bytes_returns_wrapped_body() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl From<CaixaVersion> for Vec<u8>` — asserts the owned-input
+        // byte-owned forward-projection routes the wrapper's own heap
+        // allocation through [`String::into_bytes`] verbatim (no re-copy
+        // of the wrapped body's bytes, no normalization detour) so
+        // `Vec::<u8>::from(v)` returns the same bytes `v.as_str()`
+        // borrows via `.as_bytes()`. Refuses any future silent detour
+        // that would swap the move on `v.0.into_bytes()` for an
+        // allocating `.as_str().as_bytes().to_vec()` cascade (the
+        // pre-lift compose shape), a `String::from(v).into_bytes()`
+        // two-hop reverse-then-move shape, a stray
+        // `.trim().as_bytes().to_vec()` normalization, or a routing
+        // through the sibling [`fmt::Display`] emitter that would
+        // introduce a formatter round-trip. Closes the byte-owned
+        // forward-projection axis in lockstep with the paired str-owned
+        // [`From<CaixaVersion> for String`] axis (which routes through
+        // `v.0`).
+        for versao in [
+            "0.1.0",
+            "1.2.3-alpha.1",
+            "0.0.0",
+            "",
+            "^0.1",
+            "*",
+            "not-a-version",
+            "1.2.3+build.42",
+        ] {
+            let v: CaixaVersion = versao.into();
+            let expected: Vec<u8> = v.as_str().as_bytes().to_vec();
+            let owned: Vec<u8> = Vec::<u8>::from(v);
+            assert_eq!(
+                owned, expected,
+                "Vec::<u8>::from(v) must return the wrapper's own bytes verbatim on {versao:?}",
+            );
+            assert_eq!(
+                owned,
+                versao.as_bytes(),
+                "Vec::<u8>::from(v) must byte-equal the pre-lift wrapped \
+                 String storage on round-trip through the From<&str> constructor",
+            );
+            // Round-trip witness through the paired forward constructor:
+            // the emitted owned byte-tail rematerializes into a
+            // [`String`] via [`String::from_utf8`] and folds through
+            // the paired [`From<String> for CaixaVersion`] constructor
+            // to the same [`CaixaVersion`] value — closes the
+            // `Self → Vec<u8> → String → Self` round-trip whenever the
+            // wrapped body is valid UTF-8, which every `SemVer`-shaped
+            // `:versao` body is by construction (semver's grammar is
+            // ASCII-only).
+            if let Ok(round) = String::from_utf8(owned) {
+                let back: CaixaVersion = round.into();
+                assert_eq!(back.as_str(), versao);
+            }
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_borrowed_into_owned_vec_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the lifted
+        // `impl From<&CaixaVersion> for Vec<u8>` — asserts the
+        // borrowed-input byte-owned forward-projection allocates a fresh
+        // [`Vec<u8>`] whose bytes byte-equal the substrate-primitive
+        // [`CaixaVersion::as_str`] accessor's `.as_bytes()` byte-tail
+        // (via [`slice::to_vec`]) so `Vec::<u8>::from(&v)` returns the
+        // same bytes without consuming the source wrapper. Refuses any
+        // future silent detour: a stray normalization step that would
+        // drop whitespace or canonicalize a prerelease tag ahead of the
+        // byte-owned emit, a swap onto `String::from(v.clone()).into_bytes()`
+        // that would spuriously clone the intermediate [`String`], or a
+        // routing through the sibling [`fmt::Display`] emitter that
+        // would introduce a formatter round-trip. Includes a source-
+        // survival witness — the borrowed input remains readable after
+        // the projection returns, confirming the impl takes only a
+        // borrow and does not silently move out of the source.
+        for versao in [
+            "0.1.0",
+            "1.2.3-alpha.1",
+            "0.0.0",
+            "",
+            "^0.1",
+            "*",
+            "not-a-version",
+            "1.2.3+build.42",
+        ] {
+            let v: CaixaVersion = versao.into();
+            let via_borrowed: Vec<u8> = Vec::<u8>::from(&v);
+            assert_eq!(
+                via_borrowed,
+                v.as_str().as_bytes(),
+                "Vec::<u8>::from(&v) must byte-equal CaixaVersion::as_str().as_bytes() \
+                 on {versao:?} — divergence signals a silent detour off \
+                 the substrate-primitive accessor",
+            );
+            // Source-survival witness: `v` is borrowed, not moved, so
+            // the pre-existing borrow-projection axes stay reachable
+            // through the same instance after the byte-owned projection
+            // returns.
+            assert_eq!(v.as_str(), versao);
+        }
+    }
+
+    #[test]
+    fn caixa_version_from_owned_and_borrowed_into_vec_bytes_agree_on_every_shape() {
+        // Fail-before-pass-after cross-axis partition pin: the paired
+        // owned-input [`From<CaixaVersion> for Vec<u8>`] and
+        // borrowed-input [`From<&CaixaVersion> for Vec<u8>`] impls
+        // resolve to the same byte-tail on every instance, and both
+        // agree byte-for-byte with the pre-existing byte-view
+        // [`AsRef<[u8]>`] axis on the same primitive. Closes the
+        // "owned-input move vs. borrowed-input clone" bifurcation on
+        // the [`Vec<u8>`] axis and the "owned-heap vs. borrowed-view"
+        // bifurcation between the byte-owned forward-projection and the
+        // pre-existing borrow-projection byte-view axis. Refuses any
+        // future silent split between the two corners (a normalization
+        // on one path only, a divergent routing that would let
+        // `Vec::<u8>::from(v.clone())` and `Vec::<u8>::from(&v)`
+        // disagree, or a swap on `AsRef::<[u8]>::as_ref` that would
+        // diverge from either projection).
+        for versao in [
+            "0.1.0",
+            "1.2.3-alpha.1",
+            "0.0.0",
+            "",
+            "^0.1",
+            "*",
+            "not-a-version",
+            "1.2.3+build.42",
+        ] {
+            let v: CaixaVersion = versao.into();
+            let via_owned: Vec<u8> = Vec::<u8>::from(v.clone());
+            let via_borrowed: Vec<u8> = Vec::<u8>::from(&v);
+            let via_as_ref: &[u8] = <CaixaVersion as AsRef<[u8]>>::as_ref(&v);
+            assert_eq!(via_owned, via_borrowed);
+            assert_eq!(via_borrowed.as_slice(), via_as_ref);
+            assert_eq!(via_borrowed, versao.as_bytes());
         }
     }
 }
