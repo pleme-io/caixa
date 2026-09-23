@@ -3978,6 +3978,75 @@ impl From<&RestartPolicy> for std::borrow::Cow<'static, [u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the second (and final) M2-OTP-shape closed-set fieldless
+/// typed enum peer on the caixa surface ([`RestartPolicy`]) — the
+/// [`Box<[u8]>`] companion to the paired owned-input
+/// [`From<RestartPolicy> for Vec<u8>`] and
+/// [`From<RestartPolicy> for std::borrow::Cow<'static, [u8]>`] reverse-
+/// projection impls on this same primitive, mirroring the paired string-
+/// side [`From<RestartPolicy> for Box<str>`] forward-projection axis onto
+/// the byte-family side of the reverse-projection matrix and tracking the
+/// trajectory the sibling [`RestartStrategy`] first-mover (e11150e) opened
+/// one axis prior on the paired M2-OTP-shape enum. Routes byte-for-byte
+/// through the substrate-primitive [`RestartPolicy::as_str`] `pub const fn`
+/// accessor via [`Box::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the three `match` arms in [`Self::as_str`] resolve
+/// to [`crate::render::SUPERVISOR_CHILD_RESTART_*`] `pub const &'static str`
+/// bodies, so `.as_bytes()` returns `&'static [u8]` by construction, and
+/// the standard-library [`Box::<[u8]>::from(&[u8])`] impl allocates a fit-
+/// to-length boxed byte slice in one heap allocation without an
+/// intermediary [`Vec<u8>`].
+///
+/// Extends the substrate-wide trait-idiomatic *owned-input* byte-family
+/// reverse-projection matrix onto the second (and final) M2-OTP-shape
+/// closed-set fieldless typed enum peer at the [`Box<[u8]>`] corner,
+/// closing the `{Vec<u8>, Cow<'static, [u8]>, Box<[u8]>}` three-corner
+/// partition on the same wire byte-string this primitive already carries
+/// on the paired [`Vec<u8>`] and [`Cow<'static, [u8]>`] axes. Rust's
+/// standard library does not derive `From<Self> for Box<[u8]>` from
+/// `From<Self> for Vec<u8>` (nor from `From<Self> for Cow<'static, [u8]>`),
+/// so every closed-set fieldless typed enum peer that carries the paired
+/// reverse [`Vec<u8>`] axis but not the paired [`Box<[u8]>`] axis forces
+/// every [`Box<[u8]>`]-typed call site through a
+/// `Vec::<u8>::from(policy).into_boxed_slice()` intermediary allocation
+/// whose bounds carry no compile-time link back to the substrate primitive.
+impl From<RestartPolicy> for Box<[u8]> {
+    fn from(policy: RestartPolicy) -> Box<[u8]> {
+        Box::<[u8]>::from(policy.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<[u8]>`] output* byte-owned
+/// reverse projection on the second (and final) M2-OTP-shape closed-set
+/// fieldless typed enum peer on the caixa surface ([`RestartPolicy`]) —
+/// the borrowed-input companion to the paired owned-input
+/// [`From<RestartPolicy> for Box<[u8]>`] impl immediately above, closing
+/// the `{Self, &Self} → Box<[u8]>` byte-owned reverse-projection family on
+/// this primitive at the borrowed-input corner. Routes byte-for-byte
+/// through the same substrate-primitive [`RestartPolicy::as_str`]
+/// `pub const fn` accessor via [`Box::<[u8]>::from`] on the returned
+/// `&'static str`'s [`str::as_bytes`] — the [`Box<[u8]>`] allocation
+/// happens on both input axes because [`Self::as_str`] returns
+/// `&'static str` regardless of the input shape, so the borrowed-input
+/// peer reaches the same wire byte-string through the same one-heap-
+/// allocation path the owned-input peer already carries.
+///
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer that carries the paired owned-input
+/// [`Box<[u8]>`] axis but not the borrowed-input axis forces every
+/// borrowed call site through a spurious [`Copy`] deref
+/// (`Box::<[u8]>::from(*policy)`) or an open-coded
+/// `Box::<[u8]>::from(policy.as_str().as_bytes())` whose type bounds
+/// have no compile-time link to the substrate primitive.
+impl From<&RestartPolicy> for Box<[u8]> {
+    fn from(policy: &RestartPolicy) -> Box<[u8]> {
+        Box::<[u8]>::from(policy.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
 /// second (and final) M2-OTP-shape closed-set fieldless typed enum peer on
 /// the caixa surface ([`RestartPolicy`]) — the byte-view mirror of the
@@ -15251,6 +15320,168 @@ mod tests {
                 borrowed_via_generic.as_ref(),
                 variant.as_str().as_bytes(),
                 "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 &RestartPolicy::{variant:?} must fold the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartPolicy> for Box<[u8]>` — asserts the owned-
+        // input byte-owned reverse projection routes through the
+        // substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor's `.as_bytes()` byte-view via
+        // [`Box::<[u8]>::from`] on the returned `&'static [u8]` and
+        // resolves to the same three-arm PascalCase wire byte-string
+        // emit-set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates. Refuses any
+        // future silent detour that would swap
+        // `Box::<[u8]>::from(policy.as_str().as_bytes())` for a
+        // `Vec::<u8>::from(policy).into_boxed_slice()` double-hop, a
+        // routing through the sibling `fmt::Display` emitter, or a stray
+        // normalization step that would drop or rebrand a canonical
+        // PascalCase arm ahead of the boxed byte-emit. Cross-axis
+        // partition against the paired owned-input byte-owned reverse-
+        // projection axes ([`Vec<u8>`], [`Cow<'static, [u8]>`]) and the
+        // paired string-side [`Box<str>`] forward-projection axis on the
+        // same primitive — all four routes must byte-agree on every arm,
+        // otherwise the byte-owned reverse-projection matrix has drifted
+        // off the shared substrate-primitive `as_str` accessor.
+        for &variant in RestartPolicy::ALL {
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<RestartPolicy>>::from(variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<RestartPolicy> for Box<[u8]> impl must byte-\
+                 equal RestartPolicy::as_str().as_bytes() on \
+                 RestartPolicy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // Cross-axis partition against the paired owned-input
+            // `Vec<u8>` and `Cow<'static, [u8]>` byte-owned reverse-
+            // projection axes on the same enum — all three axes must
+            // byte-agree on every arm.
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<RestartPolicy>>::from(variant);
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<RestartPolicy> for Box<[u8]> and \
+                 From<RestartPolicy> for Vec<u8> must byte-agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 owned-input byte-owned reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<RestartPolicy> for Box<[u8]> and \
+                 From<RestartPolicy> for Cow<'static, [u8]> must \
+                 byte-agree on RestartPolicy::{variant:?} — \
+                 divergence signals the owned-input byte-owned reverse-\
+                 projection axes have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            // Cross-axis partition against the paired string-side
+            // `Box<str>` forward-projection axis on the same enum — the
+            // byte-side and str-side `Box<_>` axes must byte-agree on
+            // every arm (both route through Self::as_str's `&'static str`
+            // return).
+            let via_box_str: Box<str> = <Box<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_box_str.as_bytes(),
+                "From<RestartPolicy> for Box<[u8]> and \
+                 From<RestartPolicy> for Box<str> must byte-agree on \
+                 RestartPolicy::{variant:?} — divergence signals a \
+                 silent detour off the shared substrate-primitive \
+                 as_str accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_borrowed_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartPolicy> for Box<[u8]>` — asserts the
+        // borrowed-input byte-owned reverse projection routes byte-for-
+        // byte through the substrate-primitive
+        // [`super::RestartPolicy::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view via [`Box::<[u8]>::from`] on the
+        // returned `&'static [u8]` on every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates, preserving
+        // the source [`super::RestartPolicy`] intact (no move-out).
+        // Additionally asserts the paired owned-input and borrowed-input
+        // corners byte-agree on the same arm, closing the
+        // `{Self, &Self} → Box<[u8]>` byte-owned reverse-projection
+        // family on this primitive.
+        //
+        // Generic `<T: Into<Box<[u8]>>>`-bound consumer witness helper:
+        // a future per-child byte-writer that accepts a [`Box<[u8]>`]
+        // composes on both owned and borrowed input shapes without an
+        // open-coded `Box::<[u8]>::from(policy.as_str().as_bytes())` at
+        // every call site. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_box_bytes_sink<T: Into<Box<[u8]>>>(t: T) -> Box<[u8]> {
+            t.into()
+        }
+        for &variant in RestartPolicy::ALL {
+            let via_borrowed_from: Box<[u8]> = <Box<[u8]> as From<&RestartPolicy>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&RestartPolicy> for Box<[u8]> impl must byte-\
+                 equal RestartPolicy::as_str().as_bytes() on \
+                 &RestartPolicy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // The borrowed-input impl must not move out of the source —
+            // the source RestartPolicy must survive the projection.
+            let survivor: &'static str = variant.as_str();
+            assert_eq!(
+                survivor.as_bytes(),
+                via_method_bytes,
+                "source &RestartPolicy::{variant:?} must survive \
+                 borrowed-input projection — a move-out here signals \
+                 the impl silently dereferences past the borrowed \
+                 handle"
+            );
+            // Cross-corner partition against the paired owned-input
+            // `Box<[u8]>` axis on the same enum — the two corners must
+            // byte-agree on every arm, closing the "owned-input move
+            // vs. borrowed-input clone" bifurcation on the same wire
+            // byte-string through the `Box<[u8]>` axis.
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_owned_from.as_ref(),
+                "From<&RestartPolicy> for Box<[u8]> and \
+                 From<RestartPolicy> for Box<[u8]> must byte-agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 paired owned-input and borrowed-input corners have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            let owned_via_generic = generic_box_bytes_sink(variant);
+            let variant_ref: &RestartPolicy = &variant;
+            let borrowed_via_generic = generic_box_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                via_method_bytes,
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 RestartPolicy::{variant:?} must fold the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                via_method_bytes,
+                "<T: Into<Box<[u8]>>>-bound composition on \
                  &RestartPolicy::{variant:?} must fold the same byte-\
                  tail RestartPolicy::as_str().as_bytes() returns"
             );
