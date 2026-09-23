@@ -1672,6 +1672,126 @@ impl From<&RestartStrategy> for std::borrow::Cow<'static, [u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the first M2-OTP-shape closed-set fieldless typed enum peer
+/// on the caixa surface ([`RestartStrategy`]) — the [`Box<[u8]>`] companion
+/// to the paired owned-input [`From<RestartStrategy> for Vec<u8>`] (98d38ed)
+/// and [`From<RestartStrategy> for std::borrow::Cow<'static, [u8]>`]
+/// (7f81539) reverse-projection impls on this same primitive, mirroring the
+/// paired string-side [`From<RestartStrategy> for Box<str>`] (69ef45c)
+/// forward-projection axis onto the byte-family side of the reverse-
+/// projection matrix, and tracking the trajectory the same axis walked on
+/// the sibling [`crate::CaixaVersion`] String-wrapper newtype primitive
+/// (703b2fd on the [`Box<[u8]>`] corner). Routes byte-for-byte through the
+/// substrate-primitive [`RestartStrategy::as_str`] `pub const fn` accessor
+/// via [`Box::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the four `match` arms in [`Self::as_str`] resolve to
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_*`] `pub const &'static str`
+/// bodies, so `.as_bytes()` returns `&'static [u8]` by construction, and
+/// the standard-library [`Box::<[u8]>::from(&[u8])`] impl allocates a fit-
+/// to-length boxed byte slice in one heap allocation without an
+/// intermediary [`Vec<u8>`].
+///
+/// A future consumer that wants a [`Box<[u8]>`]-typed handle on a
+/// [`RestartStrategy`] — a per-supervisor struct field typed [`Box<[u8]>`]
+/// rather than [`Vec<u8>`] to trim the twenty-four-byte pointer + length +
+/// capacity header down to the sixteen-byte pointer + length pair (a shape
+/// the substrate acknowledges as the natural fixed-length storage for
+/// once-written-never-mutated wire-scalar byte-tails held across the whole
+/// operator reconciliation cycle), a future
+/// `HashMap::<Box<[u8]>, _>::from_iter([(estrategia.into(), _)])`
+/// per-strategy lookup where the map's key type is [`Box<[u8]>`] rather than
+/// owned [`Vec<u8>`] so the map's per-entry key-slot carries the sixteen-
+/// byte [`Box<[u8]>`] header instead of the twenty-four-byte [`Vec<u8>`]
+/// header, a future M4 admission-webhook rejection body whose per-arm
+/// error-frame composer accepts a [`Box<[u8]>`] intermediate for the same
+/// reason — reaches the wire byte-string through this one dispatch, without
+/// the pre-lift `Vec::<u8>::from(strategy).into_boxed_slice()` double-hop
+/// that would still allocate through the same [`Vec<u8>`] intermediary on
+/// the way to the same [`Box<[u8]>`] slot but with one extra header-slot
+/// round-trip.
+///
+/// Peer of the paired owned-input [`From<RestartStrategy> for Vec<u8>`]
+/// (98d38ed) and [`From<RestartStrategy> for std::borrow::Cow<'static,
+/// [u8]>`] (7f81539) impls on the same primitive — the sibling
+/// [`Vec<u8>`] axis returns a fresh heap allocation via
+/// [`str::as_bytes`]`.to_vec()`; the sibling [`Cow<'static, [u8]>`] axis
+/// binds the zero-alloc [`Cow::Borrowed`] arm on the same `&'static [u8]`
+/// byte-tail; this axis allocates a fit-to-length boxed byte slice via
+/// [`Box::<[u8]>::from(&[u8])`], preserving the fixed-length-storage
+/// discipline the substrate opens on its byte-family reverse-projection
+/// matrix across every closed-set fieldless typed enum peer.
+///
+/// Extends the substrate-wide trait-idiomatic *owned-input* byte-family
+/// reverse-projection matrix onto the first M2-OTP-shape closed-set
+/// fieldless typed enum peer at the [`Box<[u8]>`] corner — mirroring the
+/// trajectory the same axis walked on the sibling [`crate::CaixaVersion`]
+/// String-wrapper newtype primitive (98d38ed on [`Vec<u8>`], baf7537 on
+/// [`Cow<'static, [u8]>`], 703b2fd on [`Box<[u8]>`], 3d5fc43 on
+/// [`std::sync::Arc<[u8]>`], 6034943 on [`std::rc::Rc<[u8]>`]) and the
+/// paired string-family [`Box<str>`] axis (69ef45c on the string-side).
+/// Rust's standard library does not derive `From<Self> for Box<[u8]>` from
+/// `From<Self> for Vec<u8>` (nor from `From<Self> for Cow<'static, [u8]>`),
+/// so every closed-set fieldless typed enum peer that carries the paired
+/// reverse [`Vec<u8>`] axis but not the paired [`Box<[u8]>`] axis forces
+/// every [`Box<[u8]>`]-typed call site through a
+/// `Vec::<u8>::from(strategy).into_boxed_slice()` intermediary allocation
+/// whose bounds carry no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_into_owned_box_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] `.as_bytes()`
+/// across the four-arm [`RestartStrategy::ALL`] accept-set on the owned-
+/// input surface, plus a cross-axis witness against the paired owned-input
+/// [`From<RestartStrategy> for Vec<u8>`] and
+/// [`From<RestartStrategy> for Cow<'static, [u8]>`] byte-owned reverse-
+/// projection axes and the paired string-side [`Box<str>`] axis on every
+/// canonical `PascalCase` scalar, closing the "owned-input into `Vec<u8>`
+/// vs. `Cow<'static, [u8]>` vs. `Box<[u8]>`" three-corner partition on the
+/// same wire byte-string).
+impl From<RestartStrategy> for Box<[u8]> {
+    fn from(strategy: RestartStrategy) -> Box<[u8]> {
+        Box::<[u8]>::from(strategy.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the first M2-OTP-shape closed-set fieldless typed enum peer
+/// on the caixa surface ([`RestartStrategy`]) — the borrowed-input companion
+/// to the paired owned-input [`From<RestartStrategy> for Box<[u8]>`] impl
+/// immediately above, closing the `{Self, &Self} → Box<[u8]>` byte-owned
+/// reverse-projection family on this primitive at the borrowed-input corner.
+/// Routes byte-for-byte through the same substrate-primitive
+/// [`RestartStrategy::as_str`] `pub const fn` accessor via
+/// [`Box::<[u8]>::from`] on the returned `&'static str`'s [`str::as_bytes`]
+/// — the [`Box<[u8]>`] allocation happens on both input axes because
+/// [`Self::as_str`] returns `&'static str` regardless of the input shape,
+/// so the borrowed-input peer reaches the same wire byte-string through the
+/// same one-heap-allocation path the owned-input peer already carries.
+///
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer that carries the paired owned-input
+/// [`Box<[u8]>`] axis but not the borrowed-input axis forces every borrowed
+/// call site through a spurious [`Copy`] deref
+/// (`Box::<[u8]>::from(*strategy)`) or an open-coded
+/// `Box::<[u8]>::from(strategy.as_str().as_bytes())` whose type bounds have
+/// no compile-time link to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_strategy_from_borrowed_into_owned_box_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartStrategy::as_str`] `.as_bytes()` via a
+/// borrowed input across the four-arm [`RestartStrategy::ALL`] accept-set,
+/// plus a source-survival witness against silent move-out and a cross-
+/// corner partition pin between owned-input and borrowed-input on the same
+/// wire byte-string through the [`Box<[u8]>`] axis).
+impl From<&RestartStrategy> for Box<[u8]> {
+    fn from(strategy: &RestartStrategy) -> Box<[u8]> {
+        Box::<[u8]>::from(strategy.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
 /// first M2-OTP-shape closed-set fieldless typed enum peer on the caixa
 /// surface ([`RestartStrategy`]) — the byte-view mirror of the str-view
@@ -18426,6 +18546,169 @@ mod tests {
                  the owned-`String` and borrowed-`&str` reverse paths \
                  have drifted off the same substrate-primitive from_wire \
                  accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartStrategy> for Box<[u8]>` — asserts the
+        // owned-input byte-owned reverse projection routes through the
+        // substrate-primitive [`super::RestartStrategy::as_str`]
+        // `pub const fn` accessor's `.as_bytes()` byte-view via
+        // [`Box::<[u8]>::from`] on the returned `&'static [u8]` and
+        // resolves to the same four-arm PascalCase wire byte-string
+        // emit-set across every arm the exhaustive
+        // [`super::RestartStrategy::ALL`] slice enumerates. Refuses any
+        // future silent detour that would swap
+        // `Box::<[u8]>::from(strategy.as_str().as_bytes())` for a
+        // `Vec::<u8>::from(strategy).into_boxed_slice()` double-hop, a
+        // routing through the sibling `fmt::Display` emitter, or a stray
+        // normalization step that would drop or rebrand a canonical
+        // PascalCase arm ahead of the boxed byte-emit. Cross-axis
+        // partition against the paired owned-input byte-owned reverse-
+        // projection axes ([`Vec<u8>`], [`Cow<'static, [u8]>`]) and the
+        // paired string-side [`Box<str>`] forward-projection axis on the
+        // same primitive — all four routes must byte-agree on every arm,
+        // otherwise the byte-owned reverse-projection matrix has drifted
+        // off the shared substrate-primitive `as_str` accessor.
+        for &variant in RestartStrategy::ALL {
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<RestartStrategy>>::from(variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<RestartStrategy> for Box<[u8]> impl must byte-\
+                 equal RestartStrategy::as_str().as_bytes() on \
+                 RestartStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // Cross-axis partition against the paired owned-input
+            // `Vec<u8>` (98d38ed) and `Cow<'static, [u8]>` (7f81539)
+            // byte-owned reverse-projection axes on the same enum — all
+            // three axes must byte-agree on every arm.
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<RestartStrategy>>::from(variant);
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<RestartStrategy> for Box<[u8]> and \
+                 From<RestartStrategy> for Vec<u8> must byte-agree on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 owned-input byte-owned reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<RestartStrategy> for Box<[u8]> and \
+                 From<RestartStrategy> for Cow<'static, [u8]> must \
+                 byte-agree on RestartStrategy::{variant:?} — \
+                 divergence signals the owned-input byte-owned reverse-\
+                 projection axes have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            // Cross-axis partition against the paired string-side
+            // `Box<str>` (69ef45c) forward-projection axis on the same
+            // enum — the byte-side and str-side `Box<_>` axes must byte-
+            // agree on every arm (both route through Self::as_str's
+            // `&'static str` return).
+            let via_box_str: Box<str> = <Box<str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_box_str.as_bytes(),
+                "From<RestartStrategy> for Box<[u8]> and \
+                 From<RestartStrategy> for Box<str> must byte-agree on \
+                 RestartStrategy::{variant:?} — divergence signals a \
+                 silent detour off the shared substrate-primitive \
+                 as_str accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_borrowed_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartStrategy> for Box<[u8]>` — asserts the
+        // borrowed-input byte-owned reverse projection routes byte-for-
+        // byte through the substrate-primitive
+        // [`super::RestartStrategy::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view via [`Box::<[u8]>::from`] on the
+        // returned `&'static [u8]` on every arm the exhaustive
+        // [`super::RestartStrategy::ALL`] slice enumerates, preserving
+        // the source [`super::RestartStrategy`] intact (no move-out).
+        // Additionally asserts the paired owned-input and borrowed-input
+        // corners byte-agree on the same arm, closing the
+        // `{Self, &Self} → Box<[u8]>` byte-owned reverse-projection
+        // family on this primitive.
+        //
+        // Generic `<T: Into<Box<[u8]>>>`-bound consumer witness helper:
+        // a future per-supervisor byte-writer that accepts a
+        // [`Box<[u8]>`] composes on both owned and borrowed input shapes
+        // without an open-coded `Box::<[u8]>::from(strategy.as_str().
+        // as_bytes())` at every call site. Lifted to the top of the
+        // function per `clippy::items_after_statements`.
+        fn generic_box_bytes_sink<T: Into<Box<[u8]>>>(t: T) -> Box<[u8]> {
+            t.into()
+        }
+        for &variant in RestartStrategy::ALL {
+            let via_borrowed_from: Box<[u8]> =
+                <Box<[u8]> as From<&RestartStrategy>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&RestartStrategy> for Box<[u8]> impl must byte-\
+                 equal RestartStrategy::as_str().as_bytes() on \
+                 &RestartStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            // The borrowed-input impl must not move out of the source —
+            // the source RestartStrategy must survive the projection.
+            let survivor: &'static str = variant.as_str();
+            assert_eq!(
+                survivor.as_bytes(),
+                via_method_bytes,
+                "source &RestartStrategy::{variant:?} must survive \
+                 borrowed-input projection — a move-out here signals \
+                 the impl silently dereferences past the borrowed \
+                 handle"
+            );
+            // Cross-corner partition against the paired owned-input
+            // `Box<[u8]>` axis on the same enum — the two corners must
+            // byte-agree on every arm, closing the "owned-input move
+            // vs. borrowed-input clone" bifurcation on the same wire
+            // byte-string through the `Box<[u8]>` axis.
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_owned_from.as_ref(),
+                "From<&RestartStrategy> for Box<[u8]> and \
+                 From<RestartStrategy> for Box<[u8]> must byte-agree on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 paired owned-input and borrowed-input corners have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            let owned_via_generic = generic_box_bytes_sink(variant);
+            let variant_ref: &RestartStrategy = &variant;
+            let borrowed_via_generic = generic_box_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                via_method_bytes,
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                via_method_bytes,
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 &RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns"
             );
         }
     }
