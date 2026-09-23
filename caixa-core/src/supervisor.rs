@@ -4047,6 +4047,77 @@ impl From<&RestartPolicy> for Box<[u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<[u8]>`] output* byte-owned
+/// reverse projection on the second (and final) M2-OTP-shape closed-set
+/// fieldless typed enum peer on the caixa surface ([`RestartPolicy`]) — the
+/// atomically-refcounted byte-slice mirror of the paired owned-input
+/// [`From<RestartPolicy> for std::sync::Arc<str>`] impl on the string-side
+/// reverse-projection matrix, and the fourth axis on the byte-side reverse-
+/// projection matrix that already carries
+/// [`From<RestartPolicy> for Vec<u8>`],
+/// [`From<RestartPolicy> for std::borrow::Cow<'static, [u8]>`] (65f381b),
+/// and [`From<RestartPolicy> for Box<[u8]>`] (6bc74c9). Routes byte-for-
+/// byte through the substrate-primitive [`RestartPolicy::as_str`]
+/// `pub const fn` accessor via [`std::sync::Arc::<[u8]>::from`] on the
+/// returned `&'static str`'s [`str::as_bytes`] — the three `match` arms in
+/// [`Self::as_str`] resolve to [`crate::render::SUPERVISOR_CHILD_RESTART_*`]
+/// `pub const &'static str` bodies, so `.as_bytes()` returns `&'static [u8]`
+/// by construction, and the standard-library
+/// [`std::sync::Arc::<[u8]>::from(&[u8])`] impl allocates an atomically-
+/// refcounted heap slab in one heap allocation without an intermediary
+/// [`Vec<u8>`] or [`Box<[u8]>`].
+///
+/// Rust's standard library does not derive `From<Self> for Arc<[u8]>` from
+/// `From<Self> for Vec<u8>` (nor from `From<Self> for Box<[u8]>`), so every
+/// closed-set fieldless typed enum peer that carries the paired reverse
+/// [`Vec<u8>`] or [`Box<[u8]>`] axis but not the paired [`Arc<[u8]>`] axis
+/// forces every [`Arc<[u8]>`]-typed call site through a
+/// `Vec::<u8>::from(policy).into()` / `Box::<[u8]>::from(policy).into()`
+/// double-allocation detour whose bounds carry no compile-time link back
+/// to the substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic *owned-input* byte-family
+/// reverse-projection matrix onto the second (and final) M2-OTP-shape
+/// closed-set fieldless typed enum peer at the [`std::sync::Arc<[u8]>`]
+/// corner, tracking the trajectory the sibling [`RestartStrategy`] first-
+/// mover (98da8f6) walked one axis prior on the paired M2-OTP-shape enum.
+impl From<RestartPolicy> for std::sync::Arc<[u8]> {
+    fn from(policy: RestartPolicy) -> std::sync::Arc<[u8]> {
+        std::sync::Arc::<[u8]>::from(policy.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<[u8]>`] output*
+/// byte-owned reverse projection on the second (and final) M2-OTP-shape
+/// closed-set fieldless typed enum peer on the caixa surface
+/// ([`RestartPolicy`]) — the borrowed-input companion to the paired owned-
+/// input [`From<RestartPolicy> for std::sync::Arc<[u8]>`] impl immediately
+/// above, closing the `{Self, &Self} → std::sync::Arc<[u8]>` byte-owned
+/// reverse-projection family on this primitive at the borrowed-input
+/// corner. Routes byte-for-byte through the same substrate-primitive
+/// [`RestartPolicy::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the [`std::sync::Arc<[u8]>`] allocation happens on
+/// both input axes because [`Self::as_str`] returns `&'static str`
+/// regardless of the input shape, so the borrowed-input peer reaches the
+/// same wire byte-string through the same one-heap-allocation path the
+/// owned-input peer already carries.
+///
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer that carries the paired owned-input
+/// [`std::sync::Arc<[u8]>`] axis but not the borrowed-input axis forces
+/// every borrowed call site through a spurious [`Copy`] deref
+/// (`std::sync::Arc::<[u8]>::from(*policy)`) or an open-coded
+/// `std::sync::Arc::<[u8]>::from(policy.as_str().as_bytes())` whose type
+/// bounds have no compile-time link to the substrate primitive.
+impl From<&RestartPolicy> for std::sync::Arc<[u8]> {
+    fn from(policy: &RestartPolicy) -> std::sync::Arc<[u8]> {
+        std::sync::Arc::<[u8]>::from(policy.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
 /// second (and final) M2-OTP-shape closed-set fieldless typed enum peer on
 /// the caixa surface ([`RestartPolicy`]) — the byte-view mirror of the
@@ -15482,6 +15553,146 @@ mod tests {
                 borrowed_via_generic.as_ref(),
                 via_method_bytes,
                 "<T: Into<Box<[u8]>>>-bound composition on \
+                 &RestartPolicy::{variant:?} must fold the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_into_owned_arc_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartPolicy> for std::sync::Arc<[u8]>` — asserts the
+        // owned-input byte-owned reverse projection routes through the
+        // substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor's `.as_bytes()` byte-view via
+        // [`std::sync::Arc::<[u8]>::from`] on the returned `&'static [u8]`
+        // and resolves to the same three-arm PascalCase wire byte-string
+        // emit-set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates. Refuses any
+        // future silent detour that would swap
+        // `std::sync::Arc::<[u8]>::from(policy.as_str().as_bytes())` for a
+        // `Box::<[u8]>::from(policy).into()` double-hop, a routing through
+        // the sibling `fmt::Display` emitter, or a stray normalization step
+        // that would drop or rebrand a canonical PascalCase arm ahead of
+        // the atomic-refcounted byte-emit. Cross-axis partition against
+        // the paired owned-input byte-owned reverse-projection axes
+        // ([`Vec<u8>`], [`Cow<'static, [u8]>`], [`Box<[u8]>`]) on the same
+        // primitive — all four routes must byte-agree on every arm.
+        for &variant in RestartPolicy::ALL {
+            let via_owned_from: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<RestartPolicy>>::from(variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<RestartPolicy> for Arc<[u8]> impl must byte-\
+                 equal RestartPolicy::as_str().as_bytes() on \
+                 RestartPolicy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<RestartPolicy>>::from(variant);
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<RestartPolicy>>::from(variant);
+            let via_box_bytes: Box<[u8]> = <Box<[u8]> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<RestartPolicy> for Arc<[u8]> and \
+                 From<RestartPolicy> for Vec<u8> must byte-agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 owned-input byte-owned reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<RestartPolicy> for Arc<[u8]> and \
+                 From<RestartPolicy> for Cow<'static, [u8]> must byte-\
+                 agree on RestartPolicy::{variant:?} — divergence \
+                 signals the owned-input byte-owned reverse-projection \
+                 axes have drifted off the same substrate-primitive \
+                 as_str accessor"
+            );
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_box_bytes.as_ref(),
+                "From<RestartPolicy> for Arc<[u8]> and \
+                 From<RestartPolicy> for Box<[u8]> must byte-agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 owned-input byte-owned reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_borrowed_into_owned_arc_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartPolicy> for std::sync::Arc<[u8]>` — asserts
+        // the borrowed-input byte-owned reverse projection routes byte-
+        // for-byte through the substrate-primitive
+        // [`super::RestartPolicy::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view via [`std::sync::Arc::<[u8]>::from`] on
+        // the returned `&'static [u8]` on every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates, preserving the
+        // source [`super::RestartPolicy`] intact (no move-out).
+        // Additionally asserts the paired owned-input and borrowed-input
+        // corners byte-agree on the same arm, closing the
+        // `{Self, &Self} → std::sync::Arc<[u8]>` byte-owned reverse-
+        // projection family on this primitive.
+        fn generic_arc_bytes_sink<T: Into<std::sync::Arc<[u8]>>>(t: T) -> std::sync::Arc<[u8]> {
+            t.into()
+        }
+        for &variant in RestartPolicy::ALL {
+            let via_borrowed_from: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<&RestartPolicy>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&RestartPolicy> for Arc<[u8]> impl must byte-\
+                 equal RestartPolicy::as_str().as_bytes() on \
+                 &RestartPolicy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            let survivor: &'static str = variant.as_str();
+            assert_eq!(
+                survivor.as_bytes(),
+                via_method_bytes,
+                "source &RestartPolicy::{variant:?} must survive \
+                 borrowed-input projection — a move-out here signals \
+                 the impl silently dereferences past the borrowed \
+                 handle"
+            );
+            let via_owned_from: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_owned_from.as_ref(),
+                "From<&RestartPolicy> for Arc<[u8]> and \
+                 From<RestartPolicy> for Arc<[u8]> must byte-agree on \
+                 RestartPolicy::{variant:?} — divergence signals the \
+                 paired owned-input and borrowed-input corners have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            let owned_via_generic = generic_arc_bytes_sink(variant);
+            let variant_ref: &RestartPolicy = &variant;
+            let borrowed_via_generic = generic_arc_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                via_method_bytes,
+                "<T: Into<Arc<[u8]>>>-bound composition on \
+                 RestartPolicy::{variant:?} must fold the same byte-\
+                 tail RestartPolicy::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                via_method_bytes,
+                "<T: Into<Arc<[u8]>>>-bound composition on \
                  &RestartPolicy::{variant:?} must fold the same byte-\
                  tail RestartPolicy::as_str().as_bytes() returns"
             );
