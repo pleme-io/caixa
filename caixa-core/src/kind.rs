@@ -2212,15 +2212,109 @@ mod tests {
     use super::*;
 
     #[test]
-    fn kind_requirements() {
-        assert!(CaixaKind::Biblioteca.requires_lib());
-        assert!(!CaixaKind::Biblioteca.requires_exe());
-        assert!(CaixaKind::Binario.requires_exe());
-        assert!(CaixaKind::Servico.requires_servicos());
-        assert!(CaixaKind::Supervisor.requires_children());
-        assert!(!CaixaKind::Servico.requires_children());
-        assert!(CaixaKind::Acao.requires_ci());
-        assert!(!CaixaKind::Servico.requires_ci());
+    fn caixa_kind_requires_predicates_partition_the_arm_set() {
+        // Fail-before-pass-after pin on the [`CaixaKind`] required-slot
+        // predicate family ([`CaixaKind::requires_lib`] /
+        // [`CaixaKind::requires_exe`] / [`CaixaKind::requires_servicos`] /
+        // [`CaixaKind::requires_children`] / [`CaixaKind::requires_membros`] /
+        // [`CaixaKind::requires_ci`]): for each of the six variants, exactly
+        // one of the six per-slot predicates returns `true` and the other
+        // five return `false`. Together the six predicates partition the
+        // six [`CaixaKind::ALL`] arms into disjoint singletons that cover
+        // every variant — the identity matrix between the six typed kinds
+        // and their canonical required-slot axes
+        // (`lib/*.lisp` for `:kind Biblioteca`, `exe/*.lisp` for
+        // `:kind Binario`, `servicos/*.computeunit.yaml` for `:kind Servico`,
+        // `:children` for `:kind Supervisor`, `:membros` for `:kind Aplicacao`,
+        // `:ci` for `:kind Acao` — the six load-bearing per-`:kind` slot
+        // axes the `★★ The six typed kinds` heading in caixa/CLAUDE.md
+        // enumerates).
+        //
+        // Pre-lift this sweep the sibling `kind_requirements` test hand-
+        // picked 8 asserts across the 6 predicates × 6 variants = 36 cells
+        // — leaving 28 (variant, predicate) cells uncovered. A future arm
+        // addition (the `Actor` virtual-actor arm the theory
+        // [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+        // M5 Orleans-inspired kind names as a trajectory item, the same
+        // future seventh arm the sibling
+        // [`caixa_kind_is_variant_predicates_partition_the_arm_set`]
+        // comment already anticipates) that landed a `requires_*` predicate
+        // returning `true` on a spurious second arm would silently pass
+        // every pre-lift hand-picked assert while splitting the partition
+        // invariant every [`crate::LayoutInvariants::verify`] per-`:kind`
+        // slot dispatch keys off. Sweeping every `(variant, predicate)`
+        // cell in the 6 × 6 identity matrix makes the partition a build-
+        // time property: any silent skew on any existing arm — a future
+        // per-consumer disambiguation collapsing two arms onto the same
+        // required-slot axis, a hand-rolled `impl` that shadows one of
+        // the derive-adjacent const fns — trips at caixa-core test time
+        // rather than at a downstream `LayoutInvariants::verify` per-
+        // `:kind` slot dispatch's silent misclassification.
+        //
+        // Peer of the sibling
+        // [`caixa_kind_is_variant_predicates_partition_the_arm_set`]
+        // (fefbb8b) sweep on the [`gen_platform::IsVariant`]-derived
+        // [`is_biblioteca`] / [`is_binario`] / [`is_servico`] /
+        // [`is_supervisor`] / [`is_aplicacao`] / [`is_acao`] predicate
+        // family and the sibling
+        // [`crate::render::tests::require_kind_distinguishes_every_pair_of_kinds`]
+        // (fefbb8b) sweep on the [`crate::render::require_kind`] pairwise
+        // dispatch — the same one-typed-dispatch-per-variant partition
+        // discipline extended here onto the paired required-slot
+        // predicate family, the third [`CaixaKind`] axis to converge on
+        // the closed-set arm-partition sweep.
+        let rows: [(CaixaKind, [bool; 6]); 6] = [
+            (
+                CaixaKind::Biblioteca,
+                [true, false, false, false, false, false],
+            ),
+            (
+                CaixaKind::Binario,
+                [false, true, false, false, false, false],
+            ),
+            (
+                CaixaKind::Servico,
+                [false, false, true, false, false, false],
+            ),
+            (
+                CaixaKind::Supervisor,
+                [false, false, false, true, false, false],
+            ),
+            (
+                CaixaKind::Aplicacao,
+                [false, false, false, false, true, false],
+            ),
+            (CaixaKind::Acao, [false, false, false, false, false, true]),
+        ];
+        // Row count is pinned load-bearing at [`CaixaKind::ALL::len`] so a
+        // future arm addition that extends the roster without an added
+        // row here trips at caixa-core test time ahead of the per-cell
+        // sweep, rather than surfacing as one arm silently absent from
+        // the identity matrix.
+        assert_eq!(
+            rows.len(),
+            CaixaKind::ALL.len(),
+            "requires_* partition sweep must cover every arm of \
+             CaixaKind::ALL (got {} rows for {} variants)",
+            rows.len(),
+            CaixaKind::ALL.len()
+        );
+        for (variant, expected) in rows {
+            let observed = [
+                variant.requires_lib(),
+                variant.requires_exe(),
+                variant.requires_servicos(),
+                variant.requires_children(),
+                variant.requires_membros(),
+                variant.requires_ci(),
+            ];
+            assert_eq!(
+                observed, expected,
+                "CaixaKind::{variant:?} requires_* predicates must \
+                 partition the required-slot axis (lib, exe, servicos, \
+                 children, membros, ci); got {observed:?}"
+            );
+        }
     }
 
     #[test]
