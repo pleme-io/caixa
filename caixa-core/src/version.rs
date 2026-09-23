@@ -939,6 +939,107 @@ impl From<&CaixaVersion> for std::rc::Rc<str> {
     }
 }
 
+/// Trait-idiomatic *byte-view* borrow projection on the [`CaixaVersion`]
+/// newtype primitive — the byte-view mirror of the pre-existing sibling
+/// [`AsRef<str>`] str-view borrow projection on this same primitive.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`CaixaVersion::as_str`] `pub const fn` accessor via [`str::as_bytes`]
+/// so every consumer that binds a [`CaixaVersion`] through the standard-
+/// library `impl AsRef<[u8]>` bound reaches the wrapped [`String`]'s
+/// byte-tail through one substrate-primitive dispatch rather than through
+/// the pre-lift open-coded `v.as_str().as_bytes()` /
+/// `<CaixaVersion as AsRef<str>>::as_ref(&v).as_bytes()` two-hop
+/// composition whose bounds carry no compile-time link back to the
+/// newtype's storage.
+///
+/// The primary compounding target is the [`crate`]-adjacent
+/// [`caixa-lacre`](../../caixa-lacre/) BLAKE3 content-address closure:
+/// [`blake3::hash`] and [`blake3::Hasher::update`] both bind their input
+/// through `impl AsRef<[u8]>`, so any future per-caixa content-address
+/// tag that folds a `:versao` byte-tail into the [`crate::Lacre`] closure
+/// (a hypothetical `hasher.update(caixa.versao());`-shape composition on
+/// the per-caixa BLAKE3 closure builder, a future per-`Membro :versao`
+/// requirement fold on the M3-mesh lacre snapshot the operator's
+/// admission cycle pins each Aplicacao's `:membros :versao` accept-set
+/// against, a future per-`ChildSpec :versao-requirement` fold on the
+/// M2-OTP-shape supervisor-tree lacre snapshot) reaches the substrate-
+/// primitive [`CaixaVersion::as_str`] accessor through this impl and no
+/// other. Peer consumer paths on the byte-view axis: any future
+/// [`std::io::Write::write_all`]-bound diagnostic sink (whose input binds
+/// through `impl AsRef<[u8]>`), any future byte-keyed
+/// [`std::collections::HashMap`] `<K: AsRef<[u8]>, V>` lookup whose entry-
+/// key trait bound rules out the sibling [`AsRef<str>`] str-view
+/// projection, and any future `ring::digest::Context::update` /
+/// `sha2::Sha256::update` / `blake3::Hasher::update` byte-input surface
+/// on any future per-`:versao` content-address digest.
+///
+/// Rust's standard library carries `impl AsRef<[u8]> for str` and
+/// `impl AsRef<[u8]> for String`, so the two-hop composition
+/// `v.as_str().as_bytes()` (equivalently
+/// `AsRef::<str>::as_ref(&v).as_bytes()`) is reachable through the pre-
+/// existing str-view axis alone. But that two-hop shape has no compile-
+/// time link back to the byte-projection axis, forces every downstream
+/// `<T: AsRef<[u8]>>`-bound consumer to open-code the two-hop composition
+/// at every call site rather than pass a [`CaixaVersion`] through the
+/// trait bound directly, and admits a silent split whenever a future call
+/// site takes a sibling reverse-projection axis (a `String::from(v)`
+/// unwrap, a `Box::<str>::from(&v)` fit-to-length boxed slice, a
+/// `Cow::<'static, str>::from(v)` owned-arm wrap) whose `.as_bytes()`
+/// byte-tail byte-equals `as_str`'s by construction but carries no
+/// compile-time byte-view surface. The lifted single-hop impl closes the
+/// byte-view axis so every future `<T: AsRef<[u8]>>`-bound consumer
+/// reaches the substrate primitive through one trait dispatch, and any
+/// future rebrand of the wrapped storage (a hypothetical widening to a
+/// typed [`semver::Version`] slot once eager parse-on-construct
+/// discipline lands) migrates the byte-view surface in lockstep with the
+/// paired [`AsRef<str>`] / [`fmt::Display`] / [`std::borrow::Borrow<str>`]
+/// projections at the shared [`CaixaVersion::as_str`] accessor.
+///
+/// Rust-side newtype convention pairs [`AsRef<str>`] and [`AsRef<[u8]>`]
+/// on the same primitive (the standard library's own [`String`] carries
+/// both — `impl AsRef<str> for String` + `impl AsRef<[u8]> for String` —
+/// on the same borrow-projection axis), so a newtype that carries one but
+/// not the other splits off the convention that lets every
+/// [`String`]-shaped consumer swap the newtype in without re-shaping its
+/// bounds. This impl closes that split on [`CaixaVersion`], mirroring the
+/// paired [`AsRef<[u8]>`] byte-view axis every closed-set fieldless typed
+/// enum peer on the substrate already carries
+/// ([`crate::CaixaKind`] at kind.rs:1791, [`crate::CaixaDialeto`] at
+/// dialeto.rs:1885, [`crate::dep::DepList`] at dep.rs:4616,
+/// [`crate::supervisor::RestartStrategy`] at supervisor.rs:1518,
+/// [`crate::supervisor::RestartPolicy`] at supervisor.rs:3385,
+/// [`crate::aplicacao::WitShape`] at aplicacao.rs:1955,
+/// [`crate::aplicacao::RateLimitUnit`] at aplicacao.rs:8900,
+/// [`crate::aplicacao::PlacementStrategy`] at aplicacao.rs:12231), now
+/// extended onto the substrate's core String-wrapper newtype primitive.
+/// The str-view axes stay reachable for the borrowed `&str` and
+/// formatter-output paths, this impl closes the byte-view axis at the
+/// same shared substrate-primitive accessor.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_version_as_ref_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaVersion::as_str`] `.as_bytes()`, plus
+/// cross-axis witness against the paired [`AsRef<str>`] and
+/// [`fmt::Display`] axes' `.as_bytes()` byte-tails, plus a
+/// `<T: AsRef<[u8]>>`-bound-consumer witness that a generic byte-input
+/// function accepts a [`CaixaVersion`] directly through the trait bound
+/// and reaches the wrapped body without the caller open-coding the
+/// two-hop projection). Any future silent detour that routes the byte-
+/// view impl off the substrate-primitive [`CaixaVersion::as_str`]
+/// accessor (a swap onto `self.0.as_bytes()` re-inlining that bypasses
+/// the shared `pub const fn` dispatch, a stray normalization step that
+/// would drop whitespace or canonicalize a prerelease tag ahead of the
+/// byte-view emit, a swap onto a hypothetical future [`semver::Version`]
+/// re-serialization that would strip the raw at-rest storage discipline
+/// [`CaixaVersion`] carries by construction) trips at caixa-core test
+/// time under `assert_eq!` rather than at a downstream `impl AsRef<[u8]>`-
+/// bound consumer's silent split.
+impl AsRef<[u8]> for CaixaVersion {
+    fn as_ref(&self) -> &[u8] {
+        self.as_str().as_bytes()
+    }
+}
+
 /// Canonical Zig-style git-tag prefix every `feira publish` run writes
 /// and every downstream consumer of a published caixa reads. A caixa
 /// published at `:versao "0.1.0"` lands as a git tag `v0.1.0` on the
@@ -2514,6 +2615,119 @@ mod tests {
                 displayed, versao,
                 "CaixaVersion::from_str + Display must round-trip byte-for-byte",
             );
+        }
+    }
+
+    #[test]
+    fn caixa_version_as_ref_bytes_routes_through_as_str_accessor() {
+        // `<T: AsRef<[u8]>>`-bound-consumer witness helper: a generic
+        // byte-input function accepts a [`CaixaVersion`] directly through
+        // the trait bound, without the caller open-coding the two-hop
+        // `v.as_str().as_bytes()` composition. Lifted to the top of the
+        // function per `clippy::items_after_statements`.
+        fn generic_bytes_sink<T: AsRef<[u8]>>(t: T) -> Vec<u8> {
+            t.as_ref().to_vec()
+        }
+        // `blake3::Hasher::update`-shape byte-input surface mock: mirrors
+        // `blake3::Hasher::update` / `ring::digest::Context::update` /
+        // `sha2::Sha256::update`'s `impl AsRef<[u8]>`-bound `update`
+        // signature so a per-`:versao` BLAKE3 content-address closure
+        // that composes `hasher.update(caixa.versao())` on the
+        // [`crate::Lacre`] closure builder reaches the substrate-
+        // primitive [`CaixaVersion::as_str`] accessor through this axis
+        // and no other.
+        struct MockHasher(Vec<u8>);
+        impl MockHasher {
+            fn new() -> Self {
+                Self(Vec::new())
+            }
+            fn update(&mut self, bytes: impl AsRef<[u8]>) -> &mut Self {
+                self.0.extend_from_slice(bytes.as_ref());
+                self
+            }
+            fn finalize(self) -> Vec<u8> {
+                self.0
+            }
+        }
+
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl AsRef<[u8]> for CaixaVersion` — asserts the trait-
+        // idiomatic byte-view standard-library impl and the substrate-
+        // primitive [`CaixaVersion::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-tail resolve to the same byte-string across
+        // every canonical `:versao`-shaped input the sibling
+        // `caixa_version_as_str_accessor_is_const_fn` and
+        // `caixa_version_from_str_round_trips_through_display_on_every_input`
+        // pins already sweep (canonical semver, prerelease-shape, zero-
+        // body, empty-string, requirement-shape, star, non-semver junk,
+        // build-metadata-tail). Opens the trait-idiomatic byte-view axis
+        // on the substrate's core String-wrapper newtype primitive
+        // [`CaixaVersion`], mirroring the paired [`AsRef<[u8]>`] axis
+        // every closed-set fieldless typed enum peer already carries.
+        for versao in [
+            "0.1.0",
+            "1.2.3-alpha.1",
+            "0.0.0",
+            "",
+            "^0.1",
+            "*",
+            "not-a-version",
+            "1.2.3+build.42",
+        ] {
+            let v: CaixaVersion = versao.into();
+            let via_trait: &[u8] = <CaixaVersion as AsRef<[u8]>>::as_ref(&v);
+            let via_method_bytes: &[u8] = v.as_str().as_bytes();
+            assert_eq!(
+                via_trait, via_method_bytes,
+                "AsRef<[u8]> for CaixaVersion impl must byte-equal \
+                 CaixaVersion::as_str().as_bytes() on {versao:?} — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor",
+            );
+            // Cross-axis witness against the paired str-view axes'
+            // `.as_bytes()` byte-tails: the newly lifted byte-view
+            // impl and every str-view axis on the same primitive
+            // ([`AsRef<str>`], [`fmt::Display`], [`CaixaVersion::as_str`])
+            // must resolve to the same byte-tail by construction — any
+            // future silent split at the substrate-primitive accessor
+            // trips here rather than at a downstream consumer.
+            let str_view_ref: &str = <CaixaVersion as AsRef<str>>::as_ref(&v);
+            assert_eq!(
+                via_trait,
+                str_view_ref.as_bytes(),
+                "AsRef<[u8]> and AsRef<str> for CaixaVersion must resolve \
+                 to byte-equal byte-tails on {versao:?}",
+            );
+            let display_bytes = v.to_string();
+            assert_eq!(
+                via_trait,
+                display_bytes.as_bytes(),
+                "AsRef<[u8]> and <CaixaVersion as fmt::Display>::to_string \
+                 must resolve to byte-equal byte-tails on {versao:?}",
+            );
+            let borrow_view: &str = <CaixaVersion as std::borrow::Borrow<str>>::borrow(&v);
+            assert_eq!(
+                via_trait,
+                borrow_view.as_bytes(),
+                "AsRef<[u8]> and Borrow<str> for CaixaVersion must resolve \
+                 to byte-equal byte-tails on {versao:?}",
+            );
+            // `<T: AsRef<[u8]>>`-bound-consumer witness: a generic
+            // byte-input function accepts the wrapper directly and
+            // returns the same bytes the substrate-primitive accessor's
+            // `.as_bytes()` byte-tail carries.
+            let sunk_owned: Vec<u8> = generic_bytes_sink(v.clone());
+            assert_eq!(sunk_owned, via_method_bytes);
+            let sunk_borrowed: Vec<u8> = generic_bytes_sink(&v);
+            assert_eq!(sunk_borrowed, via_method_bytes);
+            // `blake3::Hasher::update`-shape witness: the
+            // per-`:versao` BLAKE3 content-address closure builder reaches
+            // the substrate-primitive accessor through the byte-view axis
+            // and folds the same bytes the paired str-view axes surface.
+            let mut mock_hasher = MockHasher::new();
+            mock_hasher.update(&v);
+            let folded_bytes = mock_hasher.finalize();
+            assert_eq!(folded_bytes, via_method_bytes);
         }
     }
 }
