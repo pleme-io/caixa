@@ -327,49 +327,46 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, LexError> {
         let span_end = u32::try_from(span.end + body_start).unwrap_or(u32::MAX);
         let span = Span::new(span_start, span_end);
 
-        match result {
-            Ok(kind) => {
-                let public = match kind {
-                    LogosKind::LParen => TokenKind::LParen,
-                    LogosKind::RParen => TokenKind::RParen,
-                    LogosKind::LBrace => TokenKind::LBrace,
-                    LogosKind::RBrace => TokenKind::RBrace,
-                    LogosKind::LBracket => TokenKind::LBracket,
-                    LogosKind::RBracket => TokenKind::RBracket,
-                    LogosKind::Quote => TokenKind::Quote,
-                    LogosKind::Quasiquote => TokenKind::Quasiquote,
-                    LogosKind::Unquote => TokenKind::Unquote,
-                    LogosKind::UnquoteSplice => TokenKind::UnquoteSplice,
-                    LogosKind::Bool(b) => TokenKind::Bool(b),
-                    LogosKind::Str(s) => TokenKind::Str(s),
-                    LogosKind::Int(i) => TokenKind::Int(i),
-                    LogosKind::Float(f) => TokenKind::Float(f),
-                    LogosKind::Keyword(s) => TokenKind::Keyword(s),
-                    LogosKind::LineComment(s) => TokenKind::LineComment(s),
-                    LogosKind::Newlines(n) => TokenKind::Newlines(n),
-                    LogosKind::Whitespace => TokenKind::Whitespace,
-                    LogosKind::Symbol(s) => {
-                        if s == "nil" {
-                            TokenKind::Nil
-                        } else {
-                            TokenKind::Symbol(s)
-                        }
+        if let Ok(kind) = result {
+            let public = match kind {
+                LogosKind::LParen => TokenKind::LParen,
+                LogosKind::RParen => TokenKind::RParen,
+                LogosKind::LBrace => TokenKind::LBrace,
+                LogosKind::RBrace => TokenKind::RBrace,
+                LogosKind::LBracket => TokenKind::LBracket,
+                LogosKind::RBracket => TokenKind::RBracket,
+                LogosKind::Quote => TokenKind::Quote,
+                LogosKind::Quasiquote => TokenKind::Quasiquote,
+                LogosKind::Unquote => TokenKind::Unquote,
+                LogosKind::UnquoteSplice => TokenKind::UnquoteSplice,
+                LogosKind::Bool(b) => TokenKind::Bool(b),
+                LogosKind::Str(s) => TokenKind::Str(s),
+                LogosKind::Int(i) => TokenKind::Int(i),
+                LogosKind::Float(f) => TokenKind::Float(f),
+                LogosKind::Keyword(s) => TokenKind::Keyword(s),
+                LogosKind::LineComment(s) => TokenKind::LineComment(s),
+                LogosKind::Newlines(n) => TokenKind::Newlines(n),
+                LogosKind::Whitespace => TokenKind::Whitespace,
+                LogosKind::Symbol(s) => {
+                    if s == "nil" {
+                        TokenKind::Nil
+                    } else {
+                        TokenKind::Symbol(s)
                     }
-                };
-                out.push(Token { kind: public, span });
-            }
-            Err(_) => {
-                // Unrecognized byte — most likely an unterminated
-                // string (since strings are the only multi-byte form
-                // that can fail to close). Distinguish them by source
-                // shape so the LexError carries the right variant.
-                let slice = lex.slice();
-                if slice.starts_with('"') {
-                    return Err(LexError::UnterminatedString(span_start));
                 }
-                let ch = slice.chars().next().unwrap_or(' ');
-                return Err(LexError::UnexpectedChar(span_start, ch));
+            };
+            out.push(Token { kind: public, span });
+        } else {
+            // Unrecognized byte — most likely an unterminated
+            // string (since strings are the only multi-byte form
+            // that can fail to close). Distinguish them by source
+            // shape so the LexError carries the right variant.
+            let slice = lex.slice();
+            if slice.starts_with('"') {
+                return Err(LexError::UnterminatedString(span_start));
             }
+            let ch = slice.chars().next().unwrap_or(' ');
+            return Err(LexError::UnexpectedChar(span_start, ch));
         }
     }
 

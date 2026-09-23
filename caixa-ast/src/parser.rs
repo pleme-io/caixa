@@ -304,7 +304,7 @@ mod tests {
     }
 
     /// Delimiters terminate atoms, so no whitespace is required around
-    /// them. `{:name` must be LBrace + Keyword, never one symbol.
+    /// them. `{:name` must be `LBrace` + Keyword, never one symbol.
     #[test]
     fn delimiters_terminate_atoms_without_whitespace() {
         let nodes = parse(r"{:a 1}").unwrap();
