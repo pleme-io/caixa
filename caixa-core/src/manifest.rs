@@ -16252,7 +16252,7 @@ mod tests {
             }),
         ];
         for limits in fixtures {
-            let c = caixa_with_limits(limits.clone());
+            let c = caixa_with_limits(limits);
             assert_eq!(
                 c.limits(),
                 limits.as_ref(),
@@ -16441,7 +16441,7 @@ mod tests {
                 cpu: Some(500),
             }),
         ] {
-            let c = caixa_with_limits(limits.clone());
+            let c = caixa_with_limits(limits);
             let first = c.limits().unwrap();
             let second = c.limits().unwrap();
             assert_eq!(
