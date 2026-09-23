@@ -1376,9 +1376,10 @@ impl Caixa {
     /// The `:kind` slot carries the universal-axis closed-set typed-
     /// discriminant every substrate-side dispatch keys off (CAIXA-SDLC
     /// §I — the primary shape gate every renderer / verifier /
-    /// operator branches on; the five variants `Biblioteca` /
-    /// `Binario` / `Servico` / `Supervisor` / `Aplicacao` partition
-    /// the caixa surface into disjoint runtime contracts) — the typed
+    /// operator branches on; the six variants `Biblioteca` /
+    /// `Binario` / `Servico` / `Supervisor` / `Aplicacao` / `Acao`
+    /// partition the caixa surface into disjoint runtime contracts) —
+    /// the typed
     /// slot's [`CaixaKind`] accept-set (parse-time-rejected non-symbol
     /// values through the derive-macro's symbol-arm gate, exhaustively
     /// matched at every downstream dispatch site) maps onto every

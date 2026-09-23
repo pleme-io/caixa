@@ -2402,24 +2402,25 @@ mod tests {
     #[test]
     fn caixa_kind_is_variant_predicates_partition_the_arm_set() {
         // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
-        // derive: for each of the five variants, exactly one of the
+        // derive: for each of the six variants, exactly one of the
         // generated `is_biblioteca` / `is_binario` / `is_servico` /
-        // `is_supervisor` / `is_aplicacao` predicates returns `true` and
-        // the other four return `false`. Prior to this derive the ten
-        // production `caixa.kind() == CaixaKind::X` / `!=` sites in
-        // `layout.rs` (`SupervisorOwnsCode` / `AplicacaoOwnsCode` /
-        // `MeshSlotsOnNonAplicacao` / `SupervisorSlotsOnNonSupervisor` /
-        // `ServicoSlotsOnNonServico` / `MissingLib` biblioteca-fallback
-        // / Supervisor invariants / Aplicacao invariants) plus
-        // `manifest.rs` (`aplicacao_view` / `supervisor_view` kind
-        // gates) each open-coded a per-arm PartialEq compare against
-        // the enum variant — ten sites that expressed no compile-time
-        // link back to the closed-set typed dispatch a future sixth
-        // `:kind` (e.g. an `Actor` virtual-actor arm for the
-        // absorption-roadmap M5 Orleans-inspired kind) would have to
-        // thread through in lockstep or one gate would silently
-        // disagree with the others on which arms it treats as "runs
-        // no code" / "declares mesh slots" / etc. Peer of the sibling
+        // `is_supervisor` / `is_aplicacao` / `is_acao` predicates
+        // returns `true` and the other five return `false`. Prior to
+        // this derive the ten production `caixa.kind() == CaixaKind::X`
+        // / `!=` sites in `layout.rs` (`SupervisorOwnsCode` /
+        // `AplicacaoOwnsCode` / `MeshSlotsOnNonAplicacao` /
+        // `SupervisorSlotsOnNonSupervisor` / `ServicoSlotsOnNonServico` /
+        // `MissingLib` biblioteca-fallback / Supervisor invariants /
+        // Aplicacao invariants) plus `manifest.rs` (`aplicacao_view` /
+        // `supervisor_view` kind gates) each open-coded a per-arm
+        // PartialEq compare against the enum variant — ten sites that
+        // expressed no compile-time link back to the closed-set typed
+        // dispatch a future seventh `:kind` (e.g. an `Actor` virtual-
+        // actor arm for the absorption-roadmap M5 Orleans-inspired
+        // kind) would have to thread through in lockstep or one gate
+        // would silently disagree with the others on which arms it
+        // treats as "runs no code" / "declares mesh slots" / etc. Peer
+        // of the sibling
         // [`crate::supervisor::RestartStrategy`] / [`crate::supervisor::RestartPolicy`] /
         // [`crate::upgrade::UpgradeInstruction`] `IsVariant` derives on
         // the sibling closed-set typed-enum discriminator axes — extends

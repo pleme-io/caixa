@@ -38217,17 +38217,26 @@ mod tests {
     fn require_kind_distinguishes_every_pair_of_kinds() {
         // Sanity: the predicate is kind-axis-agnostic — it works for
         // every kind / expected pair, not just Servico/Biblioteca.
-        // Pinning that the caller can use `require_kind` for any of
-        // the five typed kinds (Biblioteca, Binario, Servico,
-        // Supervisor, Aplicacao) without a special-cased helper per
-        // kind. Same idiom every per-target renderer key off.
+        // Sweep the closed [`CaixaKind::ALL`] roster (Biblioteca,
+        // Binario, Servico, Supervisor, Aplicacao, Acao — the six
+        // typed kinds the CAIXA-SDLC §I discriminator carries) so a
+        // future kind added to the roster gets its pairwise gate
+        // coverage for free, and the test's actual pair count cannot
+        // drift out of sync with the roster's actual length. Same
+        // idiom every per-target renderer keys off.
         let mut c = bare_servico();
-        c.kind = CaixaKind::Aplicacao;
-        c.servicos = vec![];
-        let err = require_kind(&c, CaixaKind::Supervisor).unwrap_err();
-        assert_eq!(err.expected, CaixaKind::Supervisor);
-        assert_eq!(err.actual, CaixaKind::Aplicacao);
-        require_kind(&c, CaixaKind::Aplicacao).unwrap();
+        for &actual in CaixaKind::ALL {
+            c.kind = actual;
+            for &expected in CaixaKind::ALL {
+                if actual == expected {
+                    require_kind(&c, expected).unwrap();
+                } else {
+                    let err = require_kind(&c, expected).unwrap_err();
+                    assert_eq!(err.expected, expected);
+                    assert_eq!(err.actual, actual);
+                }
+            }
+        }
     }
 
     // ── require_ci / MissingCiSlot — Acao `:ci`-slot-presence gate ────
