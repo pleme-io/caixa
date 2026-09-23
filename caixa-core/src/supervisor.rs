@@ -3224,6 +3224,109 @@ impl From<&RestartPolicy> for std::sync::Arc<str> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M2 OTP-shape per-child-restart [`RestartPolicy`]
+/// closed-set fieldless typed enum — the single-threaded reference-
+/// counted peer of the paired owned-input
+/// [`From<RestartPolicy> for std::sync::Arc<str>`] impl (b05724e) on the
+/// sibling atomically-reference-counted [`std::sync::Arc<str>`] axis.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`RestartPolicy::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`.
+///
+/// Rust's standard library carries `impl From<&str> for std::rc::Rc<str>`
+/// and `impl From<String> for std::rc::Rc<str>` but no blanket
+/// `impl<T: AsRef<str>> From<T> for std::rc::Rc<str>` (nor a `From<&T>`
+/// blanket), and the [`std::sync::Arc<str>`] and [`std::rc::Rc<str>`]
+/// trait tables are disjoint — so a single-threaded caixa-operator
+/// reconciliation pass that shares the `:children :restart` wire
+/// byte-string across intra-reconcile-loop tree nodes through the cheaper
+/// non-atomic [`std::rc::Rc<str>`] refcount (the atomically-reference-
+/// counted [`std::sync::Arc<str>`] return-shape cannot provide within a
+/// single-threaded reconciliation pass without paying the atomic-fence
+/// cost the [`std::rc::Rc<str>`] axis skips by construction) reaches
+/// the substrate primitive through this impl and no other.
+///
+/// Closes the substrate-wide trait-idiomatic [`std::rc::Rc<str>`]
+/// forward-projection axis on the M2-OTP-shape `:supervisor
+/// :estrategia` and `:children :restart` slot pair the sibling-restart
+/// [`RestartStrategy`] first-mover (71ad8f4) opened one projection tier
+/// prior on the paired sibling enum — closes the paired axis on the
+/// second (and third-and-final) M2 OTP-shape closed-set fieldless typed
+/// enum peer on the caixa surface, matching the discipline the paired
+/// [`std::sync::Arc<str>`] forward-projection axis campaign already
+/// carried across the same slot pair (bca2ec8 → b3e72d7 on
+/// [`RestartStrategy`]; b05724e → borrowed-close on this enum).
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartPolicy::as_str`] across the
+/// three-arm [`RestartPolicy::ALL`] emit-set on the owned-input
+/// surface, plus a blanket-derived [`Into`] shape witness and cross-
+/// axis byte-parity pins against the sibling owned-input `{&'static
+/// str, String, Cow<'static, str>, Box<str>, std::sync::Arc<str>}`
+/// return-shape axes).
+impl From<RestartPolicy> for std::rc::Rc<str> {
+    fn from(policy: RestartPolicy) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(policy.as_str())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<str>`] output* forward
+/// projection on the M2 OTP-shape per-child-restart [`RestartPolicy`]
+/// closed-set fieldless typed enum — the borrowed-input companion to
+/// the paired owned-input [`From<RestartPolicy> for std::rc::Rc<str>`]
+/// impl immediately above, closing the `{Self, &Self}` input-shape
+/// corner of the [`std::rc::Rc<str>`] axis on the second (and third-
+/// and-final) M2 OTP-shape closed-set fieldless typed enum peer on the
+/// caixa surface. Routes byte-for-byte through the substrate-primitive
+/// [`RestartPolicy::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<str>::from`] on the returned `&'static str`, so a
+/// `RestartPolicy::ALL.iter().map(std::rc::Rc::<str>::from)`-shaped
+/// pipe (whose iterator over `&'static [RestartPolicy]` yields
+/// `&RestartPolicy` by construction) reaches the same three-arm lifted
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] const roster
+/// the paired owned-input axis and the sibling `{Self, &Self} ×
+/// {&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` forward-projection corner already return.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<str>> From<&T> for std::rc::Rc<str>` (nor a `Copy`-
+/// based `impl<T: Copy, U: From<T>> From<&T> for U`), so this borrowed-
+/// input axis is a distinct trait-idiomatic surface — without it, the
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe would force a spurious
+/// [`Copy`] deref or a `.copied()` restatement whose type bounds have
+/// no compile-time link back to the substrate primitive.
+///
+/// Closes the substrate-wide trait-idiomatic [`std::rc::Rc<str>`]
+/// forward-projection family on the M2-OTP-shape `:supervisor
+/// :estrategia` + `:children :restart` slot pair — the sibling
+/// [`RestartStrategy`] first-mover (71ad8f4) opened + closed the pair
+/// on the sibling `:supervisor :estrategia` half one projection tier
+/// prior, and the paired owned-input [`From<RestartPolicy> for
+/// std::rc::Rc<str>`] impl immediately above opens the same axis on
+/// this half — this borrowed-input impl closes it.
+///
+/// Pinned load-bearing by
+/// [`tests::restart_policy_from_borrowed_into_rc_str_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`RestartPolicy::as_str`] across the
+/// three-arm [`RestartPolicy::ALL`] emit-set on the borrowed-input
+/// surface, plus a blanket-derived [`Into`] shape witness, a cross-
+/// axis partition pin against the paired owned-input
+/// [`From<RestartPolicy> for std::rc::Rc<str>`] and the sibling
+/// borrowed-input `{&'static str, String, Cow<'static, str>, Box<str>,
+/// std::sync::Arc<str>}` return-shape axes, and a
+/// `.iter().map(std::rc::Rc::<str>::from)` pipe witness over
+/// [`RestartPolicy::ALL`] that resolves through the borrowed-input
+/// axis without a spurious [`Copy`] deref).
+impl From<&RestartPolicy> for std::rc::Rc<str> {
+    fn from(policy: &RestartPolicy) -> std::rc::Rc<str> {
+        std::rc::Rc::<str>::from(policy.as_str())
+    }
+}
+
 /// Trait-idiomatic byte-view surface on the per-child restart-decision
 /// policy typed enum.
 ///
@@ -13456,6 +13559,207 @@ mod tests {
              `RestartPolicy::as_str` accessor without a spurious \
              `Copy` deref (which would only be reachable through the \
              owned-input `From<RestartPolicy> for std::sync::Arc<str>` \
+             axis by first calling `.copied()` on the iterator)"
+        );
+    }
+
+    #[test]
+    fn restart_policy_from_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartPolicy> for std::rc::Rc<str>` — asserts
+        // the owned-input standard-library trait impl and the
+        // substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates, and cross-
+        // witnesses against every sibling owned-input `{&'static str,
+        // String, Cow<'static, str>, Box<str>, std::sync::Arc<str>}`
+        // return-shape axis so the six return-shape paths on the
+        // owned-input surface lock together by construction. Closes
+        // the substrate-wide [`std::rc::Rc<str>`] forward-projection
+        // campaign on the M2-OTP-shape `:supervisor :estrategia` +
+        // `:children :restart` slot pair the sibling-restart
+        // [`RestartStrategy`] first-mover (71ad8f4) opened one
+        // projection tier prior on the paired sibling enum.
+        for &variant in RestartPolicy::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<RestartPolicy>>::from(variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<RestartPolicy> for std::rc::Rc<str> impl must \
+                 round-trip RestartPolicy::{variant:?} to the same \
+                 lifted SUPERVISOR_CHILD_RESTART_* const \
+                 RestartPolicy::as_str returns — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            let via_into: std::rc::Rc<str> = variant.into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on \
+                 RestartPolicy::{variant:?} must byte-equal \
+                 RestartPolicy::as_str on the same input — the \
+                 blanket-derived Into shape must resolve to the same \
+                 as_str dispatch as the explicit From impl"
+            );
+            let owned_static: &'static str = <&'static str as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_static,
+                "From<RestartPolicy> for std::rc::Rc<str> and \
+                 From<RestartPolicy> for &'static str must resolve \
+                 identically on RestartPolicy::{variant:?}"
+            );
+            let owned_string: String = <String as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_string.as_str(),
+                "From<RestartPolicy> for std::rc::Rc<str> and \
+                 From<RestartPolicy> for String must resolve \
+                 identically on RestartPolicy::{variant:?}"
+            );
+            let owned_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_cow.as_ref(),
+                "From<RestartPolicy> for std::rc::Rc<str> and \
+                 From<RestartPolicy> for Cow<'static, str> must \
+                 resolve identically on RestartPolicy::{variant:?}"
+            );
+            let owned_box: Box<str> = <Box<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_box.as_ref(),
+                "From<RestartPolicy> for std::rc::Rc<str> and \
+                 From<RestartPolicy> for Box<str> must resolve \
+                 identically on RestartPolicy::{variant:?}"
+            );
+            let owned_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                owned_arc.as_ref(),
+                "From<RestartPolicy> for std::rc::Rc<str> and \
+                 From<RestartPolicy> for std::sync::Arc<str> must \
+                 resolve identically on RestartPolicy::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_borrowed_into_rc_str_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<&RestartPolicy> for std::rc::Rc<str>` — asserts
+        // the borrowed-input standard-library trait impl and the
+        // substrate-primitive [`super::RestartPolicy::as_str`]
+        // `pub const fn` accessor resolve to the same three-arm emit-
+        // set across every arm the exhaustive
+        // [`super::RestartPolicy::ALL`] slice enumerates. Closes the
+        // `{Self, &Self}` input-shape corner of the
+        // [`std::rc::Rc<str>`] axis on this enum, cross-witnesses
+        // against the paired owned-input axis and every sibling
+        // borrowed-input return-shape axis, and locks the
+        // `.iter().map(std::rc::Rc::<str>::from)` pipe over
+        // [`super::RestartPolicy::ALL`] to the substrate-primitive
+        // accessor without a spurious [`Copy`] deref (which would only
+        // be reachable through the owned-input axis by first calling
+        // `.copied()` on the iterator).
+        for &variant in RestartPolicy::ALL {
+            let via_trait: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<&RestartPolicy>>::from(&variant);
+            let via_method: &'static str = variant.as_str();
+            assert_eq!(
+                via_trait.as_ref(),
+                via_method,
+                "From<&RestartPolicy> for std::rc::Rc<str> impl must \
+                 round-trip &RestartPolicy::{variant:?} to the same \
+                 lifted SUPERVISOR_CHILD_RESTART_* const \
+                 RestartPolicy::as_str returns"
+            );
+            let via_into: std::rc::Rc<str> = (&variant).into();
+            assert_eq!(
+                via_into.as_ref(),
+                via_method,
+                "Into<std::rc::Rc<str>>::into on \
+                 &RestartPolicy::{variant:?} must byte-equal \
+                 RestartPolicy::as_str on the same input"
+            );
+            let owned_rc: std::rc::Rc<str> =
+                <std::rc::Rc<str> as From<RestartPolicy>>::from(variant);
+            assert_eq!(
+                via_trait, owned_rc,
+                "From<&RestartPolicy> for std::rc::Rc<str> and \
+                 From<RestartPolicy> for std::rc::Rc<str> must \
+                 resolve identically on RestartPolicy::{variant:?}"
+            );
+            let borrowed_static: &'static str =
+                <&'static str as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_static,
+                "From<&RestartPolicy> for std::rc::Rc<str> and \
+                 From<&RestartPolicy> for &'static str must resolve \
+                 identically on RestartPolicy::{variant:?}"
+            );
+            let borrowed_string: String = <String as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_string.as_str(),
+                "From<&RestartPolicy> for std::rc::Rc<str> and \
+                 From<&RestartPolicy> for String must resolve \
+                 identically on RestartPolicy::{variant:?}"
+            );
+            let borrowed_cow: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_cow.as_ref(),
+                "From<&RestartPolicy> for std::rc::Rc<str> and \
+                 From<&RestartPolicy> for Cow<'static, str> must \
+                 resolve identically on RestartPolicy::{variant:?}"
+            );
+            let borrowed_box: Box<str> = <Box<str> as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_box.as_ref(),
+                "From<&RestartPolicy> for std::rc::Rc<str> and \
+                 From<&RestartPolicy> for Box<str> must resolve \
+                 identically on RestartPolicy::{variant:?}"
+            );
+            let borrowed_arc: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<&RestartPolicy>>::from(&variant);
+            assert_eq!(
+                via_trait.as_ref(),
+                borrowed_arc.as_ref(),
+                "From<&RestartPolicy> for std::rc::Rc<str> and \
+                 From<&RestartPolicy> for std::sync::Arc<str> must \
+                 resolve identically on RestartPolicy::{variant:?}"
+            );
+        }
+        let via_iter: Vec<std::rc::Rc<str>> = RestartPolicy::ALL
+            .iter()
+            .map(std::rc::Rc::<str>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<str>> = RestartPolicy::ALL
+            .iter()
+            .map(|p| std::rc::Rc::<str>::from(p.as_str()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(std::rc::Rc::<str>::from)` over \
+             RestartPolicy::ALL — a call site whose iteration axis \
+             holds `&RestartPolicy` by construction — must byte-\
+             equal `.iter().map(|p| std::rc::Rc::<str>::from(p.as_str()))` \
+             on every arm — the borrowed-input std::rc::Rc<str> \
+             `From<&RestartPolicy> for std::rc::Rc<str>` axis is \
+             what makes the `std::rc::Rc::<str>::from` composition \
+             route through the substrate-primitive \
+             `RestartPolicy::as_str` accessor without a spurious \
+             `Copy` deref (which would only be reachable through the \
+             owned-input `From<RestartPolicy> for std::rc::Rc<str>` \
              axis by first calling `.copied()` on the iterator)"
         );
     }
