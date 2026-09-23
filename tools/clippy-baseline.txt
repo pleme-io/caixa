@@ -55,7 +55,6 @@
 1	clippy::print_literal	caixa-feira/src/cmd/ephemeral.rs
 1	clippy::unnecessary_wraps	caixa-feira/src/cmd/fmt.rs
 1	clippy::struct_excessive_bools	caixa-feira/src/cmd/lint.rs
-1	clippy::unnecessary_wraps	caixa-feira/src/cmd/lint.rs
 5	clippy::doc_markdown	caixa-feira/src/cmd/load.rs
 3	clippy::doc_markdown	caixa-feira/src/cmd/mod.rs
 2	clippy::doc_markdown	caixa-feira/src/cmd/pool.rs

@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use caixa_core::LAYOUT_DIR_LIB;
 use caixa_fmt::{FmtConfig, format_source};
 use caixa_lint::{FixSafety, apply_fixes, lint_source};
@@ -155,23 +155,115 @@ impl Lint {
     }
 
     fn resolve_targets(&self) -> Result<Vec<PathBuf>> {
-        if !self.paths.is_empty() {
-            return Ok(self.paths.clone());
+        if self.paths.is_empty() {
+            return Ok(expand_caixa_root(Path::new(".")));
         }
         let mut out = Vec::new();
-        let root = PathBuf::from(".");
-        let manifest = root.join("caixa.lisp");
-        if manifest.exists() {
-            out.push(manifest);
-        }
-        if let Ok(dir) = std::fs::read_dir(root.join(LAYOUT_DIR_LIB)) {
-            for entry in dir.flatten() {
-                let p = entry.path();
-                if p.extension().is_some_and(|e| e == "lisp") {
-                    out.push(p);
-                }
+        for path in &self.paths {
+            if path.is_dir() {
+                out.extend(expand_caixa_root(path));
+            } else if path.exists() {
+                out.push(path.clone());
+            } else {
+                bail!(
+                    "no such lint target: {} (pass a `.lisp` file or a caixa root \
+                     containing `caixa.lisp` + `{LAYOUT_DIR_LIB}/*.lisp`)",
+                    path.display(),
+                );
             }
         }
         Ok(out)
+    }
+}
+
+/// Expand a caixa root (a directory containing `caixa.lisp` + `lib/*.lisp`)
+/// to the concrete `.lisp` files `feira lint` walks. The `lib/` entries
+/// are sorted so diagnostic ordering is stable across filesystems.
+fn expand_caixa_root(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let manifest = root.join("caixa.lisp");
+    if manifest.exists() {
+        out.push(manifest);
+    }
+    if let Ok(dir) = std::fs::read_dir(root.join(LAYOUT_DIR_LIB)) {
+        let mut lib_files: Vec<PathBuf> = dir
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "lisp"))
+            .collect();
+        lib_files.sort();
+        out.extend(lib_files);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write(path: &Path, body: &str) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, body).unwrap();
+    }
+
+    fn lint_with_paths(paths: Vec<PathBuf>) -> Lint {
+        Lint {
+            paths,
+            errors_only: false,
+            no_color: true,
+            fix: false,
+            fix_unsafe: false,
+            fix_dry_run: false,
+        }
+    }
+
+    #[test]
+    fn directory_target_expands_to_manifest_plus_sorted_lib_lisps() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join("caixa.lisp"), "");
+        write(&root.join("lib").join("beta.lisp"), "");
+        write(&root.join("lib").join("alpha.lisp"), "");
+        write(&root.join("lib").join("readme.md"), "");
+
+        let cmd = lint_with_paths(vec![root.to_path_buf()]);
+        let targets = cmd.resolve_targets().unwrap();
+
+        assert_eq!(
+            targets,
+            vec![
+                root.join("caixa.lisp"),
+                root.join("lib").join("alpha.lisp"),
+                root.join("lib").join("beta.lisp"),
+            ],
+        );
+    }
+
+    #[test]
+    fn file_target_passes_through_untouched() {
+        let tmp = tempdir().unwrap();
+        let file = tmp.path().join("solo.lisp");
+        write(&file, "");
+        let cmd = lint_with_paths(vec![file.clone()]);
+        assert_eq!(cmd.resolve_targets().unwrap(), vec![file]);
+    }
+
+    #[test]
+    fn nonexistent_target_names_offending_path() {
+        let tmp = tempdir().unwrap();
+        let missing = tmp.path().join("nope.lisp");
+        let cmd = lint_with_paths(vec![missing.clone()]);
+        let err = cmd.resolve_targets().unwrap_err().to_string();
+        assert!(
+            err.contains(&missing.display().to_string()),
+            "error must name the offending path, got: {err}"
+        );
+        assert!(
+            err.contains("caixa.lisp"),
+            "error must point at the expected caixa-root shape, got: {err}"
+        );
     }
 }
