@@ -1609,6 +1609,69 @@ impl From<&RestartStrategy> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, [u8]>`]
+/// output* byte-owned reverse projection on the first M2 OTP-shape
+/// closed-set fieldless typed enum peer on the caixa surface
+/// ([`RestartStrategy`]) — the [`std::borrow::Cow<'static, [u8]>`] byte-
+/// mirror of the paired [`From<RestartStrategy> for
+/// std::borrow::Cow<'static, str>`] str-side impl (7dd28b3) and the
+/// [`std::borrow::Cow<'static, [u8]>`] companion of the paired byte-
+/// owned [`From<RestartStrategy> for Vec<u8>`] reverse-projection axis
+/// immediately above. Routes byte-for-byte through the substrate-
+/// primitive [`RestartStrategy::as_str`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`]`(strategy.as_str().as_bytes())` — the
+/// four `match` arms in [`Self::as_str`] resolve to
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_*`] `pub const &'static str`
+/// bodies, so `.as_bytes()` on each returns `&'static [u8]` by
+/// construction, and the zero-alloc [`Cow::Borrowed`] arm is the
+/// type-correct projection with no runtime allocation (mirroring the
+/// paired [`Cow<'static, str>`] axis's own [`Cow::Borrowed`]
+/// discipline on this same primitive; contrasts with the sibling
+/// [`crate::CaixaVersion`] [`Cow<'static, [u8]>`] impl (baf7537), whose
+/// wrapped [`String`] storage is a runtime heap allocation with no
+/// `&'static [u8]` lifetime, forcing the [`Cow::Owned`] arm there).
+///
+/// Extends the substrate-wide trait-idiomatic byte-owned reverse-
+/// projection matrix onto the first M2-OTP-shape closed-set fieldless
+/// typed-enum peer at the second byte-owned axis, following the
+/// trajectory the same axis walked on [`crate::CaixaVersion`]
+/// (98d38ed on the `Vec<u8>` axis, baf7537 on the `Cow<'static, [u8]>`
+/// axis).
+impl From<RestartStrategy> for std::borrow::Cow<'static, [u8]> {
+    fn from(strategy: RestartStrategy) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(strategy.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, [u8]>`]
+/// output* byte-owned reverse projection on the first M2 OTP-shape
+/// closed-set fieldless typed enum peer on the caixa surface
+/// ([`RestartStrategy`]) — the borrowed-input companion to the paired
+/// owned-input [`From<RestartStrategy> for
+/// std::borrow::Cow<'static, [u8]>`] impl immediately above, closing
+/// the `{Self, &Self} → Cow<'static, [u8]>` byte-owned reverse-
+/// projection family on this primitive at the borrowed-input corner.
+/// Routes byte-for-byte through the same substrate-primitive
+/// [`RestartStrategy::as_str`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`]`(strategy.as_str().as_bytes())` —
+/// the [`Cow::Borrowed`] arm is reachable on both input axes because
+/// [`Self::as_str`] returns `&'static str` regardless of the input
+/// shape, so no runtime allocation is forced on either corner.
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U
+/// where U: From<T>` (nor an
+/// `impl<T: AsRef<[u8]>> From<&T> for Cow<'static, [u8]>`), so every
+/// closed-set fieldless typed enum peer that carries the paired
+/// owned-input axis but not the borrowed-input axis forces every
+/// borrowed call site through a spurious [`Copy`] deref
+/// (`Cow::<'static, [u8]>::from(*strategy)`) or an open-coded
+/// `Cow::Borrowed(strategy.as_str().as_bytes())` whose type bounds
+/// have no compile-time link to the substrate primitive.
+impl From<&RestartStrategy> for std::borrow::Cow<'static, [u8]> {
+    fn from(strategy: &RestartStrategy) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(strategy.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
 /// first M2-OTP-shape closed-set fieldless typed enum peer on the caixa
 /// surface ([`RestartStrategy`]) — the byte-view mirror of the str-view
@@ -11920,6 +11983,124 @@ mod tests {
                  tail RestartStrategy::as_str().as_bytes() returns — \
                  the borrowed-input surface must resolve to the same \
                  as_str dispatch"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_into_owned_cow_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RestartStrategy> for std::borrow::Cow<'static, [u8]>`
+        // and `impl From<&RestartStrategy> for std::borrow::Cow<'static, [u8]>` —
+        // asserts the trait-idiomatic byte-owned reverse-projection standard-
+        // library impls and the substrate-primitive
+        // [`super::RestartStrategy::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view resolve to the same four-arm PascalCase
+        // wire byte-string emit-set across every arm the exhaustive
+        // [`super::RestartStrategy::ALL`] slice enumerates. Additionally
+        // asserts the returned `Cow<'static, [u8]>` binds the zero-alloc
+        // `Cow::Borrowed` arm on both input shapes, because
+        // `Self::as_str` returns `&'static str` and `.as_bytes()` on it
+        // preserves the `&'static [u8]` lifetime by construction.
+        //
+        // Generic `<T: Into<Cow<'static, [u8]>>>`-bound consumer witness
+        // helper: a future per-supervisor byte-writer that accepts a
+        // `Cow<'static, [u8]>` composes on both owned and borrowed input
+        // shapes without an open-coded three-hop
+        // `Cow::Borrowed(strategy.as_str().as_bytes())` at every call
+        // site. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_cow_bytes_sink<T: Into<std::borrow::Cow<'static, [u8]>>>(
+            t: T,
+        ) -> std::borrow::Cow<'static, [u8]> {
+            t.into()
+        }
+        for &variant in RestartStrategy::ALL {
+            let via_owned_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<RestartStrategy>>::from(variant);
+            let via_borrowed_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<&RestartStrategy>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<RestartStrategy> for Cow<'static, [u8]> impl must \
+                 byte-equal RestartStrategy::as_str().as_bytes() on \
+                 RestartStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&RestartStrategy> for Cow<'static, [u8]> impl must \
+                 byte-equal RestartStrategy::as_str().as_bytes() on \
+                 RestartStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_owned_from, std::borrow::Cow::Borrowed(_)),
+                "From<RestartStrategy> for Cow<'static, [u8]> must bind \
+                 the zero-alloc Cow::Borrowed arm on \
+                 RestartStrategy::{variant:?} — Self::as_str returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            assert!(
+                matches!(via_borrowed_from, std::borrow::Cow::Borrowed(_)),
+                "From<&RestartStrategy> for Cow<'static, [u8]> must bind \
+                 the zero-alloc Cow::Borrowed arm on \
+                 &RestartStrategy::{variant:?} — Self::as_str returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            // Cross-axis partition against the paired byte-owned
+            // `Vec<u8>` reverse-projection axis (7cc10eb line 1579) on
+            // the same enum — the two byte-owned reverse-projection
+            // axes must byte-agree on every arm.
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<RestartStrategy> for Cow<'static, [u8]> and \
+                 From<RestartStrategy> for Vec<u8> must byte-agree on \
+                 RestartStrategy::{variant:?} — divergence signals the \
+                 two byte-owned reverse-projection axes have drifted \
+                 off the same substrate-primitive as_str accessor"
+            );
+            // Cross-axis partition against the paired str-side
+            // `Cow<'static, str>` reverse-projection axis (7dd28b3) on
+            // the same enum — the byte-side and str-side Cow<'static, _>
+            // axes must both bind the Cow::Borrowed arm on every arm
+            // (both route through Self::as_str's &'static return).
+            let via_cow_str: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RestartStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_str.as_bytes(),
+                "From<RestartStrategy> for Cow<'static, [u8]> and \
+                 From<RestartStrategy> for Cow<'static, str> must \
+                 byte-agree on RestartStrategy::{variant:?} — \
+                 divergence signals a silent detour off the shared \
+                 substrate-primitive as_str accessor"
+            );
+        }
+        for &variant in RestartStrategy::ALL {
+            let owned_via_generic = generic_cow_bytes_sink(variant);
+            let variant_ref: &RestartStrategy = &variant;
+            let borrowed_via_generic = generic_cow_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 &RestartStrategy::{variant:?} must fold the same byte-\
+                 tail RestartStrategy::as_str().as_bytes() returns"
             );
         }
     }
