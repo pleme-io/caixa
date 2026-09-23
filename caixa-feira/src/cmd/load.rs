@@ -34,7 +34,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use caixa_core::Caixa;
+use caixa_core::{Caixa, LAYOUT_DIR_LIB};
 
 /// The canonical caixa manifest filename. Every `feira` verb's
 /// per-caixa-root entry-point resolves `<root>/caixa.lisp` through
@@ -469,6 +469,100 @@ pub(crate) fn validate_nome_arg(nome: &str) -> Result<()> {
              observable)"
         )
     })
+}
+
+/// Expand a caixa root (a directory containing `caixa.lisp` + `lib/*.lisp`)
+/// to the concrete `.lisp` files a per-verb tree-walking gate (`feira lint`,
+/// `feira fmt`) folds over. `lib/` entries are sorted so diagnostic and
+/// emit ordering is stable across filesystems whose `read_dir` order is
+/// nondeterministic.
+///
+/// Closes the PRIME DIRECTIVE duplication (theory/THEORY.md §I.5 — "the
+/// duplication budget is zero") on the per-verb caixa-root walk axis.
+/// Before this lift the same manifest-plus-`lib/*.lisp` shape appeared at
+/// two per-verb sites — `feira lint`'s `expand_caixa_root` +
+/// [`Lint::resolve_targets`] (cmd/lint.rs, the 32242c8 lift that first
+/// shaped this walk) and `feira fmt`'s inlined `resolve_targets`
+/// (cmd/fmt.rs), whose copy silently drifted from the lint arm on two
+/// axes: it did not sort the `lib/` entries (so `feira fmt` emitted
+/// `reformatted <path>` lines in filesystem-order, nondeterministic
+/// across a `tmpfs` vs. an `ext4` checkout, and its `--check` exit-code
+/// path could not be diff-stabilized against a known-good CI baseline)
+/// and it did not accept a directory argument at all (so
+/// `feira fmt examples/checkout-aplicacao` failed with `read_to_string`'s
+/// cryptic `Is a directory (os error 21)`, mirroring the same failure
+/// mode `feira lint` had before its own 32242c8 lift). Two verb-entry
+/// sites of the same walk, each one another place a future extension of
+/// what a caixa root contains (`exe/*.lisp` for `:kind Binario`,
+/// `servicos/*.lisp` for `:kind Servico`, `aplicacao.lisp` for
+/// `:kind Aplicacao`) has to remember to touch — the future extension
+/// then either reaches both verbs by construction, or lands at one and
+/// silently drifts at the other.
+///
+/// After the lift every per-verb `.lisp`-tree walker routes through this
+/// helper: the manifest-and-`lib/*.lisp` shape lives at exactly one
+/// definition, `feira fmt` inherits `feira lint`'s directory-argument
+/// support and sorted-entries discipline by construction, and any future
+/// caixa-root extension lands at one function and reaches every verb.
+/// Peer with [`caixa_manifest_path`] on the sibling per-caixa-root
+/// path-resolution axis — together the two form the canonical caixa-
+/// root introspection surface.
+pub(crate) fn expand_caixa_root(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let manifest = caixa_manifest_path(root);
+    if manifest.exists() {
+        out.push(manifest);
+    }
+    if let Ok(dir) = std::fs::read_dir(root.join(LAYOUT_DIR_LIB)) {
+        let mut lib_files: Vec<PathBuf> = dir
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "lisp"))
+            .collect();
+        lib_files.sort();
+        out.extend(lib_files);
+    }
+    out
+}
+
+/// Resolve a per-verb `Vec<PathBuf>` of `.lisp`-tree-walking arguments
+/// (`feira lint <path>…`, `feira fmt <path>…`) into concrete `.lisp`
+/// files. Empty input expands the current-working-directory caixa root
+/// via [`expand_caixa_root`]; a directory argument expands the same way;
+/// a regular file passes through unchanged; a missing target bails with
+/// a self-locating diagnostic naming the offending path and pointing at
+/// the expected caixa-root shape.
+///
+/// Closes the PRIME DIRECTIVE duplication on the per-verb resolve-targets
+/// axis (the paired site of [`expand_caixa_root`] — the walk and the
+/// per-arg dispatch that composes it were both duplicated across
+/// `feira lint` and `feira fmt`). Sharpens `feira fmt`'s error path
+/// verbatim onto `feira lint`'s named-path diagnostic so an author who
+/// mistypes a `feira fmt` target gets the same "no such <verb> target:
+/// <path>" shape they already get from `feira lint`, rather than the
+/// cryptic `read_to_string` OS error the pre-lift `feira fmt` surfaced.
+///
+/// `verb` is the caller's short name (`"fmt"`, `"lint"`) so the missing-
+/// target diagnostic can self-locate to the verb the author invoked.
+pub(crate) fn resolve_lisp_targets(paths: &[PathBuf], verb: &str) -> Result<Vec<PathBuf>> {
+    if paths.is_empty() {
+        return Ok(expand_caixa_root(Path::new(CAIXA_ROOT_DEFAULT_DIRNAME)));
+    }
+    let mut out = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            out.extend(expand_caixa_root(path));
+        } else if path.exists() {
+            out.push(path.clone());
+        } else {
+            bail!(
+                "no such {verb} target: {} (pass a `.lisp` file or a caixa root \
+                 containing `{CAIXA_MANIFEST_FILENAME}` + `{LAYOUT_DIR_LIB}/*.lisp`)",
+                path.display(),
+            );
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -1352,6 +1446,139 @@ mod tests {
         assert!(
             typed_reachable,
             "underlying tatara_lisp::LispError must remain reachable on the anyhow chain"
+        );
+    }
+
+    fn write(path: &Path, body: &str) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, body).unwrap();
+    }
+
+    #[test]
+    fn expand_caixa_root_returns_empty_for_a_missing_root() {
+        // The empty-arm — a caixa root that carries neither
+        // `caixa.lisp` nor a `lib/` directory expands to an empty
+        // target list. Load-bearing so `resolve_lisp_targets` on the
+        // no-args branch does not spuriously invent files, and so a
+        // future `feira` verb (an M4 `feira reconcile` cluster-diff
+        // verb the absorption-roadmap acknowledges, a future
+        // `feira check --strict` per-caixa admission verb) can rely
+        // on the empty-arm to short-circuit its own per-target loop
+        // without a special-case at the call-site.
+        let tmp = tempdir().unwrap();
+        assert!(expand_caixa_root(tmp.path()).is_empty());
+    }
+
+    #[test]
+    fn expand_caixa_root_walks_manifest_and_sorts_lib_lisps() {
+        // Fail-before-pass-after pin: the shared helper's manifest-plus-
+        // sorted-`lib/*.lisp` walk must land the `caixa.lisp` first (so
+        // manifest diagnostics precede library diagnostics under
+        // `feira lint`) and sort the `lib/*.lisp` entries in
+        // lexicographic order (so the per-`.lisp` diagnostic + emit
+        // stream is deterministic across a `tmpfs` vs. an `ext4`
+        // checkout). The `readme.md` entry pins that only `.lisp`
+        // extensions are lifted — a future `README.lisp.md` or
+        // `lib/CHANGELOG.md` doesn't leak into the walk. Peer with the
+        // per-verb `directory_target_expands_to_manifest_plus_sorted_
+        // lib_lisps` pins on both the `feira lint` and `feira fmt`
+        // arms — this pin lifts the invariant onto the shared helper
+        // so a future refactor of either verb's call-site can't
+        // silently drift the discipline.
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join(CAIXA_MANIFEST_FILENAME), "");
+        write(&root.join("lib").join("beta.lisp"), "");
+        write(&root.join("lib").join("alpha.lisp"), "");
+        write(&root.join("lib").join("gamma.lisp"), "");
+        write(&root.join("lib").join("readme.md"), "");
+        let out = expand_caixa_root(root);
+        assert_eq!(
+            out,
+            vec![
+                root.join(CAIXA_MANIFEST_FILENAME),
+                root.join("lib").join("alpha.lisp"),
+                root.join("lib").join("beta.lisp"),
+                root.join("lib").join("gamma.lisp"),
+            ],
+        );
+    }
+
+    #[test]
+    fn resolve_lisp_targets_directory_arg_expands_caixa_root() {
+        // Peer of the [`expand_caixa_root`] pin above on the
+        // per-arg dispatch axis: `resolve_lisp_targets` folds a
+        // directory argument through [`expand_caixa_root`], so the
+        // caller-provided path expands to the same manifest-plus-
+        // sorted-`lib/*.lisp` shape the shared helper carries. Pins
+        // that the [`Path::is_dir`]-arm reaches the same walk the
+        // empty-args branch does — a future refactor that split the
+        // two arms onto different walks would silently drift the
+        // discipline. Peer with the per-verb `directory_target_
+        // expands_to_manifest_plus_sorted_lib_lisps` pins on both
+        // `feira lint` and `feira fmt`.
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join(CAIXA_MANIFEST_FILENAME), "");
+        write(&root.join("lib").join("only.lisp"), "");
+        let out = resolve_lisp_targets(std::slice::from_ref(&root.to_path_buf()), "lint").unwrap();
+        assert_eq!(
+            out,
+            vec![
+                root.join(CAIXA_MANIFEST_FILENAME),
+                root.join("lib").join("only.lisp"),
+            ],
+        );
+    }
+
+    #[test]
+    fn resolve_lisp_targets_file_arg_passes_through_untouched() {
+        // The file-passthrough arm: a concrete `.lisp` file argument
+        // round-trips the resolver unchanged — the walker does not
+        // re-expand a plain file as if it were a caixa root, and the
+        // per-verb call-site keeps its cheap single-file shape.
+        let tmp = tempdir().unwrap();
+        let file = tmp.path().join("solo.lisp");
+        write(&file, "");
+        let out = resolve_lisp_targets(std::slice::from_ref(&file), "fmt").unwrap();
+        assert_eq!(out, vec![file]);
+    }
+
+    #[test]
+    fn resolve_lisp_targets_missing_target_names_offending_path_and_verb() {
+        // Pins the shared missing-target diagnostic — a per-verb call-
+        // site (`feira lint`, `feira fmt`) that hands the helper a
+        // non-existent target gets a self-locating message naming the
+        // offending path verbatim, the caixa-root shape the walk
+        // expects, AND the verb the author invoked. The verb-hint
+        // pins the `verb` argument on the helper — a future refactor
+        // that dropped it, or hard-coded a single verb, would surface
+        // here as the "self-locate to the invoked verb" pin firing.
+        // Peer with the per-verb-arg [`validate_cluster_arg`] /
+        // [`validate_namespace_arg`] / [`validate_nome_arg`] gates on
+        // the sibling per-verb arg-entry named-value axis.
+        let tmp = tempdir().unwrap();
+        let missing = tmp.path().join("nope.lisp");
+        let err = resolve_lisp_targets(std::slice::from_ref(&missing), "fmt")
+            .expect_err("missing target must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains(&missing.display().to_string()),
+            "diagnostic must name the offending path (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains(CAIXA_MANIFEST_FILENAME),
+            "diagnostic must name the canonical manifest filename (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains(LAYOUT_DIR_LIB),
+            "diagnostic must name the canonical lib dir (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("fmt"),
+            "diagnostic must self-locate to the invoked verb (got: {rendered:?})"
         );
     }
 }

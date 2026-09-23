@@ -1,11 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
-use caixa_core::LAYOUT_DIR_LIB;
+use anyhow::{Context, Result};
 use caixa_fmt::{FmtConfig, format_source};
 use caixa_lint::{FixSafety, apply_fixes, lint_source};
 use caixa_theme::Theme;
 use clap::Args;
+
+use super::load::resolve_lisp_targets;
 
 /// Run caixa-lint — Ruby+Rust distilled best practices. Prints Nord-themed
 /// diagnostics; exits non-zero if any error-level rule fires.
@@ -155,51 +156,14 @@ impl Lint {
     }
 
     fn resolve_targets(&self) -> Result<Vec<PathBuf>> {
-        if self.paths.is_empty() {
-            return Ok(expand_caixa_root(Path::new(".")));
-        }
-        let mut out = Vec::new();
-        for path in &self.paths {
-            if path.is_dir() {
-                out.extend(expand_caixa_root(path));
-            } else if path.exists() {
-                out.push(path.clone());
-            } else {
-                bail!(
-                    "no such lint target: {} (pass a `.lisp` file or a caixa root \
-                     containing `caixa.lisp` + `{LAYOUT_DIR_LIB}/*.lisp`)",
-                    path.display(),
-                );
-            }
-        }
-        Ok(out)
+        resolve_lisp_targets(&self.paths, "lint")
     }
-}
-
-/// Expand a caixa root (a directory containing `caixa.lisp` + `lib/*.lisp`)
-/// to the concrete `.lisp` files `feira lint` walks. The `lib/` entries
-/// are sorted so diagnostic ordering is stable across filesystems.
-fn expand_caixa_root(root: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let manifest = root.join("caixa.lisp");
-    if manifest.exists() {
-        out.push(manifest);
-    }
-    if let Ok(dir) = std::fs::read_dir(root.join(LAYOUT_DIR_LIB)) {
-        let mut lib_files: Vec<PathBuf> = dir
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|e| e == "lisp"))
-            .collect();
-        lib_files.sort();
-        out.extend(lib_files);
-    }
-    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use tempfile::tempdir;
 
     fn write(path: &Path, body: &str) {
@@ -252,7 +216,19 @@ mod tests {
     }
 
     #[test]
-    fn nonexistent_target_names_offending_path() {
+    fn nonexistent_target_names_offending_path_with_lint_verb() {
+        // Pins that the missing-target diagnostic routed through the
+        // shared [`super::super::load::resolve_lisp_targets`] helper
+        // self-locates to `feira lint` (verb = "lint") — a future
+        // refactor that dropped the per-verb `verb` argument, or
+        // routed `feira fmt`'s call-site through the same helper with
+        // `verb = "fmt"` by mistake, would silently split the "no
+        // such <verb> target: <path>" byte-string the author greps
+        // for. The named-value discipline mirrors the peer
+        // [`super::super::load::validate_cluster_arg`] /
+        // [`super::super::load::validate_namespace_arg`] /
+        // [`super::super::load::validate_nome_arg`] gates on the
+        // sibling per-verb arg-entry axes.
         let tmp = tempdir().unwrap();
         let missing = tmp.path().join("nope.lisp");
         let cmd = lint_with_paths(vec![missing.clone()]);
@@ -264,6 +240,10 @@ mod tests {
         assert!(
             err.contains("caixa.lisp"),
             "error must point at the expected caixa-root shape, got: {err}"
+        );
+        assert!(
+            err.contains("lint"),
+            "error must self-locate to `feira lint`, got: {err}"
         );
     }
 }
