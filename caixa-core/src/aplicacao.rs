@@ -9000,6 +9000,101 @@ impl From<&RateLimitUnit> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, [u8]>`]
+/// output* byte-owned reverse projection on the second M3-mesh-primitive-
+/// defining `:politicas :rate-limit :window` canonical-suffix
+/// [`RateLimitUnit`] closed-set fieldless typed enum on the caixa surface —
+/// the [`std::borrow::Cow<'static, [u8]>`] byte-mirror of the paired
+/// [`From<RateLimitUnit> for std::borrow::Cow<'static, str>`] (bf78400)
+/// str-side impl and the [`std::borrow::Cow<'static, [u8]>`] companion of
+/// the paired byte-owned [`From<RateLimitUnit> for Vec<u8>`] (bf78400)
+/// reverse-projection axis immediately above. Routes byte-for-byte through
+/// the substrate-primitive [`RateLimitUnit::as_suffix`] `pub const fn`
+/// accessor via
+/// [`std::borrow::Cow::Borrowed`]`(unit.as_suffix().as_bytes())` — the
+/// three `match` arms in [`Self::as_suffix`] resolve to
+/// [`RATE_LIMIT_UNIT_SUFFIX_SECOND`] / [`RATE_LIMIT_UNIT_SUFFIX_MINUTE`] /
+/// [`RATE_LIMIT_UNIT_SUFFIX_HOUR`] `pub const &'static str` bodies, so
+/// `.as_bytes()` on each returns `&'static [u8]` by construction, and the
+/// zero-alloc [`std::borrow::Cow::Borrowed`] arm is the type-correct
+/// projection with no runtime allocation (mirroring the paired
+/// [`Cow<'static, str>`] axis's own [`Cow::Borrowed`] discipline on this
+/// same primitive, and mirroring the sibling [`PlacementStrategy`]
+/// (05e4054), [`crate::supervisor::RestartStrategy`] (7f81539),
+/// [`crate::supervisor::RestartPolicy`] (65f381b), and
+/// [`crate::CaixaKind`] (b3451c8) `Cow<'static, [u8]>` impls whose
+/// substrate-primitive accessor returns `&'static str`).
+///
+/// Extends the substrate-wide trait-idiomatic byte-owned reverse-
+/// projection matrix onto the second (of three) M3-mesh-primitive-
+/// defining closed-set fieldless typed-enum peer at the
+/// [`Cow<'static, [u8]>`] corner — following the trajectory the first
+/// M3-mesh peer [`PlacementStrategy`] (05e4054) opened one campaign turn
+/// earlier, and mirroring the closed state the M2-OTP-shape
+/// [`crate::supervisor::RestartStrategy`] / [`crate::supervisor::RestartPolicy`]
+/// peers and the [`crate::CaixaKind`] peer already carry. Rust's `From`
+/// trait carries no blanket
+/// `impl<T: AsRef<[u8]>> From<T> for Cow<'static, [u8]>`, so every
+/// closed-set fieldless typed enum peer that carries the paired
+/// [`Vec<u8>`] axis but not the [`Cow<'static, [u8]>`] axis forces every
+/// `Cow<'static, [u8]>`-parameterized call site through an open-coded
+/// `Cow::Borrowed(unit.as_suffix().as_bytes())` composition whose type
+/// bounds have no compile-time link back to the substrate primitive, or
+/// through a `Vec::<u8>::from(unit).into()` double-hop that allocates
+/// through the sibling `Vec<u8>` axis on the way to the
+/// `Cow<'static, [u8]>` slot.
+///
+/// Pinned load-bearing by
+/// [`tests::rate_limit_unit_from_into_owned_cow_bytes_routes_through_as_suffix_accessor`]
+/// (byte-parity pin against [`RateLimitUnit::as_suffix`]`.as_bytes()`
+/// across the three-arm [`RateLimitUnit::ALL`] accept-set on both owned
+/// and borrowed input shapes, plus a [`std::borrow::Cow::Borrowed`]
+/// discriminator witness pinning the zero-alloc arm, plus cross-axis
+/// witnesses against the paired [`Vec<u8>`] byte-owned reverse-projection
+/// axis and the paired [`Cow<'static, str>`] str-owned reverse-projection
+/// axis on the same primitive).
+impl From<RateLimitUnit> for std::borrow::Cow<'static, [u8]> {
+    fn from(unit: RateLimitUnit) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(unit.as_suffix().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, [u8]>`]
+/// output* byte-owned reverse projection on the second M3-mesh-primitive-
+/// defining [`RateLimitUnit`] closed-set fieldless typed enum on the
+/// caixa surface — the borrowed-input companion to the paired owned-
+/// input [`From<RateLimitUnit> for std::borrow::Cow<'static, [u8]>`]
+/// impl immediately above, closing the
+/// `{Self, &Self} → Cow<'static, [u8]>` byte-owned reverse-projection
+/// family on this primitive at the borrowed-input corner. Routes
+/// byte-for-byte through the same substrate-primitive
+/// [`RateLimitUnit::as_suffix`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`]`(unit.as_suffix().as_bytes())` — the
+/// [`Cow::Borrowed`] arm is reachable on both input axes because
+/// [`Self::as_suffix`] returns `&'static str` regardless of the input
+/// shape, so no runtime allocation is forced on either corner.
+///
+/// Rust's `From` trait carries no blanket
+/// `impl<T> From<&T> for U where U: From<T>` (nor an
+/// `impl<T: AsRef<[u8]>> From<&T> for Cow<'static, [u8]>`), so every
+/// closed-set fieldless typed enum peer that carries the paired owned-
+/// input axis but not the borrowed-input axis forces every borrowed
+/// call site through a spurious [`Copy`] deref
+/// (`Cow::<'static, [u8]>::from(*unit)`) or an open-coded
+/// `Cow::Borrowed(unit.as_suffix().as_bytes())` whose type bounds have
+/// no compile-time link to the substrate primitive. The borrowed-input
+/// axis is the one a
+/// `RateLimitUnit::ALL.iter().map(Cow::<'static, [u8]>::from)` pipe
+/// binds against (its iterator over `&'static [RateLimitUnit]` yields
+/// `&RateLimitUnit`, not `RateLimitUnit`), so the owned-input axis alone
+/// forces every such per-arm accept-set materializer through an explicit
+/// `.copied()` restatement.
+impl From<&RateLimitUnit> for std::borrow::Cow<'static, [u8]> {
+    fn from(unit: &RateLimitUnit) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(unit.as_suffix().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed-byte-slice input, `Result<Self, ()>` output*
 /// byte-view reverse projection on the second M3-mesh-primitive-defining
 /// `:politicas :rate-limit :window` canonical-suffix [`RateLimitUnit`]
@@ -56413,5 +56508,200 @@ mod tests {
             expected.to_string(),
             "Display byte-string parity"
         );
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  here onto the second M3-mesh-primitive-defining closed-\
+                  set fieldless typed-enum peer at the Cow<'static, \
+                  [u8]> corner, so the pin binds the new impl against \
+                  every paired byte-owned, byte-view, and str-owned \
+                  reverse-projection axis on the same enum plus a \
+                  generic <T: Into<Cow<'static, [u8]>>>-bound consumer \
+                  witness and an .iter().map(Cow::<[u8]>::from) pipe \
+                  witness on both owned and borrowed input shapes to \
+                  lock the whole family against a future silent \
+                  regression"
+    )]
+    fn rate_limit_unit_from_into_owned_cow_bytes_routes_through_as_suffix_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<RateLimitUnit> for std::borrow::Cow<'static, [u8]>`
+        // and `impl From<&RateLimitUnit> for std::borrow::Cow<'static, [u8]>` —
+        // asserts the trait-idiomatic byte-owned reverse-projection
+        // standard-library impls and the substrate-primitive
+        // [`super::RateLimitUnit::as_suffix`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view resolve to the same three-arm lowercase
+        // canonical-suffix wire byte-string emit-set across every arm
+        // the exhaustive [`super::RateLimitUnit::ALL`] slice enumerates.
+        // Additionally asserts the returned `Cow<'static, [u8]>` binds
+        // the zero-alloc `Cow::Borrowed` arm on both input shapes,
+        // because `Self::as_suffix` returns `&'static str` and
+        // `.as_bytes()` on it preserves the `&'static [u8]` lifetime by
+        // construction.
+        //
+        // Extends the substrate-wide byte-owned reverse-projection
+        // matrix onto the second (of three) M3-mesh-primitive-defining
+        // closed-set fieldless typed-enum peer at the
+        // `Cow<'static, [u8]>` corner, following the trajectory the
+        // first M3-mesh peer [`super::PlacementStrategy`] (05e4054)
+        // opened one campaign turn earlier, and mirroring the closed
+        // state the M2-OTP-shape
+        // [`super::super::supervisor::RestartStrategy`] / RestartPolicy
+        // peers and the [`super::super::CaixaKind`] peer already carry.
+        //
+        // Generic `<T: Into<Cow<'static, [u8]>>>`-bound consumer witness
+        // helper: a future per-arm byte-writer that accepts a
+        // `Cow<'static, [u8]>` composes on both owned and borrowed input
+        // shapes without an open-coded three-hop
+        // `Cow::Borrowed(unit.as_suffix().as_bytes())` at every call
+        // site. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_cow_bytes_sink<T: Into<std::borrow::Cow<'static, [u8]>>>(
+            t: T,
+        ) -> std::borrow::Cow<'static, [u8]> {
+            t.into()
+        }
+        for &variant in RateLimitUnit::ALL {
+            let via_owned_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<RateLimitUnit>>::from(variant);
+            let via_borrowed_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<&RateLimitUnit>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_suffix().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<RateLimitUnit> for Cow<'static, [u8]> impl must \
+                 byte-equal RateLimitUnit::as_suffix().as_bytes() on \
+                 RateLimitUnit::{variant:?} — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&RateLimitUnit> for Cow<'static, [u8]> impl must \
+                 byte-equal RateLimitUnit::as_suffix().as_bytes() on \
+                 RateLimitUnit::{variant:?} — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_owned_from, std::borrow::Cow::Borrowed(_)),
+                "From<RateLimitUnit> for Cow<'static, [u8]> must bind \
+                 the zero-alloc Cow::Borrowed arm on \
+                 RateLimitUnit::{variant:?} — Self::as_suffix returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            assert!(
+                matches!(via_borrowed_from, std::borrow::Cow::Borrowed(_)),
+                "From<&RateLimitUnit> for Cow<'static, [u8]> must bind \
+                 the zero-alloc Cow::Borrowed arm on \
+                 &RateLimitUnit::{variant:?} — Self::as_suffix returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            // Cross-axis partition against the paired byte-owned
+            // `Vec<u8>` reverse-projection axis on the same enum — the
+            // two byte-owned reverse-projection axes must byte-agree on
+            // every arm.
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<RateLimitUnit> for Cow<'static, [u8]> and \
+                 From<RateLimitUnit> for Vec<u8> must byte-agree on \
+                 RateLimitUnit::{variant:?} — divergence signals the two \
+                 byte-owned reverse-projection axes have drifted off the \
+                 same substrate-primitive as_suffix accessor"
+            );
+            // Cross-axis partition against the paired str-side
+            // `Cow<'static, str>` reverse-projection axis on the same
+            // enum — the byte-side and str-side Cow<'static, _> axes
+            // must both bind the Cow::Borrowed arm on every arm (both
+            // route through Self::as_suffix's &'static return).
+            let via_cow_str: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<RateLimitUnit>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_str.as_bytes(),
+                "From<RateLimitUnit> for Cow<'static, [u8]> and \
+                 From<RateLimitUnit> for Cow<'static, str> must byte-agree \
+                 on RateLimitUnit::{variant:?} — divergence signals a \
+                 silent detour off the shared substrate-primitive \
+                 as_suffix accessor"
+            );
+            // Cross-axis partition against the paired borrowed byte-
+            // view `AsRef<[u8]>` axis on the same enum — the byte-owned
+            // `Cow<[u8]>` and byte-view axes must byte-agree on every
+            // arm (both route through Self::as_suffix's &'static return).
+            let via_as_ref_bytes: &[u8] = <RateLimitUnit as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_as_ref_bytes,
+                "From<RateLimitUnit> for Cow<'static, [u8]> and \
+                 AsRef<[u8]> for RateLimitUnit must byte-agree on \
+                 RateLimitUnit::{variant:?} — divergence signals the \
+                 byte-owned Cow axis and the byte-view axis have drifted \
+                 off the same substrate-primitive as_suffix accessor"
+            );
+        }
+        for &variant in RateLimitUnit::ALL {
+            let owned_via_generic = generic_cow_bytes_sink(variant);
+            let variant_ref: &RateLimitUnit = &variant;
+            let borrowed_via_generic = generic_cow_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_suffix().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 RateLimitUnit::{variant:?} must fold the same byte-tail \
+                 RateLimitUnit::as_suffix().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_suffix().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 &RateLimitUnit::{variant:?} must fold the same byte-tail \
+                 RateLimitUnit::as_suffix().as_bytes() returns"
+            );
+        }
+        // A `.iter().map(Cow::<'static, [u8]>::from)` pipe witness over
+        // `RateLimitUnit::ALL` binds the borrowed-input axis (its
+        // iterator over `&'static [RateLimitUnit]` yields
+        // `&RateLimitUnit`) and folds the three-arm accept-set through
+        // the Cow<'static, [u8]> boundary, pinning both the borrowed-
+        // input `From` impl and the zero-alloc discipline on every arm
+        // of the pipe.
+        let via_iter: Vec<std::borrow::Cow<'static, [u8]>> = RateLimitUnit::ALL
+            .iter()
+            .map(std::borrow::Cow::<'static, [u8]>::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, [u8]>> = RateLimitUnit::ALL
+            .iter()
+            .map(|u| std::borrow::Cow::Borrowed(u.as_suffix().as_bytes()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Cow::<[u8]>::from)` over RateLimitUnit::ALL \
+             must byte-equal `.iter().map(|u| \
+             Cow::Borrowed(u.as_suffix().as_bytes()))` on every arm — \
+             the trait-idiomatic `From<&RateLimitUnit> for Cow<'static, \
+             [u8]>` axis is what makes the `Cow::from` composition route \
+             through the substrate-primitive `RateLimitUnit::as_suffix` \
+             accessor with the zero-alloc Cow::Borrowed arm by \
+             construction"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the .iter().map(Cow::<[u8]>::from) \
+                 pipe over RateLimitUnit::ALL must land on the zero-alloc \
+                 Cow::Borrowed arm — a Cow::Owned outcome on any arm \
+                 signals the pipe's iteration axis has silently allocated \
+                 where the substrate-primitive RateLimitUnit::as_suffix \
+                 `&'static str` return makes the borrowed arm the type-\
+                 correct projection"
+            );
+        }
     }
 }
