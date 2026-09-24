@@ -2235,6 +2235,142 @@ impl From<&CaixaKind> for std::sync::Arc<[u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::rc::Rc<[u8]>`] output* byte-owned
+/// reverse projection on the structurally most fundamental closed-set
+/// fieldless typed enum on the caixa surface ([`CaixaKind`]) — the
+/// single-threaded-refcounted byte-slice mirror of the paired owned-input
+/// [`From<CaixaKind> for std::rc::Rc<str>`] impl on the string-side reverse-
+/// projection matrix, and the fifth (and final) axis on the byte-side
+/// reverse-projection matrix that already carries
+/// [`From<CaixaKind> for Vec<u8>`],
+/// [`From<CaixaKind> for std::borrow::Cow<'static, [u8]>`] (b3451c8),
+/// [`From<CaixaKind> for Box<[u8]>`] (4f47901), and
+/// [`From<CaixaKind> for std::sync::Arc<[u8]>`] (d8872df). Routes byte-for-
+/// byte through the substrate-primitive [`CaixaKind::as_str`] `pub const fn`
+/// accessor via [`std::rc::Rc::<[u8]>::from`] on the returned `&'static
+/// str`'s [`str::as_bytes`] — the six `match` arms in [`Self::as_str`]
+/// resolve to [`crate::render::CAIXA_KIND_LABEL_*`] `pub const &'static
+/// str` bodies, so `.as_bytes()` returns `&'static [u8]` by construction,
+/// and the standard-library [`std::rc::Rc::<[u8]>::from(&[u8])`] impl
+/// allocates a fresh single-threaded-refcounted heap slab whose header
+/// carries the non-atomic strong + weak counters the
+/// [`std::rc::Rc<[u8]>`] layout requires in one heap allocation without
+/// an intermediary [`Vec<u8>`], [`Box<[u8]>`], or [`std::sync::Arc<[u8]>`].
+///
+/// A future consumer that wants a [`std::rc::Rc<[u8]>`]-typed handle on
+/// a [`CaixaKind`] — a single-threaded `feira lint` per-caixa `:kind`
+/// diagnostic table whose per-column payload carries the kind's byte-view
+/// through a chain of Nord-themed emitters via the pointer-width
+/// [`std::rc::Rc::clone`] handle (a non-atomic refcount bump, cheaper than
+/// the paired atomic increment on the sibling [`std::sync::Arc<[u8]>`]
+/// axis by a measurable margin on hot single-threaded call sites), a
+/// future single-threaded `HashMap::<std::rc::Rc<[u8]>, _>::from_iter`
+/// per-kind lookup keyed by the byte-tail across the `feira
+/// {fmt,lint,build}` verbs' per-arg cache, a future non-`Send` `feira
+/// build` planner that materializes decoded `spec.kind` byte-tails as
+/// [`std::rc::Rc<[u8]>`] slices so downstream single-threaded verdict
+/// composers share the immutable byte-tail without a per-consumer
+/// [`Vec::<u8>::clone`] — reaches the wire byte-string through this one
+/// dispatch, without the pre-lift `Box::<[u8]>::from(kind).into()` /
+/// `Rc::<[u8]>::from(Vec::<u8>::from(kind))` double-hop that would still
+/// allocate the same [`Rc<[u8]>`] slab plus one intermediary
+/// [`Box<[u8]>`] or [`Vec<u8>`] between the enum peer and the
+/// [`std::rc::Rc<[u8]>`] slot.
+///
+/// Peer of the paired owned-input [`From<CaixaKind> for Vec<u8>`],
+/// [`From<CaixaKind> for Cow<'static, [u8]>`],
+/// [`From<CaixaKind> for Box<[u8]>`], and
+/// [`From<CaixaKind> for std::sync::Arc<[u8]>`] impls on the same
+/// primitive — the sibling [`Vec<u8>`] axis returns a fresh heap
+/// allocation via [`str::as_bytes`]`.to_vec()`; the sibling
+/// [`Cow<'static, [u8]>`] axis binds the zero-alloc [`Cow::Borrowed`] arm
+/// on the same `&'static [u8]` byte-tail; the sibling [`Box<[u8]>`] axis
+/// allocates a fit-to-length boxed byte slice via
+/// [`Box::<[u8]>::from(&[u8])`]; the sibling [`std::sync::Arc<[u8]>`]
+/// axis allocates an atomically-refcounted heap slab; this axis
+/// allocates a single-threaded-refcounted heap slab whose header carries
+/// the non-atomic strong + weak counters the [`std::rc::Rc<[u8]>`]
+/// layout requires. Rust's standard library does not derive
+/// `From<Self> for Rc<[u8]>` from `From<Self> for Arc<[u8]>` (the two
+/// layouts share the same on-disk shape but the trait tables are
+/// disjoint, and no blanket `impl<T> From<T> for Rc<[u8]> where
+/// Arc<[u8]>: From<T>` exists in `core`), so every closed-set fieldless
+/// typed enum peer that carries the paired [`Arc<[u8]>`] axis but not
+/// the paired [`Rc<[u8]>`] axis forces every single-threaded
+/// [`Rc<[u8]>`]-typed call site through a `Arc::<[u8]>::from(kind).into()`
+/// / `Rc::<[u8]>::from(Vec::<u8>::from(kind))` double-allocation detour
+/// whose bounds carry no compile-time link back to the substrate
+/// primitive.
+///
+/// Closes the trait-idiomatic *owned-input* byte-family reverse-
+/// projection matrix on the structurally most fundamental closed-set
+/// fieldless typed enum peer at the [`std::rc::Rc<[u8]>`] corner —
+/// completing the full `{Vec<u8>, Cow<'static, [u8]>, Box<[u8]>,
+/// Arc<[u8]>, Rc<[u8]>}` five-corner partition on [`CaixaKind`],
+/// mirroring the trajectory the same axis walked on the sibling
+/// [`crate::CaixaVersion`] String-wrapper newtype primitive (98d38ed on
+/// [`Vec<u8>`], baf7537 on [`Cow<'static, [u8]>`], 703b2fd on
+/// [`Box<[u8]>`], 3d5fc43 on [`std::sync::Arc<[u8]>`], 6034943 on
+/// [`std::rc::Rc<[u8]>`]) and the M2-OTP-shape
+/// [`crate::supervisor::RestartStrategy`] (2620e42 on [`Rc<[u8]>`]) and
+/// [`crate::supervisor::RestartPolicy`] (bbb78ee on [`Arc<[u8]>`]) peers.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_kind_from_into_owned_rc_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaKind::as_str`] `.as_bytes()` across
+/// the six-arm [`CaixaKind::ALL`] accept-set on the owned-input surface,
+/// plus a cross-axis witness against the paired owned-input
+/// [`From<CaixaKind> for Vec<u8>`],
+/// [`From<CaixaKind> for Cow<'static, [u8]>`],
+/// [`From<CaixaKind> for Box<[u8]>`], and
+/// [`From<CaixaKind> for std::sync::Arc<[u8]>`] byte-owned reverse-
+/// projection axes on every canonical lowercase-Portuguese diagnostic
+/// scalar, closing the "owned-input into `Vec<u8>` vs. `Cow<'static,
+/// [u8]>` vs. `Box<[u8]>` vs. `Arc<[u8]>` vs. `Rc<[u8]>`" five-corner
+/// partition on the same wire byte-string).
+impl From<CaixaKind> for std::rc::Rc<[u8]> {
+    fn from(kind: CaixaKind) -> std::rc::Rc<[u8]> {
+        std::rc::Rc::<[u8]>::from(kind.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::rc::Rc<[u8]>`] output*
+/// byte-owned reverse projection on the structurally most fundamental
+/// closed-set fieldless typed enum on the caixa surface ([`CaixaKind`]) —
+/// the borrowed-input companion to the paired owned-input
+/// [`From<CaixaKind> for std::rc::Rc<[u8]>`] impl immediately above,
+/// closing the `{Self, &Self} → std::rc::Rc<[u8]>` byte-owned reverse-
+/// projection family on this primitive at the borrowed-input corner.
+/// Routes byte-for-byte through the same substrate-primitive
+/// [`CaixaKind::as_str`] `pub const fn` accessor via
+/// [`std::rc::Rc::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the [`std::rc::Rc<[u8]>`] allocation happens on
+/// both input axes because [`Self::as_str`] returns `&'static str`
+/// regardless of the input shape, so the borrowed-input peer reaches
+/// the same wire byte-string through the same one-heap-allocation path
+/// the owned-input peer already carries.
+///
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer that carries the paired owned-input
+/// [`std::rc::Rc<[u8]>`] axis but not the borrowed-input axis forces
+/// every borrowed call site through a spurious [`Copy`] deref
+/// (`std::rc::Rc::<[u8]>::from(*kind)`) or an open-coded
+/// `std::rc::Rc::<[u8]>::from(kind.as_str().as_bytes())` whose type
+/// bounds have no compile-time link to the substrate primitive. The
+/// borrowed-input axis is the one a
+/// `CaixaKind::ALL.iter().map(std::rc::Rc::<[u8]>::from)` pipe binds
+/// against (its iterator over `&'static [CaixaKind]` yields `&CaixaKind`,
+/// not `CaixaKind`), so the owned-input axis alone forces every such
+/// per-arm accept-set materializer through an explicit `.copied()`
+/// restatement.
+impl From<&CaixaKind> for std::rc::Rc<[u8]> {
+    fn from(kind: &CaixaKind) -> std::rc::Rc<[u8]> {
+        std::rc::Rc::<[u8]>::from(kind.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
 /// structurally most fundamental closed-set fieldless typed enum on the caixa
 /// surface ([`CaixaKind`]) — the byte-view mirror of the str-view reverse-
@@ -6729,6 +6865,267 @@ mod tests {
                  on CaixaKind::{variant:?} — the trait-idiomatic \
                  `From<&CaixaKind> for Arc<[u8]>` axis is what makes \
                  the `Arc::from` composition route through the \
+                 substrate-primitive `CaixaKind::as_str` accessor by \
+                 construction"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_owned_and_borrowed_into_rc_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<CaixaKind> for std::rc::Rc<[u8]>` and
+        // `impl From<&CaixaKind> for std::rc::Rc<[u8]>` — asserts the
+        // trait-idiomatic byte-owned reverse-projection standard-library
+        // impls and the substrate-primitive [`super::CaixaKind::as_str`]
+        // `pub const fn` accessor's `.as_bytes()` byte-view resolve to
+        // the same six-arm lowercase-Portuguese wire byte-string emit-
+        // set across every arm the exhaustive [`super::CaixaKind::ALL`]
+        // slice enumerates, on both the owned-input `CaixaKind` and
+        // borrowed-input `&CaixaKind` surfaces. Additionally asserts
+        // that the borrowed-input peer preserves the source through
+        // the projection (no move-out) and that the paired owned-input
+        // and borrowed-input corners byte-agree on the same arm,
+        // closing the `{Self, &Self} → std::rc::Rc<[u8]>` byte-owned
+        // reverse-projection family on this primitive.
+        //
+        // Closes the substrate-wide byte-owned reverse-projection matrix
+        // on the structurally most fundamental closed-set fieldless
+        // typed enum peer at the [`std::rc::Rc<[u8]>`] corner —
+        // completing the full `{Vec<u8>, Cow<'static, [u8]>, Box<[u8]>,
+        // Arc<[u8]>, Rc<[u8]>}` five-corner partition on the same wire
+        // byte-string, mirroring the trajectory the same axis walked on
+        // the sibling M2-OTP-shape [`super::super::supervisor::RestartStrategy`]
+        // (2620e42) and [`super::super::CaixaVersion`] String-wrapper
+        // newtype primitive (6034943) peers.
+        fn generic_rc_bytes_sink<T: Into<std::rc::Rc<[u8]>>>(t: T) -> std::rc::Rc<[u8]> {
+            t.into()
+        }
+        for &variant in CaixaKind::ALL {
+            let via_owned_from: std::rc::Rc<[u8]> =
+                <std::rc::Rc<[u8]> as From<CaixaKind>>::from(variant);
+            let via_borrowed_from: std::rc::Rc<[u8]> =
+                <std::rc::Rc<[u8]> as From<&CaixaKind>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<CaixaKind> for Rc<[u8]> impl must byte-equal \
+                 CaixaKind::as_str().as_bytes() on \
+                 CaixaKind::{variant:?} — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&CaixaKind> for Rc<[u8]> impl must byte-equal \
+                 CaixaKind::as_str().as_bytes() on \
+                 CaixaKind::{variant:?} — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<CaixaKind> for Rc<[u8]> must land a fit-to-length \
+                 single-threaded-refcounted byte slab on \
+                 CaixaKind::{variant:?} — a length mismatch against \
+                 CaixaKind::as_str().as_bytes().len() signals the Rc<[u8]> \
+                 allocator drifted off the substrate primitive's byte-tail"
+            );
+            let via_into_owned: std::rc::Rc<[u8]> = variant.into();
+            let via_into_borrowed: std::rc::Rc<[u8]> = (&variant).into();
+            assert_eq!(
+                via_into_owned.as_ref(),
+                via_method_bytes,
+                "Into<Rc<[u8]>>::into on CaixaKind::{variant:?} must \
+                 byte-equal CaixaKind::as_str().as_bytes()"
+            );
+            assert_eq!(
+                via_into_borrowed.as_ref(),
+                via_method_bytes,
+                "Into<Rc<[u8]>>::into on &CaixaKind::{variant:?} must \
+                 byte-equal CaixaKind::as_str().as_bytes()"
+            );
+            // Cross-corner partition against the paired owned-input
+            // `Rc<[u8]>` axis on the same enum — the two corners must
+            // byte-agree on every arm, closing the "owned-input move
+            // vs. borrowed-input clone" bifurcation on the same wire
+            // byte-string through the `Rc<[u8]>` axis.
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_owned_from.as_ref(),
+                "From<&CaixaKind> for Rc<[u8]> and From<CaixaKind> for \
+                 Rc<[u8]> must byte-agree on CaixaKind::{variant:?} — \
+                 divergence signals the paired owned-input and \
+                 borrowed-input corners have drifted off the same \
+                 substrate-primitive as_str accessor"
+            );
+        }
+        for &variant in CaixaKind::ALL {
+            let owned_via_generic = generic_rc_bytes_sink(variant);
+            let variant_ref: &CaixaKind = &variant;
+            let borrowed_via_generic = generic_rc_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Rc<[u8]>>>-bound composition on \
+                 CaixaKind::{variant:?} must fold the same byte-tail \
+                 CaixaKind::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Rc<[u8]>>>-bound composition on \
+                 &CaixaKind::{variant:?} must fold the same byte-tail \
+                 CaixaKind::as_str().as_bytes() returns"
+            );
+        }
+        // Source-survival witness on the borrowed-input peer: the
+        // `From<&CaixaKind>` impl reads through the borrow, so the
+        // source value must remain reachable after the projection —
+        // this pin trips at compile time if a future refactor moves
+        // out of `&CaixaKind` (which would leave the source
+        // unusable on the next line).
+        for &variant in CaixaKind::ALL {
+            let variant_ref: &CaixaKind = &variant;
+            let _via_borrowed: std::rc::Rc<[u8]> = variant_ref.into();
+            let via_str_after: &'static str = variant_ref.as_str();
+            assert_eq!(
+                via_str_after.as_bytes(),
+                variant.as_str().as_bytes(),
+                "borrowed source &CaixaKind::{variant:?} must remain \
+                 reachable after From<&CaixaKind> for Rc<[u8]> — a \
+                 silent move-out on the borrowed axis would break the \
+                 source-survival contract on the borrowed-input peer"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_into_owned_rc_bytes_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<CaixaKind> for std::rc::Rc<[u8]>` axis must byte-agree
+        // with (a) the paired byte-owned `From<CaixaKind> for Vec<u8>`
+        // axis on the same primitive, (b) the paired byte-owned
+        // `From<CaixaKind> for Cow<'static, [u8]>` axis on the same
+        // primitive, (c) the paired byte-owned `From<CaixaKind> for
+        // Box<[u8]>` axis on the same primitive, (d) the paired byte-
+        // owned `From<CaixaKind> for std::sync::Arc<[u8]>` axis on the
+        // same primitive, (e) the paired str-side `From<CaixaKind> for
+        // std::rc::Rc<str>` axis on the same primitive, and (f) the
+        // paired borrowed byte-view `AsRef<[u8]>` axis on the same
+        // primitive — locking every one of the substrate's routed-
+        // through-`as_str` byte-family axes on this enum together so a
+        // future silent detour on any one axis trips at caixa-core test
+        // time rather than at a downstream
+        // `<T: Into<Rc<[u8]>>>`-bound consumer's silent split. Also
+        // pins the wire/label two-axis split: the byte-owned `Rc<[u8]>`
+        // axis lands on the lowercase-Portuguese diagnostic byte-string
+        // (`CaixaKind::as_str`), not the PascalCase wire byte-string
+        // (`CaixaKind::wire_name`), matching the sibling `Vec<u8>`,
+        // `Cow<'static, [u8]>`, `Box<[u8]>`, and `Arc<[u8]>` axes' own
+        // two-axis-split pins.
+        for &variant in CaixaKind::ALL {
+            let via_rc_bytes: std::rc::Rc<[u8]> =
+                <std::rc::Rc<[u8]> as From<CaixaKind>>::from(variant);
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_rc_bytes.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<CaixaKind> for Rc<[u8]> and From<CaixaKind> for \
+                 Vec<u8> must byte-agree on CaixaKind::{variant:?} — \
+                 divergence signals the two byte-owned reverse-\
+                 projection axes have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_rc_bytes.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<CaixaKind> for Rc<[u8]> and From<CaixaKind> for \
+                 Cow<'static, [u8]> must byte-agree on \
+                 CaixaKind::{variant:?} — divergence signals a silent \
+                 detour off the shared substrate-primitive as_str \
+                 accessor"
+            );
+            let via_box_bytes: Box<[u8]> = <Box<[u8]> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_rc_bytes.as_ref(),
+                via_box_bytes.as_ref(),
+                "From<CaixaKind> for Rc<[u8]> and From<CaixaKind> for \
+                 Box<[u8]> must byte-agree on CaixaKind::{variant:?} — \
+                 divergence signals the two owned byte-slab reverse-\
+                 projection axes have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            let via_atomic_arc_bytes: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_rc_bytes.as_ref(),
+                via_atomic_arc_bytes.as_ref(),
+                "From<CaixaKind> for Rc<[u8]> and From<CaixaKind> for \
+                 Arc<[u8]> must byte-agree on CaixaKind::{variant:?} — \
+                 divergence signals the single-threaded and atomically-\
+                 refcounted byte-slab axes have drifted off the same \
+                 substrate-primitive as_str accessor"
+            );
+            let via_rc_str: std::rc::Rc<str> = <std::rc::Rc<str> as From<CaixaKind>>::from(variant);
+            assert_eq!(
+                via_rc_bytes.as_ref(),
+                via_rc_str.as_bytes(),
+                "From<CaixaKind> for Rc<[u8]> and From<CaixaKind> for \
+                 Rc<str> must byte-agree on CaixaKind::{variant:?} — \
+                 divergence signals the byte-owned Rc axis and the \
+                 str-side Rc axis have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            let via_as_ref_bytes: &[u8] = <CaixaKind as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_rc_bytes.as_ref(),
+                via_as_ref_bytes,
+                "From<CaixaKind> for Rc<[u8]> and AsRef<[u8]> for \
+                 CaixaKind must byte-agree on CaixaKind::{variant:?} — \
+                 divergence signals the byte-owned Rc axis and the \
+                 byte-view axis have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            let wire_bytes = variant.wire_name().as_bytes();
+            assert_ne!(
+                via_rc_bytes.as_ref(),
+                wire_bytes,
+                "From<CaixaKind> for Rc<[u8]> must land on the \
+                 lowercase-Portuguese diagnostic byte-string \
+                 (CaixaKind::as_str), not the PascalCase wire byte-\
+                 string (CaixaKind::wire_name) — the two-axis split is \
+                 by design; if this fails on CaixaKind::{variant:?}, \
+                 the Rc<[u8]> axis has silently collapsed onto the \
+                 wire axis"
+            );
+        }
+        // A `.iter().map(std::rc::Rc::<[u8]>::from)` pipe witness over
+        // `CaixaKind::ALL` binds the borrowed-input axis (its iterator
+        // over `&'static [CaixaKind]` yields `&CaixaKind`) and folds
+        // the six-arm accept-set through the Rc<[u8]> boundary, pinning
+        // the borrowed-input `From` impl on every arm of the pipe.
+        let via_iter: Vec<std::rc::Rc<[u8]>> = CaixaKind::ALL
+            .iter()
+            .map(std::rc::Rc::<[u8]>::from)
+            .collect();
+        let via_method: Vec<std::rc::Rc<[u8]>> = CaixaKind::ALL
+            .iter()
+            .map(|k| std::rc::Rc::<[u8]>::from(k.as_str().as_bytes()))
+            .collect();
+        for (i, &variant) in CaixaKind::ALL.iter().enumerate() {
+            assert_eq!(
+                via_iter[i].as_ref(),
+                via_method[i].as_ref(),
+                "`.iter().map(std::rc::Rc::<[u8]>::from)` over \
+                 CaixaKind::ALL must byte-equal `.iter().map(|k| \
+                 std::rc::Rc::<[u8]>::from(k.as_str().as_bytes()))` \
+                 on CaixaKind::{variant:?} — the trait-idiomatic \
+                 `From<&CaixaKind> for Rc<[u8]>` axis is what makes \
+                 the `Rc::from` composition route through the \
                  substrate-primitive `CaixaKind::as_str` accessor by \
                  construction"
             );
