@@ -12544,6 +12544,131 @@ impl From<&PlacementStrategy> for Box<[u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<[u8]>`] output* byte-owned
+/// reverse projection on the first M3-mesh-primitive-defining
+/// [`PlacementStrategy`] closed-set fieldless typed enum on the caixa
+/// surface — the [`std::sync::Arc<[u8]>`] companion to the paired owned-
+/// input [`From<PlacementStrategy> for Vec<u8>`] (98d38ed's peer),
+/// [`From<PlacementStrategy> for std::borrow::Cow<'static, [u8]>`]
+/// (05e4054), and [`From<PlacementStrategy> for Box<[u8]>`] (fb48599)
+/// reverse-projection impls on this same primitive, mirroring the paired
+/// string-side [`From<PlacementStrategy> for std::sync::Arc<str>`] forward-
+/// projection axis onto the byte-family side of the reverse-projection
+/// matrix, and tracking the trajectory the same axis walked on the sibling
+/// [`crate::CaixaKind`] structurally most fundamental closed-set fieldless
+/// typed-enum peer (d8872df), on the M2-OTP-shape
+/// [`crate::supervisor::RestartStrategy`] (98da8f6) /
+/// [`crate::supervisor::RestartPolicy`] (bbb78ee) peers, and on the
+/// [`crate::CaixaVersion`] String-wrapper newtype primitive (3d5fc43).
+/// Routes byte-for-byte through the substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the three `match` arms in [`Self::as_str`] resolve
+/// to [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] `pub const &'static
+/// str` bodies, so `.as_bytes()` returns `&'static [u8]` by construction,
+/// and the standard-library [`std::sync::Arc::<[u8]>::from(&[u8])`] impl
+/// allocates an atomically-refcounted heap slab whose header carries the
+/// strong + weak counters the [`std::sync::Arc<[u8]>`] layout requires in
+/// one heap allocation without an intermediary [`Vec<u8>`] or
+/// [`Box<[u8]>`].
+///
+/// A future consumer that wants a [`std::sync::Arc<[u8]>`]-typed handle on
+/// a [`PlacementStrategy`] — a future M4 admission-webhook per-request
+/// per-Aplicacao `:placement :estrategia` byte-tail fanned out across a
+/// `tokio::spawn`ed worker pool through pointer-width
+/// [`std::sync::Arc::clone`] handles (an atomic refcount bump, cheaper
+/// than a fresh [`Box<[u8]>`] allocation on hot per-reconcile-tick call
+/// sites), a future thread-safe
+/// `HashMap::<std::sync::Arc<[u8]>, _>::from_iter` per-strategy lookup
+/// keyed by the wire byte-tail across the `lareira-fleet-programs`
+/// aggregator's per-cluster fan-out cache, a future `Send`-bound M5
+/// adaptive-placement planner that ships the wire byte-string across a
+/// channel through the [`std::sync::Arc<[u8]>`] slot — reaches the wire
+/// byte-string through this one dispatch, without the pre-lift
+/// `Box::<[u8]>::from(strategy).into()` or
+/// `Arc::<[u8]>::from(Vec::<u8>::from(strategy))` double-hop that would
+/// still allocate the same [`Arc<[u8]>`] slab plus one intermediary
+/// [`Box<[u8]>`] or [`Vec<u8>`] between the enum peer and the
+/// [`std::sync::Arc<[u8]>`] slot.
+///
+/// Peer of the paired owned-input [`From<PlacementStrategy> for Vec<u8>`],
+/// [`From<PlacementStrategy> for std::borrow::Cow<'static, [u8]>`], and
+/// [`From<PlacementStrategy> for Box<[u8]>`] impls on the same primitive —
+/// the sibling [`Vec<u8>`] axis returns a fresh heap allocation via
+/// [`str::as_bytes`]`.to_vec()`; the sibling [`Cow<'static, [u8]>`] axis
+/// binds the zero-alloc [`Cow::Borrowed`] arm on the same `&'static [u8]`
+/// byte-tail; the sibling [`Box<[u8]>`] axis allocates a fit-to-length
+/// boxed byte slice via [`Box::<[u8]>::from(&[u8])`]; this axis allocates
+/// an atomically-refcounted heap slab whose header carries the strong +
+/// weak counters the [`std::sync::Arc<[u8]>`] layout requires. Rust's
+/// standard library does not derive `From<Self> for Arc<[u8]>` from
+/// `From<Self> for Box<[u8]>` (nor from `From<Self> for Vec<u8>`), so
+/// every closed-set fieldless typed enum peer that carries the paired
+/// [`Box<[u8]>`] axis but not the paired [`Arc<[u8]>`] axis forces every
+/// [`Arc<[u8]>`]-typed call site through a
+/// `Box::<[u8]>::from(strategy).into()` /
+/// `Arc::<[u8]>::from(Vec::<u8>::from(strategy))` intermediary
+/// allocation whose bounds carry no compile-time link back to the
+/// substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_owned_arc_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] `.as_bytes()`
+/// across the three-arm [`PlacementStrategy::ALL`] accept-set on both
+/// owned and borrowed input shapes, plus cross-axis witnesses against the
+/// paired owned-input [`From<PlacementStrategy> for Vec<u8>`],
+/// [`From<PlacementStrategy> for std::borrow::Cow<'static, [u8]>`],
+/// [`From<PlacementStrategy> for Box<[u8]>`] byte-owned reverse-
+/// projection axes and the paired string-side
+/// [`From<PlacementStrategy> for std::sync::Arc<str>`] axis on the same
+/// primitive, closing the "owned-input into `Vec<u8>` vs.
+/// `Cow<'static, [u8]>` vs. `Box<[u8]>` vs. `Arc<[u8]>`" four-corner
+/// partition on the same wire byte-string).
+impl From<PlacementStrategy> for std::sync::Arc<[u8]> {
+    fn from(strategy: PlacementStrategy) -> std::sync::Arc<[u8]> {
+        std::sync::Arc::<[u8]>::from(strategy.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<[u8]>`] output*
+/// byte-owned reverse projection on the first M3-mesh-primitive-defining
+/// [`PlacementStrategy`] closed-set fieldless typed enum on the caixa
+/// surface — the borrowed-input companion to the paired owned-input
+/// [`From<PlacementStrategy> for std::sync::Arc<[u8]>`] impl immediately
+/// above, closing the `{Self, &Self} → std::sync::Arc<[u8]>` byte-owned
+/// reverse-projection family on this primitive at the borrowed-input
+/// corner. Routes byte-for-byte through the same substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the [`std::sync::Arc<[u8]>`] allocation happens on
+/// both input axes because [`Self::as_str`] returns `&'static str`
+/// regardless of the input shape, so the borrowed-input peer reaches the
+/// same wire byte-string through the same one-heap-allocation path the
+/// owned-input peer already carries.
+///
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer that carries the paired owned-input
+/// [`std::sync::Arc<[u8]>`] axis but not the borrowed-input axis forces
+/// every borrowed call site through a spurious [`Copy`] deref
+/// (`std::sync::Arc::<[u8]>::from(*strategy)`) or an open-coded
+/// `std::sync::Arc::<[u8]>::from(strategy.as_str().as_bytes())` whose
+/// type bounds have no compile-time link to the substrate primitive. The
+/// borrowed-input axis is the one a
+/// `PlacementStrategy::ALL.iter().map(std::sync::Arc::<[u8]>::from)` pipe
+/// binds against (its iterator over `&'static [PlacementStrategy]` yields
+/// `&PlacementStrategy`, not `PlacementStrategy`), so the owned-input
+/// axis alone forces every such per-arm accept-set materializer through
+/// an explicit `.copied()` restatement.
+impl From<&PlacementStrategy> for std::sync::Arc<[u8]> {
+    fn from(strategy: &PlacementStrategy) -> std::sync::Arc<[u8]> {
+        std::sync::Arc::<[u8]>::from(strategy.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed-byte-slice input, `Result<Self, ()>` output*
 /// byte-view reverse projection on the first M3-mesh-primitive-defining
 /// `:placement :estrategia` distribution-strategy [`PlacementStrategy`]
@@ -33422,6 +33547,244 @@ mod tests {
                  Box<[u8]> — a silent move-out on the borrowed axis \
                  would break the source-survival contract on the \
                  borrowed-input peer"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_owned_arc_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for std::sync::Arc<[u8]>` and
+        // `impl From<&PlacementStrategy> for std::sync::Arc<[u8]>` —
+        // asserts the trait-idiomatic byte-owned reverse-projection
+        // standard-library impls and the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view resolve to the same three-arm
+        // PascalCase wire byte-string emit-set across every arm the
+        // exhaustive [`super::PlacementStrategy::ALL`] slice enumerates,
+        // on both the owned-input `PlacementStrategy` and borrowed-input
+        // `&PlacementStrategy` surfaces.
+        //
+        // Extends the substrate-wide byte-owned reverse-projection
+        // matrix onto the first M3-mesh-primitive-defining closed-set
+        // fieldless typed-enum peer at the [`std::sync::Arc<[u8]>`]
+        // corner, mirroring the trajectory the same axis walked on the
+        // sibling M2-OTP-shape [`super::super::supervisor::RestartStrategy`]
+        // (98da8f6) and [`super::super::supervisor::RestartPolicy`]
+        // (bbb78ee) peers, on the [`super::super::CaixaVersion`] String-
+        // wrapper newtype primitive (3d5fc43), and on the
+        // [`super::super::CaixaKind`] structurally most fundamental
+        // closed-set fieldless typed-enum peer (d8872df).
+        //
+        // Generic `<T: Into<std::sync::Arc<[u8]>>>`-bound consumer
+        // witness helper: a future per-arm byte-writer that accepts an
+        // `Arc<[u8]>` composes on both owned and borrowed input shapes
+        // without an open-coded
+        // `std::sync::Arc::<[u8]>::from(strategy.as_str().as_bytes())`
+        // at every call site. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_arc_bytes_sink<T: Into<std::sync::Arc<[u8]>>>(t: T) -> std::sync::Arc<[u8]> {
+            t.into()
+        }
+        for &variant in PlacementStrategy::ALL {
+            let via_owned_from: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<PlacementStrategy>>::from(variant);
+            let via_borrowed_from: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<&PlacementStrategy>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<PlacementStrategy> for Arc<[u8]> impl must \
+                 byte-equal PlacementStrategy::as_str().as_bytes() on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&PlacementStrategy> for Arc<[u8]> impl must \
+                 byte-equal PlacementStrategy::as_str().as_bytes() on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<PlacementStrategy> for Arc<[u8]> must land a fit-\
+                 to-length atomically-refcounted byte slab on \
+                 PlacementStrategy::{variant:?} — a length mismatch \
+                 against PlacementStrategy::as_str().as_bytes().len() \
+                 signals the Arc<[u8]> allocator drifted off the \
+                 substrate primitive's byte-tail"
+            );
+            let via_into_owned: std::sync::Arc<[u8]> = variant.into();
+            let via_into_borrowed: std::sync::Arc<[u8]> = (&variant).into();
+            assert_eq!(
+                via_into_owned.as_ref(),
+                via_method_bytes,
+                "Into<Arc<[u8]>>::into on PlacementStrategy::{variant:?} \
+                 must byte-equal PlacementStrategy::as_str().as_bytes()"
+            );
+            assert_eq!(
+                via_into_borrowed.as_ref(),
+                via_method_bytes,
+                "Into<Arc<[u8]>>::into on &PlacementStrategy::{variant:?} \
+                 must byte-equal PlacementStrategy::as_str().as_bytes()"
+            );
+        }
+        for &variant in PlacementStrategy::ALL {
+            let owned_via_generic = generic_arc_bytes_sink(variant);
+            let variant_ref: &PlacementStrategy = &variant;
+            let borrowed_via_generic = generic_arc_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Arc<[u8]>>>-bound composition on \
+                 PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Arc<[u8]>>>-bound composition on \
+                 &PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns"
+            );
+        }
+        // Source-survival witness on the borrowed-input peer: the
+        // `From<&PlacementStrategy>` impl reads through the borrow, so
+        // the source value must remain reachable after the projection —
+        // this pin trips at compile time if a future refactor moves out
+        // of `&PlacementStrategy` (which would leave the source unusable
+        // on the next line).
+        for &variant in PlacementStrategy::ALL {
+            let variant_ref: &PlacementStrategy = &variant;
+            let _via_borrowed: std::sync::Arc<[u8]> = variant_ref.into();
+            let via_str_after: &'static str = variant_ref.as_str();
+            assert_eq!(
+                via_str_after.as_bytes(),
+                variant.as_str().as_bytes(),
+                "borrowed source &PlacementStrategy::{variant:?} must \
+                 remain reachable after From<&PlacementStrategy> for \
+                 Arc<[u8]> — a silent move-out on the borrowed axis \
+                 would break the source-survival contract on the \
+                 borrowed-input peer"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_into_owned_arc_bytes_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<PlacementStrategy> for std::sync::Arc<[u8]>` axis must
+        // byte-agree with (a) the paired byte-owned
+        // `From<PlacementStrategy> for Vec<u8>` axis on the same
+        // primitive, (b) the paired byte-owned `From<PlacementStrategy>
+        // for Cow<'static, [u8]>` axis on the same primitive, (c) the
+        // paired byte-owned `From<PlacementStrategy> for Box<[u8]>`
+        // axis on the same primitive, (d) the paired str-side
+        // `From<PlacementStrategy> for std::sync::Arc<str>` axis on the
+        // same primitive, and (e) the paired borrowed byte-view
+        // `AsRef<[u8]>` axis on the same primitive — locking every one
+        // of the substrate's routed-through-`as_str` byte-family axes
+        // on this enum together so a future silent detour on any one
+        // axis trips at caixa-core test time rather than at a
+        // downstream `<T: Into<Arc<[u8]>>>`-bound consumer's silent
+        // split.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_from_into_owned_arc_bytes_agrees_with_paired_axes_on_every_arm`]
+        // (d8872df) cross-axis partition test on the structurally most
+        // fundamental closed-set fieldless typed-enum peer.
+        for &variant in PlacementStrategy::ALL {
+            let via_arc_bytes: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<PlacementStrategy>>::from(variant);
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<PlacementStrategy> for Arc<[u8]> and \
+                 From<PlacementStrategy> for Vec<u8> must byte-agree on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the two byte-owned reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<PlacementStrategy> for Arc<[u8]> and \
+                 From<PlacementStrategy> for Cow<'static, [u8]> must \
+                 byte-agree on PlacementStrategy::{variant:?} — \
+                 divergence signals a silent detour off the shared \
+                 substrate-primitive as_str accessor"
+            );
+            let via_box_bytes: Box<[u8]> = <Box<[u8]> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_box_bytes.as_ref(),
+                "From<PlacementStrategy> for Arc<[u8]> and \
+                 From<PlacementStrategy> for Box<[u8]> must byte-agree \
+                 on PlacementStrategy::{variant:?} — divergence signals \
+                 the two owned byte-slab reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            let via_arc_str: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_arc_str.as_bytes(),
+                "From<PlacementStrategy> for Arc<[u8]> and \
+                 From<PlacementStrategy> for Arc<str> must byte-agree \
+                 on PlacementStrategy::{variant:?} — divergence signals \
+                 the byte-owned Arc axis and the str-side Arc axis have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            let via_as_ref_bytes: &[u8] = <PlacementStrategy as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_as_ref_bytes,
+                "From<PlacementStrategy> for Arc<[u8]> and AsRef<[u8]> \
+                 for PlacementStrategy must byte-agree on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the byte-owned Arc axis and the byte-view axis have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+        }
+        // A `.iter().map(std::sync::Arc::<[u8]>::from)` pipe witness over
+        // `PlacementStrategy::ALL` binds the borrowed-input axis (its
+        // iterator over `&'static [PlacementStrategy]` yields
+        // `&PlacementStrategy`) and folds the three-arm accept-set
+        // through the Arc<[u8]> boundary, pinning the borrowed-input
+        // `From` impl on every arm of the pipe.
+        let via_iter: Vec<std::sync::Arc<[u8]>> = PlacementStrategy::ALL
+            .iter()
+            .map(std::sync::Arc::<[u8]>::from)
+            .collect();
+        let via_method: Vec<std::sync::Arc<[u8]>> = PlacementStrategy::ALL
+            .iter()
+            .map(|s| std::sync::Arc::<[u8]>::from(s.as_str().as_bytes()))
+            .collect();
+        for (i, &variant) in PlacementStrategy::ALL.iter().enumerate() {
+            assert_eq!(
+                via_iter[i].as_ref(),
+                via_method[i].as_ref(),
+                "`.iter().map(std::sync::Arc::<[u8]>::from)` over \
+                 PlacementStrategy::ALL must byte-equal \
+                 `.iter().map(|s| std::sync::Arc::<[u8]>::from(s.as_str().as_bytes()))` \
+                 on PlacementStrategy::{variant:?} — the trait-idiomatic \
+                 `From<&PlacementStrategy> for Arc<[u8]>` axis is what \
+                 makes the `Arc::from` composition route through the \
+                 substrate-primitive `PlacementStrategy::as_str` \
+                 accessor by construction"
             );
         }
     }
