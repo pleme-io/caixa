@@ -12421,6 +12421,129 @@ impl From<&PlacementStrategy> for std::borrow::Cow<'static, [u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the first M3-mesh-primitive-defining
+/// `:placement :estrategia` distribution-strategy [`PlacementStrategy`]
+/// closed-set fieldless typed enum on the caixa surface — the [`Box<[u8]>`]
+/// companion to the paired owned-input [`From<PlacementStrategy> for
+/// Vec<u8>`] (a94ed6a's peer opening the byte-owned reverse-projection axis
+/// on this same primitive) and [`From<PlacementStrategy> for
+/// std::borrow::Cow<'static, [u8]>`] (05e4054) reverse-projection impls on
+/// this same primitive, mirroring the paired string-side
+/// [`From<PlacementStrategy> for Box<str>`] forward-projection axis onto
+/// the byte-family side of the reverse-projection matrix, and tracking the
+/// trajectory the same axis walked on the sibling M2-OTP-shape
+/// [`crate::supervisor::RestartStrategy`] (e11150e) and
+/// [`crate::supervisor::RestartPolicy`] (6bc74c9) peers, on the
+/// [`crate::CaixaVersion`] String-wrapper newtype primitive (703b2fd), and
+/// on the [`crate::CaixaKind`] structurally most fundamental closed-set
+/// fieldless typed-enum peer (4f47901). Routes byte-for-byte through the
+/// substrate-primitive [`PlacementStrategy::as_str`] `pub const fn`
+/// accessor via [`Box::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the three `match` arms in [`Self::as_str`] resolve
+/// to [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] `pub const &'static
+/// str` bodies, so `.as_bytes()` returns `&'static [u8]` by construction,
+/// and the standard-library [`Box::<[u8]>::from(&[u8])`] impl allocates a
+/// fit-to-length boxed byte slice with no length hint / capacity slack
+/// (unlike [`Vec<u8>`], whose `to_vec()` allocation carries per-arm
+/// `capacity ≥ len`), so the [`Box<[u8]>`] slot is the type-correct
+/// projection whenever a downstream consumer wants a heap-allocated byte
+/// slice whose header carries only the length, not an unused `cap` word
+/// (`24` bytes on 64-bit for [`Vec<u8>`]'s three-word header vs. `16` for
+/// [`Box<[u8]>`]'s two-word fat-pointer, so the per-arm footprint drops by
+/// one word on the enum surface without a shrink-to-fit reallocation).
+///
+/// A future consumer that wants a [`Box<[u8]>`]-typed handle on a
+/// [`PlacementStrategy`] — a future per-Aplicacao interned byte-tail
+/// registry keyed on `:placement :estrategia` whose per-arm slot
+/// `Box<[u8]>` (not `Vec<u8>`, so the interner's per-arm footprint stays
+/// tight against the arm count), a future
+/// `bytes::Bytes::from(Box::<[u8]>::from(strategy))` framer that binds a
+/// [`Box<[u8]>`] boundary to keep the fit-to-length allocation reachable
+/// at the framer's entry point (the [`bytes::Bytes::from(Box<[u8]>)`]
+/// impl on `bytes >= 1.4` is a zero-copy header rewrite over the boxed
+/// slice, without the `Vec::<u8>::from_boxed_slice` round-trip
+/// [`bytes::Bytes::from(Vec<u8>)`] otherwise forces), a future
+/// `hash::Hash::hash_slice(&Box::<[u8]>::from(strategy))`-shape BLAKE3
+/// content-address closure fold that binds a fit-to-length owned slice
+/// on the way to a downstream [`crate::Lacre`] closure body — reaches the
+/// wire byte-string through this one dispatch, without the pre-lift
+/// `Vec::<u8>::from(strategy).into_boxed_slice()` double-hop that would
+/// still allocate through the sibling [`Vec<u8>`] axis + a fit-to-length
+/// shrink between the enum peer and the [`Box<[u8]>`] slot.
+///
+/// Peer of the paired owned-input [`From<PlacementStrategy> for Vec<u8>`]
+/// and [`From<PlacementStrategy> for std::borrow::Cow<'static, [u8]>`]
+/// impls on the same primitive — the sibling [`Vec<u8>`] axis returns a
+/// fresh heap allocation via [`str::as_bytes`]`.to_vec()`; the sibling
+/// [`Cow<'static, [u8]>`] axis binds the zero-alloc [`Cow::Borrowed`] arm
+/// on the same `&'static [u8]` byte-tail; this axis allocates a
+/// fit-to-length boxed byte slice via [`Box::<[u8]>::from(&[u8])`]. Rust's
+/// standard library does not derive `From<Self> for Box<[u8]>` from
+/// `From<Self> for Vec<u8>` (the `From<Vec<u8>> for Box<[u8]>` impl exists
+/// but requires the intermediary allocation), so every closed-set
+/// fieldless typed enum peer that carries the paired reverse [`Vec<u8>`]
+/// axis but not the paired [`Box<[u8]>`] axis forces every [`Box<[u8]>`]-
+/// typed call site through a `Vec::<u8>::from(strategy).into_boxed_slice()`
+/// intermediary allocation whose bounds carry no compile-time link back to
+/// the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_owned_box_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`] `.as_bytes()`
+/// across the three-arm [`PlacementStrategy::ALL`] accept-set on both
+/// owned and borrowed input shapes, plus cross-axis witnesses against
+/// the paired owned-input [`From<PlacementStrategy> for Vec<u8>`],
+/// [`From<PlacementStrategy> for std::borrow::Cow<'static, [u8]>`]
+/// byte-owned reverse-projection axes and the paired string-side
+/// [`From<PlacementStrategy> for Box<str>`] axis on the same primitive,
+/// closing the "owned-input into `Vec<u8>` vs. `Cow<'static, [u8]>` vs.
+/// `Box<[u8]>`" three-corner partition on the same wire byte-string).
+impl From<PlacementStrategy> for Box<[u8]> {
+    fn from(strategy: PlacementStrategy) -> Box<[u8]> {
+        Box::<[u8]>::from(strategy.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<[u8]>`] output* byte-owned
+/// reverse projection on the first M3-mesh-primitive-defining
+/// [`PlacementStrategy`] closed-set fieldless typed enum on the caixa
+/// surface — the borrowed-input companion to the paired owned-input
+/// [`From<PlacementStrategy> for Box<[u8]>`] impl immediately above,
+/// closing the `{Self, &Self} → Box<[u8]>` byte-owned reverse-projection
+/// family on this primitive at the borrowed-input corner. Routes byte-
+/// for-byte through the same substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`Box::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the [`Box<[u8]>`] allocation happens on both
+/// input axes because [`Self::as_str`] returns `&'static str`
+/// regardless of the input shape, so the borrowed-input peer reaches
+/// the same wire byte-string through the same one-heap-allocation path
+/// the owned-input peer already carries.
+///
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>` (nor a `Copy`-based
+/// `impl<T: Copy, U: From<T>> From<&T> for U`), so every closed-set
+/// fieldless typed enum peer that carries the paired owned-input
+/// [`Box<[u8]>`] axis but not the borrowed-input axis forces every
+/// borrowed call site through a spurious [`Copy`] deref
+/// (`Box::<[u8]>::from(*strategy)`) or an open-coded
+/// `Box::<[u8]>::from(strategy.as_str().as_bytes())` whose type bounds
+/// have no compile-time link to the substrate primitive. The borrowed-
+/// input axis is the one a
+/// `PlacementStrategy::ALL.iter().map(Box::<[u8]>::from)` pipe binds
+/// against (its iterator over `&'static [PlacementStrategy]` yields
+/// `&PlacementStrategy`, not `PlacementStrategy`), so the owned-input
+/// axis alone forces every such per-arm accept-set materializer through
+/// an explicit `.copied()` restatement.
+impl From<&PlacementStrategy> for Box<[u8]> {
+    fn from(strategy: &PlacementStrategy) -> Box<[u8]> {
+        Box::<[u8]>::from(strategy.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed-byte-slice input, `Result<Self, ()>` output*
 /// byte-view reverse projection on the first M3-mesh-primitive-defining
 /// `:placement :estrategia` distribution-strategy [`PlacementStrategy`]
@@ -33066,6 +33189,239 @@ mod tests {
                  silently allocated where the substrate-primitive \
                  PlacementStrategy::as_str `&'static str` return makes \
                  the borrowed arm the type-correct projection"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  here onto the first M3-mesh-primitive-defining closed-\
+                  set fieldless typed-enum peer at the Box<[u8]> corner, \
+                  so the pin binds the new impl against every paired \
+                  byte-owned, byte-view, and str-side reverse-projection \
+                  axis on the same enum plus a generic <T: \
+                  Into<Box<[u8]>>>-bound consumer witness and an \
+                  .iter().map(Box::<[u8]>::from) pipe witness on both \
+                  owned and borrowed input shapes to lock the whole \
+                  family against a future silent regression"
+    )]
+    fn placement_strategy_from_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for Box<[u8]>` and
+        // `impl From<&PlacementStrategy> for Box<[u8]>` — asserts the
+        // trait-idiomatic byte-owned reverse-projection standard-library
+        // impls and the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view resolve to the same three-arm
+        // PascalCase wire byte-string emit-set across every arm the
+        // exhaustive [`super::PlacementStrategy::ALL`] slice enumerates,
+        // on both the owned-input `PlacementStrategy` and borrowed-input
+        // `&PlacementStrategy` surfaces.
+        //
+        // Extends the substrate-wide byte-owned reverse-projection
+        // matrix onto the first M3-mesh-primitive-defining closed-set
+        // fieldless typed-enum peer at the `Box<[u8]>` corner, mirroring
+        // the trajectory the same axis walked on the sibling M2-OTP-
+        // shape [`super::super::supervisor::RestartStrategy`] (e11150e)
+        // and [`super::super::supervisor::RestartPolicy`] (6bc74c9)
+        // peers, on the [`super::super::CaixaVersion`] String-wrapper
+        // newtype primitive (703b2fd), and on the
+        // [`super::super::CaixaKind`] structurally most fundamental
+        // closed-set fieldless typed-enum peer (4f47901).
+        //
+        // Generic `<T: Into<Box<[u8]>>>`-bound consumer witness helper:
+        // a future per-arm byte-writer that accepts a `Box<[u8]>`
+        // composes on both owned and borrowed input shapes without an
+        // open-coded `Box::<[u8]>::from(strategy.as_str().as_bytes())`
+        // at every call site. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_box_bytes_sink<T: Into<Box<[u8]>>>(t: T) -> Box<[u8]> {
+            t.into()
+        }
+        for &variant in PlacementStrategy::ALL {
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<PlacementStrategy>>::from(variant);
+            let via_borrowed_from: Box<[u8]> =
+                <Box<[u8]> as From<&PlacementStrategy>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<PlacementStrategy> for Box<[u8]> impl must \
+                 byte-equal PlacementStrategy::as_str().as_bytes() on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&PlacementStrategy> for Box<[u8]> impl must \
+                 byte-equal PlacementStrategy::as_str().as_bytes() on \
+                 PlacementStrategy::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<PlacementStrategy> for Box<[u8]> must land a fit-\
+                 to-length boxed byte slice on \
+                 PlacementStrategy::{variant:?} — a length mismatch \
+                 against PlacementStrategy::as_str().as_bytes().len() \
+                 signals the Box<[u8]> allocator drifted off the \
+                 substrate primitive's byte-tail"
+            );
+            let via_into_owned: Box<[u8]> = variant.into();
+            let via_into_borrowed: Box<[u8]> = (&variant).into();
+            assert_eq!(
+                via_into_owned.as_ref(),
+                via_method_bytes,
+                "Into<Box<[u8]>>::into on PlacementStrategy::{variant:?} \
+                 must byte-equal PlacementStrategy::as_str().as_bytes()"
+            );
+            assert_eq!(
+                via_into_borrowed.as_ref(),
+                via_method_bytes,
+                "Into<Box<[u8]>>::into on &PlacementStrategy::{variant:?} \
+                 must byte-equal PlacementStrategy::as_str().as_bytes()"
+            );
+            // Cross-axis partition against the paired byte-owned
+            // `Vec<u8>` reverse-projection axis on the same enum — the
+            // two byte-owned reverse-projection axes must byte-agree
+            // on every arm.
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<PlacementStrategy> for Box<[u8]> and \
+                 From<PlacementStrategy> for Vec<u8> must byte-agree on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the two byte-owned reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis partition against the paired byte-owned
+            // `Cow<'static, [u8]>` reverse-projection axis on the same
+            // enum — the two byte-owned reverse-projection axes must
+            // byte-agree on every arm.
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<PlacementStrategy> for Box<[u8]> and \
+                 From<PlacementStrategy> for Cow<'static, [u8]> must \
+                 byte-agree on PlacementStrategy::{variant:?} — \
+                 divergence signals a silent detour off the shared \
+                 substrate-primitive as_str accessor"
+            );
+            // Cross-axis partition against the paired str-side
+            // `Box<str>` reverse-projection axis on the same enum — the
+            // byte-side and str-side `Box<_>` axes must byte-agree on
+            // every arm (both route through Self::as_str's &'static
+            // return).
+            let via_box_str: Box<str> = <Box<str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_box_str.as_bytes(),
+                "From<PlacementStrategy> for Box<[u8]> and \
+                 From<PlacementStrategy> for Box<str> must byte-agree \
+                 on PlacementStrategy::{variant:?} — divergence signals \
+                 the byte-owned Box axis and the str-side Box axis have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis partition against the paired borrowed byte-
+            // view `AsRef<[u8]>` axis on the same enum — the byte-owned
+            // `Box<[u8]>` and byte-view axes must byte-agree on every
+            // arm (both route through Self::as_str's &'static return).
+            let via_as_ref_bytes: &[u8] = <PlacementStrategy as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_as_ref_bytes,
+                "From<PlacementStrategy> for Box<[u8]> and AsRef<[u8]> \
+                 for PlacementStrategy must byte-agree on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the byte-owned Box axis and the byte-view axis have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+        }
+        for &variant in PlacementStrategy::ALL {
+            let owned_via_generic = generic_box_bytes_sink(variant);
+            let variant_ref: &PlacementStrategy = &variant;
+            let borrowed_via_generic = generic_box_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 &PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns"
+            );
+        }
+        // A `.iter().map(Box::<[u8]>::from)` pipe witness over
+        // `PlacementStrategy::ALL` binds the borrowed-input axis (its
+        // iterator over `&'static [PlacementStrategy]` yields
+        // `&PlacementStrategy`) and folds the three-arm accept-set
+        // through the Box<[u8]> boundary, pinning both the borrowed-
+        // input `From` impl and the fit-to-length-allocation discipline
+        // on every arm of the pipe.
+        let via_iter: Vec<Box<[u8]>> = PlacementStrategy::ALL
+            .iter()
+            .map(Box::<[u8]>::from)
+            .collect();
+        let via_method: Vec<Box<[u8]>> = PlacementStrategy::ALL
+            .iter()
+            .map(|s| Box::<[u8]>::from(s.as_str().as_bytes()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Box::<[u8]>::from)` over \
+             PlacementStrategy::ALL must byte-equal `.iter().map(|s| \
+             Box::<[u8]>::from(s.as_str().as_bytes()))` on every arm — \
+             the trait-idiomatic `From<&PlacementStrategy> for Box<[u8]>` \
+             axis is what makes the `Box::<[u8]>::from` composition route \
+             through the substrate-primitive `PlacementStrategy::as_str` \
+             accessor by construction"
+        );
+        for boxed in &via_iter {
+            assert_eq!(
+                boxed.len(),
+                boxed.as_ref().len(),
+                "every element of the .iter().map(Box::<[u8]>::from) \
+                 pipe over PlacementStrategy::ALL must land as a \
+                 fit-to-length boxed byte slice — a slack length \
+                 signals the Box<[u8]> allocator drifted off the \
+                 substrate-primitive as_str accessor's byte-tail length"
+            );
+        }
+        // Source-survival witness on the borrowed-input peer: the
+        // `From<&PlacementStrategy>` impl reads through the borrow, so
+        // the source value must remain reachable after the projection —
+        // this pin trips at compile time if a future refactor moves out
+        // of `&PlacementStrategy` (which would leave the source unusable
+        // on the next line).
+        for &variant in PlacementStrategy::ALL {
+            let variant_ref: &PlacementStrategy = &variant;
+            let _via_borrowed: Box<[u8]> = variant_ref.into();
+            let via_str_after: &'static str = variant_ref.as_str();
+            assert_eq!(
+                via_str_after.as_bytes(),
+                variant.as_str().as_bytes(),
+                "borrowed source &PlacementStrategy::{variant:?} must \
+                 remain reachable after From<&PlacementStrategy> for \
+                 Box<[u8]> — a silent move-out on the borrowed axis \
+                 would break the source-survival contract on the \
+                 borrowed-input peer"
             );
         }
     }
