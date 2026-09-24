@@ -2189,6 +2189,76 @@ impl From<&WitShape> for Box<[u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::sync::Arc<[u8]>`] output* byte-owned
+/// reverse projection on the third M3-mesh-primitive-defining [`WitShape`]
+/// closed-set fieldless typed enum — extends the byte-owned reverse-
+/// projection matrix onto the `:contratos :wit` census-label pre-projection
+/// enum at its [`std::sync::Arc<[u8]>`] corner, tracking the trajectory the
+/// sibling [`PlacementStrategy`] (64cdf90), [`RateLimitUnit`] (e872c77),
+/// [`crate::supervisor::RestartStrategy`] (98da8f6),
+/// [`crate::supervisor::RestartPolicy`] (bbb78ee), and [`crate::CaixaKind`]
+/// (d8872df) peers walked at this same corner. Routes byte-for-byte through
+/// the substrate-primitive [`WitShape::as_str`] `pub const fn` accessor via
+/// [`std::sync::Arc::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the four `match` arms in [`Self::as_str`] resolve to
+/// the [`WIT_SHAPE_LABEL_HTTP`] / [`WIT_SHAPE_LABEL_PUBSUB`] /
+/// [`WIT_SHAPE_LABEL_STORE`] / [`WIT_SHAPE_LABEL_CAPABILITY`] `pub const
+/// &'static str` bodies, so `.as_bytes()` returns `&'static [u8]` by
+/// construction, and the standard-library [`std::sync::Arc::<[u8]>::from(&[u8])`]
+/// impl allocates an atomically-refcounted heap slab whose header carries
+/// the strong + weak counters the [`std::sync::Arc<[u8]>`] layout requires
+/// in one heap allocation without an intermediary [`Vec<u8>`] or
+/// [`Box<[u8]>`].
+///
+/// A future [`std::sync::Arc<[u8]>`]-typed consumer on a [`WitShape`] — a
+/// future M4 admission-webhook per-request per-Aplicacao `:contratos :wit`
+/// census-label byte-tail fanned out across a `tokio::spawn`ed worker pool
+/// through pointer-width [`std::sync::Arc::clone`] handles (an atomic
+/// refcount bump, cheaper than a fresh [`Box<[u8]>`] allocation on hot
+/// per-reconcile-tick call sites), a future thread-safe
+/// `HashMap::<std::sync::Arc<[u8]>, _>::from_iter` per-shape lookup keyed
+/// by the wire byte-tail across the contract planner's per-Aplicacao
+/// fan-out cache, a future `Send`-bound M5 adaptive-routing planner that
+/// ships the wire byte-string across a channel through the
+/// [`std::sync::Arc<[u8]>`] slot — reaches the wire byte-string through
+/// this one dispatch, without the pre-lift
+/// `Box::<[u8]>::from(shape).into()` or
+/// `Arc::<[u8]>::from(Vec::<u8>::from(shape))` double-hop that would still
+/// allocate the same [`Arc<[u8]>`] slab plus one intermediary [`Box<[u8]>`]
+/// or [`Vec<u8>`] between the enum peer and the [`std::sync::Arc<[u8]>`]
+/// slot.
+///
+/// Rust's standard library does not derive `From<Self> for Arc<[u8]>` from
+/// `From<Self> for Box<[u8]>` (nor from `From<Self> for Vec<u8>`), so every
+/// closed-set fieldless typed enum peer that carries the paired
+/// [`Box<[u8]>`] axis but not the paired [`Arc<[u8]>`] axis forces every
+/// [`Arc<[u8]>`]-typed call site through a `Box::<[u8]>::from(shape).into()`
+/// / `Arc::<[u8]>::from(Vec::<u8>::from(shape))` intermediary allocation
+/// whose bounds carry no compile-time link back to the substrate primitive.
+///
+/// Pinned by [`tests::wit_shape_from_into_owned_arc_bytes_routes_through_as_str_accessor`].
+impl From<WitShape> for std::sync::Arc<[u8]> {
+    fn from(shape: WitShape) -> std::sync::Arc<[u8]> {
+        std::sync::Arc::<[u8]>::from(shape.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::sync::Arc<[u8]>`] output* byte-
+/// owned reverse projection on [`WitShape`] — the borrowed-input companion
+/// to the paired owned-input impl immediately above, closing the
+/// `{Self, &Self} → std::sync::Arc<[u8]>` pair on this primitive in one
+/// lift. Rust's `From` trait carries no blanket
+/// `impl<T> From<&T> for U where U: From<T>`, so the borrowed-input axis is
+/// what a `WitShape::ALL.iter().map(std::sync::Arc::<[u8]>::from)` pipe
+/// binds against (its iterator over `&'static [WitShape]` yields
+/// `&WitShape`, not `WitShape`), without a spurious `.copied()`
+/// restatement.
+impl From<&WitShape> for std::sync::Arc<[u8]> {
+    fn from(shape: &WitShape) -> std::sync::Arc<[u8]> {
+        std::sync::Arc::<[u8]>::from(shape.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed-byte-slice input, `Result<Self, ()>` output*
 /// byte-view reverse projection on the M3-mesh `:contratos :wit` pre-
 /// projection [`WitShape`] closed-set fieldless typed enum on the caixa
@@ -24832,6 +24902,161 @@ mod tests {
             "`.iter().map(Box::<[u8]>::from)` over WitShape::ALL must \
              byte-equal the open-coded per-arm composition"
         );
+    }
+
+    #[test]
+    fn wit_shape_from_into_owned_arc_bytes_routes_through_as_str_accessor() {
+        // Byte-parity pin on `impl From<WitShape> for std::sync::Arc<[u8]>`
+        // and `impl From<&WitShape> for std::sync::Arc<[u8]>` — asserts the
+        // trait-idiomatic byte-owned reverse-projection standard-library
+        // impls and the substrate-primitive `WitShape::as_str` accessor
+        // resolve to the same four-arm census-label wire byte-string on
+        // both owned- and borrowed-input surfaces, and pins the generic
+        // `<T: Into<Arc<[u8]>>>` sink + the `.iter().map(Arc::from)` pipe
+        // witness that binds the borrowed-input axis in the closed-set
+        // fanout. Extends the substrate-wide byte-owned reverse-projection
+        // matrix onto the third M3-mesh-primitive-defining slot enum at
+        // the `Arc<[u8]>` corner, tracking the trajectory of `CaixaKind`
+        // (d8872df), `PlacementStrategy` (64cdf90), `RateLimitUnit`
+        // (e872c77), `RestartStrategy` (98da8f6), `RestartPolicy` (bbb78ee).
+        fn generic_arc_bytes_sink<T: Into<std::sync::Arc<[u8]>>>(t: T) -> std::sync::Arc<[u8]> {
+            t.into()
+        }
+        for &variant in WitShape::ALL {
+            let via_owned_from: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<WitShape>>::from(variant);
+            let via_borrowed_from: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<&WitShape>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<WitShape> for Arc<[u8]> must byte-equal \
+                 WitShape::as_str().as_bytes() on WitShape::{variant:?}"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&WitShape> for Arc<[u8]> must byte-equal \
+                 WitShape::as_str().as_bytes() on WitShape::{variant:?}"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<WitShape> for Arc<[u8]> must land a fit-to-length \
+                 atomically-refcounted byte slab on WitShape::{variant:?}"
+            );
+            let via_into_owned: std::sync::Arc<[u8]> = variant.into();
+            let via_into_borrowed: std::sync::Arc<[u8]> = (&variant).into();
+            assert_eq!(via_into_owned.as_ref(), via_method_bytes);
+            assert_eq!(via_into_borrowed.as_ref(), via_method_bytes);
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_owned_from.as_ref(),
+                "owned and borrowed Arc<[u8]> corners must byte-agree on \
+                 WitShape::{variant:?}"
+            );
+            let owned_via_generic = generic_arc_bytes_sink(variant);
+            let variant_ref: &WitShape = &variant;
+            let borrowed_via_generic = generic_arc_bytes_sink(variant_ref);
+            assert_eq!(owned_via_generic.as_ref(), via_method_bytes);
+            assert_eq!(borrowed_via_generic.as_ref(), via_method_bytes);
+        }
+        // `.iter().map(std::sync::Arc::<[u8]>::from)` pipe witness over
+        // `WitShape::ALL` — binds the borrowed-input axis (its iterator
+        // yields `&WitShape`).
+        let via_iter: Vec<std::sync::Arc<[u8]>> = WitShape::ALL
+            .iter()
+            .map(std::sync::Arc::<[u8]>::from)
+            .collect();
+        let via_method: Vec<std::sync::Arc<[u8]>> = WitShape::ALL
+            .iter()
+            .map(|s| std::sync::Arc::<[u8]>::from(s.as_str().as_bytes()))
+            .collect();
+        for (i, &variant) in WitShape::ALL.iter().enumerate() {
+            assert_eq!(
+                via_iter[i].as_ref(),
+                via_method[i].as_ref(),
+                "`.iter().map(Arc::<[u8]>::from)` over WitShape::ALL must \
+                 byte-equal the open-coded per-arm composition on \
+                 WitShape::{variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_shape_from_into_owned_arc_bytes_agrees_with_paired_axes_on_every_arm() {
+        // Cross-axis partition pin: the newly lifted trait-idiomatic
+        // `From<WitShape> for std::sync::Arc<[u8]>` axis must byte-agree
+        // with (a) the paired byte-owned `From<WitShape> for Vec<u8>` axis,
+        // (b) the paired byte-owned `From<WitShape> for Cow<'static, [u8]>`
+        // axis, (c) the paired byte-owned `From<WitShape> for Box<[u8]>`
+        // axis, (d) the paired str-side `From<WitShape> for
+        // std::sync::Arc<str>` axis, and (e) the paired borrowed byte-view
+        // `AsRef<[u8]>` axis — locking every one of the substrate's routed-
+        // through-`as_str` byte-family axes on this enum together so a
+        // future silent detour on any one axis trips at caixa-core test
+        // time rather than at a downstream `<T: Into<Arc<[u8]>>>`-bound
+        // consumer's silent split. Peer of the sibling
+        // `rate_limit_unit_from_into_owned_arc_bytes_agrees_with_paired_axes_on_every_arm`
+        // (e872c77) and
+        // `placement_strategy_from_into_owned_arc_bytes_agrees_with_paired_axes_on_every_arm`
+        // (64cdf90) cross-axis partition tests.
+        for &variant in WitShape::ALL {
+            let via_arc_bytes: std::sync::Arc<[u8]> =
+                <std::sync::Arc<[u8]> as From<WitShape>>::from(variant);
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<WitShape> for Arc<[u8]> and From<WitShape> for \
+                 Vec<u8> must byte-agree on WitShape::{variant:?} — \
+                 divergence signals the two byte-owned reverse-projection \
+                 axes have drifted off the same substrate-primitive \
+                 as_str accessor"
+            );
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<WitShape> for Arc<[u8]> and From<WitShape> for \
+                 Cow<'static, [u8]> must byte-agree on \
+                 WitShape::{variant:?} — divergence signals a silent \
+                 detour off the shared substrate-primitive as_str accessor"
+            );
+            let via_box_bytes: Box<[u8]> = <Box<[u8]> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_box_bytes.as_ref(),
+                "From<WitShape> for Arc<[u8]> and From<WitShape> for \
+                 Box<[u8]> must byte-agree on WitShape::{variant:?} — \
+                 divergence signals the two owned byte-slab reverse-\
+                 projection axes have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            let via_arc_str: std::sync::Arc<str> =
+                <std::sync::Arc<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_arc_str.as_bytes(),
+                "From<WitShape> for Arc<[u8]> and From<WitShape> for \
+                 Arc<str> must byte-agree on WitShape::{variant:?} — \
+                 divergence signals the byte-owned Arc axis and the str-\
+                 side Arc axis have drifted off the same substrate-\
+                 primitive as_str accessor"
+            );
+            let via_as_ref_bytes: &[u8] = <WitShape as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_arc_bytes.as_ref(),
+                via_as_ref_bytes,
+                "From<WitShape> for Arc<[u8]> and AsRef<[u8]> for \
+                 WitShape must byte-agree on WitShape::{variant:?} — \
+                 divergence signals the byte-owned Arc axis and the byte-\
+                 view axis have drifted off the same substrate-primitive \
+                 as_str accessor"
+            );
+        }
     }
 
     #[test]
