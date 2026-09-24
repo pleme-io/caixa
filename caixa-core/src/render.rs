@@ -37569,7 +37569,7 @@ mod tests {
         let sel = pleme_program_selector("cart");
         assert_eq!(sel.len(), 1);
         assert_eq!(sel.get(LABEL_PROGRAM).map(String::as_str), Some("cart"));
-        assert!(sel.get(LABEL_APLICACAO).is_none());
+        assert!(!sel.contains_key(LABEL_APLICACAO));
     }
 
     #[test]
@@ -38535,7 +38535,7 @@ mod tests {
             .topo_order()
             .expect("acyclic CanteiroDag returns a valid topo_order");
         assert_eq!(
-            topo.iter().count(),
+            topo.len(),
             2,
             "topo_order on a two-node acyclic run must yield two node ids"
         );
@@ -39881,7 +39881,7 @@ mod tests {
             .topo_order()
             .expect("acyclic CanteiroDag returns a valid topo_order");
         assert_eq!(
-            topo.iter().count(),
+            topo.len(),
             2,
             "topo_order on the compound helper's returned DAG must yield \
              two node ids on a two-node acyclic run"
