@@ -205,7 +205,7 @@ impl TeiaInstance {
         schema
             .required_attribute_names()
             .into_iter()
-            .filter(|name| !self.atributos.contains_key(&(*name).to_string()))
+            .filter(|&name| !self.atributos.contains_key(name))
             .map(ToString::to_string)
             .collect()
     }

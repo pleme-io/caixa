@@ -57,7 +57,6 @@
 2	clippy::doc_markdown	caixa-feira/src/cmd/pool.rs
 2	clippy::doc_markdown	caixa-feira/src/cmd/publish.rs
 1	clippy::if_not_else	caixa-feira/src/cmd/publish.rs
-1	clippy::assigning_clones	caixa-feira/src/cmd/resolve.rs
 2	clippy::items_after_statements	caixa-feira/tests/feira_e2e.rs
 1	clippy::doc_markdown	caixa-flake/src/flake.rs
 31	clippy::doc_lazy_continuation	caixa-flux/src/lib.rs
@@ -83,7 +82,6 @@
 1	clippy::too_many_lines	caixa-resolver/src/resolve.rs
 1	clippy::unnecessary_literal_bound	caixa-teia-forge/src/backend.rs
 1	clippy::doc_markdown	caixa-teia-forge/src/lib.rs
-1	clippy::unnecessary_to_owned	caixa-teia/src/instance.rs
 2	clippy::match_same_arms	caixa-teia/src/manifest.rs
 1	clippy::doc_markdown	caixa-teia/src/reference.rs
 1	clippy::doc_markdown	caixa-teia/src/value.rs

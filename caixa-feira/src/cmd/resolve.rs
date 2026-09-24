@@ -38,7 +38,7 @@ impl Resolve {
         let mut cfg = ResolverConfig::load_or_default();
         cfg.include_dev = self.dev;
         if let Some(h) = &self.default_host {
-            cfg.default_host = h.clone();
+            cfg.default_host.clone_from(h);
         }
         let cache = CacheDir::discover().context("discovering cache dir")?;
 
