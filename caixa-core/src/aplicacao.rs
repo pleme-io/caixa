@@ -2144,6 +2144,51 @@ impl From<&WitShape> for std::borrow::Cow<'static, [u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the third M3-mesh-primitive-defining [`WitShape`] closed-
+/// set fieldless typed enum — extends the byte-owned reverse-projection
+/// matrix onto the `:contratos :wit` census-label pre-projection enum at
+/// its `Box<[u8]>` corner, tracking the trajectory the sibling
+/// [`PlacementStrategy`] (fb48599), [`RateLimitUnit`] (b22c283),
+/// [`crate::supervisor::RestartStrategy`] (e11150e),
+/// [`crate::supervisor::RestartPolicy`] (6bc74c9), and [`crate::CaixaKind`]
+/// (4f47901) peers walked at this same corner. Routes byte-for-byte
+/// through the substrate-primitive [`WitShape::as_str`] `pub const fn`
+/// accessor via [`Box::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the four `match` arms in [`Self::as_str`] resolve
+/// to the [`WIT_SHAPE_LABEL_HTTP`] / [`WIT_SHAPE_LABEL_PUBSUB`] /
+/// [`WIT_SHAPE_LABEL_STORE`] / [`WIT_SHAPE_LABEL_CAPABILITY`] `pub const
+/// &'static str` bodies, so a downstream [`Box<[u8]>`] consumer (a future
+/// M4 admission-webhook rejection body binding the four-arm accepted-
+/// shape enumeration through the `Box<[u8]>` slot, a future
+/// `bytes::Bytes::from(Box<[u8]>)` framer that keeps the fit-to-length
+/// allocation reachable at the framer's entry point) reaches the wire
+/// byte-string through this one trait dispatch rather than an open-coded
+/// `Box::<[u8]>::from(shape.as_str().as_bytes())` composition whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Pinned by [`tests::wit_shape_from_into_owned_box_bytes_routes_through_as_str_accessor`].
+impl From<WitShape> for Box<[u8]> {
+    fn from(shape: WitShape) -> Box<[u8]> {
+        Box::<[u8]>::from(shape.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<[u8]>`] output* byte-owned
+/// reverse projection on [`WitShape`] — the borrowed-input companion to
+/// the paired owned-input impl immediately above, closing the
+/// `{Self, &Self} → Box<[u8]>` pair on this primitive in one lift.
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>`, so the borrowed-input axis is what a
+/// `WitShape::ALL.iter().map(Box::<[u8]>::from)` pipe binds against (its
+/// iterator over `&'static [WitShape]` yields `&WitShape`, not
+/// `WitShape`), without a spurious `.copied()` restatement.
+impl From<&WitShape> for Box<[u8]> {
+    fn from(shape: &WitShape) -> Box<[u8]> {
+        Box::<[u8]>::from(shape.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed-byte-slice input, `Result<Self, ()>` output*
 /// byte-view reverse projection on the M3-mesh `:contratos :wit` pre-
 /// projection [`WitShape`] closed-set fieldless typed enum on the caixa
@@ -24699,6 +24744,94 @@ mod tests {
                  pipe silently allocated off the substrate primitive"
             );
         }
+    }
+
+    #[test]
+    fn wit_shape_from_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Byte-parity pin on `impl From<WitShape> for Box<[u8]>` and
+        // `impl From<&WitShape> for Box<[u8]>` — asserts the trait-
+        // idiomatic byte-owned reverse-projection standard-library
+        // impls and the substrate-primitive `WitShape::as_str` accessor
+        // resolve to the same four-arm census-label wire byte-string on
+        // both owned- and borrowed-input surfaces, and cross-checks the
+        // byte-tail against the sibling `Vec<u8>`, `Cow<'static, [u8]>`,
+        // `Box<str>`, and `AsRef<[u8]>` axes on the same primitive.
+        fn generic_box_bytes_sink<T: Into<Box<[u8]>>>(t: T) -> Box<[u8]> {
+            t.into()
+        }
+        for &variant in WitShape::ALL {
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<WitShape>>::from(variant);
+            let via_borrowed_from: Box<[u8]> = <Box<[u8]> as From<&WitShape>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<WitShape> for Box<[u8]> impl must byte-equal \
+                 WitShape::as_str().as_bytes() on WitShape::{variant:?}"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&WitShape> for Box<[u8]> impl must byte-equal \
+                 WitShape::as_str().as_bytes() on WitShape::{variant:?}"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<WitShape> for Box<[u8]> must land a fit-to-length \
+                 boxed byte slice on WitShape::{variant:?}"
+            );
+            let via_into_owned: Box<[u8]> = variant.into();
+            let via_into_borrowed: Box<[u8]> = (&variant).into();
+            assert_eq!(via_into_owned.as_ref(), via_method_bytes);
+            assert_eq!(via_into_borrowed.as_ref(), via_method_bytes);
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "Box<[u8]> and Vec<u8> byte-owned reverse-projection \
+                 axes must byte-agree on WitShape::{variant:?}"
+            );
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_bytes.as_ref(),
+                "Box<[u8]> and Cow<'static, [u8]> byte-owned reverse-\
+                 projection axes must byte-agree on WitShape::{variant:?}"
+            );
+            let via_box_str: Box<str> = <Box<str> as From<WitShape>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_box_str.as_bytes(),
+                "byte-side Box<[u8]> and str-side Box<str> axes must \
+                 byte-agree on WitShape::{variant:?}"
+            );
+            let via_as_ref_bytes: &[u8] = <WitShape as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_as_ref_bytes,
+                "Box<[u8]> and AsRef<[u8]> axes must byte-agree on \
+                 WitShape::{variant:?}"
+            );
+        }
+        for &variant in WitShape::ALL {
+            let owned_via_generic = generic_box_bytes_sink(variant);
+            let variant_ref: &WitShape = &variant;
+            let borrowed_via_generic = generic_box_bytes_sink(variant_ref);
+            assert_eq!(owned_via_generic.as_ref(), variant.as_str().as_bytes());
+            assert_eq!(borrowed_via_generic.as_ref(), variant.as_str().as_bytes());
+        }
+        let via_iter: Vec<Box<[u8]>> = WitShape::ALL.iter().map(Box::<[u8]>::from).collect();
+        let via_method: Vec<Box<[u8]>> = WitShape::ALL
+            .iter()
+            .map(|s| Box::<[u8]>::from(s.as_str().as_bytes()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Box::<[u8]>::from)` over WitShape::ALL must \
+             byte-equal the open-coded per-arm composition"
+        );
     }
 
     #[test]
