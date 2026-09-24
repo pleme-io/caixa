@@ -2012,6 +2012,83 @@ impl From<&CaixaDialeto> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, [u8]>`] output*
+/// byte-owned reverse projection on the second caixa-core-internal closed-set
+/// fieldless typed enum peer ([`CaixaDialeto`]) — the [`Cow<'static, [u8]>`]
+/// companion to the paired owned-input [`From<CaixaDialeto> for Vec<u8>`] impl
+/// above on the same primitive, opening the `{Self, &Self} → Cow<'static, [u8]>`
+/// byte-owned reverse-projection axis on this peer at the owned-input corner.
+/// Routes byte-for-byte through the substrate-primitive
+/// [`CaixaDialeto::as_str`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`]`(dialeto.as_str().as_bytes())` — the four
+/// `match` arms in [`Self::as_str`] resolve to `CAIXA_DIALETO_WIRE_*`
+/// `pub const &'static str` bodies, so `.as_bytes()` returns `&'static [u8]`
+/// by construction and the zero-alloc [`Cow::Borrowed`] arm is reachable
+/// without a runtime allocation.
+///
+/// Extends the substrate-wide trait-idiomatic byte-owned reverse-projection
+/// matrix onto the second caixa-core-internal closed-set fieldless typed enum
+/// peer at the [`Cow<'static, [u8]>`] corner — mirroring the trajectory the
+/// same axis walked on the structurally most fundamental peer
+/// [`crate::CaixaKind`] (b3451c8) and the sibling M2-OTP-shape
+/// [`crate::supervisor::RestartStrategy`] (7f81539) /
+/// [`crate::supervisor::RestartPolicy`] (65f381b) / M3 mesh-primitive-defining
+/// [`crate::aplicacao::PlacementStrategy`] (05e4054) /
+/// [`crate::aplicacao::RateLimitUnit`] (ef00bea) /
+/// [`crate::aplicacao::WitShape`] (4ae2ad4) peers. Rust's `From` trait carries
+/// no blanket `impl<T: AsRef<[u8]>> From<T> for Cow<'static, [u8]>`, so every
+/// closed-set fieldless typed enum peer that carries the paired [`Vec<u8>`]
+/// axis but not the [`Cow<'static, [u8]>`] axis forces every
+/// `Cow<'static, [u8]>`-parameterized call site through an open-coded
+/// `Cow::Borrowed(dialeto.as_str().as_bytes())` composition whose type bounds
+/// have no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::caixa_dialeto_from_into_owned_cow_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`CaixaDialeto::as_str`]`.as_bytes()` across the
+/// four-arm [`CaixaDialeto::ALL`] accept-set on both owned and borrowed input
+/// shapes, plus a [`std::borrow::Cow::Borrowed`] discriminator witness pinning
+/// the zero-alloc arm, plus cross-axis witnesses against the paired [`Vec<u8>`]
+/// byte-owned reverse-projection axis and the paired [`Cow<'static, str>`]
+/// str-owned reverse-projection axis on the same primitive).
+impl From<CaixaDialeto> for std::borrow::Cow<'static, [u8]> {
+    fn from(dialeto: CaixaDialeto) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(dialeto.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, [u8]>`] output*
+/// byte-owned reverse projection on the second caixa-core-internal closed-set
+/// fieldless typed enum peer ([`CaixaDialeto`]) — the borrowed-input companion
+/// to the paired owned-input [`From<CaixaDialeto> for std::borrow::Cow<'static,
+/// [u8]>`] impl immediately above, closing the `{Self, &Self} → Cow<'static,
+/// [u8]>` byte-owned reverse-projection family on this primitive at the
+/// borrowed-input corner. Routes byte-for-byte through the same substrate-
+/// primitive [`CaixaDialeto::as_str`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`]`(dialeto.as_str().as_bytes())` — the
+/// [`Cow::Borrowed`] arm is reachable on both input axes because
+/// [`Self::as_str`] returns `&'static str` regardless of the input shape, so
+/// no runtime allocation is forced on either corner.
+///
+/// Rust's `From` trait carries no blanket
+/// `impl<T> From<&T> for U where U: From<T>` (nor an
+/// `impl<T: AsRef<[u8]>> From<&T> for Cow<'static, [u8]>`), so every closed-
+/// set fieldless typed enum peer that carries the paired owned-input axis but
+/// not the borrowed-input axis forces every borrowed call site through a
+/// spurious [`Copy`] deref (`Cow::<'static, [u8]>::from(*dialeto)`) or an
+/// open-coded `Cow::Borrowed(dialeto.as_str().as_bytes())` whose type bounds
+/// have no compile-time link to the substrate primitive. The borrowed-input
+/// axis is the one a `CaixaDialeto::ALL.iter().map(Cow::<'static, [u8]>::from)`
+/// pipe binds against (its iterator over `&'static [CaixaDialeto]` yields
+/// `&CaixaDialeto`, not `CaixaDialeto`, so the owned-input axis alone forces
+/// every such per-arm accept-set materializer through an explicit `.copied()`
+/// restatement).
+impl From<&CaixaDialeto> for std::borrow::Cow<'static, [u8]> {
+    fn from(dialeto: &CaixaDialeto) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(dialeto.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
 /// second caixa-core-internal closed-set fieldless typed enum peer
 /// ([`CaixaDialeto`]) — the byte-view mirror of the str-view reverse-
@@ -6303,6 +6380,178 @@ mod tests {
                  tail CaixaDialeto::as_str().as_bytes() returns — the \
                  borrowed-input surface must resolve to the same \
                  as_str dispatch"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  onto CaixaDialeto at the Cow<'static, [u8]> corner \
+                  here (mirroring the trajectory the same axis walked \
+                  on the first-mover CaixaKind, b3451c8), so the pin \
+                  binds both {Self, &Self}-input impls against the \
+                  substrate-primitive as_str accessor's byte-view on \
+                  every CaixaDialeto::ALL arm, discriminates the zero-\
+                  alloc Cow::Borrowed arm on both input shapes, and \
+                  cross-witnesses against the paired Vec<u8>, \
+                  Cow<'static, str>, and AsRef<[u8]> axes so the whole \
+                  byte-family stays locked to one substrate primitive — \
+                  the assertion count follows from the closed-set axis \
+                  fan-out, not from spurious repetition"
+    )]
+    fn caixa_dialeto_from_into_owned_cow_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<CaixaDialeto> for std::borrow::Cow<'static, [u8]>` and
+        // `impl From<&CaixaDialeto> for std::borrow::Cow<'static, [u8]>` —
+        // asserts the trait-idiomatic byte-owned reverse-projection
+        // standard-library impls and the substrate-primitive
+        // [`super::CaixaDialeto::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view resolve to the same four-arm
+        // `PascalCase` wire byte-string emit-set across every arm the
+        // exhaustive [`super::CaixaDialeto::ALL`] slice enumerates.
+        // Additionally asserts the returned `Cow<'static, [u8]>` binds
+        // the zero-alloc `Cow::Borrowed` arm on both input shapes,
+        // because `Self::as_str` returns `&'static str` and `.as_bytes()`
+        // on it preserves the `&'static [u8]` lifetime by construction.
+        //
+        // Extends the substrate-wide byte-owned reverse-projection
+        // matrix onto the second caixa-core-internal closed-set
+        // fieldless typed enum peer at the `Cow<'static, [u8]>` corner,
+        // mirroring the trajectory the same axis walked on the sibling
+        // structurally most fundamental peer [`super::CaixaKind`]
+        // (b3451c8) and the M2/M3 slot peers.
+        fn generic_cow_bytes_sink<T: Into<std::borrow::Cow<'static, [u8]>>>(
+            t: T,
+        ) -> std::borrow::Cow<'static, [u8]> {
+            t.into()
+        }
+        for &variant in CaixaDialeto::ALL {
+            let via_owned_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<CaixaDialeto>>::from(variant);
+            let via_borrowed_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<&CaixaDialeto>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<CaixaDialeto> for Cow<'static, [u8]> impl must \
+                 byte-equal CaixaDialeto::as_str().as_bytes() on \
+                 CaixaDialeto::{variant:?} — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&CaixaDialeto> for Cow<'static, [u8]> impl must \
+                 byte-equal CaixaDialeto::as_str().as_bytes() on \
+                 CaixaDialeto::{variant:?} — divergence signals a silent \
+                 detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_owned_from, std::borrow::Cow::Borrowed(_)),
+                "From<CaixaDialeto> for Cow<'static, [u8]> must bind the \
+                 zero-alloc Cow::Borrowed arm on CaixaDialeto::{variant:?} \
+                 — Self::as_str returns &'static str, so a Cow::Owned \
+                 arm signals a silent allocation off the substrate \
+                 primitive"
+            );
+            assert!(
+                matches!(via_borrowed_from, std::borrow::Cow::Borrowed(_)),
+                "From<&CaixaDialeto> for Cow<'static, [u8]> must bind the \
+                 zero-alloc Cow::Borrowed arm on &CaixaDialeto::{variant:?} \
+                 — Self::as_str returns &'static str, so a Cow::Owned \
+                 arm signals a silent allocation off the substrate \
+                 primitive"
+            );
+            let via_into_owned: std::borrow::Cow<'static, [u8]> = variant.into();
+            let via_into_borrowed: std::borrow::Cow<'static, [u8]> = (&variant).into();
+            assert_eq!(
+                via_into_owned.as_ref(),
+                via_method_bytes,
+                "Into<Cow<'static, [u8]>>::into on \
+                 CaixaDialeto::{variant:?} must byte-equal \
+                 CaixaDialeto::as_str().as_bytes()"
+            );
+            assert_eq!(
+                via_into_borrowed.as_ref(),
+                via_method_bytes,
+                "Into<Cow<'static, [u8]>>::into on \
+                 &CaixaDialeto::{variant:?} must byte-equal \
+                 CaixaDialeto::as_str().as_bytes()"
+            );
+            assert!(
+                matches!(via_into_owned, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, [u8]>>::into on \
+                 CaixaDialeto::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm"
+            );
+            assert!(
+                matches!(via_into_borrowed, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, [u8]>>::into on \
+                 &CaixaDialeto::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm"
+            );
+            // Cross-axis witness against the paired byte-owned
+            // `From<CaixaDialeto> for Vec<u8>` axis on the same
+            // primitive: both axes must byte-equal each other because
+            // both route through `.as_str().as_bytes()` on the same
+            // substrate-primitive accessor.
+            let paired_vec: Vec<u8> = <Vec<u8> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                paired_vec.as_slice(),
+                "From<CaixaDialeto> for Cow<'static, [u8]> and \
+                 From<CaixaDialeto> for Vec<u8> must resolve to byte-\
+                 equal byte-tails on CaixaDialeto::{variant:?} — the two \
+                 byte-owned reverse-projection axes must not drift off \
+                 the same substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired str-owned
+            // `From<CaixaDialeto> for Cow<'static, str>` axis on the
+            // same primitive: `.as_bytes()` on the str-side Cow must
+            // yield the same byte-tail the byte-side Cow carries.
+            let paired_cow_str: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<CaixaDialeto>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                paired_cow_str.as_bytes(),
+                "From<CaixaDialeto> for Cow<'static, [u8]> and \
+                 From<CaixaDialeto> for Cow<'static, str> must resolve \
+                 to byte-equal byte-tails on CaixaDialeto::{variant:?} — \
+                 the byte-side and str-side reverse-projection axes must \
+                 not drift off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis witness against the paired borrowed byte-view
+            // `AsRef<[u8]>` axis on the same primitive.
+            let borrowed_bytes: &[u8] = <CaixaDialeto as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                borrowed_bytes,
+                "From<CaixaDialeto> for Cow<'static, [u8]> and \
+                 AsRef<[u8]> for CaixaDialeto must resolve to byte-\
+                 equal byte-tails on CaixaDialeto::{variant:?}"
+            );
+        }
+        for &variant in CaixaDialeto::ALL {
+            let owned_via_generic = generic_cow_bytes_sink(variant);
+            let variant_ref: &CaixaDialeto = &variant;
+            let borrowed_via_generic = generic_cow_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 CaixaDialeto::{variant:?} must fold the same byte-tail \
+                 CaixaDialeto::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 &CaixaDialeto::{variant:?} must fold the same byte-tail \
+                 CaixaDialeto::as_str().as_bytes() returns"
             );
         }
     }
