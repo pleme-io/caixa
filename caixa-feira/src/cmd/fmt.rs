@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use caixa_fmt::{FmtConfig, format_source};
 use clap::Args;
 
-use super::load::resolve_lisp_targets;
+use super::load::{RESOLVE_LISP_TARGETS_HELP, resolve_lisp_targets};
 
 /// Format caixa.lisp (or any .lisp file) via caixa-fmt.
 ///
@@ -12,8 +12,25 @@ use super::load::resolve_lisp_targets;
 /// a non-zero exit if the file isn't already formatted.
 #[derive(Args)]
 pub struct Fmt {
-    /// Paths to format. Defaults to `./caixa.lisp` + every `.lisp` under `lib/`.
-    #[arg(value_name = "PATH")]
+    /// Paths to format. Defaults to `./caixa.lisp` + every `.lisp` under
+    /// `lib/` (`:kind Biblioteca` sources), `exe/` (`:kind Binario`
+    /// sources), and `servicos/` (pure-Lisp `:kind Servico` sources).
+    ///
+    /// The `--help`-facing wording routes through
+    /// [`super::load::RESOLVE_LISP_TARGETS_HELP`] so a future
+    /// [`super::load::CAIXA_ROOT_LISP_SUBDIRS`] extension (an
+    /// `aplicacaos/` arm for a future tatara-lisp-authored `:kind
+    /// Aplicacao`, an `acoes/` arm for a `:kind Acao` CI graph) lands
+    /// at one const rather than at two per-verb docstrings that either
+    /// both track the walker or, more commonly, silently drift onto
+    /// different subdir enumerations. Peer with the sibling
+    /// [`super::lint::Lint::paths`] docstring on the paired
+    /// `.lisp`-tree-walking verb.
+    #[arg(
+        value_name = "PATH",
+        help = RESOLVE_LISP_TARGETS_HELP,
+        long_help = RESOLVE_LISP_TARGETS_HELP,
+    )]
     pub paths: Vec<PathBuf>,
 
     /// Check only — exit 0 if already-formatted, 1 otherwise. Don't write.
@@ -149,6 +166,52 @@ mod tests {
         write(&file, "");
         let cmd = fmt_with_paths(vec![file.clone()]);
         assert_eq!(cmd.resolve_targets().unwrap(), vec![file]);
+    }
+
+    #[test]
+    fn paths_help_routes_through_shared_resolve_lisp_targets_help_const() {
+        // Fail-before-pass-after pin: `feira fmt --help`'s `<PATH>...`
+        // help line must render the shared
+        // [`super::super::load::RESOLVE_LISP_TARGETS_HELP`] const
+        // verbatim rather than a per-verb docstring inline copy. Before
+        // this lift the field carried a `///` docstring frozen at the
+        // pre-9919cfb / pre-8c3fbad walker shape ("Defaults to
+        // `./caixa.lisp` + every `.lisp` under `lib/`"), which had
+        // silently drifted from the walker's actual `exe/` + `servicos/`
+        // reach — so `feira fmt --help` misled every author on a `:kind
+        // Binario` or pure-Lisp `:kind Servico` caixa. A future
+        // [`super::super::load::CAIXA_ROOT_LISP_SUBDIRS`] extension that
+        // updates the const but not this wiring surfaces here as a per-
+        // subdir assert firing on the rendered help. Peer with the
+        // sibling `paths_help_routes_through_…` pin on
+        // [`super::super::lint`] on the paired verb.
+        let cmd = <Fmt as Args>::augment_args(clap::Command::new("test-fmt"));
+        let arg = cmd
+            .get_arguments()
+            .find(|a| a.get_id() == "paths")
+            .expect("paths arg");
+        let short = arg
+            .get_help()
+            .map(std::string::ToString::to_string)
+            .unwrap_or_default();
+        let long = arg
+            .get_long_help()
+            .map(std::string::ToString::to_string)
+            .unwrap_or_default();
+        assert_eq!(
+            short, RESOLVE_LISP_TARGETS_HELP,
+            "`-h` help must render the shared RESOLVE_LISP_TARGETS_HELP \
+             const verbatim; the per-verb docstring must not shadow the \
+             shared help wiring"
+        );
+        assert_eq!(
+            long, RESOLVE_LISP_TARGETS_HELP,
+            "`--help` (long) help must also render the shared \
+             RESOLVE_LISP_TARGETS_HELP const verbatim; the per-verb \
+             docstring block (past the first paragraph clap treats as \
+             `long_help` by default) must not leak into user-facing \
+             `feira fmt --help` output"
+        );
     }
 
     #[test]

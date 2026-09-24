@@ -499,6 +499,41 @@ pub(crate) fn validate_nome_arg(nome: &str) -> Result<()> {
 pub(crate) const CAIXA_ROOT_LISP_SUBDIRS: &[&str] =
     &[LAYOUT_DIR_LIB, LAYOUT_DIR_EXE, LAYOUT_DIR_SERVICOS];
 
+/// Canonical clap `#[arg(help = …)]` string for the per-verb
+/// `<PATH>…` positional every `.lisp`-tree-walking `feira` verb
+/// (`feira lint`, `feira fmt`) carries. Every author who runs
+/// `feira lint --help` or `feira fmt --help` sees this string
+/// verbatim in place of the pre-lift `///` doc comment; a future
+/// per-caixa-root `.lisp`-carrying subdir extension
+/// ([`CAIXA_ROOT_LISP_SUBDIRS`] gaining an `aplicacaos/` arm for
+/// a future tatara-lisp-authored `:kind Aplicacao` graph, an
+/// `acoes/` arm for a future `:kind Acao` CI graph) lands at
+/// this const and reaches both verb-help renders by construction
+/// rather than a coordinated rewrite of two per-verb `///` doc
+/// blocks that either both drift on the same day or, more
+/// commonly, silently drift onto different subdir enumerations.
+///
+/// Closes the PRIME DIRECTIVE duplication (theory/THEORY.md §I.5
+/// — "the duplication budget is zero") on the per-verb
+/// `<PATH>…` help-text axis. Before this lift the same
+/// "Defaults to `./caixa.lisp` + every `.lisp` under `lib/`"
+/// docstring appeared verbatim above both [`super::fmt::Fmt`]'s
+/// and [`super::lint::Lint`]'s `paths` field — and both had
+/// silently drifted from the actual walk after the 9919cfb /
+/// 8c3fbad lifts extended [`expand_caixa_root`] onto `exe/*.lisp`
+/// and `servicos/*.lisp`. Two verb-help renders both misled
+/// authors on `:kind Binario` and pure-Lisp `:kind Servico`
+/// caixas that `feira lint` / `feira fmt` would skip their
+/// non-`lib/` sources, when the walker in fact reached every
+/// canonical subdir. Single-sourced now, so a `--help` render
+/// on either verb enumerates every subdir the walker actually
+/// visits.
+pub(crate) const RESOLVE_LISP_TARGETS_HELP: &str = "Paths to walk. Defaults to \
+     `./caixa.lisp` + every `.lisp` under `lib/` (`:kind Biblioteca` sources), \
+     `exe/` (`:kind Binario` sources), and `servicos/` (pure-Lisp `:kind Servico` \
+     sources). A directory arg expands the same way; a `.lisp` file arg passes \
+     through unchanged.";
+
 /// Read a per-caixa-root subdirectory (`lib/`, `exe/`, …) and return
 /// its `.lisp` entries sorted in lexicographic order. A missing
 /// directory yields an empty [`Vec`] rather than an error — every caixa
@@ -1724,6 +1759,39 @@ mod tests {
              six typed kinds are read, matching the sibling `StandardLayout::verify` \
              pipeline's per-sandbox-dir probe order",
         );
+    }
+
+    #[test]
+    fn resolve_lisp_targets_help_names_manifest_and_every_canonical_subdir() {
+        // Fail-before-pass-after pin on the shared clap `--help`-text
+        // const the sibling [`super::super::fmt::Fmt::paths`] /
+        // [`super::super::lint::Lint::paths`] `#[arg(help = …)]` attrs
+        // route through. Before this lift both `paths` fields carried
+        // the verbatim docstring "Defaults to `./caixa.lisp` + every
+        // `.lisp` under `lib/`" — factually wrong on the walker's post-
+        // 9919cfb / 8c3fbad `exe/` and `servicos/` extensions, and
+        // duplicated at two sites so any correction had to land at
+        // both or drift again. The lifted const single-sources the
+        // help text and this pin walks the [`CAIXA_ROOT_LISP_SUBDIRS`]
+        // slice so a future extension (an `aplicacaos/` arm for a
+        // future tatara-lisp `:kind Aplicacao`, an `acoes/` arm for a
+        // `:kind Acao` CI graph) that lands at the walker but not at
+        // the help text surfaces here as a per-subdir assert firing.
+        // Peer with the [`CAIXA_ROOT_LISP_SUBDIRS`]-pins-canonical-
+        // order pin below on the sibling per-caixa-root canonical-const
+        // axis.
+        assert!(
+            RESOLVE_LISP_TARGETS_HELP.contains(CAIXA_MANIFEST_FILENAME),
+            "help text must name the canonical manifest filename {CAIXA_MANIFEST_FILENAME:?} \
+             (got: {RESOLVE_LISP_TARGETS_HELP:?})"
+        );
+        for subdir in CAIXA_ROOT_LISP_SUBDIRS {
+            assert!(
+                RESOLVE_LISP_TARGETS_HELP.contains(subdir),
+                "help text must name the canonical caixa-root subdir {subdir:?} \
+                 (got: {RESOLVE_LISP_TARGETS_HELP:?})"
+            );
+        }
     }
 
     #[test]
