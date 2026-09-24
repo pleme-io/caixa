@@ -593,7 +593,7 @@ fn is_kebab(s: &str) -> bool {
     // for mutators) before checking the kebab body. This matches
     // Scheme/Clojure idiom: `:can?`, `:reset!` are valid kebab.
     let body = match s.chars().last() {
-        Some('?') | Some('!') => &s[..s.len() - 1],
+        Some('?' | '!') => &s[..s.len() - 1],
         _ => s,
     };
     if body.is_empty() {
