@@ -34,7 +34,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use caixa_core::{Caixa, LAYOUT_DIR_EXE, LAYOUT_DIR_LIB};
+use caixa_core::{Caixa, LAYOUT_DIR_EXE, LAYOUT_DIR_LIB, LAYOUT_DIR_SERVICOS};
 
 /// The canonical caixa manifest filename. Every `feira` verb's
 /// per-caixa-root entry-point resolves `<root>/caixa.lisp` through
@@ -475,16 +475,29 @@ pub(crate) fn validate_nome_arg(nome: &str) -> Result<()> {
 /// per-verb tree-walking gate (`feira lint`, `feira fmt`) folds into,
 /// in the canonical author-facing order the six typed kinds are read
 /// (`:kind Biblioteca` sources at `lib/` first, `:kind Binario` sources
-/// at `exe/` second — the same relative order the sibling
+/// at `exe/` second, `:kind Servico` pure-lisp sources at `servicos/`
+/// third — the same relative order the sibling
 /// [`caixa_core::StandardLayout::verify`] pipeline probes them in at
-/// [`caixa_core::layout::LAYOUT_DIR_LIB`] and
-/// [`caixa_core::layout::LAYOUT_DIR_EXE`], `caixa-core/src/layout.rs:1086` /
-/// `:1091`). Single-sourced through the [`caixa_core::LAYOUT_DIR_*`]
-/// canonical-dirname constants so a future rename of the on-disk axis
-/// (an `exe/` → `binarios/` rename mirroring the `lib/` → `bibliotecas/`
-/// shape the underlying `:bibliotecas` slot already carries) lands at
-/// one location and reaches every consumer.
-pub(crate) const CAIXA_ROOT_LISP_SUBDIRS: &[&str] = &[LAYOUT_DIR_LIB, LAYOUT_DIR_EXE];
+/// [`caixa_core::layout::LAYOUT_DIR_LIB`],
+/// [`caixa_core::layout::LAYOUT_DIR_EXE`], and
+/// [`caixa_core::layout::LAYOUT_DIR_SERVICOS`], `caixa-core/src/layout.rs:1086`
+/// / `:1091` / `:1100`). Single-sourced through the
+/// [`caixa_core::LAYOUT_DIR_*`] canonical-dirname constants so a future
+/// rename of the on-disk axis (an `exe/` → `binarios/` rename mirroring
+/// the `lib/` → `bibliotecas/` shape the underlying `:bibliotecas` slot
+/// already carries) lands at one location and reaches every consumer.
+///
+/// The `servicos/` entry filters to `.lisp` sources through the shared
+/// [`sorted_lisp_entries`] extension-guard, so a wasm-authored `:kind
+/// Servico` caixa's `servicos/<nome>.computeunit.yaml` manifest + Rust
+/// source tree is silently skipped by the walk and only a pure-lisp
+/// Servico's `servicos/<nome>.lisp` source (the canonical author path
+/// the [`pleme-io/programs/hello-world`](https://github.com/pleme-io/programs/tree/main/hello-world)
+/// example carries — the tatara-lisp Servico entry `caixa/CLAUDE.md`
+/// names as one of the two canonical Servico shapes) reaches the per-
+/// verb walker.
+pub(crate) const CAIXA_ROOT_LISP_SUBDIRS: &[&str] =
+    &[LAYOUT_DIR_LIB, LAYOUT_DIR_EXE, LAYOUT_DIR_SERVICOS];
 
 /// Read a per-caixa-root subdirectory (`lib/`, `exe/`, …) and return
 /// its `.lisp` entries sorted in lexicographic order. A missing
@@ -520,17 +533,19 @@ fn sorted_lisp_entries(dir: &Path) -> Vec<PathBuf> {
 
 /// Expand a caixa root (a directory containing `caixa.lisp` + any of
 /// `lib/*.lisp` for `:kind Biblioteca` sources, `exe/*.lisp` for
-/// `:kind Binario` sources) to the concrete `.lisp` files a per-verb
+/// `:kind Binario` sources, `servicos/*.lisp` for pure-Lisp `:kind
+/// Servico` sources) to the concrete `.lisp` files a per-verb
 /// tree-walking gate (`feira lint`, `feira fmt`) folds over. Each
 /// per-subdir batch is sorted so diagnostic and emit ordering is stable
 /// across filesystems whose `read_dir` order is nondeterministic, and
 /// the batches are emitted in the canonical [`CAIXA_ROOT_LISP_SUBDIRS`]
-/// order (manifest → `lib/` → `exe/`) so a `feira lint` run on a caixa
-/// carrying both kinds surfaces `:bibliotecas` diagnostics ahead of
-/// `:exe` ones — the same relative order the sibling
-/// [`caixa_core::StandardLayout::verify`] pipeline probes the two sandbox
-/// dirs in (`caixa-core/src/layout.rs:1086` for `:bibliotecas` /
-/// `:1091` for `:exe`).
+/// order (manifest → `lib/` → `exe/` → `servicos/`) so a `feira lint`
+/// run on a caixa carrying multiple kind-directories surfaces
+/// `:bibliotecas` diagnostics ahead of `:exe`, and `:exe` ahead of
+/// `:servicos` — the same relative order the sibling
+/// [`caixa_core::StandardLayout::verify`] pipeline probes the three
+/// sandbox dirs in (`caixa-core/src/layout.rs:1086` for `:bibliotecas`
+/// / `:1091` for `:exe` / `:1100` for `:servicos`).
 ///
 /// Closes the PRIME DIRECTIVE duplication (theory/THEORY.md §I.5 — "the
 /// duplication budget is zero") on the per-verb caixa-root walk axis.
@@ -540,26 +555,43 @@ fn sorted_lisp_entries(dir: &Path) -> Vec<PathBuf> {
 /// inlined `resolve_targets` — whose copies silently drifted on
 /// sortedness and directory-arg acceptance. That lift folded both verbs
 /// onto this helper, but stopped at the `lib/` subdir the pre-lift copies
-/// happened to carry. The remaining drift budget was on the sibling axis:
+/// happened to carry. The 9919cfb lift then extended the walk onto
 /// `:kind Binario`'s `exe/*.lisp` sources (the canonical author-side
 /// entry-point of every locally-built caixa CLI, per the `★★ The six
 /// typed kinds` heading in `caixa/CLAUDE.md` "runs locally (CLI) …
-/// `exe/<nome>.lisp`") never reached either verb's tree walker at all —
-/// so `feira lint examples/some-binario-caixa` would lint the manifest
-/// and any `lib/` entries and silently skip every `exe/` source, and
-/// `feira fmt examples/some-binario-caixa --check` would exit `0` even
-/// when the Binario sources drifted from `caixa-fmt`'s canonical layout.
-/// A future author extending the caixa-root axis further (`servicos/*.lisp`
-/// for pure-Lisp Servicos, a future `aplicacao.lisp` for a tatara-lisp-
-/// authored `:kind Aplicacao` composition) inherits the canonical walk
-/// through the [`CAIXA_ROOT_LISP_SUBDIRS`] const rather than another
-/// verb-side copy.
+/// `exe/<nome>.lisp`"), leaving one drift budget on the sibling axis:
+/// `:kind Servico`'s `servicos/*.lisp` pure-Lisp sources (the canonical
+/// tatara-lisp Servico entry the `pleme-io/programs/hello-world`
+/// example carries, per the `caixa/CLAUDE.md` "canonical Lisp path"
+/// citation) never reached either verb's tree walker either — so
+/// `feira lint examples/some-lisp-servico` would lint the manifest and
+/// any `lib/` / `exe/` entries and silently skip every `servicos/*.lisp`
+/// source, and `feira fmt examples/some-lisp-servico --check` would
+/// exit `0` even when the pure-lisp Servico sources drifted from
+/// `caixa-fmt`'s canonical layout. This lift closes that last axis on
+/// the three-canonical-kind-directory surface; a future author extending
+/// further (a future `aplicacao.lisp` for a tatara-lisp-authored `:kind
+/// Aplicacao` composition, a future `acao.lisp` for a `:kind Acao` CI
+/// graph) inherits the canonical walk through the
+/// [`CAIXA_ROOT_LISP_SUBDIRS`] const rather than another verb-side copy.
+///
+/// The `servicos/` batch filters to `.lisp` sources through the shared
+/// [`sorted_lisp_entries`] extension-guard, so a wasm-authored `:kind
+/// Servico` caixa (the canonical Rust→wasm path the `pleme-io/hello-rio`
+/// example carries — `servicos/<nome>.computeunit.yaml` manifest + `src/`
+/// Rust source tree, per `caixa/CLAUDE.md`) reads back as an empty
+/// batch through this helper and only the pure-lisp Servico shape
+/// (`servicos/<nome>.lisp`) reaches the per-verb walker. Sibling
+/// per-verb gates (`caixa-fmt` / `caixa-lint`) operate on tatara-lisp
+/// source only; the wasm-authored Servico's YAML manifest is exercised
+/// by `feira chart` / `feira deploy`'s per-Servico YAML loader
+/// ([`load_yaml`]) on the sibling per-verb IO axis.
 ///
 /// After the lift every per-verb `.lisp`-tree walker routes through this
 /// helper: the manifest-and-per-kind-subdir shape lives at exactly one
 /// definition, the sort-lisp-entries subroutine is single-sourced at
-/// [`sorted_lisp_entries`], `feira fmt` and `feira lint` both walk
-/// `lib/` and `exe/` by construction, and any future kind-directory
+/// [`sorted_lisp_entries`], `feira fmt` and `feira lint` walk `lib/`,
+/// `exe/`, and `servicos/` by construction, and any future kind-directory
 /// extension lands at one const-slice + one helper reach. Peer with
 /// [`caixa_manifest_path`] on the sibling per-caixa-root path-resolution
 /// axis — together the two form the canonical caixa-root introspection
@@ -610,7 +642,8 @@ pub(crate) fn resolve_lisp_targets(paths: &[PathBuf], verb: &str) -> Result<Vec<
                 "no such {verb} target: {} (pass a `.lisp` file or a caixa root \
                  containing `{CAIXA_MANIFEST_FILENAME}` + `{LAYOUT_DIR_LIB}/*.lisp` \
                  (`:kind Biblioteca` sources) + `{LAYOUT_DIR_EXE}/*.lisp` \
-                 (`:kind Binario` sources))",
+                 (`:kind Binario` sources) + `{LAYOUT_DIR_SERVICOS}/*.lisp` \
+                 (pure-Lisp `:kind Servico` sources))",
                 path.display(),
             );
         }
@@ -1597,26 +1630,86 @@ mod tests {
     }
 
     #[test]
-    fn expand_caixa_root_emits_lib_batch_before_exe_batch() {
-        // Diagnostic-order pin: a caixa root carrying both `lib/*.lisp`
-        // (`:kind Biblioteca` sources) and `exe/*.lisp` (`:kind Binario`
-        // sources) emits the two per-subdir batches in the canonical
-        // author-facing order the six typed kinds are read (`:kind
-        // Biblioteca` before `:kind Binario` in the `★★ The six typed
-        // kinds` table in `caixa/CLAUDE.md`) — the same relative order
-        // the sibling [`caixa_core::StandardLayout::verify`] pipeline
-        // probes the two sandbox dirs in (`caixa-core/src/layout.rs:1086`
-        // for `:bibliotecas` / `:1091` for `:exe`). A `feira lint` run on
-        // a mixed caixa surfaces `:bibliotecas` diagnostics ahead of
-        // `:exe` ones, matching the layout probe's diagnostic ordering.
-        // The [`CAIXA_ROOT_LISP_SUBDIRS`] slice single-sources the
+    fn expand_caixa_root_walks_servicos_dir_for_kind_servico_pure_lisp_sources() {
+        // Fail-before-pass-after pin: extends the `lib/`-and-`exe/`-only
+        // walk the prior 9919cfb lift stopped at onto the sibling
+        // `:kind Servico` `servicos/*.lisp` pure-lisp sources axis (the
+        // canonical tatara-lisp Servico entry the `pleme-io/programs/
+        // hello-world` example carries, per the `caixa/CLAUDE.md`
+        // "canonical Lisp path" citation). Before this lift `feira lint
+        // examples/some-lisp-servico` would lint the manifest and any
+        // `lib/` / `exe/` entries and silently skip every
+        // `servicos/*.lisp` source; `feira fmt --check` on the same
+        // caixa would exit `0` even when the pure-lisp Servico sources
+        // drifted from `caixa-fmt`'s canonical layout. Peer with the
+        // sibling [`caixa_core::StandardLayout::verify`] pipeline's
+        // `probe_sandboxed_declared_entries(caixa.servicos(), …,
+        // LAYOUT_DIR_SERVICOS, …)` arm at `caixa-core/src/layout.rs:1100`
+        // — the same `servicos/` sandbox dir the layout-invariants probe
+        // treats as a canonical caixa-root subdir now reaches the per-
+        // verb tree walker as a canonical `.lisp`-source axis.
+        //
+        // The extension-guard [`sorted_lisp_entries`] carries filters
+        // the walk to `.lisp` files, so a wasm-authored Servico's
+        // `servicos/<nome>.computeunit.yaml` manifest (the sibling
+        // canonical Rust→wasm Servico path the `pleme-io/hello-rio`
+        // example carries) is silently skipped — the per-verb walker
+        // only reaches the pure-lisp `servicos/<nome>.lisp` source
+        // shape, matching the [`load_yaml`] / [`load_caixa`] IO-axis
+        // split the sibling per-verb call-sites already carry.
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join(CAIXA_MANIFEST_FILENAME), "");
+        write(&root.join(LAYOUT_DIR_SERVICOS).join("worker.lisp"), "");
+        write(&root.join(LAYOUT_DIR_SERVICOS).join("api.lisp"), "");
+        write(
+            &root.join(LAYOUT_DIR_SERVICOS).join("api.computeunit.yaml"),
+            "",
+        );
+        write(&root.join(LAYOUT_DIR_SERVICOS).join("readme.md"), "");
+        let out = expand_caixa_root(root);
+        assert_eq!(
+            out,
+            vec![
+                root.join(CAIXA_MANIFEST_FILENAME),
+                root.join(LAYOUT_DIR_SERVICOS).join("api.lisp"),
+                root.join(LAYOUT_DIR_SERVICOS).join("worker.lisp"),
+            ],
+            "expand_caixa_root must walk `servicos/*.lisp` for pure-Lisp \
+             `:kind Servico` sources, sorted lexicographically, filtering \
+             non-`.lisp` files (including the wasm-authored Servico's \
+             `<nome>.computeunit.yaml` manifest) — peer of the `lib/*.lisp` \
+             `:kind Biblioteca` and `exe/*.lisp` `:kind Binario` arms on \
+             the sibling canonical caixa-root subdir axes",
+        );
+    }
+
+    #[test]
+    fn expand_caixa_root_emits_lib_then_exe_then_servicos_batches_in_canonical_order() {
+        // Diagnostic-order pin: a caixa root carrying all three
+        // canonical `.lisp`-carrying subdirs — `lib/*.lisp` (`:kind
+        // Biblioteca` sources), `exe/*.lisp` (`:kind Binario` sources),
+        // and `servicos/*.lisp` (pure-Lisp `:kind Servico` sources) —
+        // emits the three per-subdir batches in the canonical author-
+        // facing order the six typed kinds are read (`:kind Biblioteca`
+        // before `:kind Binario` before `:kind Servico` in the
+        // `★★ The six typed kinds` table in `caixa/CLAUDE.md`) — the
+        // same relative order the sibling
+        // [`caixa_core::StandardLayout::verify`] pipeline probes the
+        // three sandbox dirs in (`caixa-core/src/layout.rs:1086` for
+        // `:bibliotecas` / `:1091` for `:exe` / `:1100` for `:servicos`).
+        // A `feira lint` run on a mixed caixa surfaces `:bibliotecas`
+        // diagnostics ahead of `:exe` ahead of `:servicos`, matching
+        // the layout probe's diagnostic ordering. The
+        // [`CAIXA_ROOT_LISP_SUBDIRS`] slice single-sources the
         // canonical order so a future refactor of the walker can't
-        // silently reverse it without this pin firing.
+        // silently permute it without this pin firing.
         let tmp = tempdir().unwrap();
         let root = tmp.path();
         write(&root.join(CAIXA_MANIFEST_FILENAME), "");
         write(&root.join(LAYOUT_DIR_LIB).join("a.lisp"), "");
         write(&root.join(LAYOUT_DIR_EXE).join("z.lisp"), "");
+        write(&root.join(LAYOUT_DIR_SERVICOS).join("m.lisp"), "");
         let out = expand_caixa_root(root);
         assert_eq!(
             out,
@@ -1624,29 +1717,31 @@ mod tests {
                 root.join(CAIXA_MANIFEST_FILENAME),
                 root.join(LAYOUT_DIR_LIB).join("a.lisp"),
                 root.join(LAYOUT_DIR_EXE).join("z.lisp"),
+                root.join(LAYOUT_DIR_SERVICOS).join("m.lisp"),
             ],
-            "expand_caixa_root must emit the `lib/` batch before the `exe/` batch — \
-             the canonical author-facing order the six typed kinds are read, matching \
-             the sibling `StandardLayout::verify` pipeline's per-sandbox-dir probe \
-             order",
+            "expand_caixa_root must emit the `lib/` batch before the `exe/` batch \
+             before the `servicos/` batch — the canonical author-facing order the \
+             six typed kinds are read, matching the sibling `StandardLayout::verify` \
+             pipeline's per-sandbox-dir probe order",
         );
     }
 
     #[test]
-    fn caixa_root_lisp_subdirs_pins_lib_then_exe_canonical_order() {
+    fn caixa_root_lisp_subdirs_pins_lib_then_exe_then_servicos_canonical_order() {
         // Canonical-constant arm — pins [`CAIXA_ROOT_LISP_SUBDIRS`] at
-        // the verbatim `[LAYOUT_DIR_LIB, LAYOUT_DIR_EXE]` slice literal
-        // so a future refactor of the walker can't silently permute the
-        // order without this pin firing. Peer with the
+        // the verbatim `[LAYOUT_DIR_LIB, LAYOUT_DIR_EXE,
+        // LAYOUT_DIR_SERVICOS]` slice literal so a future refactor of
+        // the walker can't silently permute the order without this pin
+        // firing. Peer with the
         // [`CAIXA_MANIFEST_FILENAME`]-pins-`"caixa.lisp"` and
         // [`CAIXA_ROOT_DEFAULT_DIRNAME`]-pins-`"."` disciplines on the
         // sibling per-caixa-root canonical-const axes.
         assert_eq!(
             CAIXA_ROOT_LISP_SUBDIRS,
-            &[LAYOUT_DIR_LIB, LAYOUT_DIR_EXE],
+            &[LAYOUT_DIR_LIB, LAYOUT_DIR_EXE, LAYOUT_DIR_SERVICOS],
             "canonical per-caixa-root `.lisp`-carrying subdir order must remain \
-             `[lib, exe]` — the same order the sibling StandardLayout::verify \
-             pipeline probes the two sandbox dirs in"
+             `[lib, exe, servicos]` — the same order the sibling \
+             StandardLayout::verify pipeline probes the three sandbox dirs in"
         );
     }
 
@@ -1692,12 +1787,14 @@ mod tests {
     #[test]
     fn resolve_lisp_targets_missing_target_diagnostic_names_exe_dir() {
         // Sharpen-the-diagnostic pin: the missing-target diagnostic must
-        // name both canonical caixa-root `.lisp`-carrying subdirs
-        // ([`LAYOUT_DIR_LIB`] and [`LAYOUT_DIR_EXE`]) so an author who
-        // mistypes a `feira lint` target on a `:kind Binario` caixa sees
-        // the `exe/*.lisp` axis in the remediation hint. Peer of the
-        // sibling `resolve_lisp_targets_missing_target_names_offending_
-        // path_and_verb` pin below on the `lib/` axis.
+        // name every canonical caixa-root `.lisp`-carrying subdir
+        // ([`LAYOUT_DIR_LIB`], [`LAYOUT_DIR_EXE`], and
+        // [`LAYOUT_DIR_SERVICOS`]) so an author who mistypes a `feira
+        // lint` target on a `:kind Binario` caixa sees the `exe/*.lisp`
+        // axis in the remediation hint, and an author on a pure-Lisp
+        // `:kind Servico` caixa sees the `servicos/*.lisp` axis. Peer
+        // of the sibling `resolve_lisp_targets_missing_target_names_
+        // offending_path_and_verb` pin below on the `lib/` axis.
         let tmp = tempdir().unwrap();
         let missing = tmp.path().join("nope.lisp");
         let err = resolve_lisp_targets(std::slice::from_ref(&missing), "lint")
@@ -1706,6 +1803,10 @@ mod tests {
         assert!(
             rendered.contains(LAYOUT_DIR_EXE),
             "diagnostic must name the canonical `exe/` axis (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains(LAYOUT_DIR_SERVICOS),
+            "diagnostic must name the canonical `servicos/` axis (got: {rendered:?})"
         );
     }
 
