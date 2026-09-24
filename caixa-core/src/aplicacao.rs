@@ -12326,6 +12326,101 @@ impl From<&PlacementStrategy> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, [u8]>`]
+/// output* byte-owned reverse projection on the first M3-mesh-primitive-
+/// defining `:placement :estrategia` distribution-strategy
+/// [`PlacementStrategy`] closed-set fieldless typed enum on the caixa
+/// surface — the [`std::borrow::Cow<'static, [u8]>`] byte-mirror of the
+/// paired [`From<PlacementStrategy> for std::borrow::Cow<'static, str>`]
+/// str-side impl and the [`std::borrow::Cow<'static, [u8]>`] companion of
+/// the paired byte-owned [`From<PlacementStrategy> for Vec<u8>`] reverse-
+/// projection axis immediately above. Routes byte-for-byte through the
+/// substrate-primitive [`PlacementStrategy::as_str`] `pub const fn`
+/// accessor via
+/// [`std::borrow::Cow::Borrowed`]`(strategy.as_str().as_bytes())` — the
+/// three `match` arms in [`Self::as_str`] resolve to
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] `pub const
+/// &'static str` bodies, so `.as_bytes()` on each returns `&'static [u8]`
+/// by construction, and the zero-alloc [`std::borrow::Cow::Borrowed`] arm
+/// is the type-correct projection with no runtime allocation (mirroring
+/// the paired [`Cow<'static, str>`] axis's own [`Cow::Borrowed`]
+/// discipline on this same primitive, and mirroring the sibling
+/// [`crate::supervisor::RestartStrategy`] (7f81539) /
+/// [`crate::supervisor::RestartPolicy`] (65f381b) /
+/// [`crate::CaixaKind`] (b3451c8) `Cow<'static, [u8]>` impls whose
+/// `Self::as_str` returns the same `&'static str`).
+///
+/// Extends the substrate-wide trait-idiomatic byte-owned reverse-
+/// projection matrix onto the first M3-mesh-primitive-defining closed-set
+/// fieldless typed-enum peer at the [`Cow<'static, [u8]>`] corner —
+/// mirroring the trajectory the same axis walked on the sibling M2-OTP-
+/// shape [`crate::supervisor::RestartStrategy`] (7f81539) and
+/// [`crate::supervisor::RestartPolicy`] (65f381b) peers, on the
+/// [`crate::CaixaVersion`] String-wrapper newtype primitive (baf7537),
+/// and on the [`crate::CaixaKind`] structurally most fundamental
+/// closed-set fieldless typed-enum peer (b3451c8). Rust's `From` trait
+/// carries no blanket
+/// `impl<T: AsRef<[u8]>> From<T> for Cow<'static, [u8]>`, so every
+/// closed-set fieldless typed enum peer that carries the paired
+/// [`Vec<u8>`] axis but not the [`Cow<'static, [u8]>`] axis forces every
+/// `Cow<'static, [u8]>`-parameterized call site through an open-coded
+/// `Cow::Borrowed(strategy.as_str().as_bytes())` composition whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Pinned load-bearing by
+/// [`tests::placement_strategy_from_into_owned_cow_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`PlacementStrategy::as_str`]`.as_bytes()`
+/// across the three-arm [`PlacementStrategy::ALL`] accept-set on both
+/// owned and borrowed input shapes, plus a [`std::borrow::Cow::Borrowed`]
+/// discriminator witness pinning the zero-alloc arm, plus cross-axis
+/// witnesses against the paired [`Vec<u8>`] byte-owned reverse-projection
+/// axis and the paired [`Cow<'static, str>`] str-owned reverse-projection
+/// axis on the same primitive).
+impl From<PlacementStrategy> for std::borrow::Cow<'static, [u8]> {
+    fn from(strategy: PlacementStrategy) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(strategy.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, [u8]>`]
+/// output* byte-owned reverse projection on the first M3-mesh-primitive-
+/// defining [`PlacementStrategy`] closed-set fieldless typed enum on the
+/// caixa surface — the borrowed-input companion to the paired owned-
+/// input [`From<PlacementStrategy> for std::borrow::Cow<'static, [u8]>`]
+/// impl immediately above, closing the
+/// `{Self, &Self} → Cow<'static, [u8]>` byte-owned reverse-projection
+/// family on this primitive at the borrowed-input corner. Routes
+/// byte-for-byte through the same substrate-primitive
+/// [`PlacementStrategy::as_str`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`]`(strategy.as_str().as_bytes())` — the
+/// [`Cow::Borrowed`] arm is reachable on both input axes because
+/// [`Self::as_str`] returns `&'static str` regardless of the input
+/// shape, so no runtime allocation is forced on either corner.
+///
+/// Rust's `From` trait carries no blanket
+/// `impl<T> From<&T> for U where U: From<T>` (nor an
+/// `impl<T: AsRef<[u8]>> From<&T> for Cow<'static, [u8]>`), so every
+/// closed-set fieldless typed enum peer that carries the paired owned-
+/// input axis but not the borrowed-input axis forces every borrowed
+/// call site through a spurious [`Copy`] deref
+/// (`Cow::<'static, [u8]>::from(*strategy)`) or an open-coded
+/// `Cow::Borrowed(strategy.as_str().as_bytes())` whose type bounds
+/// have no compile-time link to the substrate primitive. The borrowed-
+/// input axis is the one a
+/// `PlacementStrategy::ALL.iter().map(Cow::<'static, [u8]>::from)`
+/// pipe binds against (its iterator over
+/// `&'static [PlacementStrategy]` yields `&PlacementStrategy`, not
+/// `PlacementStrategy`), so the owned-input axis alone forces every
+/// such per-arm accept-set materializer through an explicit
+/// `.copied()` restatement.
+impl From<&PlacementStrategy> for std::borrow::Cow<'static, [u8]> {
+    fn from(strategy: &PlacementStrategy) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(strategy.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed-byte-slice input, `Result<Self, ()>` output*
 /// byte-view reverse projection on the first M3-mesh-primitive-defining
 /// `:placement :estrategia` distribution-strategy [`PlacementStrategy`]
@@ -32774,6 +32869,203 @@ mod tests {
                  byte-tail PlacementStrategy::as_str().as_bytes() \
                  returns — the borrowed-input surface must resolve to \
                  the same as_str dispatch"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  here onto the first M3-mesh-primitive-defining closed-\
+                  set fieldless typed-enum peer at the Cow<'static, \
+                  [u8]> corner, so the pin binds the new impl against \
+                  every paired byte-owned, byte-view, and str-owned \
+                  reverse-projection axis on the same enum plus a \
+                  generic <T: Into<Cow<'static, [u8]>>>-bound consumer \
+                  witness and an .iter().map(Cow::<[u8]>::from) pipe \
+                  witness on both owned and borrowed input shapes to \
+                  lock the whole family against a future silent \
+                  regression"
+    )]
+    fn placement_strategy_from_into_owned_cow_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<PlacementStrategy> for std::borrow::Cow<'static, [u8]>`
+        // and `impl From<&PlacementStrategy> for std::borrow::Cow<'static, [u8]>` —
+        // asserts the trait-idiomatic byte-owned reverse-projection standard-
+        // library impls and the substrate-primitive
+        // [`super::PlacementStrategy::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view resolve to the same three-arm PascalCase
+        // wire byte-string emit-set across every arm the exhaustive
+        // [`super::PlacementStrategy::ALL`] slice enumerates. Additionally
+        // asserts the returned `Cow<'static, [u8]>` binds the zero-alloc
+        // `Cow::Borrowed` arm on both input shapes, because
+        // `Self::as_str` returns `&'static str` and `.as_bytes()` on it
+        // preserves the `&'static [u8]` lifetime by construction.
+        //
+        // Extends the substrate-wide byte-owned reverse-projection
+        // matrix onto the first M3-mesh-primitive-defining closed-set
+        // fieldless typed-enum peer at the `Cow<'static, [u8]>` corner,
+        // mirroring the trajectory the same axis walked on the sibling
+        // M2-OTP-shape [`super::super::supervisor::RestartStrategy`]
+        // (7f81539), [`super::super::supervisor::RestartPolicy`]
+        // (65f381b) peers, and on the structurally most fundamental
+        // [`super::super::CaixaKind`] peer (b3451c8).
+        //
+        // Generic `<T: Into<Cow<'static, [u8]>>>`-bound consumer witness
+        // helper: a future per-arm byte-writer that accepts a
+        // `Cow<'static, [u8]>` composes on both owned and borrowed input
+        // shapes without an open-coded three-hop
+        // `Cow::Borrowed(strategy.as_str().as_bytes())` at every call
+        // site. Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_cow_bytes_sink<T: Into<std::borrow::Cow<'static, [u8]>>>(
+            t: T,
+        ) -> std::borrow::Cow<'static, [u8]> {
+            t.into()
+        }
+        for &variant in PlacementStrategy::ALL {
+            let via_owned_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<PlacementStrategy>>::from(variant);
+            let via_borrowed_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<&PlacementStrategy>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<PlacementStrategy> for Cow<'static, [u8]> impl \
+                 must byte-equal PlacementStrategy::as_str().as_bytes() \
+                 on PlacementStrategy::{variant:?} — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&PlacementStrategy> for Cow<'static, [u8]> impl \
+                 must byte-equal PlacementStrategy::as_str().as_bytes() \
+                 on PlacementStrategy::{variant:?} — divergence signals \
+                 a silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_owned_from, std::borrow::Cow::Borrowed(_)),
+                "From<PlacementStrategy> for Cow<'static, [u8]> must \
+                 bind the zero-alloc Cow::Borrowed arm on \
+                 PlacementStrategy::{variant:?} — Self::as_str returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            assert!(
+                matches!(via_borrowed_from, std::borrow::Cow::Borrowed(_)),
+                "From<&PlacementStrategy> for Cow<'static, [u8]> must \
+                 bind the zero-alloc Cow::Borrowed arm on \
+                 &PlacementStrategy::{variant:?} — Self::as_str returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            // Cross-axis partition against the paired byte-owned
+            // `Vec<u8>` reverse-projection axis on the same enum — the
+            // two byte-owned reverse-projection axes must byte-agree on
+            // every arm.
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<PlacementStrategy> for Cow<'static, [u8]> and \
+                 From<PlacementStrategy> for Vec<u8> must byte-agree on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the two byte-owned reverse-projection axes have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+            // Cross-axis partition against the paired str-side
+            // `Cow<'static, str>` reverse-projection axis on the same
+            // enum — the byte-side and str-side Cow<'static, _> axes
+            // must both bind the Cow::Borrowed arm on every arm (both
+            // route through Self::as_str's &'static return).
+            let via_cow_str: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<PlacementStrategy>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_str.as_bytes(),
+                "From<PlacementStrategy> for Cow<'static, [u8]> and \
+                 From<PlacementStrategy> for Cow<'static, str> must \
+                 byte-agree on PlacementStrategy::{variant:?} — \
+                 divergence signals a silent detour off the shared \
+                 substrate-primitive as_str accessor"
+            );
+            // Cross-axis partition against the paired borrowed byte-
+            // view `AsRef<[u8]>` axis on the same enum — the byte-owned
+            // `Cow<[u8]>` and byte-view axes must byte-agree on every
+            // arm (both route through Self::as_str's &'static return).
+            let via_as_ref_bytes: &[u8] = <PlacementStrategy as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_as_ref_bytes,
+                "From<PlacementStrategy> for Cow<'static, [u8]> and \
+                 AsRef<[u8]> for PlacementStrategy must byte-agree on \
+                 PlacementStrategy::{variant:?} — divergence signals \
+                 the byte-owned Cow axis and the byte-view axis have \
+                 drifted off the same substrate-primitive as_str \
+                 accessor"
+            );
+        }
+        for &variant in PlacementStrategy::ALL {
+            let owned_via_generic = generic_cow_bytes_sink(variant);
+            let variant_ref: &PlacementStrategy = &variant;
+            let borrowed_via_generic = generic_cow_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 &PlacementStrategy::{variant:?} must fold the same \
+                 byte-tail PlacementStrategy::as_str().as_bytes() \
+                 returns"
+            );
+        }
+        // A `.iter().map(Cow::<'static, [u8]>::from)` pipe witness over
+        // `PlacementStrategy::ALL` binds the borrowed-input axis (its
+        // iterator over `&'static [PlacementStrategy]` yields
+        // `&PlacementStrategy`) and folds the three-arm accept-set
+        // through the Cow<'static, [u8]> boundary, pinning both the
+        // borrowed-input `From` impl and the zero-alloc discipline on
+        // every arm of the pipe.
+        let via_iter: Vec<std::borrow::Cow<'static, [u8]>> = PlacementStrategy::ALL
+            .iter()
+            .map(std::borrow::Cow::<'static, [u8]>::from)
+            .collect();
+        let via_method: Vec<std::borrow::Cow<'static, [u8]>> = PlacementStrategy::ALL
+            .iter()
+            .map(|s| std::borrow::Cow::Borrowed(s.as_str().as_bytes()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Cow::<[u8]>::from)` over \
+             PlacementStrategy::ALL must byte-equal `.iter().map(|s| \
+             Cow::Borrowed(s.as_str().as_bytes()))` on every arm — the \
+             trait-idiomatic `From<&PlacementStrategy> for Cow<'static, \
+             [u8]>` axis is what makes the `Cow::from` composition \
+             route through the substrate-primitive \
+             `PlacementStrategy::as_str` accessor with the zero-alloc \
+             Cow::Borrowed arm by construction"
+        );
+        for cow in &via_iter {
+            assert!(
+                matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "every element of the .iter().map(Cow::<[u8]>::from) \
+                 pipe over PlacementStrategy::ALL must land on the \
+                 zero-alloc Cow::Borrowed arm — a Cow::Owned outcome \
+                 on any arm signals the pipe's iteration axis has \
+                 silently allocated where the substrate-primitive \
+                 PlacementStrategy::as_str `&'static str` return makes \
+                 the borrowed arm the type-correct projection"
             );
         }
     }
