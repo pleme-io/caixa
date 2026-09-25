@@ -4845,6 +4845,90 @@ impl From<&DepList> for std::borrow::Cow<'static, [u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the third caixa-core-internal closed-set fieldless typed
+/// enum peer ([`DepList`]) — extends the byte-owned reverse-projection
+/// matrix onto this primitive at the [`Box<[u8]>`] corner, tracking the
+/// trajectory the same axis walked on the structurally most fundamental
+/// first-mover peer [`crate::CaixaKind`] (4f47901), the M2-OTP-shape
+/// supervisor-slot peers [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] (6bc74c9), the M3 mesh-primitive-
+/// defining slot peers [`crate::aplicacao::PlacementStrategy`] (fb48599) /
+/// [`crate::aplicacao::RateLimitUnit`] (b22c283) /
+/// [`crate::aplicacao::WitShape`] (c6fee5c), and the sibling second-mover
+/// caixa-core-internal peer [`crate::dialeto::CaixaDialeto`] (61f5ecb).
+/// Routes byte-for-byte through the substrate-primitive [`DepList::as_str`]
+/// `pub const fn` accessor via [`Box::<[u8]>::from`] on the returned
+/// `&'static str`'s [`str::as_bytes`] — the two `match` arms in
+/// [`Self::as_str`] resolve to [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] `pub const &'static str`
+/// bodies, so a downstream [`Box<[u8]>`] consumer (a future admission-
+/// webhook rejection body binding the two-arm accepted-list enumeration
+/// through the fit-to-length `Box<[u8]>` slot, a future
+/// `bytes::Bytes::from(Box<[u8]>)` framer at the mesh-ingest boundary that
+/// keeps the fit-to-length allocation reachable at the framer's entry
+/// point) reaches the wire byte-string through this one trait dispatch
+/// rather than an open-coded per-call-site
+/// `Box::<[u8]>::from(list.as_str().as_bytes())` composition whose type
+/// bounds have no compile-time link back to the substrate primitive, or a
+/// `Box::<[u8]>::from(Vec::<u8>::from(list))` double-hop through the
+/// sibling [`Vec<u8>`] axis.
+///
+/// The [`Box<[u8]>`] slot is the fit-to-length ownership corner of the
+/// byte-owned family: unlike [`Vec<u8>`] (three-word header carrying a
+/// heap-slack `cap ≥ len`), [`Box<[u8]>`] carries only a two-word
+/// `(ptr, len)` fat pointer, so per-arm heap footprint on an accept-set
+/// interner is `mem::size_of::<usize>() * 2` (16 on `x86_64`) rather than
+/// `mem::size_of::<usize>() * 3` (24 on `x86_64`), the difference
+/// [`Vec<u8>`]'s capacity slot forces on every allocation. Downstream
+/// consumers that already carry `Box<[u8]>` in their public shape (a
+/// future `bytes::Bytes::from(Box<[u8]>)` framer at the mesh-ingest
+/// boundary) then reach this primitive without an intermediary
+/// [`Vec<u8>`] hop.
+///
+/// Pinned load-bearing by
+/// [`tests::dep_list_from_into_owned_box_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`DepList::as_str`]`.as_bytes()` across the
+/// two-arm [`DepList::ALL`] accept-set on both owned and borrowed input
+/// shapes, fit-to-length length-check witness on both surfaces, plus
+/// cross-axis witnesses against the paired [`Vec<u8>`] byte-owned axis,
+/// the paired [`std::borrow::Cow<'static, [u8]>`] byte-owned axis, the
+/// paired [`Box<str>`] str-owned axis, and the borrowed byte-view
+/// [`AsRef<[u8]>`] axis on the same primitive).
+impl From<DepList> for Box<[u8]> {
+    fn from(list: DepList) -> Box<[u8]> {
+        Box::<[u8]>::from(list.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<[u8]>`] output* byte-owned
+/// reverse projection on the third caixa-core-internal closed-set
+/// fieldless typed enum peer ([`DepList`]) — the borrowed-input companion
+/// to the paired owned-input [`From<DepList> for Box<[u8]>`] impl
+/// immediately above, closing the `{Self, &Self} → Box<[u8]>` byte-owned
+/// reverse-projection family on this primitive at the borrowed-input
+/// corner. Routes byte-for-byte through the same substrate-primitive
+/// [`DepList::as_str`] `pub const fn` accessor via [`Box::<[u8]>::from`]
+/// on the returned `&'static str`'s [`str::as_bytes`] byte-view.
+///
+/// Rust's `From` trait carries no blanket `impl<T> From<&T> for U where
+/// U: From<T>`, so every closed-set fieldless typed enum peer that carries
+/// the paired owned-input axis but not the borrowed-input axis forces
+/// every borrowed call site through a spurious [`Copy`] deref
+/// (`Box::<[u8]>::from(*list)`) or an open-coded
+/// `Box::<[u8]>::from(list.as_str().as_bytes())` whose type bounds have
+/// no compile-time link to the substrate primitive. The borrowed-input
+/// axis is the one a `DepList::ALL.iter().map(Box::<[u8]>::from)` pipe
+/// binds against — its iterator over `&'static [DepList]` yields
+/// `&DepList`, not `DepList`, so the owned-input axis alone forces every
+/// per-arm accept-set materializer through an explicit `.copied()`
+/// restatement.
+impl From<&DepList> for Box<[u8]> {
+    fn from(list: &DepList) -> Box<[u8]> {
+        Box::<[u8]>::from(list.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *borrowed byte-slice input* reverse projection on the
 /// third caixa-core-internal closed-set fieldless typed enum peer
 /// ([`DepList`]) — the byte-view mirror of the str-view reverse-projection
@@ -21913,6 +21997,193 @@ mod tests {
                  DepList::as_str().as_bytes() returns"
             );
         }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  onto DepList at the Box<[u8]> corner here (mirroring \
+                  the trajectory 61f5ecb walked on the sibling caixa-\
+                  core-internal peer CaixaDialeto, c6fee5c on WitShape, \
+                  b22c283 on RateLimitUnit, fb48599 on PlacementStrategy, \
+                  and 4f47901 on CaixaKind), so the pin binds both \
+                  {Self, &Self}-input impls against the substrate-\
+                  primitive as_str accessor's byte-view on every \
+                  DepList::ALL arm, adds fit-to-length length-check \
+                  witnesses on both surfaces, exercises the \
+                  <T: Into<Box<[u8]>>>-bound generic sink on both input \
+                  shapes, pins the borrowed-input axis with a \
+                  `.iter().map(Box::<[u8]>::from)` pipe witness over \
+                  DepList::ALL, and cross-witnesses against the paired \
+                  Vec<u8>, Cow<'static, [u8]>, Box<str>, and AsRef<[u8]> \
+                  axes so the whole byte-family stays locked to one \
+                  substrate primitive — the assertion count follows from \
+                  the closed-set axis fan-out, not from spurious \
+                  repetition"
+    )]
+    fn dep_list_from_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<DepList> for Box<[u8]>` and
+        // `impl From<&DepList> for Box<[u8]>` — asserts the trait-
+        // idiomatic byte-owned reverse-projection standard-library impls
+        // and the substrate-primitive [`super::DepList::as_str`]
+        // `pub const fn` accessor's `.as_bytes()` byte-view resolve to
+        // the same two-arm `:`-prefixed kebab-case wire byte-string
+        // emit-set across every arm the exhaustive
+        // [`super::DepList::ALL`] slice enumerates. Additionally asserts
+        // the returned `Box<[u8]>` is fit-to-length on every arm, because
+        // `Box::<[u8]>::from(&[u8])` allocates `len` bytes exactly (no
+        // capacity slack), the property downstream `Box<[u8]>` consumers
+        // (a `bytes::Bytes::from(Box<[u8]>)` framer at the mesh-ingest
+        // boundary) rely on to keep the per-arm footprint stable across
+        // the accept-set.
+        //
+        // Extends the substrate-wide byte-owned reverse-projection matrix
+        // onto the third caixa-core-internal closed-set fieldless typed
+        // enum peer at the `Box<[u8]>` corner, mirroring the trajectory
+        // 61f5ecb walked on the sibling second-mover caixa-core-internal
+        // peer CaixaDialeto, c6fee5c on the third M3 peer WitShape,
+        // b22c283 on the second M3 peer RateLimitUnit, fb48599 on the
+        // first M3 peer PlacementStrategy, and 4f47901 on the first-mover
+        // CaixaKind.
+        fn generic_box_bytes_sink<T: Into<Box<[u8]>>>(t: T) -> Box<[u8]> {
+            t.into()
+        }
+        for &variant in super::DepList::ALL {
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<super::DepList>>::from(variant);
+            let via_borrowed_from: Box<[u8]> = <Box<[u8]> as From<&super::DepList>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<DepList> for Box<[u8]> impl must byte-equal \
+                 DepList::as_str().as_bytes() on DepList::{variant:?} — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&DepList> for Box<[u8]> impl must byte-equal \
+                 DepList::as_str().as_bytes() on DepList::{variant:?} — \
+                 divergence signals a silent detour off the substrate-\
+                 primitive accessor"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<DepList> for Box<[u8]> must land a fit-to-length \
+                 boxed byte slice on DepList::{variant:?} — a length \
+                 mismatch signals a silent slab-header hop off the \
+                 substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.len(),
+                via_method_bytes.len(),
+                "From<&DepList> for Box<[u8]> must land a fit-to-length \
+                 boxed byte slice on DepList::{variant:?}"
+            );
+            let via_into_owned: Box<[u8]> = variant.into();
+            let via_into_borrowed: Box<[u8]> = (&variant).into();
+            assert_eq!(
+                via_into_owned.as_ref(),
+                via_method_bytes,
+                "Into<Box<[u8]>>::into on DepList::{variant:?} must byte-\
+                 equal DepList::as_str().as_bytes()"
+            );
+            assert_eq!(
+                via_into_borrowed.as_ref(),
+                via_method_bytes,
+                "Into<Box<[u8]>>::into on &DepList::{variant:?} must \
+                 byte-equal DepList::as_str().as_bytes()"
+            );
+            // Cross-axis witness against the paired byte-owned
+            // `From<DepList> for Vec<u8>` axis on the same primitive.
+            let paired_vec: Vec<u8> = <Vec<u8> as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                paired_vec.as_slice(),
+                "From<DepList> for Box<[u8]> and From<DepList> for \
+                 Vec<u8> must resolve to byte-equal byte-tails on \
+                 DepList::{variant:?} — the two byte-owned reverse-\
+                 projection axes must not drift off the same substrate-\
+                 primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired byte-owned
+            // `From<DepList> for Cow<'static, [u8]>` axis.
+            let paired_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                paired_cow_bytes.as_ref(),
+                "From<DepList> for Box<[u8]> and From<DepList> for \
+                 Cow<'static, [u8]> must resolve to byte-equal byte-\
+                 tails on DepList::{variant:?} — the two byte-owned \
+                 reverse-projection axes must not drift off the same \
+                 substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired str-owned
+            // `From<DepList> for Box<str>` axis on the same primitive —
+            // the byte-side and str-side owned-heap axes must byte-agree.
+            let paired_box_str: Box<str> = <Box<str> as From<super::DepList>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                paired_box_str.as_bytes(),
+                "From<DepList> for Box<[u8]> and From<DepList> for \
+                 Box<str> must resolve to byte-equal byte-tails on \
+                 DepList::{variant:?} — the byte-side and str-side \
+                 owned-heap reverse-projection axes must not drift off \
+                 the same substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the borrowed byte-view
+            // `AsRef<[u8]>` axis on the same primitive.
+            let borrowed_bytes: &[u8] = <super::DepList as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                borrowed_bytes,
+                "From<DepList> for Box<[u8]> and AsRef<[u8]> for DepList \
+                 must resolve to byte-equal byte-tails on \
+                 DepList::{variant:?}"
+            );
+        }
+        for &variant in super::DepList::ALL {
+            let owned_via_generic = generic_box_bytes_sink(variant);
+            let variant_ref: &super::DepList = &variant;
+            let borrowed_via_generic = generic_box_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 DepList::{variant:?} must fold the same byte-tail \
+                 DepList::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 &DepList::{variant:?} must fold the same byte-tail \
+                 DepList::as_str().as_bytes() returns"
+            );
+        }
+        // `.iter().map(Box::<[u8]>::from)` pipe witness over
+        // `DepList::ALL` — binds the borrowed-input axis, because the
+        // iterator over `&'static [DepList]` yields `&DepList`, not
+        // `DepList`.
+        let via_iter: Vec<Box<[u8]>> = super::DepList::ALL.iter().map(Box::<[u8]>::from).collect();
+        let via_method: Vec<Box<[u8]>> = super::DepList::ALL
+            .iter()
+            .map(|d| Box::<[u8]>::from(d.as_str().as_bytes()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Box::<[u8]>::from)` over DepList::ALL must \
+             byte-equal the open-coded per-arm composition — the \
+             borrowed-input axis is what makes the `Box::from` \
+             composition route through the substrate-primitive \
+             DepList::as_str accessor without a spurious `.copied()` \
+             restatement"
+        );
     }
 
     #[test]
