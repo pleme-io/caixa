@@ -1748,6 +1748,118 @@ impl From<&ArchVerdict> for Vec<u8> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`std::borrow::Cow<'static, [u8]>`] output*
+/// byte-owned reverse projection on the second outside-`caixa-core` closed-set
+/// fieldless typed-enum peer ([`ArchVerdict`]) — extends the byte-owned
+/// reverse-projection matrix onto this primitive at the
+/// [`std::borrow::Cow<'static, [u8]>`] corner, tracking the trajectory the
+/// same axis walked on the caixa-core-internal peers (the structurally
+/// most-fundamental first-mover [`caixa_core::CaixaKind`], the M2-OTP-shape
+/// supervisor-slot pair [`caixa_core::supervisor::RestartStrategy`] /
+/// [`caixa_core::supervisor::RestartPolicy`], the M3 mesh-primitive-defining
+/// slot peers [`caixa_core::aplicacao::PlacementStrategy`] (05e4054) /
+/// [`caixa_core::aplicacao::RateLimitUnit`] (ef00bea) /
+/// [`caixa_core::aplicacao::WitShape`] (4ae2ad4), the sibling second-mover
+/// caixa-core-internal peer [`caixa_core::dialeto::CaixaDialeto`] (92a8777),
+/// and the sibling third-mover peer [`caixa_core::dep::DepList`] (c817930))
+/// and the first-mover outside-`caixa-core`
+/// [`crate::invariants::InvariantKind`] impl (1a2d063) that opened this axis
+/// on the outside-`caixa-core` surface. Routes byte-for-byte through the
+/// substrate-primitive [`ArchVerdict::as_str`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — the two `match` arms in [`Self::as_str`] resolve to
+/// [`CAIXA_ARCH_VERDICT_WIRE_PROVEN`] / [`CAIXA_ARCH_VERDICT_WIRE_REJECTED`]
+/// `pub const &'static str` bodies, so a downstream
+/// [`std::borrow::Cow<'static, [u8]>`] consumer (a future per-`ArchReport`
+/// audit-log byte-tail composer whose framer stores the per-verdict
+/// byte-tag as a [`std::borrow::Cow<'static, [u8]>`], a future
+/// `bytes::Bytes::copy_from_slice(cow.as_ref())`-shape mesh-ingest
+/// byte-tail folder that binds a `Cow<'static, [u8]>` input through the
+/// trait-idiomatic axis, a future M4 `mesh.pleme.io/v1alpha1/ArchAudit`
+/// admission-webhook rejection body that composes the per-verdict byte-tag
+/// into a `Cow<'static, [u8]>` and only allocates when the caller widens
+/// the tail with per-request context, a future per-arch-verdict per-entry
+/// table cache whose per-arm key is a [`std::borrow::Cow<'static, [u8]>`]
+/// so the two-arm case shares one `&'static [u8]` and only per-arm dynamic
+/// tag widenings ever allocate) reaches the wire byte-string through this
+/// one substrate-primitive-anchored trait dispatch rather than an open-
+/// coded per-call-site `Cow::Borrowed(verdict.as_str().as_bytes())`
+/// composition whose type bounds have no compile-time link back to the
+/// substrate primitive, or a `Cow::Owned(Vec::<u8>::from(verdict))`
+/// double-hop through the sibling [`Vec<u8>`] axis that spuriously
+/// allocates where the [`Cow::Borrowed`] arm would suffice.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<[u8]>> From<T> for Cow<'static, [u8]>`, so every closed-
+/// set fieldless typed enum peer that carries the paired [`Vec<u8>`] axis
+/// but not the [`Cow<'static, [u8]>`] axis forces every
+/// `Cow<'static, [u8]>`-parameterized call site through an open-coded
+/// `Cow::Borrowed(verdict.as_str().as_bytes())` composition whose type
+/// bounds have no compile-time link back to the substrate primitive.
+///
+/// Extends the substrate-wide trait-idiomatic byte-owned
+/// [`std::borrow::Cow<'static, [u8]>`]-reverse-projection axis onto the
+/// second outside-`caixa-core` closed-set fieldless typed-enum peer,
+/// matching the second-outside-`caixa-core` positions the paired
+/// [`AsRef<[u8]>`] borrowed byte-view axis, the paired [`Vec<u8>`] byte-
+/// owned reverse-projection axis, and the paired [`TryFrom<&[u8]>`]
+/// byte-view reverse-projection axis already carry on this same enum.
+/// Leaves the four remaining outside-`caixa-core` closed-set fieldless
+/// typed-enum peers ([`caixa_lint::Severity`], [`caixa_lint::FixSafety`],
+/// [`caixa_theme::Semantic`], [`caixa_provedor::FerriteRuntime`]) as the
+/// campaign's next mechanical one-lift extensions against the substrate-
+/// primitive `as_str` accessor they already carry.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_from_into_owned_cow_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`ArchVerdict::as_str`]`.as_bytes()` across the
+/// two-arm [`ArchVerdict::ALL`] accept-set on both owned and borrowed input
+/// shapes, plus a [`std::borrow::Cow::Borrowed`] discriminator witness
+/// pinning the zero-alloc arm, plus cross-axis witnesses against the paired
+/// [`Vec<u8>`] byte-owned reverse-projection axis, the paired
+/// [`std::borrow::Cow<'static, str>`] str-owned reverse-projection axis,
+/// and the paired [`AsRef<[u8]>`] borrowed byte-view axis on the same
+/// primitive).
+impl From<ArchVerdict> for std::borrow::Cow<'static, [u8]> {
+    fn from(verdict: ArchVerdict) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(verdict.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`std::borrow::Cow<'static, [u8]>`] output*
+/// byte-owned reverse projection on the second outside-`caixa-core` closed-set
+/// fieldless typed-enum peer ([`ArchVerdict`]) — the borrowed-input
+/// companion to the paired owned-input
+/// [`From<ArchVerdict> for std::borrow::Cow<'static, [u8]>`] impl
+/// immediately above, closing the `{Self, &Self} → Cow<'static, [u8]>`
+/// byte-owned reverse-projection family on this primitive at the borrowed-
+/// input corner. Routes byte-for-byte through the same substrate-primitive
+/// [`ArchVerdict::as_str`] `pub const fn` accessor via
+/// [`std::borrow::Cow::Borrowed`]`(verdict.as_str().as_bytes())` — the
+/// [`Cow::Borrowed`] arm is reachable on both input axes because
+/// [`Self::as_str`] returns `&'static str` regardless of the input shape,
+/// so no runtime allocation is forced on either corner.
+///
+/// Rust's `From` trait carries no blanket
+/// `impl<T> From<&T> for U where U: From<T>` (nor an
+/// `impl<T: AsRef<[u8]>> From<&T> for Cow<'static, [u8]>`), so every
+/// closed-set fieldless typed enum peer that carries the paired owned-
+/// input axis but not the borrowed-input axis forces every borrowed call
+/// site through a spurious [`Copy`] deref (`Cow::<'static, [u8]>::from(*verdict)`)
+/// or an open-coded `Cow::Borrowed(verdict.as_str().as_bytes())` whose
+/// type bounds have no compile-time link to the substrate primitive. The
+/// borrowed-input axis is the one an
+/// `ArchVerdict::ALL.iter().map(Cow::<'static, [u8]>::from)` pipe binds
+/// against (its iterator over `&'static [ArchVerdict]` yields
+/// `&ArchVerdict`, not `ArchVerdict`, so the owned-input axis alone forces
+/// every such per-arm accept-set materializer through an explicit
+/// `.copied()` restatement).
+impl From<&ArchVerdict> for std::borrow::Cow<'static, [u8]> {
+    fn from(verdict: &ArchVerdict) -> std::borrow::Cow<'static, [u8]> {
+        std::borrow::Cow::Borrowed(verdict.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *byte-view reverse-projection* on the [`ArchVerdict`]
 /// closed-set caixa-arch verdict-outcome typed enum — the byte-mirror of
 /// the paired [`TryFrom<&str> for ArchVerdict`] str-view reverse-projection
@@ -5222,6 +5334,201 @@ mod tests {
                  resolver, or a cross-axis leak from the peer \
                  crate::invariants::InvariantKind axis's non-shared \
                  arm-set"
+            );
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  onto ArchVerdict at the Cow<'static, [u8]> corner \
+                  here (mirroring the trajectory c817930 walked on \
+                  the sibling caixa-core-internal peer DepList, \
+                  92a8777 on CaixaDialeto, 4ae2ad4 on WitShape, \
+                  ef00bea on RateLimitUnit, 05e4054 on \
+                  PlacementStrategy, 1a2d063 on the first-mover \
+                  outside-caixa-core InvariantKind), extending the \
+                  outside-caixa-core Cow<'static, [u8]> axis onto \
+                  the second-mover peer ArchVerdict, so the pin \
+                  binds both {Self, &Self}-input impls against the \
+                  substrate-primitive as_str accessor's byte-view on \
+                  every ArchVerdict::ALL arm, discriminates the \
+                  zero-alloc Cow::Borrowed arm on both input shapes, \
+                  exercises the <T: Into<Cow<'static, [u8]>>>-bound \
+                  generic sink on both input shapes, and \
+                  cross-witnesses against the paired Vec<u8>, \
+                  Cow<'static, str>, and AsRef<[u8]> axes so the \
+                  whole byte-family stays locked to one substrate \
+                  primitive — the assertion count follows from the \
+                  closed-set axis fan-out, not from spurious repetition"
+    )]
+    fn arch_verdict_from_into_owned_cow_bytes_routes_through_as_str_accessor() {
+        // Fail-before-pass-after byte-parity pin on the newly lifted
+        // `impl From<ArchVerdict> for std::borrow::Cow<'static, [u8]>`
+        // and `impl From<&ArchVerdict> for std::borrow::Cow<'static,
+        // [u8]>` — asserts the trait-idiomatic byte-owned reverse-
+        // projection standard-library impls and the substrate-primitive
+        // [`super::ArchVerdict::as_str`] `pub const fn` accessor's
+        // `.as_bytes()` byte-view resolve to the same two-arm
+        // canonical-lowercase byte-string emit-set across every arm
+        // the exhaustive [`super::ArchVerdict::ALL`] slice enumerates.
+        // Additionally asserts the returned `Cow<'static, [u8]>` binds
+        // the zero-alloc `Cow::Borrowed` arm on both input shapes,
+        // because [`super::ArchVerdict::as_str`] returns `&'static str`
+        // and `.as_bytes()` on it preserves the `&'static [u8]` lifetime
+        // by construction.
+        //
+        // Extends the substrate-wide trait-idiomatic byte-owned
+        // `Cow<'static, [u8]>`-reverse-projection axis onto the
+        // second outside-caixa-core closed-set fieldless typed-enum
+        // peer — matching the second-outside-caixa-core positions the
+        // paired [`AsRef<[u8]>`] (0e0057a) borrowed byte-view axis,
+        // the paired [`From<ArchVerdict> for Vec<u8>`] (b8fe6f1) byte-
+        // owned reverse-projection axis, and the paired
+        // [`TryFrom<&[u8]>`] (95e4d51) byte-view reverse-projection
+        // axis already carry on this same enum, and tracking the
+        // trajectory the first-mover outside-caixa-core
+        // [`crate::invariants::InvariantKind`] impl (1a2d063) walked
+        // before it.
+        //
+        // `<T: Into<Cow<'static, [u8]>>>`-bound generic-consumer witness
+        // helper: a generic owned-byte-input function accepts an
+        // [`ArchVerdict`] directly through the trait bound, without
+        // the caller open-coding the two-hop
+        // `Cow::Borrowed(verdict.as_str().as_bytes())` composition.
+        // Lifted to the top of the function per
+        // `clippy::items_after_statements`.
+        fn generic_cow_bytes_sink<T: Into<std::borrow::Cow<'static, [u8]>>>(
+            t: T,
+        ) -> std::borrow::Cow<'static, [u8]> {
+            t.into()
+        }
+        for &variant in ArchVerdict::ALL {
+            let via_owned_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<ArchVerdict>>::from(variant);
+            let via_borrowed_from: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<&ArchVerdict>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<ArchVerdict> for Cow<'static, [u8]> impl must \
+                 byte-equal ArchVerdict::as_str().as_bytes() on \
+                 ArchVerdict::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&ArchVerdict> for Cow<'static, [u8]> impl must \
+                 byte-equal ArchVerdict::as_str().as_bytes() on \
+                 ArchVerdict::{variant:?} — divergence signals a \
+                 silent detour off the substrate-primitive accessor"
+            );
+            assert!(
+                matches!(via_owned_from, std::borrow::Cow::Borrowed(_)),
+                "From<ArchVerdict> for Cow<'static, [u8]> must bind \
+                 the zero-alloc Cow::Borrowed arm on \
+                 ArchVerdict::{variant:?} — Self::as_str returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            assert!(
+                matches!(via_borrowed_from, std::borrow::Cow::Borrowed(_)),
+                "From<&ArchVerdict> for Cow<'static, [u8]> must bind \
+                 the zero-alloc Cow::Borrowed arm on \
+                 &ArchVerdict::{variant:?} — Self::as_str returns \
+                 &'static str, so a Cow::Owned arm signals a silent \
+                 allocation off the substrate primitive"
+            );
+            let via_into_owned: std::borrow::Cow<'static, [u8]> = variant.into();
+            let via_into_borrowed: std::borrow::Cow<'static, [u8]> = (&variant).into();
+            assert_eq!(
+                via_into_owned.as_ref(),
+                via_method_bytes,
+                "Into<Cow<'static, [u8]>>::into on \
+                 ArchVerdict::{variant:?} must byte-equal \
+                 ArchVerdict::as_str().as_bytes()"
+            );
+            assert_eq!(
+                via_into_borrowed.as_ref(),
+                via_method_bytes,
+                "Into<Cow<'static, [u8]>>::into on \
+                 &ArchVerdict::{variant:?} must byte-equal \
+                 ArchVerdict::as_str().as_bytes()"
+            );
+            assert!(
+                matches!(via_into_owned, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, [u8]>>::into on \
+                 ArchVerdict::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm"
+            );
+            assert!(
+                matches!(via_into_borrowed, std::borrow::Cow::Borrowed(_)),
+                "Into<Cow<'static, [u8]>>::into on \
+                 &ArchVerdict::{variant:?} must land on the zero-alloc \
+                 Cow::Borrowed arm"
+            );
+            // Cross-axis witness against the paired byte-owned
+            // `From<ArchVerdict> for Vec<u8>` axis on the same
+            // primitive: both axes must byte-equal each other because
+            // both route through `.as_str().as_bytes()` on the same
+            // substrate-primitive accessor.
+            let paired_vec: Vec<u8> = <Vec<u8> as From<ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                paired_vec.as_slice(),
+                "From<ArchVerdict> for Cow<'static, [u8]> and \
+                 From<ArchVerdict> for Vec<u8> must resolve to \
+                 byte-equal byte-tails on ArchVerdict::{variant:?} — \
+                 the two byte-owned reverse-projection axes must not \
+                 drift off the same substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired str-owned
+            // `From<ArchVerdict> for Cow<'static, str>` axis on the
+            // same primitive: `.as_bytes()` on the str-side Cow must
+            // yield the same byte-tail the byte-side Cow carries.
+            let paired_cow_str: std::borrow::Cow<'static, str> =
+                <std::borrow::Cow<'static, str> as From<ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                paired_cow_str.as_bytes(),
+                "From<ArchVerdict> for Cow<'static, [u8]> and \
+                 From<ArchVerdict> for Cow<'static, str> must \
+                 resolve to byte-equal byte-tails on \
+                 ArchVerdict::{variant:?} — the byte-side and \
+                 str-side reverse-projection axes must not drift off \
+                 the same substrate-primitive as_str accessor"
+            );
+            // Cross-axis witness against the paired borrowed byte-view
+            // `AsRef<[u8]>` axis on the same primitive.
+            let borrowed_bytes: &[u8] = <ArchVerdict as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                borrowed_bytes,
+                "From<ArchVerdict> for Cow<'static, [u8]> and \
+                 AsRef<[u8]> for ArchVerdict must resolve to \
+                 byte-equal byte-tails on ArchVerdict::{variant:?}"
+            );
+        }
+        for &variant in ArchVerdict::ALL {
+            let owned_via_generic = generic_cow_bytes_sink(variant);
+            let variant_ref: &ArchVerdict = &variant;
+            let borrowed_via_generic = generic_cow_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 ArchVerdict::{variant:?} must fold the same byte-\
+                 tail ArchVerdict::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Cow<'static, [u8]>>>-bound composition on \
+                 &ArchVerdict::{variant:?} must fold the same byte-\
+                 tail ArchVerdict::as_str().as_bytes() returns"
             );
         }
     }
