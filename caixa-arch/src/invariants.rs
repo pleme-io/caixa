@@ -1842,6 +1842,53 @@ impl From<&InvariantKind> for std::borrow::Cow<'static, [u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the first outside-`caixa-core` closed-set fieldless typed
+/// enum peer ([`InvariantKind`]) — extends the byte-owned reverse-projection
+/// matrix onto this primitive at the [`Box<[u8]>`] corner, tracking the
+/// trajectory the paired axis walked on the caixa-core-internal peers
+/// ([`caixa_core::CaixaKind`], [`caixa_core::supervisor::RestartStrategy`],
+/// [`caixa_core::supervisor::RestartPolicy`],
+/// [`caixa_core::aplicacao::PlacementStrategy`] (fb48599),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (b22c283),
+/// [`caixa_core::aplicacao::WitShape`] (c6fee5c),
+/// [`caixa_core::CaixaDialeto`] (61f5ecb), and
+/// [`caixa_core::dep::DepList`] (1e14c64)) at this same corner. Routes
+/// byte-for-byte through the substrate-primitive [`InvariantKind::as_str`]
+/// `pub const fn` accessor via [`Box::<[u8]>::from`] on the returned
+/// `&'static str`'s [`str::as_bytes`] — a downstream [`Box<[u8]>`] consumer
+/// (a per-caixa-arch audit-log byte-tail composer that hands ownership of
+/// a fit-to-length severity byte-tag to a sink expecting `Box<[u8]>`, a
+/// future `bytes::Bytes::from(Box<[u8]>)` framer that keeps the
+/// fit-to-length allocation reachable at the framer's entry point, a
+/// future M4 admission-webhook per-arch-severity table cache keyed by
+/// `Box<[u8]>`) reaches the wire byte-string through this one trait
+/// dispatch rather than an open-coded
+/// `Box::<[u8]>::from(kind.as_str().as_bytes())` composition.
+///
+/// Pinned by
+/// [`tests::invariant_kind_from_into_owned_box_bytes_routes_through_as_str_accessor`].
+impl From<InvariantKind> for Box<[u8]> {
+    fn from(kind: InvariantKind) -> Box<[u8]> {
+        Box::<[u8]>::from(kind.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on [`InvariantKind`] — the borrowed-input companion to the
+/// paired owned-input impl immediately above, closing the
+/// `{Self, &Self} → Box<[u8]>` pair on this primitive. Rust's `From` trait
+/// carries no blanket `impl<T> From<&T> for U where U: From<T>`, so the
+/// borrowed-input axis is what an
+/// `InvariantKind::ALL.iter().map(Box::<[u8]>::from)` pipe binds against
+/// (its iterator over `&'static [InvariantKind]` yields `&InvariantKind`,
+/// not `InvariantKind`), without a spurious `.copied()` restatement.
+impl From<&InvariantKind> for Box<[u8]> {
+    fn from(kind: &InvariantKind) -> Box<[u8]> {
+        Box::<[u8]>::from(kind.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *byte-view reverse-projection* on the [`InvariantKind`]
 /// closed-set caixa-arch invariant-severity typed enum — the byte-mirror
 /// of the paired [`TryFrom<&str> for InvariantKind`] str-view reverse-
@@ -5773,5 +5820,102 @@ mod tests {
                  tail InvariantKind::as_str().as_bytes() returns"
             );
         }
+    }
+
+    #[test]
+    fn invariant_kind_from_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Byte-parity pin on `impl From<InvariantKind> for Box<[u8]>` and
+        // `impl From<&InvariantKind> for Box<[u8]>` — asserts the trait-
+        // idiomatic byte-owned reverse-projection standard-library impls
+        // and the substrate-primitive `InvariantKind::as_str` accessor
+        // resolve to the same three-arm canonical-lowercase wire byte-
+        // string on both owned- and borrowed-input surfaces, and cross-
+        // checks the byte-tail against the sibling `Vec<u8>`,
+        // `Cow<'static, [u8]>`, `Box<str>`, and `AsRef<[u8]>` axes on the
+        // same primitive. Extends the byte-owned reverse-projection
+        // matrix onto the first outside-`caixa-core` closed-set fieldless
+        // typed enum at the `Box<[u8]>` corner, tracking the sibling
+        // caixa-core-internal `PlacementStrategy` (fb48599), `RateLimitUnit`
+        // (b22c283), `WitShape` (c6fee5c), `CaixaDialeto` (61f5ecb), and
+        // `DepList` (1e14c64) peers walked at this same corner.
+        fn generic_box_bytes_sink<T: Into<Box<[u8]>>>(t: T) -> Box<[u8]> {
+            t.into()
+        }
+        for &variant in InvariantKind::ALL {
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<InvariantKind>>::from(variant);
+            let via_borrowed_from: Box<[u8]> = <Box<[u8]> as From<&InvariantKind>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<InvariantKind> for Box<[u8]> impl must byte-equal \
+                 InvariantKind::as_str().as_bytes() on \
+                 InvariantKind::{variant:?}"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&InvariantKind> for Box<[u8]> impl must byte-equal \
+                 InvariantKind::as_str().as_bytes() on \
+                 InvariantKind::{variant:?}"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<InvariantKind> for Box<[u8]> must land a fit-to-\
+                 length boxed byte slice on InvariantKind::{variant:?}"
+            );
+            let via_into_owned: Box<[u8]> = variant.into();
+            let via_into_borrowed: Box<[u8]> = (&variant).into();
+            assert_eq!(via_into_owned.as_ref(), via_method_bytes);
+            assert_eq!(via_into_borrowed.as_ref(), via_method_bytes);
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "Box<[u8]> and Vec<u8> byte-owned reverse-projection axes \
+                 must byte-agree on InvariantKind::{variant:?}"
+            );
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_bytes.as_ref(),
+                "Box<[u8]> and Cow<'static, [u8]> byte-owned reverse-\
+                 projection axes must byte-agree on \
+                 InvariantKind::{variant:?}"
+            );
+            let via_box_str: Box<str> = <Box<str> as From<InvariantKind>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_box_str.as_bytes(),
+                "byte-side Box<[u8]> and str-side Box<str> axes must \
+                 byte-agree on InvariantKind::{variant:?}"
+            );
+            let via_as_ref_bytes: &[u8] = <InvariantKind as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_as_ref_bytes,
+                "Box<[u8]> and AsRef<[u8]> axes must byte-agree on \
+                 InvariantKind::{variant:?}"
+            );
+        }
+        for &variant in InvariantKind::ALL {
+            let owned_via_generic = generic_box_bytes_sink(variant);
+            let variant_ref: &InvariantKind = &variant;
+            let borrowed_via_generic = generic_box_bytes_sink(variant_ref);
+            assert_eq!(owned_via_generic.as_ref(), variant.as_str().as_bytes());
+            assert_eq!(borrowed_via_generic.as_ref(), variant.as_str().as_bytes());
+        }
+        let via_iter: Vec<Box<[u8]>> = InvariantKind::ALL.iter().map(Box::<[u8]>::from).collect();
+        let via_method: Vec<Box<[u8]>> = InvariantKind::ALL
+            .iter()
+            .map(|k| Box::<[u8]>::from(k.as_str().as_bytes()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Box::<[u8]>::from)` over InvariantKind::ALL \
+             must byte-equal the open-coded per-arm composition"
+        );
     }
 }
