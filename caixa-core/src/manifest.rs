@@ -11151,18 +11151,17 @@ mod tests {
         // level so a future regression that drops the `name.len() >
         // SUFFIX.len()` bound at the predicate surfaces here, not
         // piecemeal as a `lareira-` chart-name collision at render time.
-        for relpath in ["servicos/.computeunit.yaml"] {
-            let c = caixa_with_code_paths(vec![], vec![], vec![relpath]);
-            let err = c.validate_code_paths().unwrap_err();
-            let ManifestError::CodePathNonComputeUnitYamlExtension { slot, path } = err else {
-                panic!(
-                    "expected CodePathNonComputeUnitYamlExtension for {relpath:?}, \
-                     got {err:?}"
-                );
-            };
-            assert_eq!(slot, ":servicos");
-            assert_eq!(path, PathBuf::from(relpath));
-        }
+        let relpath = "servicos/.computeunit.yaml";
+        let c = caixa_with_code_paths(vec![], vec![], vec![relpath]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathNonComputeUnitYamlExtension { slot, path } = err else {
+            panic!(
+                "expected CodePathNonComputeUnitYamlExtension for {relpath:?}, \
+                 got {err:?}"
+            );
+        };
+        assert_eq!(slot, ":servicos");
+        assert_eq!(path, PathBuf::from(relpath));
     }
 
     #[test]
