@@ -1860,6 +1860,100 @@ impl From<&ArchVerdict> for std::borrow::Cow<'static, [u8]> {
     }
 }
 
+/// Trait-idiomatic *owned-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the second outside-`caixa-core` closed-set fieldless typed
+/// enum peer ([`ArchVerdict`]) — extends the substrate-wide byte-owned
+/// reverse-projection matrix onto this primitive at the [`Box<[u8]>`] corner,
+/// tracking the trajectory the paired axis walked on the first outside-
+/// `caixa-core` peer [`crate::invariants::InvariantKind`] (3032683) and on
+/// the caixa-core-internal peers ([`caixa_core::dep::DepList`] (1e14c64),
+/// [`caixa_core::CaixaDialeto`] (61f5ecb),
+/// [`caixa_core::aplicacao::WitShape`] (c6fee5c),
+/// [`caixa_core::aplicacao::RateLimitUnit`] (b22c283), and
+/// [`caixa_core::aplicacao::PlacementStrategy`] (fb48599)) at this same
+/// corner. Routes byte-for-byte through the substrate-primitive
+/// [`ArchVerdict::as_str`] `pub const fn` accessor via
+/// [`Box::<[u8]>::from`] on the returned `&'static str`'s
+/// [`str::as_bytes`] — a downstream [`Box<[u8]>`] consumer of the caixa-
+/// arch verdict-outcome byte-tag (an audit-log byte-tail composer that
+/// hands ownership of a fit-to-length verdict byte-tag to a sink expecting
+/// `Box<[u8]>`, a future `bytes::Bytes::from(Box<[u8]>)` framer that keeps
+/// the fit-to-length allocation reachable at the framer's entry point, a
+/// future M4 `mesh.pleme.io/v1alpha1/ArchAudit` admission-webhook per-
+/// verdict table cache keyed by `Box<[u8]>`) reaches the wire byte-string
+/// through this one substrate-primitive-anchored trait dispatch rather
+/// than an open-coded
+/// `Box::<[u8]>::from(verdict.as_str().as_bytes())` composition whose type
+/// bounds have no compile-time link back to the substrate primitive, or a
+/// `Box::<[u8]>::from(Vec::<u8>::from(verdict).into_boxed_slice())`
+/// double-hop through the sibling [`Vec<u8>`] axis.
+///
+/// Rust's standard library carries no blanket
+/// `impl<T: AsRef<[u8]>> From<T> for Box<[u8]>`, so every closed-set
+/// fieldless typed enum peer that carries the paired [`Vec<u8>`] /
+/// [`std::borrow::Cow<'static, [u8]>`] byte-owned axes but not the paired
+/// [`Box<[u8]>`] axis forces every `Box<[u8]>`-parameterized call site
+/// through an open-coded `Box::<[u8]>::from(verdict.as_str().as_bytes())`
+/// composition whose type bounds have no compile-time link back to the
+/// substrate primitive. Extending the [`Box<[u8]>`] corner onto
+/// [`ArchVerdict`] — the second outside-`caixa-core` closed-set fieldless
+/// typed enum peer — closes one more edge on the substrate-wide byte-
+/// owned reverse-projection matrix and matches the second-outside-
+/// `caixa-core` positions the paired [`AsRef<[u8]>`], [`Vec<u8>`],
+/// [`std::borrow::Cow<'static, [u8]>`], and [`TryFrom<&[u8]>`] axes
+/// already carry on this same enum. Leaves the four remaining outside-
+/// `caixa-core` closed-set fieldless typed-enum peers
+/// ([`caixa_lint::Severity`], [`caixa_lint::FixSafety`],
+/// [`caixa_theme::Semantic`], [`caixa_provedor::FerriteRuntime`]) as the
+/// campaign's next mechanical one-lift extensions against the substrate-
+/// primitive `as_str` accessor they already carry.
+///
+/// Pinned load-bearing by
+/// [`tests::arch_verdict_from_into_owned_box_bytes_routes_through_as_str_accessor`]
+/// (byte-parity pin against [`ArchVerdict::as_str`]`.as_bytes()` across the
+/// two-arm [`ArchVerdict::ALL`] accept-set on both owned and borrowed input
+/// shapes, a fit-to-length-slab witness on both surfaces, a
+/// `<T: Into<Box<[u8]>>>` generic-sink witness on both input shapes, a
+/// `.iter().map(Box::<[u8]>::from)` borrowed-input pipeline witness, plus
+/// cross-axis reconciliation against the paired [`Vec<u8>`],
+/// [`std::borrow::Cow<'static, [u8]>`], [`Box<str>`], and [`AsRef<[u8]>`]
+/// axes on the same primitive).
+impl From<ArchVerdict> for Box<[u8]> {
+    fn from(verdict: ArchVerdict) -> Box<[u8]> {
+        Box::<[u8]>::from(verdict.as_str().as_bytes())
+    }
+}
+
+/// Trait-idiomatic *borrowed-input, [`Box<[u8]>`] output* byte-owned reverse
+/// projection on the second outside-`caixa-core` closed-set fieldless typed-
+/// enum peer ([`ArchVerdict`]) — the borrowed-input companion to the paired
+/// owned-input [`From<ArchVerdict> for Box<[u8]>`] impl immediately above,
+/// closing the `{Self, &Self} → Box<[u8]>` byte-owned reverse-projection
+/// family on this primitive at the borrowed-input corner. Routes byte-for-
+/// byte through the same substrate-primitive [`ArchVerdict::as_str`]
+/// `pub const fn` accessor via [`Box::<[u8]>::from`] on the returned
+/// `&'static str`'s [`str::as_bytes`], so the same fit-to-length boxed slab
+/// lands on both input surfaces.
+///
+/// Rust's `From` trait carries no blanket
+/// `impl<T> From<&T> for U where U: From<T>` (nor an
+/// `impl<T: AsRef<[u8]>> From<&T> for Box<[u8]>`), so every closed-set
+/// fieldless typed enum peer that carries the paired owned-input axis but
+/// not the borrowed-input axis forces every borrowed call site through a
+/// spurious [`Copy`] deref (`Box::<[u8]>::from(*verdict)`) or an open-coded
+/// `Box::<[u8]>::from(verdict.as_str().as_bytes())` whose type bounds have
+/// no compile-time link back to the substrate primitive. The borrowed-input
+/// axis is the one an `ArchVerdict::ALL.iter().map(Box::<[u8]>::from)` pipe
+/// binds against (its iterator over `&'static [ArchVerdict]` yields
+/// `&ArchVerdict`, not `ArchVerdict`, so the owned-input axis alone forces
+/// every such per-arm accept-set materializer through an explicit
+/// `.copied()` restatement).
+impl From<&ArchVerdict> for Box<[u8]> {
+    fn from(verdict: &ArchVerdict) -> Box<[u8]> {
+        Box::<[u8]>::from(verdict.as_str().as_bytes())
+    }
+}
+
 /// Trait-idiomatic *byte-view reverse-projection* on the [`ArchVerdict`]
 /// closed-set caixa-arch verdict-outcome typed enum — the byte-mirror of
 /// the paired [`TryFrom<&str> for ArchVerdict`] str-view reverse-projection
@@ -5531,5 +5625,151 @@ mod tests {
                  tail ArchVerdict::as_str().as_bytes() returns"
             );
         }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the byte-owned reverse-projection axis is extended \
+                  onto ArchVerdict at the Box<[u8]> corner here \
+                  (mirroring the trajectory 1e14c64 walked on the \
+                  sibling caixa-core-internal peer DepList, 61f5ecb \
+                  on CaixaDialeto, c6fee5c on WitShape, b22c283 on \
+                  RateLimitUnit, fb48599 on PlacementStrategy, and \
+                  3032683 on the first-mover outside-caixa-core \
+                  InvariantKind), extending the outside-caixa-core \
+                  Box<[u8]> axis onto the second-mover peer \
+                  ArchVerdict, so the pin binds both {Self, \
+                  &Self}-input impls against the substrate-primitive \
+                  as_str accessor's byte-view on every \
+                  ArchVerdict::ALL arm, witnesses the fit-to-length \
+                  boxed slab on both input shapes, exercises the <T: \
+                  Into<Box<[u8]>>>-bound generic sink on both input \
+                  shapes, exercises the .iter().map(Box::<[u8]>::from) \
+                  borrowed-input pipeline, and cross-witnesses against \
+                  the paired Vec<u8>, Cow<'static, [u8]>, Box<str>, \
+                  and AsRef<[u8]> axes so the whole byte-family stays \
+                  locked to one substrate primitive — the assertion \
+                  count follows from the closed-set axis fan-out, not \
+                  from spurious repetition"
+    )]
+    fn arch_verdict_from_into_owned_box_bytes_routes_through_as_str_accessor() {
+        // Byte-parity pin on `impl From<ArchVerdict> for Box<[u8]>` and
+        // `impl From<&ArchVerdict> for Box<[u8]>` — asserts the trait-
+        // idiomatic byte-owned reverse-projection standard-library impls
+        // and the substrate-primitive `ArchVerdict::as_str` accessor
+        // resolve to the same two-arm canonical-lowercase wire byte-
+        // string on both owned- and borrowed-input surfaces, and cross-
+        // checks the byte-tail against the sibling `Vec<u8>`,
+        // `Cow<'static, [u8]>`, `Box<str>`, and `AsRef<[u8]>` axes on the
+        // same primitive. Extends the byte-owned reverse-projection matrix
+        // onto the second outside-`caixa-core` closed-set fieldless typed
+        // enum at the `Box<[u8]>` corner, tracking the sibling first
+        // outside-`caixa-core` peer `InvariantKind` (3032683) and the
+        // caixa-core-internal `PlacementStrategy` (fb48599), `RateLimitUnit`
+        // (b22c283), `WitShape` (c6fee5c), `CaixaDialeto` (61f5ecb), and
+        // `DepList` (1e14c64) peers walked at this same corner.
+        fn generic_box_bytes_sink<T: Into<Box<[u8]>>>(t: T) -> Box<[u8]> {
+            t.into()
+        }
+        for &variant in ArchVerdict::ALL {
+            let via_owned_from: Box<[u8]> = <Box<[u8]> as From<ArchVerdict>>::from(variant);
+            let via_borrowed_from: Box<[u8]> = <Box<[u8]> as From<&ArchVerdict>>::from(&variant);
+            let via_method_bytes: &'static [u8] = variant.as_str().as_bytes();
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_method_bytes,
+                "From<ArchVerdict> for Box<[u8]> impl must byte-equal \
+                 ArchVerdict::as_str().as_bytes() on \
+                 ArchVerdict::{variant:?}"
+            );
+            assert_eq!(
+                via_borrowed_from.as_ref(),
+                via_method_bytes,
+                "From<&ArchVerdict> for Box<[u8]> impl must byte-equal \
+                 ArchVerdict::as_str().as_bytes() on \
+                 ArchVerdict::{variant:?}"
+            );
+            assert_eq!(
+                via_owned_from.len(),
+                via_method_bytes.len(),
+                "From<ArchVerdict> for Box<[u8]> must land a fit-to-\
+                 length boxed byte slice on ArchVerdict::{variant:?}"
+            );
+            assert_eq!(
+                via_borrowed_from.len(),
+                via_method_bytes.len(),
+                "From<&ArchVerdict> for Box<[u8]> must land a fit-to-\
+                 length boxed byte slice on ArchVerdict::{variant:?}"
+            );
+            let via_into_owned: Box<[u8]> = variant.into();
+            let via_into_borrowed: Box<[u8]> = (&variant).into();
+            assert_eq!(via_into_owned.as_ref(), via_method_bytes);
+            assert_eq!(via_into_borrowed.as_ref(), via_method_bytes);
+            let via_vec_bytes: Vec<u8> = <Vec<u8> as From<ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_vec_bytes.as_slice(),
+                "From<ArchVerdict> for Box<[u8]> and \
+                 From<ArchVerdict> for Vec<u8> byte-owned reverse-\
+                 projection axes must byte-agree on \
+                 ArchVerdict::{variant:?}"
+            );
+            let via_cow_bytes: std::borrow::Cow<'static, [u8]> =
+                <std::borrow::Cow<'static, [u8]> as From<ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_cow_bytes.as_ref(),
+                "From<ArchVerdict> for Box<[u8]> and \
+                 From<ArchVerdict> for Cow<'static, [u8]> byte-owned \
+                 reverse-projection axes must byte-agree on \
+                 ArchVerdict::{variant:?}"
+            );
+            let via_box_str: Box<str> = <Box<str> as From<ArchVerdict>>::from(variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_box_str.as_bytes(),
+                "byte-side From<ArchVerdict> for Box<[u8]> and \
+                 str-side From<ArchVerdict> for Box<str> axes must \
+                 byte-agree on ArchVerdict::{variant:?}"
+            );
+            let via_as_ref_bytes: &[u8] = <ArchVerdict as AsRef<[u8]>>::as_ref(&variant);
+            assert_eq!(
+                via_owned_from.as_ref(),
+                via_as_ref_bytes,
+                "From<ArchVerdict> for Box<[u8]> and AsRef<[u8]> for \
+                 ArchVerdict axes must byte-agree on \
+                 ArchVerdict::{variant:?}"
+            );
+        }
+        for &variant in ArchVerdict::ALL {
+            let owned_via_generic = generic_box_bytes_sink(variant);
+            let variant_ref: &ArchVerdict = &variant;
+            let borrowed_via_generic = generic_box_bytes_sink(variant_ref);
+            assert_eq!(
+                owned_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 ArchVerdict::{variant:?} must fold the same byte-\
+                 tail ArchVerdict::as_str().as_bytes() returns"
+            );
+            assert_eq!(
+                borrowed_via_generic.as_ref(),
+                variant.as_str().as_bytes(),
+                "<T: Into<Box<[u8]>>>-bound composition on \
+                 &ArchVerdict::{variant:?} must fold the same byte-\
+                 tail ArchVerdict::as_str().as_bytes() returns"
+            );
+        }
+        let via_iter: Vec<Box<[u8]>> = ArchVerdict::ALL.iter().map(Box::<[u8]>::from).collect();
+        let via_method: Vec<Box<[u8]>> = ArchVerdict::ALL
+            .iter()
+            .map(|v| Box::<[u8]>::from(v.as_str().as_bytes()))
+            .collect();
+        assert_eq!(
+            via_iter, via_method,
+            "`.iter().map(Box::<[u8]>::from)` over ArchVerdict::ALL \
+             must byte-equal the open-coded per-arm composition"
+        );
     }
 }
