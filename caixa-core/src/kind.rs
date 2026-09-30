@@ -289,7 +289,7 @@ impl CaixaKind {
         crate::render::CAIXA_KIND_LABEL_ACAO,
     ];
 
-    /// Substrate-canonical per-[`CaixaKind`] PascalCase wire byte-string
+    /// Substrate-canonical per-[`CaixaKind`] `PascalCase` wire byte-string
     /// every consumer that emits the Caixa's `:kind` axis onto a wire
     /// surface outside the caixa-core boundary keys off — returns the
     /// per-arm byte-string the paired
@@ -329,7 +329,7 @@ impl CaixaKind {
     ///
     /// Prior to this lift, the six [`caixa-crd::conversion`] +
     /// [`caixa-feira`] + future-M4-CR-materializer consumers that
-    /// needed the PascalCase wire byte-shape reached for one of two
+    /// needed the `PascalCase` wire byte-shape reached for one of two
     /// fragile paths: `format!("{:?}", kind)` (couples the wire format
     /// to `Debug`'s stability guarantee, which Rust's own conventions
     /// give as *no guarantee at all* — a `#[derive(Debug)]` swap for
@@ -360,7 +360,7 @@ impl CaixaKind {
     }
 
     /// Substrate-canonical inverse of [`Self::wire_name`] — parses a
-    /// PascalCase wire byte-string into the typed [`CaixaKind`]
+    /// `PascalCase` wire byte-string into the typed [`CaixaKind`]
     /// discriminator, returning `None` on any string not in the six-arm
     /// accept-set the sibling [`Self::wire_name`] emits.
     ///
@@ -452,7 +452,7 @@ impl CaixaKind {
     /// same drift-detection posture.
     ///
     /// The two axes ([`Self::as_str`] returning lowercase Portuguese
-    /// vs. the un-`rename`d `Serialize` derive emitting PascalCase
+    /// vs. the un-`rename`d `Serialize` derive emitting `PascalCase`
     /// `"Biblioteca"` / `"Binario"` / `"Servico"` / `"Supervisor"` /
     /// `"Aplicacao"`) are intentionally distinct: the wire format is
     /// the tatara-lisp author surface (`:kind Biblioteca`), while
@@ -491,9 +491,9 @@ impl CaixaKind {
 ///
 /// Pre-convergence [`CaixaKind`] carried no [`std::fmt::Display`]
 /// surface at all — every consumer past the wire format
-/// (`Serialize` → PascalCase) had to pick between two paths
+/// (`Serialize` → `PascalCase`) had to pick between two paths
 /// ([`CaixaKind::as_str`] returning the lowercase Portuguese label, or
-/// `format!("{v:?}")` on the `Debug` derive returning the PascalCase
+/// `format!("{v:?}")` on the `Debug` derive returning the `PascalCase`
 /// variant name), each with different bytes on every arm and no
 /// compile-time link between the two — with the failure surfacing as a
 /// downstream consumer's log / graph / diagnostic reading one spelling
@@ -507,7 +507,7 @@ impl CaixaKind {
 /// vocabulary shift) reaches every consumer through exactly one
 /// const-edit.
 ///
-/// The wire format axis (`Serialize` derive, PascalCase, tatara-lisp
+/// The wire format axis (`Serialize` derive, `PascalCase`, tatara-lisp
 /// author surface `:kind Biblioteca`) stays deliberately distinct from
 /// the human-readable axis (`Display` / `as_str`, lowercase Portuguese
 /// diagnostic form): the two-path split is by design, not drift. The
