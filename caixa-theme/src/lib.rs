@@ -20,6 +20,7 @@ pub mod palette;
 pub mod style;
 
 pub use blackmatter::Theme;
+pub use kazari::{Capability, ColorLevel, Stream};
 pub use palette::{Nord, Rgb};
 pub use style::{
     CAIXA_THEME_SEMANTIC_WIRE_ACCENT, CAIXA_THEME_SEMANTIC_WIRE_ADDED,

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use caixa_fmt::{FmtConfig, format_source};
 use caixa_lint::{FixSafety, apply_fixes, lint_source};
-use caixa_theme::Theme;
+use caixa_theme::{Capability, Theme};
 use clap::Args;
 
 use super::load::{RESOLVE_LISP_TARGETS_HELP, resolve_lisp_targets};
@@ -146,7 +146,7 @@ impl Lint {
                     error_count += 1;
                 }
                 let rendered = if self.no_color {
-                    let plain = Theme::blackmatter_light();
+                    let plain = Theme::blackmatter_dark().with_capability(Capability::plain());
                     d.render(&src, &plain)
                 } else {
                     d.render(&src, &theme)

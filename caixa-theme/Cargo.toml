@@ -9,7 +9,10 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+anstyle = { workspace = true }
 gen-platform = { workspace = true }
+irodori = { workspace = true }
+kazari = { workspace = true }
 serde = { workspace = true }
 
 [lints]

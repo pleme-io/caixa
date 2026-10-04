@@ -4,6 +4,8 @@
 //! and blackmatter-shell. Light and high-contrast overlays are provided so a
 //! caller can pick at runtime.
 
+use kazari::{Capability, ColorLevel, Role, Stream};
+
 use crate::palette::{Nord, Rgb};
 use crate::style::Semantic;
 
@@ -11,6 +13,7 @@ use crate::style::Semantic;
 pub struct Theme {
     pub name: &'static str,
     resolver: fn(Semantic) -> Rgb,
+    caps: Capability,
 }
 
 impl Theme {
@@ -19,6 +22,7 @@ impl Theme {
         Self {
             name: "blackmatter-dark",
             resolver: blackmatter_dark_color,
+            caps: Capability::probe_stream(Stream::Stderr),
         }
     }
 
@@ -27,7 +31,19 @@ impl Theme {
         Self {
             name: "blackmatter-light",
             resolver: blackmatter_light_color,
+            caps: Capability::probe_stream(Stream::Stderr),
         }
+    }
+
+    #[must_use]
+    pub const fn with_capability(mut self, caps: Capability) -> Self {
+        self.caps = caps;
+        self
+    }
+
+    #[must_use]
+    pub const fn capability(&self) -> Capability {
+        self.caps
     }
 
     #[must_use]
@@ -37,12 +53,19 @@ impl Theme {
 
     #[must_use]
     pub fn ansi(&self, s: Semantic) -> String {
-        self.color(s).fg_ansi()
+        if self.caps.level == ColorLevel::None {
+            return String::new();
+        }
+        let rgb = kazari::Rgb::from(self.color(s));
+        anstyle::Style::new()
+            .fg_color(Some(rgb.to_anstyle(self.caps.level)))
+            .render()
+            .to_string()
     }
 
     #[must_use]
     pub fn paint(&self, s: Semantic, text: &str) -> String {
-        format!("{}{}{}", self.ansi(s), text, crate::palette::ANSI_RESET)
+        kazari::paint_rgb_at(self.color(s).into(), text, false, false, &self.caps)
     }
 }
 
@@ -52,24 +75,23 @@ impl Default for Theme {
     }
 }
 
-// Arms are merged by their target Nord color so each equivalence class
-// (Error ≡ Removed on alert-red, String ≡ Added on growth-green, …) reads
-// as a single design decision rather than a duplicated-arm coincidence a
-// future overlay edit could silently decouple. Arm order follows the
-// declaration order of each group's first `Semantic` variant in
-// `Semantic::ALL`, so the resolver still tracks the enum surface.
-fn blackmatter_dark_color(s: Semantic) -> Rgb {
+#[must_use]
+pub const fn blackmatter_dark_role(s: Semantic) -> Role {
     match s {
-        Semantic::Keyword => Nord::NORD9,
-        Semantic::Symbol | Semantic::Unchanged => Nord::NORD4,
-        Semantic::KeywordArg | Semantic::Accent | Semantic::Info => Nord::NORD8,
-        Semantic::String | Semantic::Added => Nord::NORD14,
-        Semantic::Number => Nord::NORD15,
-        Semantic::Literal | Semantic::Hint => Nord::NORD13,
-        Semantic::Comment | Semantic::Muted => Nord::NORD3,
-        Semantic::Error | Semantic::Removed => Nord::NORD11,
-        Semantic::Warning => Nord::NORD12,
+        Semantic::Keyword => Role::Info,
+        Semantic::Symbol | Semantic::Unchanged => Role::TextMuted,
+        Semantic::KeywordArg | Semantic::Accent | Semantic::Info => Role::Primary,
+        Semantic::String | Semantic::Added => Role::Ok,
+        Semantic::Number => Role::Ident,
+        Semantic::Literal | Semantic::Hint => Role::Pending,
+        Semantic::Comment | Semantic::Muted => Role::TextDim,
+        Semantic::Error | Semantic::Removed => Role::Error,
+        Semantic::Warning => Role::Warn,
     }
+}
+
+fn blackmatter_dark_color(s: Semantic) -> Rgb {
+    kazari::Theme::default().color(blackmatter_dark_role(s)).into()
 }
 
 // Invert background-assuming choices for readability on light terminals;
@@ -107,11 +129,45 @@ mod tests {
 
     #[test]
     fn paint_wraps_with_reset() {
-        let t = Theme::blackmatter_dark();
+        let t = Theme::blackmatter_dark()
+            .with_capability(Capability::fixed(ColorLevel::Truecolor, 80, true));
         let out = t.paint(Semantic::Error, "boom");
-        assert!(out.starts_with("\x1b["));
-        assert!(out.ends_with(crate::palette::ANSI_RESET));
-        assert!(out.contains("boom"));
+        assert_eq!(out, format!("{}boom{}", t.ansi(Semantic::Error), crate::palette::ANSI_RESET));
+        assert_eq!(t.ansi(Semantic::Error), Nord::NORD11.fg_ansi());
+    }
+
+    #[test]
+    fn paint_degrades_through_every_kazari_color_level() {
+        for level in ColorLevel::ALL {
+            let caps = Capability::fixed(level, 80, true);
+            let t = Theme::blackmatter_dark().with_capability(caps);
+            for &sem in Semantic::ALL {
+                assert_eq!(
+                    t.paint(sem, "x"),
+                    kazari::paint_rgb_at(t.color(sem).into(), "x", false, false, &caps),
+                );
+            }
+        }
+        let plain = Theme::blackmatter_dark().with_capability(Capability::plain());
+        assert_eq!(plain.paint(Semantic::Error, "boom"), "boom");
+        assert_eq!(plain.ansi(Semantic::Error), "");
+    }
+
+    #[test]
+    fn dark_overlay_resolves_through_kazari_roles() {
+        let t = Theme::blackmatter_dark();
+        for &sem in Semantic::ALL {
+            assert_eq!(
+                t.color(sem),
+                Rgb::from(kazari::Theme::default().color(blackmatter_dark_role(sem))),
+            );
+        }
+        assert_eq!(t.color(Semantic::Keyword), Nord::NORD9);
+        assert_eq!(t.color(Semantic::Symbol), Nord::NORD4);
+        assert_eq!(t.color(Semantic::Accent), Nord::NORD8);
+        assert_eq!(t.color(Semantic::Number), Nord::NORD15);
+        assert_eq!(t.color(Semantic::Hint), Nord::NORD13);
+        assert_eq!(t.color(Semantic::Muted), Nord::NORD3);
     }
 
     #[test]
