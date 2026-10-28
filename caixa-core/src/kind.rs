@@ -2559,7 +2559,7 @@ impl TryFrom<Vec<u8>> for CaixaKind {
 /// and needs a typed [`CaixaKind`] — a future M4
 /// `pleme.io/v1alpha1/Caixa` CR admission-webhook body reader that hands
 /// the `spec.kind` `PascalCase` scalar off as an owned [`String`] after
-/// UTF-8 validation, a `serde_yaml::from_str` / `serde_json::from_str`
+/// UTF-8 validation, a `serde_norway::from_str` / `serde_json::from_str`
 /// de-serialize round-trip whose composer surfaces the `:kind` scalar as
 /// an owned [`String`] typed field, a
 /// `feira init --kind <Biblioteca|Binario|Servico|Supervisor|Aplicacao|Acao>`

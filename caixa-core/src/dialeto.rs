@@ -2608,7 +2608,7 @@ impl TryFrom<Vec<u8>> for CaixaDialeto {
 /// [`CaixaDialeto`] — a future admission-webhook body reader that hands
 /// a per-manifest `spec.dialeto` `PascalCase` scalar off as an owned
 /// [`String`] after UTF-8 validation commits allocation, a
-/// `serde_yaml::from_str` / `serde_json::from_str` de-serialize composer
+/// `serde_norway::from_str` / `serde_json::from_str` de-serialize composer
 /// that surfaces the classification scalar as an owned [`String`] typed
 /// field, a future
 /// `feira dialeto --filter <Pacote|Molde|MoldePosicional|Desconhecido>`

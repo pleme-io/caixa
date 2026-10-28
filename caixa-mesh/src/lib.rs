@@ -24,7 +24,7 @@
 //! use caixa_mesh::programs_for_aplicacao;
 //!
 //! let aplicacao: Caixa = Caixa::from_lisp(src)?;
-//! let entries: Vec<serde_yaml::Value> = programs_for_aplicacao(&aplicacao)?;
+//! let entries: Vec<serde_norway::Value> = programs_for_aplicacao(&aplicacao)?;
 //! // → one entry per :membros, suitable for fan-out into the
 //! //   cluster's lareira-fleet-programs HelmRelease.
 //! ```
@@ -58,12 +58,12 @@ pub enum Error {
     #[error("aplicacao typed shape violation: {0}")]
     InvalidAplicacao(#[from] caixa_core::AplicacaoError),
     #[error("yaml: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] serde_norway::Error),
 }
 
 /// Render one `programs.yaml` entry per `:membros` in the Aplicacao.
 ///
-/// Each entry is a typed [`serde_yaml::Value::Mapping`] suitable for
+/// Each entry is a typed [`serde_norway::Value::Mapping`] suitable for
 /// upserting into a `lareira-fleet-programs` HelmRelease's
 /// `spec.values.programs[]` (the same shape `caixa-flux::programs_yaml_entry`
 /// emits for individual Servico caixas).
@@ -78,7 +78,7 @@ pub enum Error {
 ///     Aplicacao-level `politicas` overrides.
 ///   - Mesh-level concerns (Cilium NetworkPolicy, Gateway) are
 ///     deferred to follow-up rendering verbs in this crate (M3.x).
-pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
+pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_norway::Value>, Error> {
     // Route the entry gate through the canonical [`typed_view`] entry
     // point so every per-Aplicacao renderer in this crate
     // (`programs_for_aplicacao`, `cilium_network_policies`,
@@ -122,7 +122,7 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
 pub(crate) fn programs_for_aplicacao_from_spec(
     caixa: &Caixa,
     spec: &AplicacaoSpec,
-) -> Result<Vec<serde_yaml::Value>, Error> {
+) -> Result<Vec<serde_norway::Value>, Error> {
     // `:placement` overlay — surfaces the typed Aplicacao-level
     // distribution strategy + cluster list (validated upstream by
     // [`AplicacaoSpec::validate_placement`]: non-empty `:clusters`,
@@ -177,11 +177,11 @@ pub(crate) fn programs_for_aplicacao_from_spec(
     // is byte-for-byte identical (validated by the peer
     // `aplicacao_spec_placement_returns_placement_ref_byte_equal_across_permutations`
     // reference-identity pin).
-    let placement_value = serde_yaml::to_value(spec.placement())?;
+    let placement_value = serde_norway::to_value(spec.placement())?;
 
     let mut out = Vec::with_capacity(spec.membros().len());
     for m in spec.membros() {
-        let mut entry = serde_yaml::Mapping::new();
+        let mut entry = serde_norway::Mapping::new();
         // Route the per-`:membros` entry-`name:` byte-string through the
         // typed [`Membro::nome`] accessor rather than the raw `.caixa`
         // field access — the last un-lifted `.caixa.clone()` copy of the
@@ -737,7 +737,7 @@ pub use caixa_core::CILIUM_AUTH_MODE_DISABLED;
 /// body rather than at scattered per-emitter inline closure bodies.
 /// Consumed by the `cilium_network_policies` per-`(:de, :para)` emitter's
 /// `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
-/// |required| serde_yaml::Value::String(cilium_auth_mode(required).into()))`
+/// |required| serde_norway::Value::String(cilium_auth_mode(required).into()))`
 /// closure body the prior inline `if required { CILIUM_AUTH_MODE_REQUIRED }
 /// else { CILIUM_AUTH_MODE_DISABLED }` per-arm dispatch sat at (plus the
 /// caixa-core in-file `single_field_overlay_threads_typed_value_through_
@@ -2548,7 +2548,7 @@ pub use caixa_core::GATEWAY_API_KEY_REQUEST;
 /// validates against the official schema.
 ///
 /// [cnp]: https://docs.cilium.io/en/stable/security/policy/index.html
-pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
+pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_norway::Value>, Error> {
     let spec = typed_view(caixa)?;
     cilium_network_policies_from_spec(caixa, &spec)
 }
@@ -2571,7 +2571,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
 pub(crate) fn cilium_network_policies_from_spec(
     caixa: &Caixa,
     spec: &AplicacaoSpec,
-) -> Result<Vec<serde_yaml::Value>, Error> {
+) -> Result<Vec<serde_norway::Value>, Error> {
     let namespace = DEFAULT_NAMESPACE; // operators scope per-cluster manifests
     // `:politicas :mtls-required` overlay — when the typed slot
     // carries a value it surfaces as a per-ingress-rule
@@ -2629,7 +2629,7 @@ pub(crate) fn cilium_network_policies_from_spec(
     let mtls_overlay = single_field_overlay(
         spec.politicas().mtls_required(),
         CILIUM_KEY_MODE,
-        |required| serde_yaml::Value::String(cilium_auth_mode(required).into()),
+        |required| serde_norway::Value::String(cilium_auth_mode(required).into()),
     );
     // Fan typed edges into per-`(:de, :para)` groups — the policy
     // identity axis. A `BTreeMap` keyed by the pair gives deterministic
@@ -2744,7 +2744,7 @@ pub(crate) fn cilium_network_policies_from_spec(
         // .pleme.pleme.io/aplicacao)` shares one typed dispatch on the
         // substrate primitive.
         let from_endpoint = label_selector(pleme_program_in_aplicacao_selector(de, caixa.nome()));
-        let mut ingress_rule = serde_yaml::Mapping::new();
+        let mut ingress_rule = serde_norway::Mapping::new();
         ingress_rule.insert_sequence(CILIUM_KEY_FROM_ENDPOINTS, vec![from_endpoint]);
 
         // One `toPorts[]` entry per typed edge in the group — Cilium
@@ -2756,8 +2756,8 @@ pub(crate) fn cilium_network_policies_from_spec(
         for c in edges {
             // toPorts — wit-shape-aware. HTTP gets L7 rules; pubsub +
             // store get L4-only (Cilium can't introspect those protocols).
-            let mut to_port = serde_yaml::Mapping::new();
-            let mut port_entry = serde_yaml::Mapping::new();
+            let mut to_port = serde_norway::Mapping::new();
+            let mut port_entry = serde_norway::Mapping::new();
             // The per-destination Servico TCP port every emitted CNP's
             // ingress[].toPorts[].ports[0].port axis reads now routes
             // through the canonical [`AplicacaoSpec::port_for_destination`]
@@ -2836,9 +2836,9 @@ pub(crate) fn cilium_network_policies_from_spec(
             // `--release`) reaches both call sites by construction
             // rather than through a coordinated per-consumer rewrite.
             if let Some(endpoint) = c.target_projected().http_endpoint() {
-                let mut http_rule = serde_yaml::Mapping::new();
+                let mut http_rule = serde_norway::Mapping::new();
                 http_rule.insert_string(CILIUM_KEY_PATH, endpoint);
-                let mut rules = serde_yaml::Mapping::new();
+                let mut rules = serde_norway::Mapping::new();
                 rules.insert_singleton_mapping_sequence(CILIUM_KEY_HTTP, http_rule);
                 to_port.insert_mapping(KUBE_KEY_RULES, rules);
             }
@@ -2847,7 +2847,7 @@ pub(crate) fn cilium_network_policies_from_spec(
         ingress_rule.insert_sequence(CILIUM_KEY_TO_PORTS, to_ports_seq);
         ingress_rule.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, mtls_overlay.as_ref());
 
-        let mut policy_spec = serde_yaml::Mapping::new();
+        let mut policy_spec = serde_norway::Mapping::new();
         policy_spec.insert_str_key(CILIUM_KEY_ENDPOINT_SELECTOR, endpoint_selector);
         policy_spec.insert_singleton_mapping_sequence(CILIUM_KEY_INGRESS, ingress_rule);
         policy.insert_mapping(KUBE_KEY_SPEC, policy_spec);
@@ -2870,7 +2870,7 @@ pub(crate) fn cilium_network_policies_from_spec(
 ///   - one `gateway.networking.k8s.io/v1 HTTPRoute` per declared
 ///     `:entrada :paths` entry (or one catch-all when paths is empty),
 ///     pointing at the destination Servico.
-pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
+pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_norway::Value>, Error> {
     let spec = typed_view(caixa)?;
     gateway_routes_from_spec(caixa, &spec)
 }
@@ -2897,7 +2897,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 pub(crate) fn gateway_routes_from_spec(
     caixa: &Caixa,
     spec: &AplicacaoSpec,
-) -> Result<Vec<serde_yaml::Value>, Error> {
+) -> Result<Vec<serde_norway::Value>, Error> {
     // Route the per-`:entrada` composite-reference read through the
     // lifted [`caixa_core::AplicacaoSpec::entrada`] accessor rather
     // than the raw `spec.entrada.as_ref()` field access — the
@@ -2948,7 +2948,7 @@ pub(crate) fn gateway_routes_from_spec(
         namespace,
         BTreeMap::new(),
     );
-    let mut listener = serde_yaml::Mapping::new();
+    let mut listener = serde_norway::Mapping::new();
     // Per-listener name-discriminator scalar — reads from the lifted
     // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] `&'static str` const so
     // a future substrate-side listener-name migration (`"http"` →
@@ -3005,7 +3005,7 @@ pub(crate) fn gateway_routes_from_spec(
     // sibling [`caixa_core::Entrada::resolved_paths`] (1449891)
     // path-list resolver on the per-HTTPRoute per-rule path axis.
     listener.insert_string(GATEWAY_API_KEY_HOSTNAME, entrada.hostname());
-    let mut g_spec = serde_yaml::Mapping::new();
+    let mut g_spec = serde_norway::Mapping::new();
     // `spec.gatewayClassName` binds the emitted `Gateway` to the
     // substrate's chosen K8s Gateway API controller — the same Cilium
     // eBPF-identity data plane the sibling `cilium_network_policies`
@@ -3083,7 +3083,7 @@ pub(crate) fn gateway_routes_from_spec(
         BTreeMap::new(),
     );
 
-    let mut parent_ref = serde_yaml::Mapping::new();
+    let mut parent_ref = serde_norway::Mapping::new();
     parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome());
     // Per-parentRef listener-selector sub-axis — pins the emitted
     // `HTTPRoute` to the parent Gateway's sole HTTP listener by name,
@@ -3169,7 +3169,7 @@ pub(crate) fn gateway_routes_from_spec(
     // tooling parses — no per-renderer ad-hoc duration formatting.
     let timeout_overlay =
         single_field_overlay(spec.politicas().timeout(), GATEWAY_API_KEY_REQUEST, |d| {
-            serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d))
+            serde_norway::Value::String(caixa_core::supervisor::duration_codec::render(d))
         });
     // `:politicas :retries` overlay — when the typed slot carries a
     // value it surfaces as a per-rule `retry: { attempts: <N> }` block
@@ -3215,16 +3215,16 @@ pub(crate) fn gateway_routes_from_spec(
     let retry_overlay = single_field_overlay(
         spec.politicas().retries(),
         GATEWAY_API_KEY_ATTEMPTS,
-        |attempts| serde_yaml::Value::Number(attempts.into()),
+        |attempts| serde_norway::Value::Number(attempts.into()),
     );
     let mut rules = Vec::with_capacity(paths.len());
     for path in paths {
-        let mut path_match = serde_yaml::Mapping::new();
+        let mut path_match = serde_norway::Mapping::new();
         path_match.insert_string(KUBE_KEY_TYPE, GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX);
         path_match.insert_string(GATEWAY_API_KEY_VALUE, path);
-        let mut match_entry = serde_yaml::Mapping::new();
+        let mut match_entry = serde_norway::Mapping::new();
         match_entry.insert_mapping(GATEWAY_API_KEY_PATH, path_match);
-        let mut backend_ref = serde_yaml::Mapping::new();
+        let mut backend_ref = serde_norway::Mapping::new();
         // Substrate-canonical per-`:entrada` destination-Servico
         // scalar — routes through the lifted
         // [`caixa_core::Entrada::destination`] typed accessor on the
@@ -3287,7 +3287,7 @@ pub(crate) fn gateway_routes_from_spec(
             KUBE_KEY_PORT,
             spec.port_for_destination(entrada.destination()),
         );
-        let mut rule = serde_yaml::Mapping::new();
+        let mut rule = serde_norway::Mapping::new();
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_MATCHES, match_entry);
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_BACKEND_REFS, backend_ref);
         rule.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, timeout_overlay.as_ref());
@@ -3295,7 +3295,7 @@ pub(crate) fn gateway_routes_from_spec(
         rules.push_mapping(rule);
     }
 
-    let mut r_spec = serde_yaml::Mapping::new();
+    let mut r_spec = serde_norway::Mapping::new();
     r_spec.insert_singleton_mapping_sequence(GATEWAY_API_KEY_PARENT_REFS, parent_ref);
     // Substrate-canonical per-`:entrada` DNS-hostname plural
     // resolver — routes through the lifted
@@ -3321,15 +3321,15 @@ pub(crate) fn gateway_routes_from_spec(
         entrada
             .hostnames()
             .into_iter()
-            .map(|h| serde_yaml::Value::String(h.to_string()))
+            .map(|h| serde_norway::Value::String(h.to_string()))
             .collect(),
     );
     r_spec.insert_sequence(KUBE_KEY_RULES, rules);
     route.insert_mapping(KUBE_KEY_SPEC, r_spec);
 
     Ok(vec![
-        serde_yaml::Value::Mapping(gateway),
-        serde_yaml::Value::Mapping(route),
+        serde_norway::Value::Mapping(gateway),
+        serde_norway::Value::Mapping(route),
     ])
 }
 
@@ -3367,7 +3367,7 @@ pub(crate) fn gateway_routes_from_spec(
 /// typed_view(caixa)?;` prelude collapsed), pinned by the drift-
 /// detection test
 /// [`tests::render_all_byte_matches_manual_three_renderer_composition`].
-pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
+pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_norway::Value>, Error> {
     let spec = typed_view(caixa)?;
     let mut out = Vec::new();
     out.extend(programs_for_aplicacao_from_spec(caixa, &spec)?);
@@ -7147,8 +7147,8 @@ mod tests {
             let via_primitive = caixa_core::require_aplicacao_view::<Error>(&c)
                 .expect("valid aplicacao passes require_aplicacao_view");
             assert_eq!(
-                serde_yaml::to_string(&via_wrapper).expect("typed_view spec serializes"),
-                serde_yaml::to_string(&via_primitive)
+                serde_norway::to_string(&via_wrapper).expect("typed_view spec serializes"),
+                serde_norway::to_string(&via_primitive)
                     .expect("require_aplicacao_view spec serializes"),
                 "typed_view's Ok-arm AplicacaoSpec must equal \
                  caixa_core::require_aplicacao_view's Ok-arm AplicacaoSpec \
@@ -7229,7 +7229,7 @@ mod tests {
 
     // ── programs.yaml :placement overlay ─────────────────────────────────
 
-    fn placement_blocks(entries: &[serde_yaml::Value]) -> Vec<&serde_yaml::Mapping> {
+    fn placement_blocks(entries: &[serde_norway::Value]) -> Vec<&serde_norway::Mapping> {
         entries
             .iter()
             .map(|e| {
@@ -7545,7 +7545,7 @@ mod tests {
             affinity: None,
             shard_key: None,
         };
-        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let value = serde_norway::to_value(&placement).expect("serialize Placement");
         let mapping = value
             .as_mapping()
             .expect("Placement serializes to a mapping");
@@ -7612,7 +7612,7 @@ mod tests {
             affinity: None,
             shard_key: None,
         };
-        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let value = serde_norway::to_value(&placement).expect("serialize Placement");
         let mapping = value
             .as_mapping()
             .expect("Placement serializes to a mapping");
@@ -7691,7 +7691,7 @@ mod tests {
             affinity: Some("data-locality".to_string()),
             shard_key: None,
         };
-        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let value = serde_norway::to_value(&placement).expect("serialize Placement");
         let mapping = value
             .as_mapping()
             .expect("Placement serializes to a mapping");
@@ -7781,7 +7781,7 @@ mod tests {
             affinity: None,
             shard_key: Some("$tenantId".to_string()),
         };
-        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let value = serde_norway::to_value(&placement).expect("serialize Placement");
         let mapping = value
             .as_mapping()
             .expect("Placement serializes to a mapping");
@@ -9477,7 +9477,7 @@ mod tests {
 
     // ── HTTPRoute :politicas :timeout overlay ────────────────────────────
 
-    fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
+    fn httproute_rules(docs: &[serde_norway::Value]) -> Vec<serde_norway::Value> {
         find_by_kind(docs, GATEWAY_API_KIND_HTTP_ROUTE)
             .and_then(|v| kube_spec_seq_field(v, KUBE_KEY_RULES))
             .cloned()
@@ -9798,7 +9798,7 @@ mod tests {
 
     // ── CiliumNetworkPolicy :politicas :mtls-required overlay ────────────
 
-    fn cnp_ingress_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
+    fn cnp_ingress_rules(docs: &[serde_norway::Value]) -> Vec<serde_norway::Value> {
         docs.iter()
             .filter(|d| kube_kind_is(d, CILIUM_KIND_NETWORK_POLICY))
             .filter_map(|d| kube_spec_seq_first(d, CILIUM_KEY_INGRESS).cloned())
@@ -10311,51 +10311,51 @@ mod tests {
 
         for (outer, inner) in axes.iter().copied() {
             // Positive path — leaf string is present under `<outer>.<inner>`.
-            let mut inner_map = serde_yaml::Mapping::new();
+            let mut inner_map = serde_norway::Mapping::new();
             inner_map.insert(
-                serde_yaml::Value::String(inner.to_string()),
-                serde_yaml::Value::String("present".to_string()),
+                serde_norway::Value::String(inner.to_string()),
+                serde_norway::Value::String("present".to_string()),
             );
-            let mut root_present = serde_yaml::Mapping::new();
+            let mut root_present = serde_norway::Mapping::new();
             root_present.insert(
-                serde_yaml::Value::String(outer.to_string()),
-                serde_yaml::Value::Mapping(inner_map),
+                serde_norway::Value::String(outer.to_string()),
+                serde_norway::Value::Mapping(inner_map),
             );
-            let present = serde_yaml::Value::Mapping(root_present);
+            let present = serde_norway::Value::Mapping(root_present);
 
             // Outer-absent short-circuit — no `<outer>:` key anywhere.
-            let outer_absent = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+            let outer_absent = serde_norway::Value::Mapping(serde_norway::Mapping::new());
 
             // Inner-absent short-circuit — outer sub-mapping present but empty.
-            let mut root_inner_absent = serde_yaml::Mapping::new();
+            let mut root_inner_absent = serde_norway::Mapping::new();
             root_inner_absent.insert(
-                serde_yaml::Value::String(outer.to_string()),
-                serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+                serde_norway::Value::String(outer.to_string()),
+                serde_norway::Value::Mapping(serde_norway::Mapping::new()),
             );
-            let inner_absent = serde_yaml::Value::Mapping(root_inner_absent);
+            let inner_absent = serde_norway::Value::Mapping(root_inner_absent);
 
             // Non-string-leaf short-circuit — `<inner>:` present as an integer,
             // so the trailing `.as_str()` shape-gate rejects.
-            let mut inner_non_str = serde_yaml::Mapping::new();
+            let mut inner_non_str = serde_norway::Mapping::new();
             inner_non_str.insert(
-                serde_yaml::Value::String(inner.to_string()),
-                serde_yaml::Value::Number(42_u64.into()),
+                serde_norway::Value::String(inner.to_string()),
+                serde_norway::Value::Number(42_u64.into()),
             );
-            let mut root_non_str = serde_yaml::Mapping::new();
+            let mut root_non_str = serde_norway::Mapping::new();
             root_non_str.insert(
-                serde_yaml::Value::String(outer.to_string()),
-                serde_yaml::Value::Mapping(inner_non_str),
+                serde_norway::Value::String(outer.to_string()),
+                serde_norway::Value::Mapping(inner_non_str),
             );
-            let non_str = serde_yaml::Value::Mapping(root_non_str);
+            let non_str = serde_norway::Value::Mapping(root_non_str);
 
             // Outer-non-mapping short-circuit — `<outer>:` present as a scalar,
             // so the middle-hop `.get(<inner>)` on a non-mapping arm falls off.
-            let mut root_outer_scalar = serde_yaml::Mapping::new();
+            let mut root_outer_scalar = serde_norway::Mapping::new();
             root_outer_scalar.insert(
-                serde_yaml::Value::String(outer.to_string()),
-                serde_yaml::Value::String("scalar".to_string()),
+                serde_norway::Value::String(outer.to_string()),
+                serde_norway::Value::String("scalar".to_string()),
             );
-            let outer_scalar = serde_yaml::Value::Mapping(root_outer_scalar);
+            let outer_scalar = serde_norway::Value::Mapping(root_outer_scalar);
 
             for fixture in [
                 &present,

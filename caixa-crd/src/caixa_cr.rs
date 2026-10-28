@@ -143,7 +143,7 @@ mod tests {
             deps: vec![],
         };
         let cr = Caixa::new("demo", spec);
-        let yaml = serde_yaml::to_string(&cr).unwrap();
+        let yaml = serde_norway::to_string(&cr).unwrap();
         assert!(yaml.contains("kind: Caixa"));
         assert!(yaml.contains("apiVersion: caixa.pleme.io/v1alpha1"));
         assert!(yaml.contains("nome: demo"));

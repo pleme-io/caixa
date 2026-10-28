@@ -423,7 +423,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "tatara-lisp",
  "thiserror 2.0.18",
 ]
@@ -441,7 +441,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "thiserror 2.0.18",
 ]
 
@@ -471,7 +471,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "tatara-lisp",
  "tatara-process",
  "tempfile",
@@ -500,7 +500,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "thiserror 2.0.18",
 ]
 
@@ -524,7 +524,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -583,7 +583,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "thiserror 2.0.18",
 ]
 
@@ -605,7 +605,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -650,7 +650,7 @@ dependencies = [
  "proptest",
  "semver",
  "serde",
- "serde_yaml",
+ "serde_norway",
  "tatara-lisp",
  "tempfile",
  "thiserror 2.0.18",
@@ -664,7 +664,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "tatara-process",
  "thiserror 2.0.18",
 ]
@@ -1072,7 +1072,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1111,7 +1111,6 @@ dependencies = [
  "atomic",
  "pear",
  "serde",
- "serde_yaml",
  "toml",
  "uncased",
  "version_check",
@@ -1255,9 +1254,9 @@ dependencies = [
 
 [[package]]
 name = "gen-macros"
-version = "0.1.52"
+version = "0.1.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45aa54e78709c6e9644351c49be01154ea4e2ec8f52197e06312d594b3fc9b7b"
+checksum = "95031891fe4a8b7893adac592e70b63b3601db258e6c855bc8b447d414247520"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1266,9 +1265,9 @@ dependencies = [
 
 [[package]]
 name = "gen-platform"
-version = "0.1.52"
+version = "0.1.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bbe0fc580d799cdec0d3e87f0b70eac8958aaf5d5f2051652512aca3ea2c07b"
+checksum = "42f8754d46d4c50c8b38377d45a595f7ab208e94adc6585c110ec97125bd53f7"
 dependencies = [
  "gen-macros",
  "gen-types",
@@ -1280,9 +1279,9 @@ dependencies = [
 
 [[package]]
 name = "gen-types"
-version = "0.1.52"
+version = "0.1.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a36de42423d45a3a53484df348c00d9691603252d6630dd3f980e01d560da7eb"
+checksum = "b3e137370b9fd815da59dfde4533d8f784d1195bf446f4eaabc1451b11b93683"
 dependencies = [
  "blake3",
  "chrono",
@@ -1582,9 +1581,9 @@ dependencies = [
 
 [[package]]
 name = "iac-forge"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d7debe94753bde9ad1d60735d39aa96af70e98e19cac8df295d41408de29703"
+checksum = "0ccb32efb969464e0befcfa47140dbd98e2b05efef384d82b66c2cc84c0f4af2"
 dependencies = [
  "blake3",
  "meimei",
@@ -2198,16 +2197,16 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openapi-forge"
-version = "0.1.7"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba0d692bfa4a3bcd8d438a32137df663300b3c75b8bd282b2164b0bddf30de7f"
+checksum = "8012994858a5b3bc8f1e00713defc391a86b075916013302e62dbd7d60dd8d85"
 dependencies = [
  "indexmap",
  "pleme-io-takumi",
  "sekkei",
  "serde",
  "serde_json",
- "serde_yaml_ng",
+ "serde_norway",
  "thiserror 2.0.18",
 ]
 
@@ -2435,9 +2434,9 @@ dependencies = [
 
 [[package]]
 name = "pleme-io-takumi"
-version = "0.1.2"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffaca7708d11e770b80cc69993aaa791a9bfcd61ec138f0be9e364177384ab42"
+checksum = "f62dde6433e76e0c4a8bc1919dadc74d8fa5679107217851a6aac72416556538"
 dependencies = [
  "indexmap",
  "sekkei",
@@ -2823,7 +2822,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3046,13 +3045,13 @@ dependencies = [
 
 [[package]]
 name = "sekkei"
-version = "0.1.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c292eaa6530dcd2f082f7812cb50bbddc9248a4f1dfb43b6d8c28653ecffd414"
+checksum = "e5d0101ba01060b127d14d61dbf7f7394ad86dbf5c70fc7fd6fcb98ae14d919c"
 dependencies = [
  "serde",
  "serde_json",
- "serde_yaml_ng",
+ "serde_norway",
  "thiserror 2.0.18",
 ]
 
@@ -3131,6 +3130,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_norway"
+version = "0.9.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e408f29489b5fd500fab51ff1484fc859bb655f32c671f307dcd733b72e8168c"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml-norway",
+]
+
+[[package]]
 name = "serde_repr"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3155,19 +3167,6 @@ name = "serde_yaml"
 version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
-]
-
-[[package]]
-name = "serde_yaml_ng"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
 dependencies = [
  "indexmap",
  "itoa",
@@ -3239,9 +3238,9 @@ dependencies = [
 
 [[package]]
 name = "shikumi"
-version = "0.1.1083"
+version = "0.1.1084"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "253ee1f04558dcc476384a4be719428df4322816ad73c5e2e7731d3808cc5523"
+checksum = "d340f2caa2bc6c020e7223bc89cd330687a9dd2aacdcfe6686f46ba1339ea1c1"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -3252,7 +3251,7 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -3383,18 +3382,18 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tatara-closed-set"
-version = "0.3.27"
+version = "0.3.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c270ba04ecfd2268f817e0d41fd19e829315f890bc97d372f1fbe291083d603c"
+checksum = "ab5957a85fdf3bbabe58332b59b4d1eae91c6d8e12d6aebfcad85d044fb01fd7"
 dependencies = [
  "tatara-closed-set-derive",
 ]
 
 [[package]]
 name = "tatara-closed-set-derive"
-version = "0.3.27"
+version = "0.3.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efc4de162992884b188fac459128bb0546a776f4f33a48604302fcae47f008cf"
+checksum = "553e05104250924bb943f4427051e4f52ca6eac63218a0e0a0c18651edd1c2d3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3403,9 +3402,9 @@ dependencies = [
 
 [[package]]
 name = "tatara-core"
-version = "0.2.202"
+version = "0.2.830"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "548c9f02281e1b8dfe62a33ba8b14525b034621c366d1ab3fd72f904e2115ad6"
+checksum = "4bcdd0be6c219bfcfc1a989bfc856a1c0732fb6497649a53c82f8432bee766d0"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3426,9 +3425,9 @@ dependencies = [
 
 [[package]]
 name = "tatara-lisp"
-version = "0.3.27"
+version = "0.3.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6d4818fc60a03547e3722cc197aaec740130f433e4d022613ba36e36a406ee9"
+checksum = "e3c1ccb522ac57a35a9dbfdf3b7f2bca57391c807f95d4d4b2942d64bcecf18c"
 dependencies = [
  "blake3",
  "serde",
@@ -3440,9 +3439,9 @@ dependencies = [
 
 [[package]]
 name = "tatara-lisp-derive"
-version = "0.3.27"
+version = "0.3.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02e392fa6003be174dfa7a96d9d577c50ddc51a12fccf2caee401f7cc5376fb9"
+checksum = "e41fe8cff169dbab6425e042c9a9293e0e2a828fe433be527eb7d1d72e113cfe"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3451,13 +3450,14 @@ dependencies = [
 
 [[package]]
 name = "tatara-process"
-version = "0.2.202"
+version = "0.2.830"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "138d17dba3cf65817b4790f116455e9224e4786027993569a71cd973ca1209f9"
+checksum = "1561d079e2b466cb917ee94ec666434791cb30636b4cbf4235195fcdf8f0bbb8"
 dependencies = [
  "anyhow",
  "blake3",
  "chrono",
+ "either",
  "hex",
  "humantime",
  "k8s-openapi",
@@ -3483,7 +3483,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3928,6 +3928,12 @@ name = "unsafe-libyaml"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
+
+[[package]]
+name = "unsafe-libyaml-norway"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39abd59bf32521c7f2301b52d05a6a2c975b6003521cbd0c6dc1582f0a22104"
 
 [[package]]
 name = "untrusted"

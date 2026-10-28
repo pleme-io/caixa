@@ -29,8 +29,8 @@
 //! use caixa_helm::{ChartDir, render_chart_for_servico};
 //!
 //! let caixa: Caixa = Caixa::from_lisp(src)?;
-//! let cu_yaml: serde_yaml::Value =
-//!     serde_yaml::from_str(std::fs::read_to_string("servicos/hello-rio.computeunit.yaml")?)?;
+//! let cu_yaml: serde_norway::Value =
+//!     serde_norway::from_str(std::fs::read_to_string("servicos/hello-rio.computeunit.yaml")?)?;
 //! let dir: ChartDir = render_chart_for_servico(&caixa, &cu_yaml)?;
 //! dir.write_to(std::path::Path::new("/tmp/lareira-hello-rio"))?;
 //! ```
@@ -79,7 +79,7 @@ pub enum Error {
     #[error("computeunit yaml missing required field: {0}")]
     MissingField(&'static str),
     #[error("yaml: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] serde_norway::Error),
     #[error("render: {0}")]
     Render(#[from] caixa_core::RenderError),
     #[error("io: {0}")]
@@ -339,7 +339,7 @@ pub use caixa_core::HELM_CHART_TYPE_LIBRARY;
 /// pin at
 /// [`tests::chart_yaml_serializes_type_axis_under_lifted_helm_chart_key_type`]
 /// round-trips a rendered `Chart.yaml` through
-/// `serde_yaml::from_str::<serde_yaml::Value>` and asserts the top-
+/// `serde_norway::from_str::<serde_norway::Value>` and asserts the top-
 /// level `Mapping::get(HELM_CHART_KEY_TYPE)` resolves, closing the
 /// drift the attribute-literal-only grammar leaves silent (a future
 /// refactor that dropped the `#[serde(rename = "type")]` attribute
@@ -429,7 +429,7 @@ pub use caixa_core::HELM_CHART_KEY_API_VERSION;
 /// drift-detection pin at
 /// [`tests::chart_yaml_serializes_dependencies_axis_under_lifted_helm_chart_key_dependencies`]
 /// round-trips a rendered `Chart.yaml` through
-/// `serde_yaml::from_str::<serde_yaml::Value>` and asserts the top-
+/// `serde_norway::from_str::<serde_norway::Value>` and asserts the top-
 /// level `Mapping::get(HELM_CHART_KEY_DEPENDENCIES)` resolves — closing
 /// the drift a future field rename (`dependencies` → `deps` /
 /// `chartDependencies`) or a `#[serde(rename_all = "camelCase")]`
@@ -799,13 +799,13 @@ impl Default for RenderOpts {
 /// Render a per-program lareira-<name> chart from a Caixa Servico + its
 /// loaded ComputeUnit YAML.
 ///
-/// The ComputeUnit YAML is passed in as a `serde_yaml::Value` because the
+/// The ComputeUnit YAML is passed in as a `serde_norway::Value` because the
 /// authoritative schema lives in the wasm-operator's CRD — we don't want
 /// caixa-helm to drift from that schema. It's enough that we can locate
 /// `spec` and pass it through.
 pub fn render_chart_for_servico(
     caixa: &Caixa,
-    computeunit_yaml: &serde_yaml::Value,
+    computeunit_yaml: &serde_norway::Value,
 ) -> Result<ChartDir, Error> {
     render_chart_for_servico_with(caixa, computeunit_yaml, &RenderOpts::default())
 }
@@ -813,7 +813,7 @@ pub fn render_chart_for_servico(
 /// `render_chart_for_servico` with explicit options.
 pub fn render_chart_for_servico_with(
     caixa: &Caixa,
-    computeunit_yaml: &serde_yaml::Value,
+    computeunit_yaml: &serde_norway::Value,
     opts: &RenderOpts,
 ) -> Result<ChartDir, Error> {
     caixa_core::require_v0_servico_shape::<Error>(caixa)?;
@@ -863,7 +863,7 @@ pub fn render_chart_for_servico_with(
         files: vec![
             ChartFile::new(
                 HELM_CHART_YAML_FILENAME,
-                serde_yaml::to_string(&chart_yaml)?,
+                serde_norway::to_string(&chart_yaml)?,
             ),
             ChartFile::new(HELM_VALUES_YAML_FILENAME, values_yaml),
             ChartFile::new(HELM_CHART_README_FILENAME, readme),
@@ -942,7 +942,7 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
 
 fn build_values_yaml(
     caixa: &Caixa,
-    computeunit_yaml: &serde_yaml::Value,
+    computeunit_yaml: &serde_norway::Value,
     opts: &RenderOpts,
 ) -> Result<String, Error> {
     // The library chart consumes its values under the key matching its
@@ -989,7 +989,7 @@ fn build_values_yaml(
     let mut block = BTreeMap::new();
     block.insert(
         HELM_VALUES_KEY_ENABLED.to_string(),
-        serde_yaml::Value::Bool(opts.enabled_default),
+        serde_norway::Value::Bool(opts.enabled_default),
     );
     // Two-step per-Servico value-block splice — the `spec.*` field
     // splice (module / trigger / capabilities / config / resources /
@@ -1014,9 +1014,9 @@ fn build_values_yaml(
         block.entry(k).or_insert(v);
     }
 
-    let mut wrapped = serde_yaml::Mapping::new();
-    wrapped.insert_str_key(library_alias, serde_yaml::to_value(block)?);
-    let body = serde_yaml::to_string(&serde_yaml::Value::Mapping(wrapped))?;
+    let mut wrapped = serde_norway::Mapping::new();
+    wrapped.insert_str_key(library_alias, serde_norway::to_value(block)?);
+    let body = serde_norway::to_string(&serde_norway::Value::Mapping(wrapped))?;
     Ok(format!("{header}{body}"))
 }
 
@@ -1142,8 +1142,8 @@ mod tests {
         }
     }
 
-    fn sample_cu_yaml() -> serde_yaml::Value {
-        serde_yaml::from_str(
+    fn sample_cu_yaml() -> serde_norway::Value {
+        serde_norway::from_str(
             r#"
 apiVersion: wasm.pleme.io/v1alpha1
 kind: ComputeUnit
@@ -1243,7 +1243,7 @@ spec:
             .expect("must wrap under DEFAULT_LIBRARY_NAME");
         assert_eq!(
             cu_block.get(HELM_VALUES_KEY_ENABLED),
-            Some(&serde_yaml::Value::Bool(false))
+            Some(&serde_norway::Value::Bool(false))
         );
         assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_MODULE));
         assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_TRIGGER));
@@ -1285,7 +1285,7 @@ spec:
         let cu_block = parsed.get("acme-computeunit").unwrap();
         assert_eq!(
             cu_block.get(HELM_VALUES_KEY_ENABLED),
-            Some(&serde_yaml::Value::Bool(false))
+            Some(&serde_norway::Value::Bool(false))
         );
         assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_MODULE));
         assert!(kube_has(cu_block, COMPUTEUNIT_SPEC_KEY_TRIGGER));
@@ -1933,7 +1933,7 @@ spec:
         // level key, defaulting the per-chart-kind axis to
         // `application` with no process-log signal. This pin closes
         // the drift by round-tripping a rendered `Chart.yaml` through
-        // `serde_yaml::from_str::<serde_yaml::Value>` and asserting
+        // `serde_norway::from_str::<serde_norway::Value>` and asserting
         // the top-level `Mapping::get(HELM_CHART_KEY_TYPE)` resolves
         // (rather than serializing through the [`ChartYaml`]-typed
         // deserializer that would silently absorb the rename drift
@@ -1981,7 +1981,7 @@ spec:
         // `helm search` per-chart index falls back to "no application
         // version" for the rendered chart. This pin closes the drift
         // by round-tripping a rendered `Chart.yaml` through
-        // `serde_yaml::from_str::<serde_yaml::Value>` (rather than
+        // `serde_norway::from_str::<serde_norway::Value>` (rather than
         // through the [`ChartYaml`]-typed deserializer that would
         // silently absorb the rename drift). Peer to
         // [`chart_yaml_serializes_type_axis_under_lifted_helm_chart_key_type`]
@@ -2031,7 +2031,7 @@ spec:
         // `lareira-<nome>` chart consumer drops with no field naming
         // the serde-rename-drift root cause. This pin closes the drift
         // by round-tripping a rendered `Chart.yaml` through
-        // `serde_yaml::from_str::<serde_yaml::Value>` (rather than
+        // `serde_norway::from_str::<serde_norway::Value>` (rather than
         // through the [`ChartYaml`]-typed deserializer that would
         // silently absorb the rename drift via `#[serde(default)]`
         // fall-through at the struct-side). Peer to
@@ -2084,7 +2084,7 @@ spec:
         // (`alias` set to a non-`None` value so the
         // `#[serde(skip_serializing_if = "Option::is_none")]`
         // attribute doesn't elide the axis from the emitted YAML)
-        // through `serde_yaml::to_value` and asserting each of the
+        // through `serde_norway::to_value` and asserting each of the
         // four per-dep sub-mapping wire keys resolves via
         // `Mapping::get(HELM_CHART_DEPENDENCY_KEY_*)`. Peer to
         // [`chart_yaml_serializes_type_axis_under_lifted_helm_chart_key_type`]
@@ -2101,7 +2101,7 @@ spec:
             repository: "file://../pleme-computeunit".into(),
             alias: Some("acme-alias".into()),
         };
-        let doc = serde_yaml::to_value(&dep).unwrap();
+        let doc = serde_norway::to_value(&dep).unwrap();
         let mapping = doc.as_mapping().expect(
             "ChartDependency must serialize to a top-level YAML mapping per \
              the Helm 3 per-dep sub-mapping shape",
@@ -2165,7 +2165,7 @@ spec:
         // far from the drift site with no field naming the top-level-
         // list-key-drift root cause. This pin closes the drift by
         // round-tripping a rendered `Chart.yaml` through
-        // `serde_yaml::from_str::<serde_yaml::Value>` and asserting
+        // `serde_norway::from_str::<serde_norway::Value>` and asserting
         // the top-level `Mapping::get(HELM_CHART_KEY_DEPENDENCIES)`
         // resolves — rather than through the [`ChartYaml`]-typed
         // deserializer that would silently absorb any of the three
@@ -2439,7 +2439,7 @@ spec:
             .expect("must wrap under DEFAULT_LIBRARY_NAME");
         assert_eq!(
             cu_block.get(HELM_VALUES_KEY_ENABLED),
-            Some(&serde_yaml::Value::Bool(false)),
+            Some(&serde_norway::Value::Bool(false)),
             "rendered values.yaml `{DEFAULT_LIBRARY_NAME}.{HELM_VALUES_KEY_ENABLED}` must \
              equal the default-off toggle the lifted HELM_VALUES_KEY_ENABLED axis carries — \
              a drifted enable-toggle key silently splits the per-values enable-flip across \
@@ -3096,7 +3096,7 @@ spec:
         // Per-crate fail-before-pass-after equivalence pin covering the
         // five test-side `assert!(mapping.contains_key(<KEY>))`
         // drift-detection sites that this commit swept off the
-        // three-token `serde_yaml::Value::String(<KEY>.to_string())`
+        // three-token `serde_norway::Value::String(<KEY>.to_string())`
         // wrapped shape onto the shorter bare-`&str` form
         // ([`HELM_CHART_KEY_TYPE`] on the per-Chart.yaml top-level
         // chart-kind discriminator axis, [`HELM_CHART_KEY_APP_VERSION`]
@@ -3134,7 +3134,7 @@ spec:
         // covers the generic KUBE_KEY_KIND / KUBE_KEY_SPEC probe;
         // this caixa-helm-side pin covers the seven Chart.yaml-shape
         // axis-keys the swept sites key off.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(HELM_CHART_KEY_TYPE, "application");
         m.insert_string(HELM_CHART_KEY_APP_VERSION, "1.0.0");
         m.insert_string(HELM_CHART_KEY_API_VERSION, "v2");
@@ -3159,7 +3159,7 @@ spec:
             // Present-key path: both forms find the same insertion.
             assert_eq!(
                 m.contains_key(key),
-                m.contains_key(serde_yaml::Value::String(key.to_string())),
+                m.contains_key(serde_norway::Value::String(key.to_string())),
                 "present-key mapping.contains_key({key:?}) via bare-&str must \
                  byte-equal mapping.contains_key(Value::String({key:?}.to_string())) \
                  — otherwise the swept `assert!(_.contains_key({key:?}))` sites \
@@ -3173,7 +3173,7 @@ spec:
         let absent = "this_key_never_appears_in_any_chart_yaml_axis";
         assert_eq!(
             m.contains_key(absent),
-            m.contains_key(serde_yaml::Value::String(absent.to_string())),
+            m.contains_key(serde_norway::Value::String(absent.to_string())),
             "absent-key mapping.contains_key(<bare-&str>) must byte-equal \
              absent-key mapping.contains_key(Value::String(<key>.to_string())) \
              — otherwise a future swept drift-detection pin's absent-key arm \
@@ -3367,14 +3367,14 @@ spec:
         // [`caixa_core::parse_yaml_at_path`] composed navigator: for
         // every YAML leaf the `render_chart_for_servico` `lareira-
         // <nome>` chart-directory emit writes that the test-side
-        // routed callers parse to a [`serde_yaml::Value`]
+        // routed callers parse to a [`serde_norway::Value`]
         // ([`HELM_CHART_YAML_FILENAME`] as `doc` /
         // [`HELM_VALUES_YAML_FILENAME`] as `parsed`), the lifted helper
         // must return a `Value` byte-equal to the prior two-step
         //
         //   let f = find_file_by_path(&dir.files, <FILENAME>).unwrap();
-        //   let parsed: serde_yaml::Value =
-        //       serde_yaml::from_str(&f.contents).unwrap();
+        //   let parsed: serde_norway::Value =
+        //       serde_norway::from_str(&f.contents).unwrap();
         //
         // the 12 test-side per-artifact YAML readback sites previously
         // carried. Mirrors the sibling `caixa-flux`
@@ -3390,13 +3390,13 @@ spec:
         for filename in [HELM_CHART_YAML_FILENAME, HELM_VALUES_YAML_FILENAME] {
             let via_helper = parse_yaml_at_path(&dir.files, filename);
             let via_inline_file = find_file_by_path(&dir.files, filename).unwrap();
-            let via_inline: serde_yaml::Value =
-                serde_yaml::from_str(&via_inline_file.contents).unwrap();
+            let via_inline: serde_norway::Value =
+                serde_norway::from_str(&via_inline_file.contents).unwrap();
             assert_eq!(
                 via_helper, via_inline,
                 "parse_yaml_at_path(&dir.files, {filename:?}) must \
                  byte-equal the prior two-step `find_file_by_path(&dir.files, \
-                 {filename:?}).unwrap() + serde_yaml::from_str(&_.contents).unwrap()` \
+                 {filename:?}).unwrap() + serde_norway::from_str(&_.contents).unwrap()` \
                  combinator on every YAML leaf the `lareira-<nome>` chart-\
                  directory emit writes — otherwise the 12 routed per-\
                  artifact YAML readback sites regress silently on the \
@@ -3418,7 +3418,7 @@ spec:
         //   let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME)
         //       .unwrap(); // or .expect("Chart.yaml present")
         //   let chart: ChartYaml =
-        //       serde_yaml::from_str(&chart_file.contents).unwrap();
+        //       serde_norway::from_str(&chart_file.contents).unwrap();
         //
         // the 9 test-side per-`Chart.yaml`-typed-parse readback sites
         // previously carried. Mirrors the sibling
@@ -3434,20 +3434,20 @@ spec:
         // through the `ChartYaml`-typed body at the `Chart.yaml`
         // leaf; [`HELM_VALUES_YAML_FILENAME`] carries no typed-mirror
         // struct in this crate (the routed callers navigate its
-        // parsed [`serde_yaml::Value`] through `kube_*` / `mapping_*`
+        // parsed [`serde_norway::Value`] through `kube_*` / `mapping_*`
         // primitives), and [`HELM_CHART_README_FILENAME`] is not
         // parsed as YAML at all.
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
         let filename = HELM_CHART_YAML_FILENAME;
         let via_helper: ChartYaml = parse_yaml_at_path_as(&dir.files, filename);
         let via_inline_file = find_file_by_path(&dir.files, filename).unwrap();
-        let via_inline: ChartYaml = serde_yaml::from_str(&via_inline_file.contents).unwrap();
+        let via_inline: ChartYaml = serde_norway::from_str(&via_inline_file.contents).unwrap();
         assert_eq!(
             via_helper, via_inline,
             "parse_yaml_at_path_as::<ChartYaml>(&dir.files, {filename:?}) \
              must byte-equal the prior two-step \
              `find_file_by_path(&dir.files, {filename:?}).unwrap() + \
-             serde_yaml::from_str::<ChartYaml>(&_.contents).unwrap()` \
+             serde_norway::from_str::<ChartYaml>(&_.contents).unwrap()` \
              combinator on the `Chart.yaml` YAML leaf — otherwise \
              the 9 routed per-artifact typed-parse readback sites \
              regress silently on the parse-target axis",

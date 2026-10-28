@@ -235,7 +235,7 @@ impl PoolStatusArgs {
 
 fn parse_pool_docs(yaml: &str) -> Result<Vec<EphemeralPool>> {
     let mut out = Vec::new();
-    for doc in serde_yaml::Deserializer::from_str(yaml) {
+    for doc in serde_norway::Deserializer::from_str(yaml) {
         match EphemeralPool::deserialize(doc) {
             Ok(p) => out.push(p),
             Err(e) => {

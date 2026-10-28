@@ -97,7 +97,7 @@ impl ResolverConfig {
         let yaml = dir.join("config.yaml");
         if yaml.exists()
             && let Ok(src) = std::fs::read_to_string(&yaml)
-            && let Ok(cfg) = serde_yaml::from_str::<Self>(&src)
+            && let Ok(cfg) = serde_norway::from_str::<Self>(&src)
         {
             return cfg;
         }

@@ -467,7 +467,7 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
 /// Render a `Caixa` to YAML bytes (Process wire format).
 pub fn process_yaml(caixa: &Caixa, inputs: &RenderInputs) -> Result<String> {
     let process = process_for_aplicacao(caixa, inputs)?;
-    serde_yaml::to_string(&process).map_err(|e| Error::Serialize(e.to_string()))
+    serde_norway::to_string(&process).map_err(|e| Error::Serialize(e.to_string()))
 }
 
 fn derive_chart_ref(caixa: &Caixa, registry: &str) -> String {

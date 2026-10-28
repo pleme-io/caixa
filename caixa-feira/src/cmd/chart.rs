@@ -58,7 +58,7 @@ impl Chart {
 /// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5) on the
 /// per-Servico computeunit IO axis. Before this lift both verbs
 /// open-coded the same four-line shape — [`first_servico_path`] →
-/// [`std::fs::read_to_string`] → [`serde_yaml::from_str`], all with
+/// [`std::fs::read_to_string`] → [`serde_norway::from_str`], all with
 /// verbatim `"reading {…}"` / `"parsing {…}"` `.with_context(...)`
 /// strings — at every entry-point that consumes the per-Servico
 /// `servicos/<name>.computeunit.yaml`. Two inline copies of the same
@@ -68,7 +68,7 @@ impl Chart {
 ///
 /// After the lift every per-Servico-verb entry-point routes through
 /// this helper; the `"reading {…}"` / `"parsing {…}"` context strings
-/// live at exactly one call-site, the underlying `serde_yaml::Error`
+/// live at exactly one call-site, the underlying `serde_norway::Error`
 /// remains reachable on the anyhow cause chain for typed-view
 /// downstream callers (peer with the per-renderer
 /// [`caixa_core::KindMismatch`] / [`caixa_core::ServicoCountMismatch`]
@@ -90,7 +90,7 @@ impl Chart {
 pub(crate) fn load_first_servico_yaml(
     caixa: &Caixa,
     root: &std::path::Path,
-) -> Result<serde_yaml::Value> {
+) -> Result<serde_norway::Value> {
     let cu_path = first_servico_path(caixa, root)?;
     super::load::load_yaml(&cu_path)
 }
@@ -421,7 +421,7 @@ mod tests {
     fn load_first_servico_yaml_accepts_well_formed_computeunit() {
         // The canonical happy-path — a `:kind Servico` caixa with one
         // `:servicos` entry whose file is on disk and parses as YAML
-        // returns the typed `serde_yaml::Value`, peer with every
+        // returns the typed `serde_norway::Value`, peer with every
         // per-Servico verb's `Run::run` entry-point: each one used to
         // open-code the same four-line `first_servico_path` → read →
         // parse shape before this lift, and now routes through the
@@ -442,7 +442,7 @@ mod tests {
         );
         let cu_yaml = load_first_servico_yaml(&caixa, dir.path()).expect("well-formed must load");
         assert_eq!(
-            cu_yaml.get("name").and_then(serde_yaml::Value::as_str),
+            cu_yaml.get("name").and_then(serde_norway::Value::as_str),
             Some("hello"),
             "parsed YAML must round-trip the canonical top-level scalar"
         );
@@ -490,7 +490,7 @@ mod tests {
     fn load_first_servico_yaml_parse_error_preserves_underlying_serde_yaml_error_on_chain() {
         // Peer to the parse-context pin above: the anyhow
         // `.with_context(...)` wrap preserves the underlying
-        // `serde_yaml::Error` on the cause chain — a future
+        // `serde_norway::Error` on the cause chain — a future
         // structured-output mode (`feira chart --json`, a future
         // `feira validate --strict` per-Servico admission verb) can
         // downcast through the chain and read the typed payload
@@ -519,10 +519,10 @@ mod tests {
             load_first_servico_yaml(&caixa, dir.path()).expect_err("malformed YAML must reject");
         let typed_reachable = err
             .chain()
-            .any(|e| e.downcast_ref::<serde_yaml::Error>().is_some());
+            .any(|e| e.downcast_ref::<serde_norway::Error>().is_some());
         assert!(
             typed_reachable,
-            "underlying serde_yaml::Error must remain reachable on the anyhow chain"
+            "underlying serde_norway::Error must remain reachable on the anyhow chain"
         );
     }
 

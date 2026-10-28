@@ -7,7 +7,7 @@
 //! block per render entry-point that:
 //!
 //! 1. Checked `caixa.limits.is_some() && !limits.is_empty()`.
-//! 2. Called `serde_yaml::to_value(limits).unwrap_or(Value::Null)` —
+//! 2. Called `serde_norway::to_value(limits).unwrap_or(Value::Null)` —
 //!    silently swallowing every serialization error as a `null`-shaped
 //!    fragment that would render as `limits: null` in the values block,
 //!    indistinguishable from "the author omitted the slot" downstream.
@@ -39,7 +39,7 @@ use crate::{Caixa, CaixaKind};
 /// Errors the render helpers can raise.
 #[derive(Debug, Error)]
 pub enum RenderError {
-    /// `serde_yaml::to_value` failed for one of the M2 typed slots —
+    /// `serde_norway::to_value` failed for one of the M2 typed slots —
     /// theoretically impossible for the canonical
     /// [`crate::LimitsSpec`] / [`crate::BehaviorSpec`] /
     /// [`crate::UpgradeFromEntry`] types (all derive Serialize without
@@ -51,18 +51,18 @@ pub enum RenderError {
     Yaml {
         slot: &'static str,
         #[source]
-        source: serde_yaml::Error,
+        source: serde_norway::Error,
     },
 }
 
-/// Serialize a typed M2 slot value into a [`serde_yaml::Value`], tagging any
+/// Serialize a typed M2 slot value into a [`serde_norway::Value`], tagging any
 /// failure with the caller-supplied `slot` label so the diagnostic reads
 /// `yaml serialization of M2 slot <slot>: <source>` — the canonical
 /// substrate primitive every [`servico_m2_overlay`] per-slot serialization
 /// site now routes through, folding the pre-lift uniform three-line
-/// `serde_yaml::to_value(<val>).map_err(|source| RenderError::Yaml { slot,
+/// `serde_norway::to_value(<val>).map_err(|source| RenderError::Yaml { slot,
 /// source })` block onto one dispatch. Byte-equal on the `Ok` axis to
-/// `serde_yaml::to_value(value)` on every input the underlying serializer
+/// `serde_norway::to_value(value)` on every input the underlying serializer
 /// accepts, and tags the `Err` axis with the caller-supplied `slot` label
 /// verbatim so a downstream `#[from]` consumer of [`RenderError::Yaml`]
 /// sees the same envelope shape the pre-lift inline block emitted.
@@ -93,12 +93,12 @@ pub enum RenderError {
 ///
 /// # Errors
 /// Returns [`RenderError::Yaml`] tagged with `slot` if
-/// `serde_yaml::to_value` fails on `value`.
-pub fn to_yaml_slot<T>(slot: &'static str, value: &T) -> Result<serde_yaml::Value, RenderError>
+/// `serde_norway::to_value` fails on `value`.
+pub fn to_yaml_slot<T>(slot: &'static str, value: &T) -> Result<serde_norway::Value, RenderError>
 where
     T: serde::Serialize + ?Sized,
 {
-    serde_yaml::to_value(value).map_err(|source| RenderError::Yaml { slot, source })
+    serde_norway::to_value(value).map_err(|source| RenderError::Yaml { slot, source })
 }
 
 /// Typed kind-mismatch view: the canonical surface every per-kind
@@ -1266,7 +1266,7 @@ impl RenderedFile {
     /// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] every current per-target
     /// renderer picks its per-artifact leaf path from, `String` /
     /// `PathBuf` for future author-supplied paths) and anything
-    /// convertible into [`String`] (the `serde_yaml::to_string` /
+    /// convertible into [`String`] (the `serde_norway::to_string` /
     /// `format!` outputs every current renderer already threads into
     /// the paired `contents` field).
     ///
@@ -9343,7 +9343,7 @@ pub fn is_lisp_extension(path: &Path) -> bool {
 
 /// The canonical compound suffix every `:servicos` entry — the
 /// ComputeUnit-CR axis the M2 typed-substrate caixa-helm /
-/// caixa-flux renderers consume via `serde_yaml::from_str` — must
+/// caixa-flux renderers consume via `serde_norway::from_str` — must
 /// terminate in. Two-segment shape (`.computeunit.yaml`) rather than
 /// a single `.yaml` extension: the `.computeunit` segment routes
 /// authoring-time to the typed `ComputeUnit` CR shape the
@@ -9373,7 +9373,7 @@ pub const COMPUTEUNIT_YAML_SUFFIX: &str = ".computeunit.yaml";
 /// [`COMPUTEUNIT_YAML_SUFFIX`] (lowercase `.computeunit.yaml`) — the
 /// file-type shape every `:servicos` entry, the ComputeUnit-CR axis
 /// the M2 typed-substrate caixa-helm / caixa-flux renderers consume
-/// via `serde_yaml::from_str`, must take. The contract:
+/// via `serde_norway::from_str`, must take. The contract:
 ///
 ///   - the path has a final file-name component (paths ending in `/`
 ///     fail);
@@ -9825,7 +9825,7 @@ pub const M2_UPGRADE_FROM_KEY_INSTRUCTIONS: &str = "instructions";
 /// [`crate::UpgradeInstruction`] enum surfaces its variant tag under
 /// on serde emission — the internally-tagged wire key downstream
 /// consumers navigate to (`serde_json::to_value(&instr).get("kind")`
-/// / `serde_yaml::Value::Mapping.get("kind")` / hand-authored `{"kind":
+/// / `serde_norway::Value::Mapping.get("kind")` / hand-authored `{"kind":
 /// "load-module", "module": "…"}` JSON) to disambiguate which of the
 /// five OTP-shaped variants they hold. The `#[serde(tag = "kind",
 /// rename_all = "kebab-case")]` attribute on
@@ -9877,7 +9877,7 @@ pub const M2_UPGRADE_INSTRUCTION_KEY_KIND: &str = "kind";
 /// per-variant field byte-string every downstream consumer reading the
 /// module string reaches for
 /// (`serde_json::to_value(&instr).get("module")` /
-/// `serde_yaml::Value::Mapping.get("module")` / hand-authored
+/// `serde_norway::Value::Mapping.get("module")` / hand-authored
 /// `{"kind": "load-module", "module": "hello-rio"}` JSON blobs the
 /// wasm-operator's upgrade-dispatch step consumes to route the
 /// per-module load / soft-purge / purge action). The three variants
@@ -9934,7 +9934,7 @@ pub const M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE: &str = "module";
 /// the internally-tagged per-variant field byte-string every downstream
 /// consumer reading the migration-script path reaches for
 /// (`serde_json::to_value(&instr).get("script")` /
-/// `serde_yaml::Value::Mapping.get("script")` / hand-authored
+/// `serde_norway::Value::Mapping.get("script")` / hand-authored
 /// `{"kind": "state-change", "script": "lib/migrations/v01-to-v02.lisp"}`
 /// JSON blobs the wasm-operator's upgrade-dispatch step consumes to
 /// route the per-`gen_server` `code_change/3` migration action). Peer
@@ -13291,7 +13291,7 @@ pub const DEFAULT_FLUX_SYSTEM_NAMESPACE: &str = "flux-system";
 /// render-side consumers now thread the same `&'static str` through their
 /// format-string templates so a future Flux v3 promotion lands in one
 /// place; the test fixtures keep the value as a literal because they
-/// exercise `serde_yaml::from_str` on a static YAML document — the
+/// exercise `serde_norway::from_str` on a static YAML document — the
 /// build-time pin [`default_flux_helmrelease_api_version_matches_caixa_flux_test_fixtures`]
 /// trips if the literals ever drift past the typed const.
 ///
@@ -16254,7 +16254,7 @@ pub const CILIUM_AUTH_MODE_DISABLED: &str = "disabled";
 ///     `spec.ingress[].authentication.mode` leaf value (caixa-mesh/src/lib.rs
 ///     — the `cilium_network_policies` per-`(:de, :para)`
 ///     `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
-///     |required| serde_yaml::Value::String(cilium_auth_mode(required).into()))`
+///     |required| serde_norway::Value::String(cilium_auth_mode(required).into()))`
 ///     closure body).
 ///   - the generic-helper pin in this crate's
 ///     `single_field_overlay_threads_typed_value_through_closure` test
@@ -16284,7 +16284,7 @@ pub const CILIUM_AUTH_MODE_DISABLED: &str = "disabled";
 /// Pairs with the [`CILIUM_KEY_MODE`] per-authentication-block mode-
 /// discriminator leaf-axis key at the caller's
 /// `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
-/// |required| serde_yaml::Value::String(cilium_auth_mode(required).into()))`
+/// |required| serde_norway::Value::String(cilium_auth_mode(required).into()))`
 /// call: the key is the field name the leaf mounts under, this projection
 /// is the scalar the leaf carries. Same-shape peer to the K8s core
 /// `Protocol` closed-set enum's future `bool → {"TCP", "UDP"}` /
@@ -19161,7 +19161,7 @@ pub const CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT: bool = true;
 ///   - the rendered `values.yaml` document's
 ///     `<library>.enabled` scalar-value axis
 ///     (caixa-helm/src/lib.rs — the [`caixa_helm::build_values_yaml`][cbv]
-///     `serde_yaml::Value::Bool(opts.enabled_default)` block-insertion
+///     `serde_norway::Value::Bool(opts.enabled_default)` block-insertion
 ///     under the per-`{library_name}` wrap position, threading the same
 ///     `bool` through the [`caixa_helm::RenderOpts::enabled_default`][cro]
 ///     default-knob);
@@ -20362,7 +20362,7 @@ pub const HELM_CHART_TYPE_LIBRARY: &str = "library";
 ///     [`caixa-helm`]'s
 ///     `chart_yaml_serializes_api_version_axis_under_lifted_helm_chart_key_api_version`
 ///     round-trips a rendered [`caixa-helm`]-emitted `Chart.yaml`
-///     through `serde_yaml::from_str::<serde_yaml::Value>` and
+///     through `serde_norway::from_str::<serde_norway::Value>` and
 ///     asserts the top-level `Mapping::get(HELM_CHART_KEY_API_VERSION)`
 ///     resolves — closing the drift the syntactic-literal-only
 ///     attribute would otherwise leave silent);
@@ -20419,7 +20419,7 @@ pub const HELM_CHART_KEY_API_VERSION: &str = "apiVersion";
 ///     [`caixa-helm`]'s
 ///     `chart_yaml_serializes_type_axis_under_lifted_helm_chart_key_type`
 ///     round-trips a rendered [`caixa-helm`]-emitted `Chart.yaml`
-///     through `serde_yaml::from_str::<serde_yaml::Value>` and
+///     through `serde_norway::from_str::<serde_norway::Value>` and
 ///     asserts the top-level `Mapping::get(HELM_CHART_KEY_TYPE)`
 ///     resolves — closing the drift the syntactic-literal-only
 ///     attribute would otherwise leave silent);
@@ -20567,7 +20567,7 @@ pub const HELM_CHART_KEY_APP_VERSION: &str = "appVersion";
 ///     paired drift-detection pin at [`caixa-helm`]'s
 ///     `chart_yaml_serializes_dependencies_axis_under_lifted_helm_chart_key_dependencies`
 ///     round-trips a rendered `Chart.yaml` through
-///     `serde_yaml::from_str::<serde_yaml::Value>` and asserts the
+///     `serde_norway::from_str::<serde_norway::Value>` and asserts the
 ///     top-level `Mapping::get(HELM_CHART_KEY_DEPENDENCIES)` resolves —
 ///     closing the drift a future hostile refactor could otherwise
 ///     leave silent: a rename of the Rust field to `Vec<ChartDependency>
@@ -21351,7 +21351,7 @@ pub fn is_lareira_chart_name_shape(nome: &str) -> Result<(), String> {
 /// YAML's `matchLabels:` block appears in a deterministic order
 /// independent of source-code declaration order). The two keys
 /// alphabetize as [`LABEL_APLICACAO`] before [`LABEL_PROGRAM`], the
-/// same order the renderer's `serde_yaml::Mapping` iteration will
+/// same order the renderer's `serde_norway::Mapping` iteration will
 /// preserve through to the rendered YAML.
 #[must_use]
 pub fn pleme_program_in_aplicacao_selector(
@@ -21387,7 +21387,7 @@ pub fn pleme_program_selector(program: &str) -> BTreeMap<&'static str, String> {
 /// Convert a typed string-valued mapping (e.g. one of the canonical
 /// [`pleme_program_selector`] / [`pleme_program_in_aplicacao_selector`]
 /// selectors, or any caller-built `BTreeMap<&'static str, String>`)
-/// into a [`serde_yaml::Value::Mapping`] with `String → String` shape —
+/// into a [`serde_norway::Value::Mapping`] with `String → String` shape —
 /// the surface every Cilium / Gateway / HTTPRoute / ComputeUnit
 /// `matchLabels` / `metadata.labels` / `selector` field expects.
 ///
@@ -21407,29 +21407,29 @@ pub fn pleme_program_selector(program: &str) -> BTreeMap<&'static str, String> {
 /// renderer would re-inline the same five-line `for (k, v)` body and
 /// inherit the same drift footguns.
 #[must_use]
-pub fn yaml_string_mapping<K, V, M>(m: M) -> serde_yaml::Value
+pub fn yaml_string_mapping<K, V, M>(m: M) -> serde_norway::Value
 where
     M: IntoIterator<Item = (K, V)>,
     K: Into<String>,
     V: Into<String>,
 {
-    let mut out = serde_yaml::Mapping::new();
+    let mut out = serde_norway::Mapping::new();
     for (k, v) in m {
-        out.insert_str_key(&k.into(), serde_yaml::Value::String(v.into()));
+        out.insert_str_key(&k.into(), serde_norway::Value::String(v.into()));
     }
-    serde_yaml::Value::Mapping(out)
+    serde_norway::Value::Mapping(out)
 }
 
 /// Wrap a typed string-valued label mapping in the canonical K8s
 /// [`LabelSelector`][k8s-ls] shape — `{matchLabels: <string-string-map>}`
-/// — and return it as a [`serde_yaml::Value::Mapping`] ready to drop
+/// — and return it as a [`serde_norway::Value::Mapping`] ready to drop
 /// directly under any K8s field that takes a label selector
 /// (Cilium `endpointSelector` / `fromEndpoints[].matchLabels`, Gateway
 /// API `BackendRef` filters, ComputeUnit `selector`, Service
 /// `spec.selector`, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
 /// `spec.selector`).
 ///
-/// Lifted from two inline `serde_yaml::Mapping::new() +
+/// Lifted from two inline `serde_norway::Mapping::new() +
 /// insert(Value::String("matchLabels".into()), yaml_string_mapping(_))`
 /// blocks in `caixa-mesh::cilium_network_policies` (the destination
 /// `endpointSelector` and the source `fromEndpoints[0]` selector) so
@@ -21464,21 +21464,21 @@ where
 ///
 /// [k8s-ls]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta
 #[must_use]
-pub fn label_selector<K, V, M>(labels: M) -> serde_yaml::Value
+pub fn label_selector<K, V, M>(labels: M) -> serde_norway::Value
 where
     M: IntoIterator<Item = (K, V)>,
     K: Into<String>,
     V: Into<String>,
 {
-    let mut out = serde_yaml::Mapping::new();
+    let mut out = serde_norway::Mapping::new();
     out.insert_str_key(KUBE_KEY_MATCH_LABELS, yaml_string_mapping(labels));
-    serde_yaml::Value::Mapping(out)
+    serde_norway::Value::Mapping(out)
 }
 
 /// Build the canonical K8s-resource skeleton — the
 /// `apiVersion` + `kind` + `metadata.{name, namespace, labels?}`
 /// block every cluster artifact emitted by every caixa-side renderer
-/// carries — and return it as a fresh [`serde_yaml::Mapping`] the
+/// carries — and return it as a fresh [`serde_norway::Mapping`] the
 /// caller adds its `spec:` (and any other top-level keys) to.
 ///
 /// `labels` is inserted under `metadata.labels` only when non-empty.
@@ -21495,7 +21495,7 @@ where
 /// declaration order. Same render-determinism contract the M2 overlay
 /// helper and the pleme-io selector helpers enshrine.
 ///
-/// Lifted from three inline `serde_yaml::Mapping::new()` blocks in
+/// Lifted from three inline `serde_norway::Mapping::new()` blocks in
 /// `caixa-mesh` ([`cilium_network_policies`][cnp] CNP construction,
 /// [`gateway_routes`][gw] Gateway construction, the same fn's
 /// HTTPRoute construction) so the next renderer to land — the
@@ -21516,30 +21516,30 @@ pub fn kube_resource_skeleton(
     name: &str,
     namespace: &str,
     labels: BTreeMap<&'static str, String>,
-) -> serde_yaml::Mapping {
-    let mut metadata: BTreeMap<&'static str, serde_yaml::Value> = BTreeMap::new();
-    metadata.insert(KUBE_KEY_NAME, serde_yaml::Value::String(name.to_string()));
+) -> serde_norway::Mapping {
+    let mut metadata: BTreeMap<&'static str, serde_norway::Value> = BTreeMap::new();
+    metadata.insert(KUBE_KEY_NAME, serde_norway::Value::String(name.to_string()));
     metadata.insert(
         KUBE_KEY_NAMESPACE,
-        serde_yaml::Value::String(namespace.to_string()),
+        serde_norway::Value::String(namespace.to_string()),
     );
     if !labels.is_empty() {
         metadata.insert(KUBE_KEY_LABELS, yaml_string_mapping(labels));
     }
 
-    let mut metadata_map = serde_yaml::Mapping::new();
+    let mut metadata_map = serde_norway::Mapping::new();
     for (k, v) in metadata {
         metadata_map.insert_str_key(k, v);
     }
 
-    let mut out = serde_yaml::Mapping::new();
+    let mut out = serde_norway::Mapping::new();
     out.insert_string(KUBE_KEY_API_VERSION, api_version.to_string());
     out.insert_string(KUBE_KEY_KIND, kind.to_string());
     out.insert_mapping(KUBE_KEY_METADATA, metadata_map);
     out
 }
 
-/// Build a single-field [`serde_yaml::Value::Mapping`] from a typed
+/// Build a single-field [`serde_norway::Value::Mapping`] from a typed
 /// `Option<T>` slot — `None` when the slot is unset, `Some(Mapping {
 /// inner_key: f(t) })` otherwise.
 ///
@@ -21556,7 +21556,7 @@ pub fn kube_resource_skeleton(
 ///     wired in 878bf81)
 ///
 /// Until this lift the three call sites each carried a verbatim copy
-/// of the same six-line block — `let mut m = serde_yaml::Mapping::new();
+/// of the same six-line block — `let mut m = serde_norway::Mapping::new();
 /// m.insert(Value::String(<key>.into()), <value>); Value::Mapping(m)` —
 /// wrapped in `spec.politicas.<axis>.map(|v| { … })`. Three-of-the-pattern
 /// across one emit-site (and now structurally one-of-the-pattern in each
@@ -21572,7 +21572,7 @@ pub fn kube_resource_skeleton(
 ///     `consecutiveErrors` / `requestsPerUnit` for the two roadmap
 ///     axes), and
 ///   * a closure converting the typed `T` into the inner field's
-///     [`serde_yaml::Value`] (typically a `String` for canonical
+///     [`serde_norway::Value`] (typically a `String` for canonical
 ///     duration / enum scalars or a `Number` for typed integer
 ///     attempt counts).
 ///
@@ -21594,19 +21594,19 @@ pub fn single_field_overlay<T, F>(
     slot: Option<T>,
     inner_key: &'static str,
     f: F,
-) -> Option<serde_yaml::Value>
+) -> Option<serde_norway::Value>
 where
-    F: FnOnce(T) -> serde_yaml::Value,
+    F: FnOnce(T) -> serde_norway::Value,
 {
     slot.map(|v| {
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_str_key(inner_key, f(v));
-        serde_yaml::Value::Mapping(m)
+        serde_norway::Value::Mapping(m)
     })
 }
 
-/// Wrap a single [`serde_yaml::Mapping`] as the sole element of a
-/// [`serde_yaml::Value::Sequence`], returning the ready-to-drop
+/// Wrap a single [`serde_norway::Mapping`] as the sole element of a
+/// [`serde_norway::Value::Sequence`], returning the ready-to-drop
 /// singleton-mapping-sequence `Value`.
 ///
 /// The canonical shape every K8s-CRD schema-list-shape-required field
@@ -21638,8 +21638,8 @@ where
 ///     route — every route attaches to exactly one Gateway).
 ///
 /// Until this lift landed all seven call sites re-inlined the same
-/// three-token boilerplate — `serde_yaml::` path re-quote,
-/// `Value::Sequence(_)` promotion, `vec![serde_yaml::Value::Mapping(_)]`
+/// three-token boilerplate — `serde_norway::` path re-quote,
+/// `Value::Sequence(_)` promotion, `vec![serde_norway::Value::Mapping(_)]`
 /// singleton-list wrapping — around a one-token semantic payload (the
 /// per-site `Mapping`). Lifting collapses the boilerplate into one
 /// function call the caller reads as intent (`singleton_mapping_sequence
@@ -21658,14 +21658,14 @@ where
 /// / `pipelines.traces.exporters[]` singleton-list-shape emission —
 /// gets the canonical CRD-list-shape-wrap for free with one function
 /// call, instead of re-inlining the same three-token block. Peer with
-/// the sibling render-side helpers on the [`serde_yaml::Value`]-
+/// the sibling render-side helpers on the [`serde_norway::Value`]-
 /// construction surface ([`yaml_string_mapping`], [`label_selector`],
 /// [`kube_resource_skeleton`], [`single_field_overlay`], the sibling
 /// [`MappingExt::insert_str_key`] primitive) — each closes a distinct
 /// axis of the K8s-artifact-emit surface's "same shape, written N
 /// times" duplication.
 ///
-/// The helper takes an owned [`serde_yaml::Mapping`] (moving into the
+/// The helper takes an owned [`serde_norway::Mapping`] (moving into the
 /// wrapping `vec!` without a clone) because every call site has just
 /// finished building the mapping locally and passes it by value to the
 /// insert-under-outer-key step. A [`Value::Mapping`] wrapping of the
@@ -21687,12 +21687,12 @@ where
 /// [mesh]: https://docs.rs/caixa-mesh
 #[must_use]
 #[inline]
-pub fn singleton_mapping_sequence(m: serde_yaml::Mapping) -> serde_yaml::Value {
-    serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(m)])
+pub fn singleton_mapping_sequence(m: serde_norway::Mapping) -> serde_norway::Value {
+    serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(m)])
 }
 
-/// Iterator over the string-keyed entries of a [`serde_yaml::Value`]
-/// that may or may not be a [`serde_yaml::Mapping`] — the canonical
+/// Iterator over the string-keyed entries of a [`serde_norway::Value`]
+/// that may or may not be a [`serde_norway::Mapping`] — the canonical
 /// shape both per-Servico renderers reach for when splicing the
 /// upstream `ComputeUnit` YAML's `spec.*` fields into their emitted
 /// output map.
@@ -21704,19 +21704,19 @@ pub fn singleton_mapping_sequence(m: serde_yaml::Mapping) -> serde_yaml::Value {
 ///
 ///   * [`caixa_flux`][flux-programs]'s `programs_yaml_entry` splices
 ///     `computeunit_yaml.spec.*` into the emitted programs.yaml entry
-///     ([`serde_yaml::Mapping`] destination, via
+///     ([`serde_norway::Mapping`] destination, via
 ///     [`MappingExt::insert_str_key`]);
 ///   * [`caixa_helm`][helm-values]'s `build_values_yaml` splices the
 ///     same `computeunit_yaml.spec.*` into the values.yaml wrapped
 ///     block ([`std::collections::BTreeMap`]`<String, Value>`
 ///     destination, via `BTreeMap::insert`).
 ///
-/// Both sites need the same walk (destructure as [`serde_yaml::Mapping`],
+/// Both sites need the same walk (destructure as [`serde_norway::Mapping`],
 /// iterate its entries, keep only string-keyed pairs, hand the caller
 /// each `(&str, &Value)` pair) but drop the values into different
 /// destination map types, so the lift is at the iterator layer, not
 /// the insert layer. The caller keeps its own insert idiom (
-/// [`MappingExt::insert_str_key`] on a [`serde_yaml::Mapping`],
+/// [`MappingExt::insert_str_key`] on a [`serde_norway::Mapping`],
 /// `BTreeMap::insert` on the [`BTreeMap`]-shaped values block, a
 /// future renderer's own destination) but reaches through one lifted
 /// walk with one contract on how non-string-keyed entries are handled:
@@ -21724,7 +21724,7 @@ pub fn singleton_mapping_sequence(m: serde_yaml::Mapping) -> serde_yaml::Value {
 /// inline via the `if let Some(s) = k.as_str()` filter.
 ///
 /// Returns an empty iterator when `v` is not a
-/// [`serde_yaml::Value::Mapping`] — the shape the prior `if let
+/// [`serde_norway::Value::Mapping`] — the shape the prior `if let
 /// Value::Mapping(_) = v` arm silently no-ops on (so a Null / String
 /// / Sequence / Number / Bool `spec` field, itself schema-invalid
 /// upstream but tolerated by the renderer, contributes zero entries
@@ -21749,15 +21749,15 @@ pub fn singleton_mapping_sequence(m: serde_yaml::Mapping) -> serde_yaml::Value {
 /// [flux-programs]: https://docs.rs/caixa-flux
 /// [helm-values]: https://docs.rs/caixa-helm
 pub fn string_keyed_entries(
-    v: &serde_yaml::Value,
-) -> impl Iterator<Item = (&str, &serde_yaml::Value)> + '_ {
+    v: &serde_norway::Value,
+) -> impl Iterator<Item = (&str, &serde_norway::Value)> + '_ {
     v.as_mapping()
         .into_iter()
         .flat_map(|m| m.iter())
         .filter_map(|(k, v)| k.as_str().map(|s| (s, v)))
 }
 
-/// Collect the string-shaped keys of a [`serde_yaml::Mapping`] as owned
+/// Collect the string-shaped keys of a [`serde_norway::Mapping`] as owned
 /// [`String`]s — the canonical shape the assert-side diagnostic
 /// blocks routed across [`caixa-mesh`][mesh]'s per-`Placement` /
 /// [`caixa-helm`][helm]'s per-`Chart.yaml` / per-`ChartDependency` /
@@ -21773,13 +21773,13 @@ pub fn string_keyed_entries(
 ///
 /// around a one-token semantic payload (the receiver `<mapping>`
 /// bracket the assert's failure-message wants a full string-keyed
-/// enumeration off — the [`serde_yaml::Value::to_value(&Placement)
+/// enumeration off — the [`serde_norway::Value::to_value(&Placement)
 /// .as_mapping()`] bracket the four `caixa-mesh` per-`Placement`
 /// pins compare `M3_PLACEMENT_KEY_ESTRATEGIA` /
 /// `M3_PLACEMENT_KEY_CLUSTERS` / `M3_PLACEMENT_KEY_AFFINITY` /
 /// `M3_PLACEMENT_KEY_SHARD_KEY` `contains_key` presence against, the
 /// [`caixa-helm`] cluster-bundle `values.yaml` parsed
-/// [`serde_yaml::Value::as_mapping()`] bracket the
+/// [`serde_norway::Value::as_mapping()`] bracket the
 /// `HELM_VALUES_KEY_ENABLED` /
 /// `COMPUTEUNIT_SPEC_KEY_MODULE|TRIGGER|CAPABILITIES` presence pins
 /// enumerate on failure, the [`caixa-helm`] per-`ChartDependency`
@@ -21814,14 +21814,14 @@ pub fn string_keyed_entries(
 /// altitude down on the ownership-arity axis, if the routed caller
 /// surface ever grows dense enough on that receiver-arm to justify
 /// it — the same-arity carveout the sibling [`kube_map`] docs
-/// already name for the [`serde_yaml::Mapping`]-receiver overload
+/// already name for the [`serde_norway::Mapping`]-receiver overload
 /// axis.
 ///
-/// Non-string-shape keys ([`serde_yaml::Value::Number`] /
-/// [`serde_yaml::Value::Bool`] / [`serde_yaml::Value::Mapping`] /
-/// [`serde_yaml::Value::Sequence`] / [`serde_yaml::Value::Null`] /
-/// [`serde_yaml::Value::Tagged`] arms [`serde_yaml`] admits at the
-/// [`serde_yaml::Value::key`] axis position) are silently dropped —
+/// Non-string-shape keys ([`serde_norway::Value::Number`] /
+/// [`serde_norway::Value::Bool`] / [`serde_norway::Value::Mapping`] /
+/// [`serde_norway::Value::Sequence`] / [`serde_norway::Value::Null`] /
+/// [`serde_norway::Value::Tagged`] arms [`serde_yaml`] admits at the
+/// [`serde_norway::Value::key`] axis position) are silently dropped —
 /// the same behavior the seven routed inline sites carried via the
 /// per-key `.and_then(|k| k.as_str())` shape-gate short-circuit,
 /// and mirroring the sibling [`string_keyed_entries`] iterator's
@@ -21854,23 +21854,23 @@ pub fn string_keyed_entries(
 /// per-consumer `.and_then(|k| k.as_str())` shape-gate drift; no
 /// coordinated rewrite across every diagnostic sub-mapping key
 /// enumeration on a future [`serde_yaml`] surface rebrand of the
-/// key-shape axis (a versioned [`serde_yaml::Value::Tagged`] arm at
+/// key-shape axis (a versioned [`serde_norway::Value::Tagged`] arm at
 /// the key position for Server-Side-Apply per-field ownership
-/// annotations, a shift in the [`serde_yaml::Mapping::keys`] iterator
+/// annotations, a shift in the [`serde_norway::Mapping::keys`] iterator
 /// borrow contract).
 ///
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn mapping_string_keys(mapping: &serde_yaml::Mapping) -> Vec<String> {
+pub fn mapping_string_keys(mapping: &serde_norway::Mapping) -> Vec<String> {
     mapping
         .keys()
         .filter_map(|k| k.as_str().map(str::to_string))
         .collect()
 }
 
-/// Collect the string-shaped keys of a [`serde_yaml::Mapping`] as
+/// Collect the string-shaped keys of a [`serde_norway::Mapping`] as
 /// borrowed [`&str`] slices — the borrowed-arity peer of
 /// [`mapping_string_keys`] on the emit-side render-determinism assert
 /// axis (THEORY.md §V.2.7). The five routed test-side call sites — the
@@ -21906,20 +21906,20 @@ pub fn mapping_string_keys(mapping: &serde_yaml::Mapping) -> Vec<String> {
 /// [`string_keyed_entries`] borrowed-`(&str, &Value)` iterator carries
 /// on the sibling entry-arity axis.
 ///
-/// Non-string-shape keys ([`serde_yaml::Value::Number`] /
-/// [`serde_yaml::Value::Bool`] / [`serde_yaml::Value::Mapping`] /
-/// [`serde_yaml::Value::Sequence`] / [`serde_yaml::Value::Null`] /
-/// [`serde_yaml::Value::Tagged`] arms) are silently dropped — the
+/// Non-string-shape keys ([`serde_norway::Value::Number`] /
+/// [`serde_norway::Value::Bool`] / [`serde_norway::Value::Mapping`] /
+/// [`serde_norway::Value::Sequence`] / [`serde_norway::Value::Null`] /
+/// [`serde_norway::Value::Tagged`] arms) are silently dropped — the
 /// same drop-not-panic contract the sibling
 /// [`mapping_string_keys`] + [`string_keyed_entries`] pair enforces.
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn mapping_str_keys(mapping: &serde_yaml::Mapping) -> Vec<&str> {
+pub fn mapping_str_keys(mapping: &serde_norway::Mapping) -> Vec<&str> {
     mapping.keys().filter_map(|k| k.as_str()).collect()
 }
 
-/// Collect the string-shaped values of a [`serde_yaml::Sequence`] as
+/// Collect the string-shaped values of a [`serde_norway::Sequence`] as
 /// borrowed [`&str`] slices — the sequence-values-axis peer of
 /// [`mapping_str_keys`] on the mapping-keys-axis. The three-line
 /// composition
@@ -21949,17 +21949,17 @@ pub fn mapping_str_keys(mapping: &serde_yaml::Mapping) -> Vec<&str> {
 /// — the two together bracket the "flatten a YAML container of string
 /// scalars into a borrowed `Vec<&str>` snapshot" surface at both
 /// container-shape arms: [`mapping_str_keys`] closes it on
-/// [`serde_yaml::Mapping`] keys, [`sequence_str_values`] closes it on
-/// [`serde_yaml::Sequence`] values. Same ownership arity, same drop-
+/// [`serde_norway::Mapping`] keys, [`sequence_str_values`] closes it on
+/// [`serde_norway::Sequence`] values. Same ownership arity, same drop-
 /// not-panic contract, different container-shape input — the two
 /// scalar-enumeration axes the emit-side test-harness routinely reaches
 /// for when byte-comparing a readback of a K8s CR sub-container against
 /// an expected `vec![<STR_CONST>, ...]` shape.
 ///
-/// Non-string-shape entries ([`serde_yaml::Value::Number`] /
-/// [`serde_yaml::Value::Bool`] / [`serde_yaml::Value::Mapping`] /
-/// [`serde_yaml::Value::Sequence`] / [`serde_yaml::Value::Null`] /
-/// [`serde_yaml::Value::Tagged`] arms) are silently dropped — the same
+/// Non-string-shape entries ([`serde_norway::Value::Number`] /
+/// [`serde_norway::Value::Bool`] / [`serde_norway::Value::Mapping`] /
+/// [`serde_norway::Value::Sequence`] / [`serde_norway::Value::Null`] /
+/// [`serde_norway::Value::Tagged`] arms) are silently dropped — the same
 /// drop-not-panic contract the sibling [`mapping_str_keys`] enforces on
 /// non-string keys. The dropped entries never reach the downstream K8s
 /// YAML-scalar surface (which requires string scalars at every
@@ -21977,10 +21977,10 @@ pub fn mapping_str_keys(mapping: &serde_yaml::Mapping) -> Vec<&str> {
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn sequence_str_values(sequence: &serde_yaml::Sequence) -> Vec<&str> {
+pub fn sequence_str_values(sequence: &serde_norway::Sequence) -> Vec<&str> {
     sequence
         .iter()
-        .filter_map(serde_yaml::Value::as_str)
+        .filter_map(serde_norway::Value::as_str)
         .collect()
 }
 
@@ -22091,7 +22091,7 @@ pub fn sequence_str_values(sequence: &serde_yaml::Sequence) -> Vec<&str> {
 /// updates, `metadata.uid` on cross-CR ownerReference bookkeeping) —
 /// each new axis reaches for the same helper with a new
 /// [`KUBE_KEY_<AXIS>`] const, not a fresh per-axis helper.
-pub fn kube_metadata_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
+pub fn kube_metadata_str_field<'a>(value: &'a serde_norway::Value, field: &str) -> Option<&'a str> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_metadata_field`] (450f1ff) scalar-Value accessor rather
     // than re-inlining the two-hop `get(KUBE_KEY_METADATA).and_then(|m|
@@ -22103,7 +22103,7 @@ pub fn kube_metadata_str_field<'a>(value: &'a serde_yaml::Value, field: &str) ->
     // Every K8s API-machinery rebrand on the outer `metadata:` navigation
     // now reaches exactly one substrate helper on the sub-`metadata:`
     // axis — no per-shape-gate-arity duplication of the two-hop walk.
-    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_str)
+    kube_metadata_field(value, field).and_then(serde_norway::Value::as_str)
 }
 
 /// Read the string-scalar value at a top-level `<field>` axis-key on a
@@ -22185,7 +22185,7 @@ pub fn kube_metadata_str_field<'a>(value: &'a serde_yaml::Value, field: &str) ->
 /// MESH-COMPOSITION §III.2 #5) — each new axis reaches for the same
 /// helper with a new [`KUBE_KEY_<AXIS>`] const, not a fresh per-axis
 /// helper.
-pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
+pub fn kube_root_str_field<'a>(value: &'a serde_norway::Value, field: &str) -> Option<&'a str> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_root_field`] parametric root-axis scalar-Value accessor
     // rather than re-inlining the two-hop `value.get(field)
@@ -22197,7 +22197,7 @@ pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
     // its trailing `.as_str()` closure onto its axis's scalar-Value
     // accessor primitive rather than re-walking the two-hop navigation
     // on every axis.
-    kube_root_field(value, field).and_then(serde_yaml::Value::as_str)
+    kube_root_field(value, field).and_then(serde_norway::Value::as_str)
 }
 
 /// Predicate: does the K8s custom resource YAML document at `value`
@@ -22271,7 +22271,7 @@ pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
 /// pre-materialization CR observations) reaches this predicate through
 /// one composition-link, not a re-inlined `kube_root_str_field(_,
 /// KUBE_KEY_KIND) == Some(...)` two-token composition.
-pub fn kube_kind_is(value: &serde_yaml::Value, kind: &str) -> bool {
+pub fn kube_kind_is(value: &serde_norway::Value, kind: &str) -> bool {
     kube_kind(value) == Some(kind)
 }
 
@@ -22324,9 +22324,9 @@ pub fn kube_kind_is(value: &serde_yaml::Value, kind: &str) -> bool {
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn find_by_kind<'a>(
-    docs: &'a [serde_yaml::Value],
+    docs: &'a [serde_norway::Value],
     kind: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     docs.iter().find(|d| kube_kind_is(d, kind))
 }
 
@@ -22436,7 +22436,7 @@ pub fn find_by_kind<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
-pub fn kube_kind(value: &serde_yaml::Value) -> Option<&str> {
+pub fn kube_kind(value: &serde_norway::Value) -> Option<&str> {
     kube_root_str_field(value, KUBE_KEY_KIND)
 }
 
@@ -22568,7 +22568,7 @@ pub fn kube_kind(value: &serde_yaml::Value) -> Option<&str> {
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
-pub fn kube_api_version(value: &serde_yaml::Value) -> Option<&str> {
+pub fn kube_api_version(value: &serde_norway::Value) -> Option<&str> {
     kube_root_str_field(value, KUBE_KEY_API_VERSION)
 }
 
@@ -22665,7 +22665,7 @@ pub fn kube_api_version(value: &serde_yaml::Value) -> Option<&str> {
 /// re-parameterization on the pinned [`KUBE_KEY_API_VERSION`]
 /// axis-key.
 #[must_use]
-pub fn kube_api_version_is(value: &serde_yaml::Value, api_version: &str) -> bool {
+pub fn kube_api_version_is(value: &serde_norway::Value, api_version: &str) -> bool {
     kube_api_version(value) == Some(api_version)
 }
 
@@ -22729,9 +22729,9 @@ pub fn kube_api_version_is(value: &serde_yaml::Value, api_version: &str) -> bool
 /// the receiver-widen or combinator axes.
 #[must_use]
 pub fn find_by_api_version<'a>(
-    docs: &'a [serde_yaml::Value],
+    docs: &'a [serde_norway::Value],
     api_version: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     docs.iter().find(|d| kube_api_version_is(d, api_version))
 }
 
@@ -22808,7 +22808,7 @@ pub fn find_by_api_version<'a>(
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_name_is(value: &serde_yaml::Value, name: &str) -> bool {
+pub fn kube_name_is(value: &serde_norway::Value, name: &str) -> bool {
     kube_name(value) == Some(name)
 }
 
@@ -22902,7 +22902,7 @@ pub fn kube_name_is(value: &serde_yaml::Value, name: &str) -> bool {
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
-pub fn kube_name(value: &serde_yaml::Value) -> Option<&str> {
+pub fn kube_name(value: &serde_norway::Value) -> Option<&str> {
     kube_metadata_str_field(value, KUBE_KEY_NAME)
 }
 
@@ -23011,7 +23011,7 @@ pub fn kube_name(value: &serde_yaml::Value) -> Option<&str> {
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 /// [`programs_yaml_entry`]: https://docs.rs/caixa-flux
 #[must_use]
-pub fn kube_namespace(value: &serde_yaml::Value) -> Option<&str> {
+pub fn kube_namespace(value: &serde_norway::Value) -> Option<&str> {
     kube_metadata_str_field(value, KUBE_KEY_NAMESPACE)
 }
 
@@ -23066,7 +23066,7 @@ pub fn kube_namespace(value: &serde_yaml::Value) -> Option<&str> {
 /// inline `kube_namespace(v) == Some(...)` equality wrap and no
 /// re-parameterization on the pinned [`KUBE_KEY_NAMESPACE`] axis-key.
 #[must_use]
-pub fn kube_namespace_is(value: &serde_yaml::Value, namespace: &str) -> bool {
+pub fn kube_namespace_is(value: &serde_norway::Value, namespace: &str) -> bool {
     kube_namespace(value) == Some(namespace)
 }
 
@@ -23124,9 +23124,9 @@ pub fn kube_namespace_is(value: &serde_yaml::Value, namespace: &str) -> bool {
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn find_by_name<'a>(
-    docs: &'a [serde_yaml::Value],
+    docs: &'a [serde_norway::Value],
     name: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     docs.iter().find(|d| kube_name_is(d, name))
 }
 
@@ -23180,14 +23180,14 @@ pub fn find_by_name<'a>(
 /// combinator axes.
 #[must_use]
 pub fn find_by_namespace<'a>(
-    docs: &'a [serde_yaml::Value],
+    docs: &'a [serde_norway::Value],
     namespace: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     docs.iter().find(|d| kube_namespace_is(d, namespace))
 }
 
 /// Read the `metadata.labels` sub-mapping of a K8s custom resource YAML
-/// document as `Option<&serde_yaml::Mapping>` — the first non-scalar
+/// document as `Option<&serde_norway::Mapping>` — the first non-scalar
 /// sub-`metadata:` accessor peer to the scalar-arity parametric
 /// [`kube_metadata_str_field`] on the same two-hop `metadata.<field>`
 /// navigation depth. Where [`kube_metadata_str_field`] reads
@@ -23212,7 +23212,7 @@ pub fn find_by_namespace<'a>(
 /// block is present but carries a non-Mapping YAML type (a schema-
 /// invalid CR shape per the apiserver's `OpenAPI` schema but tolerated
 /// here as `None` so the readback stays a total function). The returned
-/// `&serde_yaml::Mapping` borrows into the input `Value` — the caller
+/// `&serde_norway::Mapping` borrows into the input `Value` — the caller
 /// decides whether to enumerate (`.iter()`), probe a specific key
 /// (`.get(<LABEL>)`), or delegate through the composed sibling
 /// [`kube_metadata_label`] scalar-arity peer. The three-hop navigation
@@ -23287,7 +23287,7 @@ pub fn find_by_namespace<'a>(
 /// axis-key); [`kube_metadata_labels`] reads the sub-mapping-arity
 /// sub-block (pinned on the [`KUBE_KEY_LABELS`] axis-key). Same two-
 /// hop `metadata.<sub-block>` readback shape, different return
-/// (`Option<&str>` scalar-arity vs. `Option<&serde_yaml::Mapping>`
+/// (`Option<&str>` scalar-arity vs. `Option<&serde_norway::Mapping>`
 /// sub-mapping-arity) — together they bracket the two canonical
 /// per-`metadata` readback shapes every K8s CR document carries.
 ///
@@ -23311,7 +23311,7 @@ pub fn find_by_namespace<'a>(
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_metadata_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
+pub fn kube_metadata_labels(value: &serde_norway::Value) -> Option<&serde_norway::Mapping> {
     kube_metadata_map_field(value, KUBE_KEY_LABELS)
 }
 
@@ -23415,10 +23415,10 @@ pub fn kube_metadata_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Ma
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 /// [caixa-nome]: https://docs.rs/caixa-core
 #[must_use]
-pub fn kube_metadata_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Option<&'a str> {
+pub fn kube_metadata_label<'a>(value: &'a serde_norway::Value, label: &str) -> Option<&'a str> {
     kube_metadata_labels(value)
         .and_then(|labels| labels.get(label))
-        .and_then(serde_yaml::Value::as_str)
+        .and_then(serde_norway::Value::as_str)
 }
 
 /// Predicate: does the K8s custom resource YAML document at `value`
@@ -23511,7 +23511,7 @@ pub fn kube_metadata_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Opt
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_metadata_label_is(value: &serde_yaml::Value, label: &str, expected: &str) -> bool {
+pub fn kube_metadata_label_is(value: &serde_norway::Value, label: &str, expected: &str) -> bool {
     kube_metadata_label(value, label) == Some(expected)
 }
 
@@ -23577,10 +23577,10 @@ pub fn kube_metadata_label_is(value: &serde_yaml::Value, label: &str, expected: 
 /// axis-key axes.
 #[must_use]
 pub fn find_by_label<'a>(
-    docs: &'a [serde_yaml::Value],
+    docs: &'a [serde_norway::Value],
     label: &str,
     expected: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     docs.iter()
         .find(|d| kube_metadata_label_is(d, label, expected))
 }
@@ -23612,7 +23612,7 @@ pub fn find_by_label<'a>(
 /// per-entry `f.path == <PathBuf>` equality-shape gate happen once
 /// inside the helper, the caller keeps its downstream continuation
 /// (`.expect(<axis>)`, `.unwrap_or_else(...)`, `.and_then(|f|
-/// serde_yaml::from_str(&f.contents))`) unchanged.
+/// serde_norway::from_str(&f.contents))`) unchanged.
 ///
 /// Accepts `path: &str` (rather than `&Path` / `&PathBuf`) to match the
 /// author-supplied filename constants the routed callers already carry
@@ -23654,14 +23654,14 @@ pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'
 
 /// Locate the [`RenderedFile`] in `files` whose sandboxed relative
 /// [`RenderedFile::path`] byte-equals `path`, then parse its
-/// [`RenderedFile::contents`] as an untyped [`serde_yaml::Value`] YAML
+/// [`RenderedFile::contents`] as an untyped [`serde_norway::Value`] YAML
 /// document. Panics on either short-circuit arm — the leaf is absent
 /// (`{path} present`) or the contents do not parse as YAML
 /// (`{path} parses as YAML: {err}`).
 ///
 /// The composed peer to [`find_file_by_path`] — same
 /// `&[RenderedFile]`-container-side one-hop navigator, extended by the
-/// paired [`serde_yaml::from_str`] parse step every test-side per-
+/// paired [`serde_norway::from_str`] parse step every test-side per-
 /// artifact readback carried inline after the locate call. Every
 /// per-artifact readback across [`caixa-flux`][flux]'s
 /// [`cluster_bundle`][cb] Flux v2 CR-trio emit and [`caixa-helm`][helm]'s
@@ -23671,8 +23671,8 @@ pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'
 /// ```ignore
 /// let f = find_file_by_path(&files, <FILENAME>)
 ///     .expect("<filename>.yaml present");
-/// let parsed: serde_yaml::Value =
-///     serde_yaml::from_str(&f.contents).expect("<filename>.yaml parses as YAML");
+/// let parsed: serde_norway::Value =
+///     serde_norway::from_str(&f.contents).expect("<filename>.yaml parses as YAML");
 /// ```
 ///
 /// combinator around a one-token semantic payload (the `<FILENAME>`
@@ -23699,7 +23699,7 @@ pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'
 /// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] / [`FLUX_GITREPOSITORY_YAML_FILENAME`]
 /// / [`HELM_VALUES_YAML_FILENAME`] / [`HELM_CHART_YAML_FILENAME`]) —
 /// same panic prefix, and the parse-failure arm now includes the
-/// underlying `serde_yaml::Error` for far-easier root-cause naming
+/// underlying `serde_norway::Error` for far-easier root-cause naming
 /// than the prior `.expect("<filename>.yaml parses as YAML")` /
 /// `.unwrap()` shape (which either dropped the error verbatim or
 /// carried the canonical `Result::unwrap()` panic naming nothing).
@@ -23711,7 +23711,7 @@ pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'
 /// per-tofu-manifest emit that carries `main.tf` / `variables.tf` /
 /// `outputs.tf` leaves the tofu-plan test walks by filename) reaches
 /// this same helper by construction, with no inline
-/// `find_file_by_path(...).expect(...)` + `serde_yaml::from_str(...).expect(...)`
+/// `find_file_by_path(...).expect(...)` + `serde_norway::from_str(...).expect(...)`
 /// two-step and no drift surface on the parse-target,
 /// panic-message-composition, or filename-axis-key axes.
 ///
@@ -23719,27 +23719,27 @@ pub fn find_file_by_path<'a>(files: &'a [RenderedFile], path: &str) -> Option<&'
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 /// [helm]: https://github.com/pleme-io/caixa/tree/main/caixa-helm
 #[must_use]
-pub fn parse_yaml_at_path(files: &[RenderedFile], path: &str) -> serde_yaml::Value {
+pub fn parse_yaml_at_path(files: &[RenderedFile], path: &str) -> serde_norway::Value {
     let file = find_file_by_path(files, path).unwrap_or_else(|| panic!("{path} present"));
-    serde_yaml::from_str(&file.contents)
+    serde_norway::from_str(&file.contents)
         .unwrap_or_else(|err| panic!("{path} parses as YAML: {err}"))
 }
 
 /// Locate the [`RenderedFile`] in `files` whose sandboxed relative
 /// [`RenderedFile::path`] byte-equals `path`, then parse its
 /// [`RenderedFile::contents`] as a caller-typed `T` YAML document via
-/// [`serde_yaml::from_str::<T>`]. Panics on either short-circuit arm —
+/// [`serde_norway::from_str::<T>`]. Panics on either short-circuit arm —
 /// the leaf is absent (`{path} present`) or the contents do not parse
 /// as `T` at the passed [`serde::Deserialize`] boundary
 /// (`{path} parses as YAML: {err}`).
 ///
 /// The caller-typed peer to [`parse_yaml_at_path`] — same
-/// leaf-locate + `serde_yaml::from_str` two-step, extended one axis-
+/// leaf-locate + `serde_norway::from_str` two-step, extended one axis-
 /// arity by letting the caller pin the parse target through the
 /// standard [`serde::Deserialize`] surface every renderer already
 /// carries on its emit-side [`serde::Serialize`]-derived body type.
 /// Where [`parse_yaml_at_path`] closes the untyped
-/// [`serde_yaml::Value`]-arity every renderer-neutral `kube_*` /
+/// [`serde_norway::Value`]-arity every renderer-neutral `kube_*` /
 /// `mapping_*` navigator downstream keys off, this closes the paired
 /// typed-arity every renderer-native emit-side test-arm keys off —
 /// [`caixa-helm`][helm]'s `ChartYaml`-typed Chart.yaml readback, a
@@ -23759,7 +23759,7 @@ pub fn parse_yaml_at_path(files: &[RenderedFile], path: &str) -> serde_yaml::Val
 /// let chart_file = find_file_by_path(&dir.files, HELM_CHART_YAML_FILENAME)
 ///     .unwrap(); // or .expect("Chart.yaml present")
 /// let chart: ChartYaml =
-///     serde_yaml::from_str(&chart_file.contents).unwrap();
+///     serde_norway::from_str(&chart_file.contents).unwrap();
 /// ```
 ///
 /// combinator around a two-token semantic payload (the `<FILENAME>`
@@ -23779,9 +23779,9 @@ pub fn parse_yaml_at_path(files: &[RenderedFile], path: &str) -> serde_yaml::Val
 /// produces `"{path} parses as YAML: {err}"`. These match the
 /// canonical shape the routed test-side sites carried inline
 /// (`"Chart.yaml present"` on the `.expect`-shaped variant), and the
-/// parse-failure arm now includes the underlying `serde_yaml::Error`
+/// parse-failure arm now includes the underlying `serde_norway::Error`
 /// for far-easier root-cause naming than the prior
-/// `serde_yaml::from_str(...).unwrap()` shape (which produced the
+/// `serde_norway::from_str(...).unwrap()` shape (which produced the
 /// canonical [`Result::unwrap`] panic naming nothing about which leaf,
 /// which parse-target type, or which per-field boundary the parser
 /// tripped over).
@@ -23797,14 +23797,14 @@ pub fn parse_yaml_at_path(files: &[RenderedFile], path: &str) -> serde_yaml::Val
 /// flake typed-mirror readback whose test-side asserts on the emitted
 /// `flake.nix` frontmatter through a typed `NixFlakeFrontmatter`
 /// struct) reaches this same helper by construction, with no inline
-/// `find_file_by_path(...).expect(...)` + `serde_yaml::from_str::<T>(...)
+/// `find_file_by_path(...).expect(...)` + `serde_norway::from_str::<T>(...)
 /// .expect(...)` two-step and no drift surface on the parse-target,
 /// panic-message-composition, or filename-axis-key axes.
 ///
 /// Composition-symmetric with the sibling [`parse_yaml_at_path`] on
 /// the untyped-parse arm: the two together bracket every leaf-locate
 /// paired with a serde_yaml-parse readback the substrate output
-/// containers admit — [`parse_yaml_at_path`] on the [`serde_yaml::Value`]-arity
+/// containers admit — [`parse_yaml_at_path`] on the [`serde_norway::Value`]-arity
 /// (renderer-neutral navigation through `kube_*` / `mapping_*`
 /// primitives), [`parse_yaml_at_path_as`] on the caller-typed-arity
 /// (renderer-native per-body-field assertion through the typed struct
@@ -23820,12 +23820,12 @@ where
     T: serde::de::DeserializeOwned,
 {
     let file = find_file_by_path(files, path).unwrap_or_else(|| panic!("{path} present"));
-    serde_yaml::from_str(&file.contents)
+    serde_norway::from_str(&file.contents)
         .unwrap_or_else(|err| panic!("{path} parses as YAML: {err}"))
 }
 
 /// Read the top-level `spec:` sub-mapping on a K8s custom resource YAML
-/// document as `Option<&serde_yaml::Mapping>` — the sub-mapping-arity
+/// document as `Option<&serde_norway::Mapping>` — the sub-mapping-arity
 /// accessor peer on the sibling top-level `spec:` sub-block, structural
 /// mirror of the recently-lifted [`kube_metadata_labels`] (f3d9fcd) on
 /// the sub-`metadata.labels` sub-block. Where [`kube_metadata_labels`]
@@ -23856,7 +23856,7 @@ where
 /// pin their respective canonical sub-block axis-key inside the
 /// helper (`KUBE_KEY_LABELS` for [`kube_metadata_labels`],
 /// [`KUBE_KEY_SPEC`] for this accessor), and return
-/// `Option<&serde_yaml::Mapping>` — together they bracket the two
+/// `Option<&serde_norway::Mapping>` — together they bracket the two
 /// canonical top-level sub-mapping readbacks every K8s CR document
 /// the emit-side [`kube_resource_skeleton`] renders carries
 /// (`metadata.labels` for the per-CR selector surface via the sibling
@@ -23906,7 +23906,7 @@ where
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_spec(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
+pub fn kube_spec(value: &serde_norway::Value) -> Option<&serde_norway::Mapping> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_root_map_field`] parametric root-axis accessor rather
     // than re-inlining the two-hop `value.get(KUBE_KEY_SPEC)
@@ -23916,7 +23916,7 @@ pub fn kube_spec(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
 }
 
 /// Read the sub-`spec.<field>` value on a K8s custom resource YAML
-/// document as `Option<&serde_yaml::Value>` — the composed scalar-arity
+/// document as `Option<&serde_norway::Value>` — the composed scalar-arity
 /// per-sub-field-Value accessor peer that stands on the sub-mapping-arity
 /// [`kube_spec`] (9b028ee) accessor, closing the two-hop
 /// `spec → as_mapping → get(<field>)` composition the load-bearing
@@ -24010,9 +24010,9 @@ pub fn kube_spec(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_spec(value).and_then(|s| kube_field(s, field))
 }
 
@@ -24109,12 +24109,12 @@ pub fn kube_spec_field<'a>(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_spec_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
-    kube_spec_field(value, field).and_then(serde_yaml::Value::as_str)
+pub fn kube_spec_str_field<'a>(value: &'a serde_norway::Value, field: &str) -> Option<&'a str> {
+    kube_spec_field(value, field).and_then(serde_norway::Value::as_str)
 }
 
 /// Read the sub-`spec.<field>` YAML sequence on a K8s custom resource YAML
-/// document as `Option<&serde_yaml::Sequence>` — the composed sequence-
+/// document as `Option<&serde_norway::Sequence>` — the composed sequence-
 /// arity per-sub-field-sequence accessor peer that stands on the composed
 /// scalar-arity [`kube_spec_field`] (23bd568) accessor, folding the
 /// trailing `.and_then(|v| v.as_sequence())` shape-gate closure into the
@@ -24198,14 +24198,14 @@ pub fn kube_spec_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec_seq_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Sequence> {
-    kube_spec_field(value, field).and_then(serde_yaml::Value::as_sequence)
+) -> Option<&'a serde_norway::Sequence> {
+    kube_spec_field(value, field).and_then(serde_norway::Value::as_sequence)
 }
 
 /// Read the sub-`spec.<field>` YAML sub-mapping on a K8s custom resource
-/// YAML document as `Option<&serde_yaml::Mapping>` — the composed sub-
+/// YAML document as `Option<&serde_norway::Mapping>` — the composed sub-
 /// mapping-arity per-sub-field-mapping accessor peer that stands on the
 /// composed scalar-arity [`kube_spec_field`] (23bd568) accessor, folding
 /// the trailing `.and_then(|v| v.as_mapping())` shape-gate closure into
@@ -24293,10 +24293,10 @@ pub fn kube_spec_seq_field<'a>(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
 pub fn kube_spec_map_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Mapping> {
-    kube_spec_field(value, field).and_then(serde_yaml::Value::as_mapping)
+) -> Option<&'a serde_norway::Mapping> {
+    kube_spec_field(value, field).and_then(serde_norway::Value::as_mapping)
 }
 
 /// Read the sub-`spec.<field>` YAML scalar-boolean on a K8s custom
@@ -24398,8 +24398,8 @@ pub fn kube_spec_map_field<'a>(
 ///
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
-pub fn kube_spec_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bool> {
-    kube_spec_field(value, field).and_then(serde_yaml::Value::as_bool)
+pub fn kube_spec_bool_field(value: &serde_norway::Value, field: &str) -> Option<bool> {
+    kube_spec_field(value, field).and_then(serde_norway::Value::as_bool)
 }
 
 /// Read the sub-`spec.<field>` YAML scalar-integer on a K8s custom
@@ -24489,12 +24489,12 @@ pub fn kube_spec_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
 ///
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
-pub fn kube_spec_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64> {
-    kube_spec_field(value, field).and_then(serde_yaml::Value::as_u64)
+pub fn kube_spec_u64_field(value: &serde_norway::Value, field: &str) -> Option<u64> {
+    kube_spec_field(value, field).and_then(serde_norway::Value::as_u64)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` sub-value on a K8s custom
-/// resource YAML document as `Option<&serde_yaml::Value>` — the composed
+/// resource YAML document as `Option<&serde_norway::Value>` — the composed
 /// nested-spec-anchored two-hop accessor peer that composes
 /// [`kube_spec_field`] twice, folding the trailing
 /// `.and_then(|c| kube_spec_field(c, <inner>))` re-inline closure into the
@@ -24513,7 +24513,7 @@ pub fn kube_spec_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64
 /// (2ee7fc9) on the composed two-hop nested-first-entry axis: both
 /// accessors fold a trailing two-hop re-inline of a substrate-primitive
 /// spec-anchored accessor into one helper call, both stay parametric on
-/// the per-hop axis-key, both return `Option<&serde_yaml::Value>` at the
+/// the per-hop axis-key, both return `Option<&serde_norway::Value>` at the
 /// generic-value tail arity. Where [`kube_spec_seq_first_seq_first`]
 /// closes the nested-first-entry axis on ordered sub-sequences, this
 /// closes the nested-spec axis on the sub-spec-envelope container-shape
@@ -24587,10 +24587,10 @@ pub fn kube_spec_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64
 /// [argo-app]: https://argo-cd.readthedocs.io/en/stable/user-guide/application-specification/
 #[must_use]
 pub fn kube_spec_spec_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     outer: &str,
     inner: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_spec_field(value, outer).and_then(|c| kube_spec_field(c, inner))
 }
 
@@ -24674,15 +24674,15 @@ pub fn kube_spec_spec_field<'a>(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
 pub fn kube_spec_spec_str_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     outer: &str,
     inner: &str,
 ) -> Option<&'a str> {
-    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_str)
+    kube_spec_spec_field(value, outer, inner).and_then(serde_norway::Value::as_str)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` sub-mapping on a K8s
-/// custom resource YAML document as `Option<&serde_yaml::Mapping>` — the
+/// custom resource YAML document as `Option<&serde_norway::Mapping>` — the
 /// composed sub-mapping-arity peer that stands on the composed nested-
 /// spec-envelope-arity [`kube_spec_spec_field`] (18d3851) accessor,
 /// folding the trailing `.and_then(|v| v.as_mapping())` shape-gate
@@ -24764,15 +24764,15 @@ pub fn kube_spec_spec_str_field<'a>(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
 pub fn kube_spec_spec_map_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     outer: &str,
     inner: &str,
-) -> Option<&'a serde_yaml::Mapping> {
-    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_mapping)
+) -> Option<&'a serde_norway::Mapping> {
+    kube_spec_spec_field(value, outer, inner).and_then(serde_norway::Value::as_mapping)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` YAML sequence on a K8s
-/// custom resource YAML document as `Option<&serde_yaml::Sequence>` — the
+/// custom resource YAML document as `Option<&serde_norway::Sequence>` — the
 /// composed sequence-arity peer that stands on the composed nested-spec-
 /// envelope-arity [`kube_spec_spec_field`] (18d3851) accessor, folding
 /// the trailing `.and_then(|v| v.as_sequence())` shape-gate closure into
@@ -24786,7 +24786,7 @@ pub fn kube_spec_spec_map_field<'a>(
 /// one-hop [`kube_spec_seq_field`] (66d90b0) on the sub-`spec.<field>`
 /// axis: both accessors fold a trailing `.as_sequence()` shape-gate
 /// closure onto their respective composed-[`kube_spec_field`]-family
-/// navigation, both return `Option<&serde_yaml::Sequence>` for callers
+/// navigation, both return `Option<&serde_norway::Sequence>` for callers
 /// that pin an ordered multi-entry sub-block downstream, both stay
 /// parametric on the per-`<inner>` sub-field axis-key. Where
 /// [`kube_spec_seq_field`] closes the `spec.<field>` sequence readback
@@ -24856,11 +24856,11 @@ pub fn kube_spec_spec_map_field<'a>(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
 pub fn kube_spec_spec_seq_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     outer: &str,
     inner: &str,
-) -> Option<&'a serde_yaml::Sequence> {
-    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_sequence)
+) -> Option<&'a serde_norway::Sequence> {
+    kube_spec_spec_field(value, outer, inner).and_then(serde_norway::Value::as_sequence)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` scalar-boolean on a K8s
@@ -24968,11 +24968,11 @@ pub fn kube_spec_spec_seq_field<'a>(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
 pub fn kube_spec_spec_bool_field(
-    value: &serde_yaml::Value,
+    value: &serde_norway::Value,
     outer: &str,
     inner: &str,
 ) -> Option<bool> {
-    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_bool)
+    kube_spec_spec_field(value, outer, inner).and_then(serde_norway::Value::as_bool)
 }
 
 /// Read the nested `spec.<outer>.spec.<inner>` scalar-integer on a K8s
@@ -25086,15 +25086,15 @@ pub fn kube_spec_spec_bool_field(
 /// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
 #[must_use]
 pub fn kube_spec_spec_u64_field(
-    value: &serde_yaml::Value,
+    value: &serde_norway::Value,
     outer: &str,
     inner: &str,
 ) -> Option<u64> {
-    kube_spec_spec_field(value, outer, inner).and_then(serde_yaml::Value::as_u64)
+    kube_spec_spec_field(value, outer, inner).and_then(serde_norway::Value::as_u64)
 }
 
 /// Read the top-level `metadata:` sub-mapping on a K8s custom resource
-/// YAML document as `Option<&serde_yaml::Mapping>` — the sub-mapping-
+/// YAML document as `Option<&serde_norway::Mapping>` — the sub-mapping-
 /// arity accessor peer on the sibling top-level `metadata:` sub-block,
 /// structural mirror of the recently-lifted [`kube_spec`] (9b028ee) on
 /// the top-level `spec:` sub-block. Where [`kube_spec`] closes the one-
@@ -25125,7 +25125,7 @@ pub fn kube_spec_spec_u64_field(
 /// trailing `.as_mapping()` closure onto the helper), pin their
 /// respective canonical sub-block axis-key inside the helper
 /// ([`KUBE_KEY_METADATA`] for this accessor, [`KUBE_KEY_SPEC`] for
-/// [`kube_spec`]), and return `Option<&serde_yaml::Mapping>` —
+/// [`kube_spec`]), and return `Option<&serde_norway::Mapping>` —
 /// together they bracket the two canonical top-level sub-mapping
 /// readbacks every K8s CR document the emit-side
 /// [`kube_resource_skeleton`] renders carries (`metadata` for the
@@ -25187,7 +25187,7 @@ pub fn kube_spec_spec_u64_field(
 ///
 /// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
 #[must_use]
-pub fn kube_metadata(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
+pub fn kube_metadata(value: &serde_norway::Value) -> Option<&serde_norway::Mapping> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_root_map_field`] parametric root-axis accessor rather
     // than re-inlining the two-hop `value.get(KUBE_KEY_METADATA)
@@ -25203,7 +25203,7 @@ pub fn kube_metadata(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> 
 }
 
 /// Read the sub-`metadata.<field>` value on a K8s custom resource YAML
-/// document as `Option<&serde_yaml::Value>` — the composed scalar-arity
+/// document as `Option<&serde_norway::Value>` — the composed scalar-arity
 /// per-sub-field-Value accessor peer that stands on the sub-mapping-
 /// arity [`kube_metadata`] (f41c4fe) accessor, closing the two-hop
 /// `metadata → as_mapping → get(<field>)` composition the load-bearing
@@ -25211,7 +25211,7 @@ pub fn kube_metadata(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> 
 /// [`kube_spec_field`] (23bd568) on the sub-`spec:` axis: same
 /// composition shape (scalar-arity sub-field-Value accessor stands on
 /// sub-mapping-arity sub-block accessor), same return shape
-/// (`Option<&serde_yaml::Value>` so the caller closes the trailing
+/// (`Option<&serde_norway::Value>` so the caller closes the trailing
 /// shape-gate at call site), same parametric `field` axis (open-ended
 /// on the K8s [`ObjectMeta`][om]-flavoured sub-field surface every
 /// per-CR identity readback reaches for). The composition-pin test
@@ -25317,14 +25317,14 @@ pub fn kube_metadata(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> 
 /// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
 #[must_use]
 pub fn kube_metadata_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_metadata(value).and_then(|m| kube_field(m, field))
 }
 
 /// Read the sub-`metadata.<field>` YAML sub-mapping on a K8s custom
-/// resource YAML document as `Option<&serde_yaml::Mapping>` — the
+/// resource YAML document as `Option<&serde_norway::Mapping>` — the
 /// composed sub-mapping-arity per-sub-field-mapping accessor peer that
 /// stands on the composed scalar-arity [`kube_metadata_field`]
 /// (450f1ff) accessor, folding the trailing
@@ -25416,14 +25416,14 @@ pub fn kube_metadata_field<'a>(
 /// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
 #[must_use]
 pub fn kube_metadata_map_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Mapping> {
-    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_mapping)
+) -> Option<&'a serde_norway::Mapping> {
+    kube_metadata_field(value, field).and_then(serde_norway::Value::as_mapping)
 }
 
 /// Read the sub-`metadata.<field>` YAML sequence on a K8s custom
-/// resource YAML document as `Option<&serde_yaml::Sequence>` — the
+/// resource YAML document as `Option<&serde_norway::Sequence>` — the
 /// composed sequence-arity per-sub-field-sequence accessor peer that
 /// stands on the composed scalar-arity [`kube_metadata_field`]
 /// (450f1ff) accessor, folding the trailing
@@ -25502,10 +25502,10 @@ pub fn kube_metadata_map_field<'a>(
 /// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
 #[must_use]
 pub fn kube_metadata_seq_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Sequence> {
-    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_sequence)
+) -> Option<&'a serde_norway::Sequence> {
+    kube_metadata_field(value, field).and_then(serde_norway::Value::as_sequence)
 }
 
 /// Read the sub-`metadata.<field>` YAML scalar-integer on a K8s custom
@@ -25592,8 +25592,8 @@ pub fn kube_metadata_seq_field<'a>(
 ///
 /// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
 #[must_use]
-pub fn kube_metadata_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64> {
-    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_u64)
+pub fn kube_metadata_u64_field(value: &serde_norway::Value, field: &str) -> Option<u64> {
+    kube_metadata_field(value, field).and_then(serde_norway::Value::as_u64)
 }
 
 /// Read the sub-`metadata.<field>` YAML scalar-boolean on a K8s custom
@@ -25671,12 +25671,12 @@ pub fn kube_metadata_u64_field(value: &serde_yaml::Value, field: &str) -> Option
 ///
 /// [om]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#objectmeta-v1-meta
 #[must_use]
-pub fn kube_metadata_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bool> {
-    kube_metadata_field(value, field).and_then(serde_yaml::Value::as_bool)
+pub fn kube_metadata_bool_field(value: &serde_norway::Value, field: &str) -> Option<bool> {
+    kube_metadata_field(value, field).and_then(serde_norway::Value::as_bool)
 }
 
 /// Read a top-level `<field>:` sub-mapping on a K8s custom resource
-/// YAML document as `Option<&serde_yaml::Mapping>` — the composed
+/// YAML document as `Option<&serde_norway::Mapping>` — the composed
 /// sub-mapping-arity per-top-level-field accessor at the root axis,
 /// folding the shape `value.get(field).and_then(|v| v.as_mapping())`
 /// onto one substrate-primitive method call the caller reads as
@@ -25691,7 +25691,7 @@ pub fn kube_metadata_bool_field(value: &serde_yaml::Value, field: &str) -> Optio
 /// axis the caller navigates (top-level `<field>:` here, sub-
 /// `metadata.<field>` on the metadata peer, sub-`spec.<field>` on the
 /// spec peer). The root-level variant needs no outer shape gate on
-/// `value` itself — [`serde_yaml::Value::get`] already short-circuits
+/// `value` itself — [`serde_norway::Value::get`] already short-circuits
 /// to `None` on non-Mapping outer values — so the composition folds
 /// on one hop rather than the two hops the sub-axis peers close.
 ///
@@ -25743,9 +25743,9 @@ pub fn kube_metadata_bool_field(value: &serde_yaml::Value, field: &str) -> Optio
 /// (`{str, seq, map}`) already closed at the sub-axis level.
 #[must_use]
 pub fn kube_root_map_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Mapping> {
+) -> Option<&'a serde_norway::Mapping> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_root_field`] parametric root-axis scalar-Value accessor
     // rather than re-inlining the two-hop `value.get(field)
@@ -25756,17 +25756,17 @@ pub fn kube_root_map_field<'a>(
     // [`kube_spec_field`] (23bd568) — each shape-gate arity peer
     // folds its trailing `.as_mapping()` closure onto its axis's
     // scalar-Value accessor primitive.
-    kube_root_field(value, field).and_then(serde_yaml::Value::as_mapping)
+    kube_root_field(value, field).and_then(serde_norway::Value::as_mapping)
 }
 
 /// Read a top-level `<field>:` sub-Value on a K8s custom resource or
-/// helm-values-shaped YAML document as `Option<&serde_yaml::Value>` —
+/// helm-values-shaped YAML document as `Option<&serde_norway::Value>` —
 /// the composed scalar-arity per-top-level-field-Value accessor at the
 /// root axis, folding the one-hop `value.get(field)` navigation onto
 /// one substrate-primitive method call the caller reads as intent
 /// (`kube_root_field(<value>, <FIELD>)` — "read this K8s CR's
 /// top-level `<FIELD>:` sub-Value") rather than as a hand-spelled
-/// [`serde_yaml::Value::get`] site the shape-gate peers each re-typed
+/// [`serde_norway::Value::get`] site the shape-gate peers each re-typed
 /// verbatim. Root-axis peer to the sibling composed scalar-Value
 /// accessors on the sub-axes — [`kube_metadata_field`] (450f1ff) on
 /// the sub-`metadata:` axis and [`kube_spec_field`] (23bd568) on the
@@ -25780,7 +25780,7 @@ pub fn kube_root_map_field<'a>(
 /// close a two-hop `outer-block → per-field-value` navigation
 /// through their axis's [`kube_metadata`] / [`kube_spec`] outer
 /// sub-mapping accessor, the root-axis variant needs no outer shape
-/// gate on `value` itself — [`serde_yaml::Value::get`] already
+/// gate on `value` itself — [`serde_norway::Value::get`] already
 /// short-circuits to `None` on non-Mapping outer values — so the
 /// composition folds on the single hop the sub-axis peers close
 /// under an outer sub-mapping walk.
@@ -25802,7 +25802,7 @@ pub fn kube_root_map_field<'a>(
 /// sub-mapping walks.
 ///
 /// Returns `None` on either short-circuit arm the underlying
-/// [`serde_yaml::Value::get`] closes: the requested top-level
+/// [`serde_norway::Value::get`] closes: the requested top-level
 /// `<field>:` axis-key is absent (a legally-omitted top-level
 /// sub-block — e.g. a bare status-scoped document that carries no
 /// `spec:` body, a `List`-shaped document that carries no per-item
@@ -25844,14 +25844,14 @@ pub fn kube_root_map_field<'a>(
 /// primitives without a per-arity two-hop chain re-inline.
 #[must_use]
 pub fn kube_root_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_field(value, field)
 }
 
 /// Read a top-level `<field>:` sub-sequence on a K8s custom resource or
-/// helm-values-shaped YAML document as `Option<&serde_yaml::Sequence>` —
+/// helm-values-shaped YAML document as `Option<&serde_norway::Sequence>` —
 /// the composed sequence-arity per-top-level-field accessor at the root
 /// axis, folding the shape `value.get(field).and_then(|v|
 /// v.as_sequence())` onto one substrate-primitive method call the caller
@@ -25865,7 +25865,7 @@ pub fn kube_root_field<'a>(
 /// the readback, differing only in which axis the caller navigates (top-
 /// level `<field>:` here, sub-`metadata.<field>` on the metadata peer,
 /// sub-`spec.<field>` on the spec peer). The root-level variant needs
-/// no outer shape gate on `value` itself — [`serde_yaml::Value::get`]
+/// no outer shape gate on `value` itself — [`serde_norway::Value::get`]
 /// already short-circuits to `None` on non-Mapping outer values — so
 /// the composition folds on one hop rather than the two hops the sub-
 /// axis peers close. Peer of [`kube_root_str_field`] (ae83f4e) on the
@@ -25916,9 +25916,9 @@ pub fn kube_root_field<'a>(
 /// hand-spelled readback chain.
 #[must_use]
 pub fn kube_root_seq_field<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Sequence> {
+) -> Option<&'a serde_norway::Sequence> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_root_field`] parametric root-axis scalar-Value accessor
     // rather than re-inlining the two-hop `value.get(field)
@@ -25929,7 +25929,7 @@ pub fn kube_root_seq_field<'a>(
     // [`kube_spec_field`] (23bd568) — each shape-gate arity peer folds
     // its trailing `.as_sequence()` closure onto its axis's
     // scalar-Value accessor primitive.
-    kube_root_field(value, field).and_then(serde_yaml::Value::as_sequence)
+    kube_root_field(value, field).and_then(serde_norway::Value::as_sequence)
 }
 
 /// Read a top-level `<field>:` scalar-boolean leaf-toggle on a K8s
@@ -25959,7 +25959,7 @@ pub fn kube_root_seq_field<'a>(
 /// four-arity family already closed at the sub-axis level
 /// (`c4fe21d` — str; `fc64ed7` — seq; `27fc2ee` — map;
 /// `4f6fc93` — bool). The root-level variant needs no outer shape
-/// gate on `value` itself — [`serde_yaml::Value::get`] already
+/// gate on `value` itself — [`serde_norway::Value::get`] already
 /// short-circuits to `None` on non-Mapping outer values — so the
 /// composition folds on one hop rather than the two hops the
 /// spec-anchored peer closes.
@@ -25969,7 +25969,7 @@ pub fn kube_root_seq_field<'a>(
 /// carries a non-Mapping YAML type (the [`kube_root_field`]
 /// `Value::get` outer-arm short-circuit — `Value::Null`,
 /// `Value::String`, `Value::Sequence`, `Value::Number`,
-/// `Value::Bool`, `Value::Tagged` — [`serde_yaml::Value::get`]
+/// `Value::Bool`, `Value::Tagged` — [`serde_norway::Value::get`]
 /// gates the outer shape without a separate `.as_mapping()`
 /// closure), the requested top-level `<field>:` axis-key is absent
 /// from the outer Mapping (the [`kube_root_field`] trailing
@@ -26019,7 +26019,7 @@ pub fn kube_root_seq_field<'a>(
 /// structural parity with the sub-`spec.<field>` four-arity closure
 /// established at 4f6fc93.
 #[must_use]
-pub fn kube_root_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bool> {
+pub fn kube_root_bool_field(value: &serde_norway::Value, field: &str) -> Option<bool> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_root_field`] parametric root-axis scalar-Value accessor
     // rather than re-inlining the two-hop `value.get(field)
@@ -26038,7 +26038,7 @@ pub fn kube_root_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
     // folds its trailing `.as_bool()` / `.as_str()` / `.as_mapping()`
     // / `.as_sequence()` closure onto its axis's scalar-Value
     // accessor primitive.
-    kube_root_field(value, field).and_then(serde_yaml::Value::as_bool)
+    kube_root_field(value, field).and_then(serde_norway::Value::as_bool)
 }
 
 /// Read a top-level `<field>:` scalar-integer on a K8s custom resource or
@@ -26069,7 +26069,7 @@ pub fn kube_root_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
 /// closed at the sub-axis level (`c4fe21d` — str; `fc64ed7` — seq;
 /// `27fc2ee` — map; `4f6fc93` — bool; `e09f5ad` — u64). The root-level
 /// variant needs no outer shape gate on `value` itself —
-/// [`serde_yaml::Value::get`] already short-circuits to `None` on
+/// [`serde_norway::Value::get`] already short-circuits to `None` on
 /// non-Mapping outer values — so the composition folds on one hop rather
 /// than the two hops the spec-anchored peer closes.
 ///
@@ -26078,7 +26078,7 @@ pub fn kube_root_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
 /// non-Mapping YAML type (the [`kube_root_field`] `Value::get` outer-arm
 /// short-circuit — `Value::Null`, `Value::String`, `Value::Sequence`,
 /// `Value::Number`, `Value::Bool`, `Value::Tagged` —
-/// [`serde_yaml::Value::get`] gates the outer shape without a separate
+/// [`serde_norway::Value::get`] gates the outer shape without a separate
 /// `.as_mapping()` closure), the requested top-level `<field>:` axis-key
 /// is absent from the outer Mapping (the [`kube_root_field`] trailing
 /// `Value::get` none-arm — a legally-omitted top-level scalar-integer
@@ -26127,7 +26127,7 @@ pub fn kube_root_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
 /// top-level axis to structural parity with the sub-`spec.<field>`
 /// five-arity closure established at e09f5ad.
 #[must_use]
-pub fn kube_root_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64> {
+pub fn kube_root_u64_field(value: &serde_norway::Value, field: &str) -> Option<u64> {
     // Post-lift body: composes on the substrate-primitive
     // [`kube_root_field`] parametric root-axis scalar-Value accessor
     // rather than re-inlining the two-hop `value.get(field)
@@ -26143,14 +26143,14 @@ pub fn kube_root_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64
     // trailing `.as_u64()` / `.as_bool()` / `.as_str()` /
     // `.as_mapping()` / `.as_sequence()` closure onto its axis's
     // scalar-Value accessor primitive.
-    kube_root_field(value, field).and_then(serde_yaml::Value::as_u64)
+    kube_root_field(value, field).and_then(serde_norway::Value::as_u64)
 }
 
 /// Read the `matchLabels:` string-scalar sub-mapping on a K8s
 /// `LabelSelector`-shaped YAML value (Cilium `EndpointSelector`,
 /// `fromEndpoints[]`, Gateway API selectors, `NetworkPolicy` peers,
 /// RBAC subject selectors, `spec.selector` on every `Deployment` /
-/// `StatefulSet` / `DaemonSet`) as `Option<&serde_yaml::Mapping>` — the
+/// `StatefulSet` / `DaemonSet`) as `Option<&serde_norway::Mapping>` — the
 /// selector-side counterpart of the sub-`metadata.labels` accessor
 /// [`kube_metadata_labels`] (f3d9fcd) on the CR-side of the K8s
 /// label-selection contract. Where [`kube_metadata_labels`] reads the
@@ -26201,7 +26201,7 @@ pub fn kube_root_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64
 /// decides whether to enumerate (`for (k, v) in selector { ... }`),
 /// further-navigate (`selector.get(LABEL_APLICACAO)`), or clone.
 ///
-/// The input `value` is the [`serde_yaml::Value`] carrying the
+/// The input `value` is the [`serde_norway::Value`] carrying the
 /// selector's outer surface — e.g. the [`crate::label_selector`] /
 /// [`crate::pleme_program_selector`] /
 /// [`crate::pleme_program_in_aplicacao_selector`] emitter's return, or
@@ -26251,7 +26251,7 @@ pub fn kube_root_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_match_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
+pub fn kube_match_labels(value: &serde_norway::Value) -> Option<&serde_norway::Mapping> {
     kube_root_map_field(value, KUBE_KEY_MATCH_LABELS)
 }
 
@@ -26357,10 +26357,10 @@ pub fn kube_match_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Mappi
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_match_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Option<&'a str> {
+pub fn kube_match_label<'a>(value: &'a serde_norway::Value, label: &str) -> Option<&'a str> {
     kube_match_labels(value)
         .and_then(|labels| labels.get(label))
-        .and_then(serde_yaml::Value::as_str)
+        .and_then(serde_norway::Value::as_str)
 }
 
 /// Predicate: does the K8s `LabelSelector`-shaped YAML value at `value`
@@ -26419,12 +26419,12 @@ pub fn kube_match_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Option
 ///
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
-pub fn kube_match_label_is(value: &serde_yaml::Value, label: &str, expected: &str) -> bool {
+pub fn kube_match_label_is(value: &serde_norway::Value, label: &str, expected: &str) -> bool {
     kube_match_label(value, label) == Some(expected)
 }
 
 /// Read the first entry of the sub-`spec.<field>[]` YAML sequence on a
-/// K8s custom resource YAML document as `Option<&serde_yaml::Value>` —
+/// K8s custom resource YAML document as `Option<&serde_norway::Value>` —
 /// the composed first-entry-arity accessor peer that stands on the
 /// composed sequence-arity [`kube_spec_seq_field`] (fc64ed7) accessor,
 /// folding the trailing `.and_then(|s| s.first())` head-of-sequence
@@ -26514,15 +26514,15 @@ pub fn kube_match_label_is(value: &serde_yaml::Value, label: &str, expected: &st
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec_seq_first<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_spec_seq_field(value, field).and_then(|s| s.first())
 }
 
 /// Read the first entry of a nested `<inner>[]` YAML sub-sequence
 /// nested one hop below the first entry of a sub-`spec.<outer>[]` YAML
-/// sequence as `Option<&serde_yaml::Value>` — the composed six-hop
+/// sequence as `Option<&serde_norway::Value>` — the composed six-hop
 /// `spec → as_mapping → get(<outer>) → as_sequence → first →
 /// get(<inner>) → as_sequence → first` walk that folds the outer
 /// [`kube_spec_seq_first`] (b7babfe) spec-anchored head-selector and
@@ -26553,7 +26553,7 @@ pub fn kube_spec_seq_first<'a>(
 /// sequence), plus the inner two arms ([`kube_seq_first`]'s missing
 /// `<inner>` sub-field on the first outer entry / non-sequence
 /// `<inner>` sub-field / present-but-empty `<inner>[]` sequence — the
-/// [`serde_yaml::Value::get`] scalar-arm short-circuit does not reach
+/// [`serde_norway::Value::get`] scalar-arm short-circuit does not reach
 /// the inner leg because the outer [`kube_spec_seq_first`] hop only
 /// yields a `&Value` that came out of a `Mapping` position on the
 /// outer sequence). The returned `&Value` borrows into the input
@@ -26604,10 +26604,10 @@ pub fn kube_spec_seq_first<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec_seq_first_seq_first<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     outer: &str,
     inner: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_spec_seq_first(value, outer).and_then(|o| kube_seq_first(o, inner))
 }
 
@@ -26615,7 +26615,7 @@ pub fn kube_spec_seq_first_seq_first<'a>(
 /// sub-sequence nested one hop below the first entry of a
 /// `<mid>[]` sub-sequence itself nested one hop below the first entry
 /// of a sub-`spec.<outer>[]` YAML sequence as
-/// `Option<&serde_yaml::Value>` — the composed nine-hop
+/// `Option<&serde_norway::Value>` — the composed nine-hop
 /// `spec → as_mapping → get(<outer>) → as_sequence → first →
 /// get(<mid>) → as_sequence → first → get(<innermost>) →
 /// as_sequence → first` walk that folds the outer + mid
@@ -26699,11 +26699,11 @@ pub fn kube_spec_seq_first_seq_first<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec_seq_first_seq_first_seq_first<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     outer: &str,
     mid: &str,
     innermost: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_spec_seq_first_seq_first(value, outer, mid).and_then(|tp| kube_seq_first(tp, innermost))
 }
 
@@ -26749,7 +26749,7 @@ pub fn kube_spec_seq_first_seq_first_seq_first<'a>(
 /// `<seq_field>[]` sequence), plus the trailing [`kube_str`] arm's
 /// composite short-circuits (missing `<scalar_field>` sub-field on the
 /// first outer entry / non-string `<scalar_field>` sub-field — the
-/// [`serde_yaml::Value::get`] scalar-arm short-circuit does not reach
+/// [`serde_norway::Value::get`] scalar-arm short-circuit does not reach
 /// the trailing leg because the outer [`kube_spec_seq_first`] hop only
 /// yields a `&Value` that came out of a `Mapping` position on the outer
 /// sequence). The returned `&str` borrows into the input `Value` — the
@@ -26799,7 +26799,7 @@ pub fn kube_spec_seq_first_seq_first_seq_first<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_spec_seq_first_str<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     seq_field: &str,
     scalar_field: &str,
 ) -> Option<&'a str> {
@@ -26807,8 +26807,8 @@ pub fn kube_spec_seq_first_str<'a>(
 }
 
 /// Read the first entry of a sub-`<field>[]` YAML sequence nested one
-/// hop under an arbitrary `&serde_yaml::Value` mapping receiver as
-/// `Option<&serde_yaml::Value>` — the value-level three-hop navigation
+/// hop under an arbitrary `&serde_norway::Value` mapping receiver as
+/// `Option<&serde_norway::Value>` — the value-level three-hop navigation
 /// primitive that folds `.get(<field>) → as_sequence → first` into a
 /// single helper call. Peer of the spec-anchored
 /// [`kube_spec_seq_first`] (b7babfe) at one altitude below: where the
@@ -26836,10 +26836,10 @@ pub fn kube_spec_seq_first_str<'a>(
 /// Returns `None` on any of the four short-circuit arms folded through
 /// the underlying three-hop composition: the receiver `value` carries a
 /// YAML type without a `get(<field>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<field>` axis-key is absent from the receiver's mapping
-/// ([`serde_yaml::Value::get`] trailing miss), the sub-field value is
+/// ([`serde_norway::Value::get`] trailing miss), the sub-field value is
 /// present but carries a non-sequence YAML type (the trailing
 /// `.as_sequence()` shape-gate short-circuit — a schema-invalid nested-
 /// sub-field type per the K8s apiserver's `OpenAPI` schema but tolerated
@@ -26895,28 +26895,28 @@ pub fn kube_spec_seq_first_str<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_seq_first<'a>(
-    value: &'a serde_yaml::Value,
+    value: &'a serde_norway::Value,
     field: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     value
         .get(field)
-        .and_then(serde_yaml::Value::as_sequence)
+        .and_then(serde_norway::Value::as_sequence)
         .and_then(|s| s.first())
 }
 
 mod kube_receiver_sealed {
     pub trait Sealed {}
-    impl Sealed for serde_yaml::Value {}
-    impl Sealed for serde_yaml::Mapping {}
+    impl Sealed for serde_norway::Value {}
+    impl Sealed for serde_norway::Mapping {}
 }
 
 /// Sealed dispatch surface for the value-level primitive receiver-arms
-/// — [`serde_yaml::Value`] and [`serde_yaml::Mapping`] — the two YAML
+/// — [`serde_norway::Value`] and [`serde_norway::Mapping`] — the two YAML
 /// container-shape types every routed value-level two-hop `get → as_*`
 /// primitive ([`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`],
 /// [`kube_map`]) accepts as its first argument. Where the sibling
 /// spec/metadata/root-anchored families always sit on a per-CR
-/// `&serde_yaml::Value` because the outer prelude gates on the
+/// `&serde_norway::Value` because the outer prelude gates on the
 /// document-shape `apiVersion + kind + metadata + spec` skeleton, the
 /// value-level family drops the outer prelude and stays parametric on
 /// whichever container-shape the caller already holds — a `&Value` for
@@ -26941,9 +26941,9 @@ mod kube_receiver_sealed {
 /// cannot extend the receiver-arm axis past the two `serde_yaml`
 /// container-shape types the value-level primitive family walks
 /// through — the trait is a substrate-internal dispatch surface, not
-/// an authoring extension point. The [`serde_yaml::Mapping`] impl
-/// exists precisely because [`serde_yaml::Value::get`] and
-/// [`serde_yaml::Mapping::get`] carry the same shape at the same
+/// an authoring extension point. The [`serde_norway::Mapping`] impl
+/// exists precisely because [`serde_norway::Value::get`] and
+/// [`serde_norway::Mapping::get`] carry the same shape at the same
 /// arity (`.get(<field>) → Option<&Value>`); the trait method
 /// [`field_value`](KubeReceiver::field_value) is the one-hop
 /// navigation the value-level quintet composes on and both `serde_yaml`
@@ -26956,30 +26956,30 @@ pub trait KubeReceiver: kube_receiver_sealed::Sealed {
     /// `Option<&Value>` — the one-hop navigation the value-level
     /// primitive quintet ([`kube_str`], [`kube_u64`], [`kube_bool`],
     /// [`kube_seq`], [`kube_map`]) composes on. Both
-    /// [`serde_yaml::Value`] and [`serde_yaml::Mapping`] expose an
+    /// [`serde_norway::Value`] and [`serde_norway::Mapping`] expose an
     /// inherent `.get(<field>)` returning `Option<&Value>` at the same
     /// shape; this trait method is the dispatch surface the generic
     /// primitives call through so a caller holding either container-
     /// arm reaches the same one-line dispatch.
-    fn field_value(&self, field: &str) -> Option<&serde_yaml::Value>;
+    fn field_value(&self, field: &str) -> Option<&serde_norway::Value>;
 }
 
-impl KubeReceiver for serde_yaml::Value {
+impl KubeReceiver for serde_norway::Value {
     #[inline]
-    fn field_value(&self, field: &str) -> Option<&serde_yaml::Value> {
+    fn field_value(&self, field: &str) -> Option<&serde_norway::Value> {
         self.get(field)
     }
 }
 
-impl KubeReceiver for serde_yaml::Mapping {
+impl KubeReceiver for serde_norway::Mapping {
     #[inline]
-    fn field_value(&self, field: &str) -> Option<&serde_yaml::Value> {
+    fn field_value(&self, field: &str) -> Option<&serde_norway::Value> {
         self.get(field)
     }
 }
 
 /// Read a sub-`<field>` YAML value nested one hop under an arbitrary
-/// [`KubeReceiver`] as `Option<&serde_yaml::Value>` — the value-level
+/// [`KubeReceiver`] as `Option<&serde_norway::Value>` — the value-level
 /// one-hop pass-through primitive that folds `.get(<field>)` into a
 /// single helper call, closing the value-level primitive family at
 /// the raw-`Value` arity to structural parity with the sub-`spec.
@@ -26989,7 +26989,7 @@ impl KubeReceiver for serde_yaml::Mapping {
 /// [`kube_root_field`] c456d97). Where the value-level shape-gated
 /// quintet ([`kube_str`] a23f61d, [`kube_u64`] bfbec1d, [`kube_bool`]
 /// 4785e45, [`kube_seq`] 9c74ddb, [`kube_map`] 28fa5d8) folds a
-/// trailing [`serde_yaml::Value::as_<X>`] shape-gate onto the one-hop
+/// trailing [`serde_norway::Value::as_<X>`] shape-gate onto the one-hop
 /// navigation, this accessor stops at the raw `&Value` — so a caller
 /// that hands the result to a downstream [`kube_seq`] / [`kube_str`] /
 /// [`kube_u64`] / [`kube_map`] / [`kube_bool`] navigator, or that runs
@@ -27016,14 +27016,14 @@ impl KubeReceiver for serde_yaml::Mapping {
 /// arity.
 ///
 /// Returns `None` on either short-circuit arm the underlying
-/// [`serde_yaml::Value::get`] / [`serde_yaml::Mapping::get`] one-hop
+/// [`serde_norway::Value::get`] / [`serde_norway::Mapping::get`] one-hop
 /// walk closes: the receiver carries a YAML type without a
-/// `.get(<field>)` navigation surface ([`serde_yaml::Value::get`]
+/// `.get(<field>)` navigation surface ([`serde_norway::Value::get`]
 /// returns `None` on scalar arms — string, bool, number, null — that
-/// expose no per-key lookup; [`serde_yaml::Mapping::get`] cannot be
+/// expose no per-key lookup; [`serde_norway::Mapping::get`] cannot be
 /// called on such receivers as the trait does not extend past the
 /// two-mapping-container arms), or the requested `<field>` axis-key
-/// is absent from the receiver's mapping ([`serde_yaml::Mapping::get`]
+/// is absent from the receiver's mapping ([`serde_norway::Mapping::get`]
 /// trailing miss). No trailing shape-gate — the returned `&Value`
 /// borrows into the input receiver and preserves the caller's freedom
 /// to choose the downstream shape gate.
@@ -27080,7 +27080,7 @@ impl KubeReceiver for serde_yaml::Mapping {
 pub fn kube_field<'a, R: KubeReceiver + ?Sized>(
     recv: &'a R,
     field: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     recv.field_value(field)
 }
 
@@ -27115,11 +27115,11 @@ pub fn kube_field<'a, R: KubeReceiver + ?Sized>(
 /// trait's [`field_value`](KubeReceiver::field_value) method.
 ///
 /// Returns `true` iff the receiver carries the requested `<field>`
-/// axis-key with any value (including [`serde_yaml::Value::Null`] —
-/// [`serde_yaml::Mapping::get`] returns `Some(&Value::Null)` for an
+/// axis-key with any value (including [`serde_norway::Value::Null`] —
+/// [`serde_norway::Mapping::get`] returns `Some(&Value::Null)` for an
 /// explicitly-null key, which this predicate reports present, matching
 /// the raw `.get(<field>).is_some()` semantic bit-for-bit).
-/// [`serde_yaml::Value::get`] returns `None` on scalar arms (string,
+/// [`serde_norway::Value::get`] returns `None` on scalar arms (string,
 /// bool, number, null) that expose no per-key lookup, which this
 /// predicate reports absent — again matching the raw semantic.
 ///
@@ -27166,11 +27166,11 @@ pub fn kube_field<'a, R: KubeReceiver + ?Sized>(
 /// sibling to the six shape-gated arities that partition the K8s
 /// apiserver `OpenAPI` schema's shape-gate arms.
 ///
-/// The [`serde_yaml::Mapping::contains_key`] inherent method is the
+/// The [`serde_norway::Mapping::contains_key`] inherent method is the
 /// bit-for-bit equivalent shape on the `&Mapping` receiver arm alone:
-/// [`serde_yaml::Mapping::contains_key`] delegates through the same
-/// [`serde_yaml::mapping::Index`] hash-bucket lookup that
-/// [`serde_yaml::Mapping::get`] does, so `kube_has(&mapping, K)`
+/// [`serde_norway::Mapping::contains_key`] delegates through the same
+/// [`serde_norway::mapping::Index`] hash-bucket lookup that
+/// [`serde_norway::Mapping::get`] does, so `kube_has(&mapping, K)`
 /// (which reaches through the trait's
 /// [`field_value`](KubeReceiver::field_value) dispatch to `Mapping::get`)
 /// yields the same `bool` as `mapping.contains_key(K)` on every axis-key
@@ -27179,7 +27179,7 @@ pub fn kube_field<'a, R: KubeReceiver + ?Sized>(
 /// production axis-keys on both present-key and absent-key arms). Every
 /// routed test-side `mapping.contains_key(<K>)` existence-probe re-inline
 /// site across the renderer crates folds through this one substrate
-/// dispatch after the sweep — the [`serde_yaml::Mapping::contains_key`]
+/// dispatch after the sweep — the [`serde_norway::Mapping::contains_key`]
 /// inherent method stays reachable as an escape hatch, but the substrate
 /// promotes the shape-agnostic [`kube_has`] to the canonical existence-
 /// probe form so a caller reaches for the same one-line dispatch across
@@ -27199,8 +27199,8 @@ pub fn kube_has<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> bool {
 }
 
 /// Read a sub-`<field>[]` YAML sequence nested one hop under an
-/// arbitrary `&serde_yaml::Value` mapping receiver as
-/// `Option<&serde_yaml::Sequence>` — the value-level two-hop navigation
+/// arbitrary `&serde_norway::Value` mapping receiver as
+/// `Option<&serde_norway::Sequence>` — the value-level two-hop navigation
 /// primitive that folds `.get(<field>) → as_sequence` into a single
 /// helper call. Sequence-arity peer of the value-level first-entry
 /// accessor [`kube_seq_first`] (2d6cb54): the pair closes the
@@ -27221,10 +27221,10 @@ pub fn kube_has<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> bool {
 /// Returns `None` on any of the three short-circuit arms folded through
 /// the underlying two-hop composition: the receiver `value` carries a
 /// YAML type without a `get(<field>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<field>` axis-key is absent from the receiver's mapping
-/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value is
+/// ([`serde_norway::Value::get`] trailing miss), or the sub-field value is
 /// present but carries a non-sequence YAML type (the trailing
 /// `.as_sequence()` shape-gate short-circuit — a schema-invalid nested-
 /// sub-field type per the K8s apiserver's `OpenAPI` schema but tolerated
@@ -27280,13 +27280,13 @@ pub fn kube_has<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> bool {
 pub fn kube_seq<'a, R: KubeReceiver + ?Sized>(
     recv: &'a R,
     field: &str,
-) -> Option<&'a serde_yaml::Sequence> {
+) -> Option<&'a serde_norway::Sequence> {
     recv.field_value(field)
-        .and_then(serde_yaml::Value::as_sequence)
+        .and_then(serde_norway::Value::as_sequence)
 }
 
 /// Read a sub-`<field>` YAML scalar-str nested one hop under an
-/// arbitrary `&serde_yaml::Value` mapping receiver as `Option<&str>`
+/// arbitrary `&serde_norway::Value` mapping receiver as `Option<&str>`
 /// — the value-level two-hop navigation primitive that folds
 /// `.get(<field>) → as_str` into a single helper call. Scalar-str-
 /// arity peer of the value-level sequence-arity [`kube_seq`]
@@ -27316,10 +27316,10 @@ pub fn kube_seq<'a, R: KubeReceiver + ?Sized>(
 /// Returns `None` on any of the three short-circuit arms folded
 /// through the underlying two-hop composition: the receiver `value`
 /// carries a YAML type without a `get(<field>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms —
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms —
 /// string, bool, number, null — that expose no per-key lookup), the
 /// requested `<field>` axis-key is absent from the receiver's
-/// mapping ([`serde_yaml::Value::get`] trailing miss), or the sub-
+/// mapping ([`serde_norway::Value::get`] trailing miss), or the sub-
 /// field value is present but carries a non-string YAML type (the
 /// trailing `.as_str()` shape-gate short-circuit — a schema-invalid
 /// scalar type per the K8s apiserver's `OpenAPI` schema but
@@ -27380,11 +27380,11 @@ pub fn kube_seq<'a, R: KubeReceiver + ?Sized>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_str<'a, R: KubeReceiver + ?Sized>(recv: &'a R, field: &str) -> Option<&'a str> {
-    recv.field_value(field).and_then(serde_yaml::Value::as_str)
+    recv.field_value(field).and_then(serde_norway::Value::as_str)
 }
 
 /// Read a sub-`<field>` YAML scalar-integer nested one hop under an
-/// arbitrary `&serde_yaml::Value` mapping receiver as `Option<u64>`
+/// arbitrary `&serde_norway::Value` mapping receiver as `Option<u64>`
 /// — the value-level two-hop navigation primitive that folds
 /// `.get(<field>) → as_u64` into a single helper call. Integer-arity
 /// peer of the value-level scalar-str [`kube_str`] (a23f61d) accessor
@@ -27404,12 +27404,12 @@ pub fn kube_str<'a, R: KubeReceiver + ?Sized>(recv: &'a R, field: &str) -> Optio
 /// Returns `None` on any of the three short-circuit arms folded through
 /// the underlying two-hop composition: the receiver `value` carries a
 /// YAML type without a `get(<field>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<field>` axis-key is absent from the receiver's mapping
-/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value
+/// ([`serde_norway::Value::get`] trailing miss), or the sub-field value
 /// is present but carries a non-`u64` YAML scalar type (the trailing
-/// [`serde_yaml::Value::as_u64`] shape-gate short-circuit — a
+/// [`serde_norway::Value::as_u64`] shape-gate short-circuit — a
 /// schema-invalid scalar type per the K8s apiserver's `OpenAPI` schema
 /// but tolerated here as `None` so the readback stays a total
 /// function, mirroring the sibling [`kube_str`] posture). The returned
@@ -27469,11 +27469,11 @@ pub fn kube_str<'a, R: KubeReceiver + ?Sized>(recv: &'a R, field: &str) -> Optio
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_u64<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<u64> {
-    recv.field_value(field).and_then(serde_yaml::Value::as_u64)
+    recv.field_value(field).and_then(serde_norway::Value::as_u64)
 }
 
 /// Read a sub-`<field>` YAML mapping nested one hop under an arbitrary
-/// `&serde_yaml::Value` mapping receiver as `Option<&serde_yaml::Mapping>`
+/// `&serde_norway::Value` mapping receiver as `Option<&serde_norway::Mapping>`
 /// — the value-level two-hop navigation primitive that folds
 /// `.get(<field>) → as_mapping` into a single helper call. Sub-mapping-
 /// arity peer of the value-level scalar-str [`kube_str`] (a23f61d),
@@ -27503,12 +27503,12 @@ pub fn kube_u64<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<u64> 
 /// Returns `None` on any of the three short-circuit arms folded through
 /// the underlying two-hop composition: the receiver `value` carries a
 /// YAML type without a `get(<field>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<field>` axis-key is absent from the receiver's mapping
-/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value is
+/// ([`serde_norway::Value::get`] trailing miss), or the sub-field value is
 /// present but carries a non-mapping YAML type (the trailing
-/// [`serde_yaml::Value::as_mapping`] shape-gate short-circuit — a
+/// [`serde_norway::Value::as_mapping`] shape-gate short-circuit — a
 /// schema-invalid sub-field type per the K8s apiserver's `OpenAPI` schema
 /// but tolerated here as `None` so the readback stays a total function,
 /// mirroring the sibling [`kube_str`] / [`kube_u64`] / [`kube_seq`]
@@ -27575,13 +27575,13 @@ pub fn kube_u64<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<u64> 
 pub fn kube_map<'a, R: KubeReceiver + ?Sized>(
     recv: &'a R,
     field: &str,
-) -> Option<&'a serde_yaml::Mapping> {
+) -> Option<&'a serde_norway::Mapping> {
     recv.field_value(field)
-        .and_then(serde_yaml::Value::as_mapping)
+        .and_then(serde_norway::Value::as_mapping)
 }
 
 /// Read a sub-`<field>` YAML scalar-boolean nested one hop under an
-/// arbitrary `&serde_yaml::Value` mapping receiver as `Option<bool>`
+/// arbitrary `&serde_norway::Value` mapping receiver as `Option<bool>`
 /// — the value-level two-hop navigation primitive that folds
 /// `.get(<field>) → as_bool` into a single helper call. Boolean-arity
 /// peer of the value-level scalar-str [`kube_str`] (a23f61d), scalar-
@@ -27611,12 +27611,12 @@ pub fn kube_map<'a, R: KubeReceiver + ?Sized>(
 /// Returns `None` on any of the three short-circuit arms folded through
 /// the underlying two-hop composition: the receiver `value` carries a
 /// YAML type without a `get(<field>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<field>` axis-key is absent from the receiver's mapping
-/// ([`serde_yaml::Value::get`] trailing miss), or the sub-field value
+/// ([`serde_norway::Value::get`] trailing miss), or the sub-field value
 /// is present but carries a non-boolean YAML type (the trailing
-/// [`serde_yaml::Value::as_bool`] shape-gate short-circuit — a
+/// [`serde_norway::Value::as_bool`] shape-gate short-circuit — a
 /// schema-invalid scalar type per the K8s apiserver's `OpenAPI` schema
 /// but tolerated here as `None` so the readback stays a total
 /// function, mirroring the sibling [`kube_str`] / [`kube_u64`] /
@@ -27681,7 +27681,7 @@ pub fn kube_map<'a, R: KubeReceiver + ?Sized>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_bool<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<bool> {
-    recv.field_value(field).and_then(serde_yaml::Value::as_bool)
+    recv.field_value(field).and_then(serde_norway::Value::as_bool)
 }
 
 /// Read a sub-`<mid>.<tail>` YAML scalar-str nested two hops under an
@@ -27708,12 +27708,12 @@ pub fn kube_bool<R: KubeReceiver + ?Sized>(recv: &R, field: &str) -> Option<bool
 /// Returns `None` on any of the four short-circuit arms folded through
 /// the underlying three-hop composition: the receiver carries a YAML
 /// type without a `get(<mid>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
 /// the `<mid>` sub-field value is present but carries a YAML shape with
 /// no `get(<tail>)` navigation surface (a scalar arm at the middle-hop
-/// altitude — the inner [`serde_yaml::Value::get`] scalar-arm `None`
+/// altitude — the inner [`serde_norway::Value::get`] scalar-arm `None`
 /// folds through), or the `<tail>` scalar value is present but carries
 /// a non-string YAML type (the trailing `.as_str()` shape-gate short-
 /// circuit — a schema-invalid scalar type per the K8s apiserver's
@@ -27787,13 +27787,13 @@ pub fn kube_field_str<'a, R: KubeReceiver + ?Sized>(
 ///
 /// Returns `None` on any of the four short-circuit arms folded through the
 /// underlying three-hop composition: the receiver carries a YAML type
-/// without a `get(<mid>)` navigation surface ([`serde_yaml::Value::get`]
+/// without a `get(<mid>)` navigation surface ([`serde_norway::Value::get`]
 /// returns `None` on scalar arms — string, bool, number, null — that
 /// expose no per-key lookup), the requested `<mid>` middle-hop axis-key is
 /// absent from the receiver's mapping, the `<mid>` sub-field value is
 /// present but carries a YAML shape with no `get(<tail>)` navigation
 /// surface (a scalar arm at the middle-hop altitude — the inner
-/// [`serde_yaml::Value::get`] scalar-arm `None` folds through), or the
+/// [`serde_norway::Value::get`] scalar-arm `None` folds through), or the
 /// `<tail>` scalar value is present but carries a non-`u64` YAML type
 /// (the trailing `.as_u64()` shape-gate short-circuit — a schema-invalid
 /// scalar type per the K8s apiserver's `OpenAPI` schema but tolerated
@@ -27885,12 +27885,12 @@ pub fn kube_field_u64<R: KubeReceiver + ?Sized>(
 /// Returns `None` on any of the four short-circuit arms folded through
 /// the underlying three-hop composition: the receiver carries a YAML
 /// type without a `get(<mid>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
 /// the `<mid>` sub-field value is present but carries a YAML shape with
 /// no `get(<tail>)` navigation surface (a scalar arm at the middle-hop
-/// altitude — the inner [`serde_yaml::Value::get`] scalar-arm `None`
+/// altitude — the inner [`serde_norway::Value::get`] scalar-arm `None`
 /// folds through), or the `<tail>` scalar value is present but carries
 /// a non-`bool` YAML type (the trailing `.as_bool()` shape-gate short-
 /// circuit — a schema-invalid scalar type per the K8s apiserver's
@@ -27953,7 +27953,7 @@ pub fn kube_field_bool<R: KubeReceiver + ?Sized>(
 }
 
 /// Read a sub-`<mid>.<tail>[]` YAML sequence nested two hops under an
-/// arbitrary [`KubeReceiver`] as `Option<&serde_yaml::Sequence>` — the
+/// arbitrary [`KubeReceiver`] as `Option<&serde_norway::Sequence>` — the
 /// value-level three-hop navigation primitive that folds `.get(<mid>)
 /// .and_then(|v| v.get(<tail>)).and_then(|v| v.as_sequence())` into a
 /// single helper call. Exactly `kube_field(recv, mid).and_then(|v|
@@ -27980,12 +27980,12 @@ pub fn kube_field_bool<R: KubeReceiver + ?Sized>(
 /// Returns `None` on any of the four short-circuit arms folded through
 /// the underlying three-hop composition: the receiver carries a YAML
 /// type without a `get(<mid>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
 /// the `<mid>` sub-field value is present but carries a YAML shape with
 /// no `get(<tail>)` navigation surface (a scalar arm at the middle-hop
-/// altitude — the inner [`serde_yaml::Value::get`] scalar-arm `None`
+/// altitude — the inner [`serde_norway::Value::get`] scalar-arm `None`
 /// folds through), or the `<tail>` value is present but carries a non-
 /// sequence YAML type (the trailing `.as_sequence()` shape-gate short-
 /// circuit — a schema-invalid nested type per the K8s apiserver's
@@ -28057,11 +28057,11 @@ pub fn kube_field_seq<'a, R: KubeReceiver + ?Sized>(
     recv: &'a R,
     field: &str,
     seq_field: &str,
-) -> Option<&'a serde_yaml::Sequence> {
+) -> Option<&'a serde_norway::Sequence> {
     kube_field(recv, field).and_then(|v| kube_seq(v, seq_field))
 }
 
-/// Read a sub-`<mid>.<tail>` raw `&serde_yaml::Value` nested two hops
+/// Read a sub-`<mid>.<tail>` raw `&serde_norway::Value` nested two hops
 /// under an arbitrary [`KubeReceiver`] as `Option<&Value>` — the value-
 /// level three-hop navigation primitive that folds `.get(<mid>)
 /// .and_then(|v| v.get(<tail>))` into a single helper call. Exactly
@@ -28093,12 +28093,12 @@ pub fn kube_field_seq<'a, R: KubeReceiver + ?Sized>(
 /// Returns `None` on any of the three short-circuit arms folded through
 /// the underlying three-hop composition: the receiver carries a YAML
 /// type without a `get(<mid>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
 /// or the `<mid>` sub-field value is present but carries a YAML shape
 /// with no `get(<tail>)` navigation surface (a scalar arm at the
-/// middle-hop altitude — the inner [`serde_yaml::Value::get`] scalar-
+/// middle-hop altitude — the inner [`serde_norway::Value::get`] scalar-
 /// arm `None` folds through). Unlike the sibling composed shape-gated
 /// variants there is no fourth trailing shape-gate short-circuit — the
 /// raw `&Value` tail passes through verbatim once the two-hop
@@ -28175,12 +28175,12 @@ pub fn kube_field_field<'a, R: KubeReceiver + ?Sized>(
     recv: &'a R,
     field: &str,
     inner_field: &str,
-) -> Option<&'a serde_yaml::Value> {
+) -> Option<&'a serde_norway::Value> {
     kube_field(recv, field).and_then(|v| kube_field(v, inner_field))
 }
 
 /// Read a sub-`<mid>.<tail>` YAML sub-mapping nested two hops under an
-/// arbitrary [`KubeReceiver`] as `Option<&serde_yaml::Mapping>` — the
+/// arbitrary [`KubeReceiver`] as `Option<&serde_norway::Mapping>` — the
 /// value-level three-hop navigation primitive that folds `.get(<mid>)
 /// .and_then(|v| v.get(<tail>)).and_then(|v| v.as_mapping())` into a
 /// single helper call. Exactly `kube_field(recv, mid).and_then(|v|
@@ -28214,12 +28214,12 @@ pub fn kube_field_field<'a, R: KubeReceiver + ?Sized>(
 /// Returns `None` on any of the four short-circuit arms folded through
 /// the underlying three-hop composition: the receiver carries a YAML
 /// type without a `get(<mid>)` navigation surface
-/// ([`serde_yaml::Value::get`] returns `None` on scalar arms — string,
+/// ([`serde_norway::Value::get`] returns `None` on scalar arms — string,
 /// bool, number, null — that expose no per-key lookup), the requested
 /// `<mid>` middle-hop axis-key is absent from the receiver's mapping,
 /// the `<mid>` sub-field value is present but carries a YAML shape
 /// with no `get(<tail>)` navigation surface (a scalar arm at the
-/// middle-hop altitude — the inner [`serde_yaml::Value::get`] scalar-
+/// middle-hop altitude — the inner [`serde_norway::Value::get`] scalar-
 /// arm `None` folds through), or the `<tail>` value is present but
 /// carries a non-mapping YAML type (the trailing `.as_mapping()`
 /// shape-gate short-circuit — a schema-invalid nested type per the
@@ -28275,7 +28275,7 @@ pub fn kube_field_map<'a, R: KubeReceiver + ?Sized>(
     recv: &'a R,
     field: &str,
     map_field: &str,
-) -> Option<&'a serde_yaml::Mapping> {
+) -> Option<&'a serde_norway::Mapping> {
     kube_field(recv, field).and_then(|v| kube_map(v, map_field))
 }
 
@@ -28315,7 +28315,7 @@ pub fn kube_field_map<'a, R: KubeReceiver + ?Sized>(
 /// Returns `true` iff the receiver carries the requested `<mid>` middle-hop
 /// axis-key with any value AND the middle-hop value in turn carries the
 /// requested `<tail>` axis-key with any value (including
-/// [`serde_yaml::Value::Null`] — [`serde_yaml::Mapping::get`] returns
+/// [`serde_norway::Value::Null`] — [`serde_norway::Mapping::get`] returns
 /// `Some(&Value::Null)` for an explicitly-null key, which this predicate
 /// reports present, matching the raw `.get(<mid>).and_then(|v|
 /// v.get(<tail>)).is_some()` semantic bit-for-bit). Returns `false` on any
@@ -28427,13 +28427,13 @@ pub fn kube_field_has<R: KubeReceiver + ?Sized>(recv: &R, field: &str, inner_fie
 /// # Errors
 ///
 /// Returns `on_missing_name()` when `new_entry.get(name_key)` is
-/// not a [`serde_yaml::Value::String`] — the closure surfaces the
+/// not a [`serde_norway::Value::String`] — the closure surfaces the
 /// caller's own typed error variant naming the offending schema
 /// axis. On success returns `Ok(true)` for a newly-appended entry,
 /// `Ok(false)` for an in-place replacement.
 pub fn upsert_named_entry<E>(
-    arr: &mut Vec<serde_yaml::Value>,
-    new_entry: serde_yaml::Value,
+    arr: &mut Vec<serde_norway::Value>,
+    new_entry: serde_norway::Value,
     name_key: &'static str,
     on_missing_name: impl FnOnce() -> E,
 ) -> Result<bool, E> {
@@ -28477,14 +28477,14 @@ pub fn upsert_named_entry<E>(
 ///
 /// # Errors
 ///
-/// Returns [`RenderError::Yaml`] if `serde_yaml::to_value` fails for
+/// Returns [`RenderError::Yaml`] if `serde_norway::to_value` fails for
 /// any of the typed M2 slot values. The prior inline block silently
-/// substituted [`serde_yaml::Value::Null`] in this case, which renders
+/// substituted [`serde_norway::Value::Null`] in this case, which renders
 /// as e.g. `limits: null` — indistinguishable from "the author omitted
 /// the slot" once it leaves the typed surface.
 pub fn servico_m2_overlay(
     caixa: &Caixa,
-) -> Result<BTreeMap<&'static str, serde_yaml::Value>, RenderError> {
+) -> Result<BTreeMap<&'static str, serde_norway::Value>, RenderError> {
     let mut out = BTreeMap::new();
     if let Some(limits) = caixa.limits()
         && !limits.is_empty()
@@ -28520,11 +28520,11 @@ pub fn servico_m2_overlay(
 ///      the two prior inline call sites shared, promoted here to a
 ///      filtered append so the returned `Vec` is drop-in for a target
 ///      mapping whose insertion order is load-bearing (caixa-flux's
-///      `serde_yaml::Mapping` preserves it; caixa-helm's `BTreeMap`
+///      `serde_norway::Mapping` preserves it; caixa-helm's `BTreeMap`
 ///      re-sorts by key, so both consumer shapes stay byte-identical
 ///      to their prior inline blocks under this lift).
 ///
-/// Returns a `Vec<(String, serde_yaml::Value)>` in insertion order —
+/// Returns a `Vec<(String, serde_norway::Value)>` in insertion order —
 /// spec.* entries first (original ordering preserved), then the M2 slots
 /// that weren't claimed by spec.* (in [`servico_m2_overlay`]'s canonical
 /// BTreeMap-key ordering: `behavior` → `limits` → `upgradeFrom`).
@@ -28554,14 +28554,14 @@ pub fn servico_m2_overlay(
 /// # Errors
 ///
 /// Propagates [`RenderError::Yaml`] from [`servico_m2_overlay`] when
-/// `serde_yaml::to_value` fails for any typed M2 slot value — the same
+/// `serde_norway::to_value` fails for any typed M2 slot value — the same
 /// error surface [`servico_m2_overlay`]'s docstring names.
 pub fn servico_spec_and_m2_overlay_entries(
     caixa: &Caixa,
-    spec: &serde_yaml::Value,
-) -> Result<Vec<(String, serde_yaml::Value)>, RenderError> {
+    spec: &serde_norway::Value,
+) -> Result<Vec<(String, serde_norway::Value)>, RenderError> {
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut out: Vec<(String, serde_yaml::Value)> = Vec::new();
+    let mut out: Vec<(String, serde_norway::Value)> = Vec::new();
     for (k, v) in string_keyed_entries(spec) {
         seen.insert(k.to_string());
         out.push((k.to_string(), v.clone()));
@@ -29402,7 +29402,7 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
     );
 }
 
-/// Extension methods on [`serde_yaml::Mapping`] that lift the per-key
+/// Extension methods on [`serde_norway::Mapping`] that lift the per-key
 /// scalar-promotion boilerplate every K8s-artifact-emitter across
 /// `caixa-mesh`, `caixa-flux`, `caixa-helm`, and `caixa-core::render`
 /// carries: the canonical `mapping.insert(Value::String(key.into()),
@@ -29410,39 +29410,39 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 /// document tunnels a `&'static str` key axis-name through.
 ///
 /// Five methods form the primitive quintuple — one per non-Null
-/// primitive [`serde_yaml::Value`] variant the K8s-artifact-emit
+/// primitive [`serde_norway::Value`] variant the K8s-artifact-emit
 /// surface actually reaches for as a leaf payload:
 ///
 ///   * [`Self::insert_str_key`] — insert with a `&str` key and any
-///     fully-built [`serde_yaml::Value`]. The building block every
+///     fully-built [`serde_norway::Value`]. The building block every
 ///     other renderer helper (`yaml_string_mapping`, `label_selector`,
 ///     `kube_resource_skeleton`, `single_field_overlay`) composes on
 ///     top of.
 ///   * [`Self::insert_string`] — insert with a `&str` key and an
 ///     `Into<String>` value that gets auto-promoted to
-///     [`serde_yaml::Value::String`]. The string-scalar-valued-field
+///     [`serde_norway::Value::String`]. The string-scalar-valued-field
 ///     shape every schema-typed `apiVersion` / `kind` /
 ///     `metadata.namespace` / `port.protocol` / `hostname` /
 ///     `path.value` axis emission uses — collapses the two-step
 ///     `insert_str_key(K, Value::String(V.into()))` boilerplate onto
 ///     one direct call.
 ///   * [`Self::insert_number`] — insert with a `&str` key and an
-///     `Into<serde_yaml::Number>` value that gets auto-promoted to
-///     [`serde_yaml::Value::Number`]. The integer-scalar-valued-field
+///     `Into<serde_norway::Number>` value that gets auto-promoted to
+///     [`serde_norway::Value::Number`]. The integer-scalar-valued-field
 ///     shape every schema-typed `port` / `targetPort` / `attempts` /
 ///     `maxFailures` / `hostPort` axis emission uses — collapses the
 ///     two-step `insert_str_key(K, Value::Number(N.into()))`
 ///     boilerplate onto one direct call.
 ///   * [`Self::insert_mapping`] — insert with a `&str` key and a
-///     [`serde_yaml::Mapping`] value that gets auto-promoted to
-///     [`serde_yaml::Value::Mapping`]. The nested-Mapping-valued-field
+///     [`serde_norway::Mapping`] value that gets auto-promoted to
+///     [`serde_norway::Value::Mapping`]. The nested-Mapping-valued-field
 ///     shape every schema-typed `metadata` / `spec` / `spec.rules[].path`
 ///     / `toPorts[].rules` sub-block emission uses — collapses the
 ///     two-step `insert_str_key(K, Value::Mapping(m))` boilerplate
 ///     onto one direct call.
 ///   * [`Self::insert_sequence`] — insert with a `&str` key and a
-///     `Vec<serde_yaml::Value>` value that gets auto-promoted to
-///     [`serde_yaml::Value::Sequence`]. The list-shape-valued-field
+///     `Vec<serde_norway::Value>` value that gets auto-promoted to
+///     [`serde_norway::Value::Sequence`]. The list-shape-valued-field
 ///     shape every schema-typed `spec.ingress[].fromEndpoints` /
 ///     `spec.ingress[].toPorts` / `spec.hostnames` / `spec.rules` list
 ///     emission uses — collapses the two-step
@@ -29451,7 +29451,7 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 ///
 /// A sibling method — [`Self::entry_str_key`] — closes the entry-API
 /// twin of [`Self::insert_str_key`] on the same `&str →  Value::String`
-/// key-promotion axis: the [`serde_yaml::Mapping::entry`] method's
+/// key-promotion axis: the [`serde_norway::Mapping::entry`] method's
 /// `Value` parameter demands the same `Value::String(<K>.into())`
 /// wrapping every fresh-emit site's `insert_str_key` call closes, but
 /// on the idempotent-upsert axis (where callers compose
@@ -29459,15 +29459,15 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 /// `.or_default()` on the returned entry handle) rather than the
 /// fresh-emit axis. Same key-promotion contract, different downstream
 /// API surface — so a future rebrand of the promotion (e.g. to
-/// [`serde_yaml::Value::Tagged`] under a K8s Server-Side-Apply typed-
+/// [`serde_norway::Value::Tagged`] under a K8s Server-Side-Apply typed-
 /// field-ownership axis) reaches both fresh-emit and upsert sites
 /// through one lift.
 ///
 /// See each method's docstring for its compounding rationale.
 pub trait MappingExt {
     /// Insert `(key, value)` into `self` with `key` promoted to a
-    /// [`serde_yaml::Value::String`]. Returns the prior value at that
-    /// key, mirroring [`serde_yaml::Mapping::insert`].
+    /// [`serde_norway::Value::String`]. Returns the prior value at that
+    /// key, mirroring [`serde_norway::Mapping::insert`].
     ///
     /// The canonical shape ~48 call sites across the caixa-side
     /// renderer surface (`caixa-mesh` per-`CiliumNetworkPolicy` /
@@ -29476,8 +29476,8 @@ pub trait MappingExt {
     /// `caixa-helm` per-`Chart.yaml` / `values.yaml` construction,
     /// `caixa-core::render` per-skeleton construction) previously
     /// carried inline as the three-line block
-    /// `mapping.insert(serde_yaml::Value::String(<KEY>.into()),
-    /// <VALUE>)` — three per-call boilerplate axes (`serde_yaml::` path
+    /// `mapping.insert(serde_norway::Value::String(<KEY>.into()),
+    /// <VALUE>)` — three per-call boilerplate axes (`serde_norway::` path
     /// re-quote, `Value::String(_)` promotion, `.into()` `&str → String`
     /// coercion) around a two-token semantic payload (`<KEY>`, `<VALUE>`).
     ///
@@ -29495,7 +29495,7 @@ pub trait MappingExt {
     /// re-inlining the three-line block.
     ///
     /// Peer to the sibling render-side helpers on the
-    /// [`serde_yaml::Value`]-construction surface:
+    /// [`serde_norway::Value`]-construction surface:
     /// [`yaml_string_mapping`] (string→string mapping), [`label_selector`]
     /// (K8s `LabelSelector` shape), [`kube_resource_skeleton`] (K8s
     /// `apiVersion`+`kind`+`metadata` skeleton), [`single_field_overlay`]
@@ -29503,21 +29503,21 @@ pub trait MappingExt {
     /// of the K8s-artifact-emit surface's "same shape, written N times"
     /// duplication; this one closes the per-key insert primitive the
     /// other four all compose on top of.
-    fn insert_str_key(&mut self, key: &str, value: serde_yaml::Value) -> Option<serde_yaml::Value>;
+    fn insert_str_key(&mut self, key: &str, value: serde_norway::Value) -> Option<serde_norway::Value>;
 
     /// Insert `(key, Value::String(value.into()))` into `self` — the
     /// string-scalar-valued-field emission shape that combines
     /// [`Self::insert_str_key`]'s `&str →  Value::String` key promotion
     /// with an automatic `Value::String` promotion of an `Into<String>`
     /// value. Returns the prior value at that key, mirroring
-    /// [`serde_yaml::Mapping::insert`].
+    /// [`serde_norway::Mapping::insert`].
     ///
     /// The canonical shape ~17 production call sites across the caixa-
     /// side renderer surface previously carried inline as the three-
     /// line block `mapping.insert_str_key(<KEY>,
-    /// serde_yaml::Value::String(<VALUE>.into() | .clone() |
+    /// serde_norway::Value::String(<VALUE>.into() | .clone() |
     /// .to_string()))` — the two-token semantic payload (`<KEY>`,
-    /// `<VALUE>`) buried under three boilerplate axes (`serde_yaml::`
+    /// `<VALUE>`) buried under three boilerplate axes (`serde_norway::`
     /// path re-quote, `Value::String(_)` promotion, the
     /// `.into() | .clone() | .to_string()` `→ String` coercion).
     ///
@@ -29564,22 +29564,22 @@ pub trait MappingExt {
     /// the two together form the "one method call per emission axis"
     /// primitive pair the K8s-artifact-emit surface's "same shape,
     /// written N times" duplication (THEORY.md §I.3.5) collapses onto.
-    fn insert_string<V: Into<String>>(&mut self, key: &str, value: V) -> Option<serde_yaml::Value>;
+    fn insert_string<V: Into<String>>(&mut self, key: &str, value: V) -> Option<serde_norway::Value>;
 
     /// Insert `(key, Value::Number(value.into()))` into `self` — the
     /// integer-scalar-valued-field emission shape that combines
     /// [`Self::insert_str_key`]'s `&str → Value::String` key promotion
-    /// with an automatic [`serde_yaml::Value::Number`] promotion of an
-    /// `Into<serde_yaml::Number>` value. Returns the prior value at that
-    /// key, mirroring [`serde_yaml::Mapping::insert`].
+    /// with an automatic [`serde_norway::Value::Number`] promotion of an
+    /// `Into<serde_norway::Number>` value. Returns the prior value at that
+    /// key, mirroring [`serde_norway::Mapping::insert`].
     ///
     /// The canonical shape 2 production call sites across `caixa-mesh`
     /// previously carried inline as the three-token block
-    /// `mapping.insert_str_key(<KEY>, serde_yaml::Value::Number(<N>.into()))`
+    /// `mapping.insert_str_key(<KEY>, serde_norway::Value::Number(<N>.into()))`
     /// — the two-token semantic payload (`<KEY>`, `<N>`) buried under
-    /// three boilerplate axes (`serde_yaml::` path re-quote,
+    /// three boilerplate axes (`serde_norway::` path re-quote,
     /// `Value::Number(_)` promotion, the `<N>.into()` typed-integer →
-    /// [`serde_yaml::Number`] coercion) around a numeric constant or
+    /// [`serde_norway::Number`] coercion) around a numeric constant or
     /// typed field the caller already carries as `u16` / `u32` / `u64`.
     ///
     /// Sites lifted:
@@ -29615,8 +29615,8 @@ pub trait MappingExt {
     /// method call, instead of re-inlining the three-token
     /// `Value::Number(_.into())` block.
     ///
-    /// The `Into<serde_yaml::Number>` bound accepts every numeric
-    /// primitive [`serde_yaml::Number`] declares `From` for
+    /// The `Into<serde_norway::Number>` bound accepts every numeric
+    /// primitive [`serde_norway::Number`] declares `From` for
     /// (`i8`..=`i64`, `u8`..=`u64`, `f32`, `f64`) — the same coverage
     /// the two production sites reach through with their `u16` port
     /// fields and the same coverage every future numeric-scalar
@@ -29636,25 +29636,25 @@ pub trait MappingExt {
     /// `insert_number` for the integer-scalar-valued-field shape,
     /// `insert_mapping` for the nested-Mapping-valued-field shape,
     /// `insert_sequence` for the list-shape-valued-field shape.
-    fn insert_number<N: Into<serde_yaml::Number>>(
+    fn insert_number<N: Into<serde_norway::Number>>(
         &mut self,
         key: &str,
         value: N,
-    ) -> Option<serde_yaml::Value>;
+    ) -> Option<serde_norway::Value>;
 
     /// Insert `(key, Value::Mapping(value))` into `self` — the
     /// nested-Mapping-valued-field emission shape that combines
     /// [`Self::insert_str_key`]'s `&str →  Value::String` key promotion
-    /// with an automatic [`serde_yaml::Value::Mapping`] promotion of a
-    /// [`serde_yaml::Mapping`] value. Returns the prior value at that
-    /// key, mirroring [`serde_yaml::Mapping::insert`].
+    /// with an automatic [`serde_norway::Value::Mapping`] promotion of a
+    /// [`serde_norway::Mapping`] value. Returns the prior value at that
+    /// key, mirroring [`serde_norway::Mapping::insert`].
     ///
     /// The canonical shape ~6 production call sites across the caixa-
     /// side renderer surface previously carried inline as the three-
     /// token block `mapping.insert_str_key(<KEY>,
-    /// serde_yaml::Value::Mapping(<INNER>))` — a two-token semantic
+    /// serde_norway::Value::Mapping(<INNER>))` — a two-token semantic
     /// payload (`<KEY>`, `<INNER>`) buried under a two-axis boilerplate
-    /// (`serde_yaml::` path re-quote, `Value::Mapping(_)` promotion)
+    /// (`serde_norway::` path re-quote, `Value::Mapping(_)` promotion)
     /// around a `Mapping` variable the caller already built.
     ///
     /// Sites lifted:
@@ -29706,21 +29706,21 @@ pub trait MappingExt {
     fn insert_mapping(
         &mut self,
         key: &str,
-        value: serde_yaml::Mapping,
-    ) -> Option<serde_yaml::Value>;
+        value: serde_norway::Mapping,
+    ) -> Option<serde_norway::Value>;
 
     /// Insert `(key, Value::Sequence(value))` into `self` — the
     /// list-shape-valued-field emission shape that combines
     /// [`Self::insert_str_key`]'s `&str → Value::String` key promotion
-    /// with an automatic [`serde_yaml::Value::Sequence`] promotion of a
-    /// pre-built `Vec<serde_yaml::Value>` value. Returns the prior
-    /// value at that key, mirroring [`serde_yaml::Mapping::insert`].
+    /// with an automatic [`serde_norway::Value::Sequence`] promotion of a
+    /// pre-built `Vec<serde_norway::Value>` value. Returns the prior
+    /// value at that key, mirroring [`serde_norway::Mapping::insert`].
     ///
     /// The canonical shape 4 production call sites across `caixa-mesh`
     /// previously carried inline as the three-token block
-    /// `mapping.insert_str_key(<KEY>, serde_yaml::Value::Sequence(<VEC>))`
+    /// `mapping.insert_str_key(<KEY>, serde_norway::Value::Sequence(<VEC>))`
     /// — a two-token semantic payload (`<KEY>`, `<VEC>`) buried under a
-    /// two-axis boilerplate (`serde_yaml::` path re-quote,
+    /// two-axis boilerplate (`serde_norway::` path re-quote,
     /// `Value::Sequence(_)` promotion) around a `Vec<Value>` variable
     /// the caller already built.
     ///
@@ -29782,16 +29782,16 @@ pub trait MappingExt {
     fn insert_sequence(
         &mut self,
         key: &str,
-        value: Vec<serde_yaml::Value>,
-    ) -> Option<serde_yaml::Value>;
+        value: Vec<serde_norway::Value>,
+    ) -> Option<serde_norway::Value>;
 
     /// Insert `(key, Value::Sequence(vec![Value::Mapping(value)]))` into
     /// `self` — the singleton-Mapping-list-shape-valued-field emission
     /// shape that composes [`Self::insert_str_key`]'s
     /// `&str → Value::String` key promotion with the
     /// [`singleton_mapping_sequence`] helper's singleton-list wrap of a
-    /// [`serde_yaml::Mapping`] payload. Returns the prior value at that
-    /// key, mirroring [`serde_yaml::Mapping::insert`].
+    /// [`serde_norway::Mapping`] payload. Returns the prior value at that
+    /// key, mirroring [`serde_norway::Mapping::insert`].
     ///
     /// The canonical shape 7 production call sites across `caixa-mesh`
     /// previously carried inline as the two-token composition
@@ -29859,23 +29859,23 @@ pub trait MappingExt {
     fn insert_singleton_mapping_sequence(
         &mut self,
         key: &str,
-        value: serde_yaml::Mapping,
-    ) -> Option<serde_yaml::Value>;
+        value: serde_norway::Mapping,
+    ) -> Option<serde_norway::Value>;
 
     /// Entry-API sibling of [`Self::insert_str_key`] — mint the
     /// `Value::String(<KEY>.into())` key-promotion the underlying
-    /// [`serde_yaml::Mapping::entry`] method's `Value` parameter
+    /// [`serde_norway::Mapping::entry`] method's `Value` parameter
     /// demands, and return the entry-API's
-    /// [`serde_yaml::mapping::Entry`] handle the caller composes
+    /// [`serde_norway::mapping::Entry`] handle the caller composes
     /// `.or_insert(<V>)` / `.or_insert_with(<F>)` /
     /// `.and_modify(<F>)` / `.or_default()` on.
     ///
     /// The canonical shape 4 production call sites across `caixa-flux`
     /// previously carried inline as the three-token composition
-    /// `mapping.entry(serde_yaml::Value::String(<KEY>.into()))` around
+    /// `mapping.entry(serde_norway::Value::String(<KEY>.into()))` around
     /// a one-token semantic payload (the schema key axis-name). Every
     /// site immediately composes an `.or_insert(...)` on the returned
-    /// [`serde_yaml::mapping::Entry`] handle — the pattern is the
+    /// [`serde_norway::mapping::Entry`] handle — the pattern is the
     /// entry-API twin of the [`Self::insert_str_key`] pattern the
     /// ~48 fresh-emit sites already collapsed onto (23506b3).
     ///
@@ -29906,7 +29906,7 @@ pub trait MappingExt {
     /// (`mapping.entry_str_key(<KEY>).or_insert(<DEFAULT>)` — "get the
     /// entry handle for this schema key and default it if missing")
     /// rather than four hand-spelled positional artifacts
-    /// (`serde_yaml::` path re-quote, `Value::String(_)` promotion,
+    /// (`serde_norway::` path re-quote, `Value::String(_)` promotion,
     /// the `.into() | .to_string()` `&str → String` coercion, plus the
     /// `.entry(_)` call itself). The next renderer to land — the
     /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter (which
@@ -29928,13 +29928,13 @@ pub trait MappingExt {
     /// `or_default` composition), insert-API for fresh-emit sites where
     /// the caller unconditionally writes a value and either drops or
     /// pattern-matches on the returned `Option<Value>` prior value.
-    fn entry_str_key(&mut self, key: &str) -> serde_yaml::mapping::Entry<'_>;
+    fn entry_str_key(&mut self, key: &str) -> serde_norway::mapping::Entry<'_>;
 
     /// Arity-0-or-1 twin of [`Self::insert_str_key`] — insert
     /// `(key, value.clone())` iff `value` is `Some`; leave `self`
     /// untouched iff `value` is `None`. Returns the prior value at that
     /// key when the insert fires (mirroring
-    /// [`serde_yaml::Mapping::insert`]), and `None` otherwise (no insert
+    /// [`serde_norway::Mapping::insert`]), and `None` otherwise (no insert
     /// happened, so no prior value can be surfaced).
     ///
     /// The canonical shape 3 production call sites across `caixa-mesh`
@@ -30016,14 +30016,14 @@ pub trait MappingExt {
     fn insert_str_key_if_some(
         &mut self,
         key: &str,
-        value: Option<&serde_yaml::Value>,
-    ) -> Option<serde_yaml::Value>;
+        value: Option<&serde_norway::Value>,
+    ) -> Option<serde_norway::Value>;
 
-    /// Fetch a `&mut serde_yaml::Mapping` at `key`, defaulting an empty
-    /// [`serde_yaml::Mapping`] into place when the entry is absent.
+    /// Fetch a `&mut serde_norway::Mapping` at `key`, defaulting an empty
+    /// [`serde_norway::Mapping`] into place when the entry is absent.
     /// Returns `Some(&mut inner)` on the absent-key (fresh empty
     /// Mapping) and present-Mapping arms; `None` iff `key` holds a
-    /// different [`serde_yaml::Value`] variant — a structural
+    /// different [`serde_norway::Value`] variant — a structural
     /// container-type mismatch the caller surfaces as its own
     /// domain-specific error (`Error::MissingField("spec.values must
     /// be a mapping")` for the caixa-flux Flux-HelmRelease overlay
@@ -30062,7 +30062,7 @@ pub trait MappingExt {
     /// .ok_or(<ERR>)?` — "give me the nested Mapping at this schema
     /// key, defaulting empty if absent, else surface my domain
     /// error") rather than five hand-spelled positional artifacts
-    /// (`serde_yaml::` path re-quote, `Value::Mapping(_)` promotion,
+    /// (`serde_norway::` path re-quote, `Value::Mapping(_)` promotion,
     /// `Mapping::new()` construction, the entry-API `.or_insert(...)`
     /// call, plus the outer `let Value::Mapping(_) = _ else {}`
     /// destructure). The next renderer to land — the per-`:politicas`
@@ -30087,13 +30087,13 @@ pub trait MappingExt {
     /// (the exact idempotent-upsert semantic the caixa-flux
     /// per-cluster `feira app deploy` write path depends on to
     /// preserve operator-pinned overlays across re-renders).
-    fn entry_or_default_mapping(&mut self, key: &str) -> Option<&mut serde_yaml::Mapping>;
+    fn entry_or_default_mapping(&mut self, key: &str) -> Option<&mut serde_norway::Mapping>;
 
-    /// Fetch a `&mut Vec<serde_yaml::Value>` at `key`, defaulting an
-    /// empty [`Vec<serde_yaml::Value>`] into place when the entry is
+    /// Fetch a `&mut Vec<serde_norway::Value>` at `key`, defaulting an
+    /// empty [`Vec<serde_norway::Value>`] into place when the entry is
     /// absent. Returns `Some(&mut inner)` on the absent-key (fresh
     /// empty Sequence) and present-Sequence arms; `None` iff `key`
-    /// holds a different [`serde_yaml::Value`] variant — a structural
+    /// holds a different [`serde_norway::Value`] variant — a structural
     /// container-type mismatch the caller surfaces as its own
     /// domain-specific error (`Error::MissingField("programs must be
     /// a sequence")` for the caixa-flux fleet-programs upsert
@@ -30134,7 +30134,7 @@ pub trait MappingExt {
     /// .ok_or(<ERR>)?` — "give me the list at this schema key,
     /// defaulting empty if absent, else surface my domain error")
     /// rather than five hand-spelled positional artifacts
-    /// (`serde_yaml::` path re-quote, `Value::Sequence(_)` promotion,
+    /// (`serde_norway::` path re-quote, `Value::Sequence(_)` promotion,
     /// `Vec::new()` construction, the entry-API `.or_insert(...)`
     /// call, plus the outer `match { Value::Sequence(_) => _, _ =>
     /// return Err(_) }` destructure). The next renderer to land — the
@@ -30160,131 +30160,131 @@ pub trait MappingExt {
     /// idempotent-upsert semantic the `feira app deploy` per-cluster
     /// write path depends on to preserve prior `programs[]` entries
     /// across per-Servico rewrites).
-    fn entry_or_default_sequence(&mut self, key: &str) -> Option<&mut Vec<serde_yaml::Value>>;
+    fn entry_or_default_sequence(&mut self, key: &str) -> Option<&mut Vec<serde_norway::Value>>;
 }
 
-impl MappingExt for serde_yaml::Mapping {
+impl MappingExt for serde_norway::Mapping {
     #[inline]
-    fn insert_str_key(&mut self, key: &str, value: serde_yaml::Value) -> Option<serde_yaml::Value> {
-        self.insert(serde_yaml::Value::String(key.to_string()), value)
+    fn insert_str_key(&mut self, key: &str, value: serde_norway::Value) -> Option<serde_norway::Value> {
+        self.insert(serde_norway::Value::String(key.to_string()), value)
     }
 
     #[inline]
-    fn insert_string<V: Into<String>>(&mut self, key: &str, value: V) -> Option<serde_yaml::Value> {
-        self.insert_str_key(key, serde_yaml::Value::String(value.into()))
+    fn insert_string<V: Into<String>>(&mut self, key: &str, value: V) -> Option<serde_norway::Value> {
+        self.insert_str_key(key, serde_norway::Value::String(value.into()))
     }
 
     #[inline]
-    fn insert_number<N: Into<serde_yaml::Number>>(
+    fn insert_number<N: Into<serde_norway::Number>>(
         &mut self,
         key: &str,
         value: N,
-    ) -> Option<serde_yaml::Value> {
-        self.insert_str_key(key, serde_yaml::Value::Number(value.into()))
+    ) -> Option<serde_norway::Value> {
+        self.insert_str_key(key, serde_norway::Value::Number(value.into()))
     }
 
     #[inline]
     fn insert_mapping(
         &mut self,
         key: &str,
-        value: serde_yaml::Mapping,
-    ) -> Option<serde_yaml::Value> {
-        self.insert_str_key(key, serde_yaml::Value::Mapping(value))
+        value: serde_norway::Mapping,
+    ) -> Option<serde_norway::Value> {
+        self.insert_str_key(key, serde_norway::Value::Mapping(value))
     }
 
     #[inline]
     fn insert_sequence(
         &mut self,
         key: &str,
-        value: Vec<serde_yaml::Value>,
-    ) -> Option<serde_yaml::Value> {
-        self.insert_str_key(key, serde_yaml::Value::Sequence(value))
+        value: Vec<serde_norway::Value>,
+    ) -> Option<serde_norway::Value> {
+        self.insert_str_key(key, serde_norway::Value::Sequence(value))
     }
 
     #[inline]
     fn insert_singleton_mapping_sequence(
         &mut self,
         key: &str,
-        value: serde_yaml::Mapping,
-    ) -> Option<serde_yaml::Value> {
+        value: serde_norway::Mapping,
+    ) -> Option<serde_norway::Value> {
         self.insert_str_key(key, singleton_mapping_sequence(value))
     }
 
     #[inline]
-    fn entry_str_key(&mut self, key: &str) -> serde_yaml::mapping::Entry<'_> {
-        self.entry(serde_yaml::Value::String(key.to_string()))
+    fn entry_str_key(&mut self, key: &str) -> serde_norway::mapping::Entry<'_> {
+        self.entry(serde_norway::Value::String(key.to_string()))
     }
 
     #[inline]
     fn insert_str_key_if_some(
         &mut self,
         key: &str,
-        value: Option<&serde_yaml::Value>,
-    ) -> Option<serde_yaml::Value> {
+        value: Option<&serde_norway::Value>,
+    ) -> Option<serde_norway::Value> {
         value.and_then(|v| self.insert_str_key(key, v.clone()))
     }
 
     #[inline]
-    fn entry_or_default_mapping(&mut self, key: &str) -> Option<&mut serde_yaml::Mapping> {
+    fn entry_or_default_mapping(&mut self, key: &str) -> Option<&mut serde_norway::Mapping> {
         match self
             .entry_str_key(key)
-            .or_insert_with(|| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()))
+            .or_insert_with(|| serde_norway::Value::Mapping(serde_norway::Mapping::new()))
         {
-            serde_yaml::Value::Mapping(m) => Some(m),
+            serde_norway::Value::Mapping(m) => Some(m),
             _ => None,
         }
     }
 
     #[inline]
-    fn entry_or_default_sequence(&mut self, key: &str) -> Option<&mut Vec<serde_yaml::Value>> {
+    fn entry_or_default_sequence(&mut self, key: &str) -> Option<&mut Vec<serde_norway::Value>> {
         match self
             .entry_str_key(key)
-            .or_insert_with(|| serde_yaml::Value::Sequence(Vec::new()))
+            .or_insert_with(|| serde_norway::Value::Sequence(Vec::new()))
         {
-            serde_yaml::Value::Sequence(s) => Some(s),
+            serde_norway::Value::Sequence(s) => Some(s),
             _ => None,
         }
     }
 }
 
-/// Extension methods for the [`Vec<serde_yaml::Value>`] emission
+/// Extension methods for the [`Vec<serde_norway::Value>`] emission
 /// surface that the K8s-artifact-emit sites of `caixa-mesh` /
 /// `caixa-flux` / `caixa-helm` / `caixa-core::render` build up as
 /// `spec.ingress[]` / `spec.rules[]` / `spec.hostnames[]` / per-
 /// programs.yaml-entry payloads before wrapping each vec as a
-/// [`serde_yaml::Value::Sequence`] on an outer [`serde_yaml::Mapping`]
+/// [`serde_norway::Value::Sequence`] on an outer [`serde_norway::Mapping`]
 /// (via [`MappingExt::insert_sequence`]).
 ///
-/// Peer to [`MappingExt`] on the sibling [`serde_yaml::Value`]-
+/// Peer to [`MappingExt`] on the sibling [`serde_norway::Value`]-
 /// construction surface: [`MappingExt`] closes the per-key-and-value
 /// insert primitive every schema-key axis reaches through;
 /// [`SequenceExt`] closes the per-list-element push primitive every
 /// per-iteration append site reaches through when the built-up
-/// [`serde_yaml::Value`] variant is uniform across a loop body (e.g.
-/// every element is a fresh [`serde_yaml::Value::Mapping`], not a
+/// [`serde_norway::Value`] variant is uniform across a loop body (e.g.
+/// every element is a fresh [`serde_norway::Value::Mapping`], not a
 /// heterogeneous mix of `Mapping` / `String` / `Sequence`).
 ///
 /// Each method mints the same `Value::<Variant>(<payload>)` promotion
 /// the caller would otherwise re-inline as
-/// `vec.push(serde_yaml::Value::<Variant>(<payload>))` on every
+/// `vec.push(serde_norway::Value::<Variant>(<payload>))` on every
 /// iteration. Same variant-promotion contract as [`MappingExt`]'s
 /// typed inserts, applied to the sequence-append axis instead of the
 /// mapping-insert axis — so a future rebrand of the `Value` variant
 /// wrapping (e.g. to a Server-Side-Apply-typed
-/// [`serde_yaml::Value::Tagged`] per-list-element ownership axis)
+/// [`serde_norway::Value::Tagged`] per-list-element ownership axis)
 /// reaches both `Mapping`-insert and `Vec<Value>`-push sites through
 /// one lift.
 pub trait SequenceExt {
     /// Append `Value::Mapping(value)` to `self` — the per-iteration
-    /// append shape that combines a `Vec<serde_yaml::Value>::push`
-    /// with an automatic [`serde_yaml::Value::Mapping`] promotion of a
-    /// pre-built [`serde_yaml::Mapping`] element.
+    /// append shape that combines a `Vec<serde_norway::Value>::push`
+    /// with an automatic [`serde_norway::Value::Mapping`] promotion of a
+    /// pre-built [`serde_norway::Mapping`] element.
     ///
     /// The canonical shape 4 production call sites across `caixa-mesh`
     /// previously carried inline as the three-token block
-    /// `<vec>.push(serde_yaml::Value::Mapping(<M>))` — a one-token
+    /// `<vec>.push(serde_norway::Value::Mapping(<M>))` — a one-token
     /// semantic payload (the per-iteration `Mapping`) buried under a
-    /// two-axis boilerplate (`serde_yaml::` path re-quote,
+    /// two-axis boilerplate (`serde_norway::` path re-quote,
     /// `Value::Mapping(_)` promotion) around a `Mapping` variable the
     /// caller already built.
     ///
@@ -30308,7 +30308,7 @@ pub trait SequenceExt {
     /// the caller reads as intent (`<vec>.push_mapping(<M>)` —
     /// "append this built inner `M` as the next `Value::Mapping`
     /// element") rather than three hand-spelled positional artifacts
-    /// (`serde_yaml::` path re-quote, `Value::Mapping(_)` promotion,
+    /// (`serde_norway::` path re-quote, `Value::Mapping(_)` promotion,
     /// plus the `.push(_)` call itself). Peer to
     /// [`MappingExt::insert_singleton_mapping_sequence`] on the
     /// singleton-Mapping-list-shape axis: [`Self::push_mapping`]
@@ -30335,13 +30335,13 @@ pub trait SequenceExt {
     /// append — gets the canonical `Value::Mapping`-promoted append
     /// for free with one method call, instead of re-inlining the
     /// three-token `Value::Mapping(_)` promotion.
-    fn push_mapping(&mut self, value: serde_yaml::Mapping);
+    fn push_mapping(&mut self, value: serde_norway::Mapping);
 }
 
-impl SequenceExt for Vec<serde_yaml::Value> {
+impl SequenceExt for Vec<serde_norway::Value> {
     #[inline]
-    fn push_mapping(&mut self, value: serde_yaml::Mapping) {
-        self.push(serde_yaml::Value::Mapping(value));
+    fn push_mapping(&mut self, value: serde_norway::Mapping) {
+        self.push(serde_norway::Value::Mapping(value));
     }
 }
 
@@ -30511,7 +30511,7 @@ mod tests {
 
     #[test]
     fn to_yaml_slot_ok_matches_serde_yaml_to_value_on_every_m2_slot_type() {
-        // Byte-equal to `serde_yaml::to_value` on the three canonical M2
+        // Byte-equal to `serde_norway::to_value` on the three canonical M2
         // slot value shapes (`&LimitsSpec` / `&BehaviorSpec` /
         // `&[UpgradeFromEntry]`). Any wrapper-side silent transformation
         // of the serialized value — a silent `.to_string()` re-wrap, a
@@ -30524,7 +30524,7 @@ mod tests {
             cpu: Some(500),
         };
         let via_helper_limits = to_yaml_slot(M2_KEY_LIMITS, &limits).unwrap();
-        let via_serde_limits = serde_yaml::to_value(limits).unwrap();
+        let via_serde_limits = serde_norway::to_value(limits).unwrap();
         assert_eq!(via_helper_limits, via_serde_limits);
         let behavior = BehaviorSpec {
             on_init: Some(PathBuf::from("lib/init.lisp")),
@@ -30532,7 +30532,7 @@ mod tests {
             ..Default::default()
         };
         let via_helper_behavior = to_yaml_slot(M2_KEY_BEHAVIOR, &behavior).unwrap();
-        let via_serde_behavior = serde_yaml::to_value(behavior).unwrap();
+        let via_serde_behavior = serde_norway::to_value(behavior).unwrap();
         assert_eq!(via_helper_behavior, via_serde_behavior);
         let upgrade = vec![UpgradeFromEntry {
             from: "0.0.9".into(),
@@ -30541,7 +30541,7 @@ mod tests {
             }],
         }];
         let via_helper_upgrade = to_yaml_slot(M2_KEY_UPGRADE_FROM, upgrade.as_slice()).unwrap();
-        let via_serde_upgrade = serde_yaml::to_value(upgrade).unwrap();
+        let via_serde_upgrade = serde_norway::to_value(upgrade).unwrap();
         assert_eq!(via_helper_upgrade, via_serde_upgrade);
     }
 
@@ -30744,8 +30744,8 @@ mod tests {
     // slots in BTreeMap-key order at every M2 key not already claimed by
     // spec.*).
 
-    fn cu_yaml_with_spec_fields(spec_yaml: &str) -> serde_yaml::Value {
-        serde_yaml::from_str(&format!(
+    fn cu_yaml_with_spec_fields(spec_yaml: &str) -> serde_norway::Value {
+        serde_norway::from_str(&format!(
             "apiVersion: wasm.pleme.io/v1alpha1\nkind: ComputeUnit\nmetadata:\n  name: hello-rio\nspec:\n{spec_yaml}"
         ))
         .unwrap()
@@ -30766,7 +30766,7 @@ mod tests {
     #[test]
     fn servico_spec_and_m2_overlay_entries_splices_spec_fields_in_source_insertion_order() {
         // The spec.* field-splice loop preserves the source YAML
-        // Mapping's insertion order — caixa-flux's `serde_yaml::Mapping`
+        // Mapping's insertion order — caixa-flux's `serde_norway::Mapping`
         // target reads this back verbatim, so a rebrand of the source
         // ComputeUnit YAML's field ordering must not silently reorder
         // the emitted programs.yaml entry.
@@ -30848,7 +30848,7 @@ mod tests {
             ..Default::default()
         });
         let out = servico_spec_and_m2_overlay_entries(&c, spec).unwrap();
-        let limits_entries: Vec<&(String, serde_yaml::Value)> =
+        let limits_entries: Vec<&(String, serde_norway::Value)> =
             out.iter().filter(|(k, _)| k == M2_KEY_LIMITS).collect();
         assert_eq!(
             limits_entries.len(),
@@ -30875,7 +30875,7 @@ mod tests {
         // and only the M2 overlay contributes. Bracket-guard against a
         // future refactor that swaps `string_keyed_entries` for a
         // stricter parser silently dropping the M2 half too.
-        let non_mapping_spec = serde_yaml::Value::String("not-a-mapping".into());
+        let non_mapping_spec = serde_norway::Value::String("not-a-mapping".into());
         let mut c = bare_servico();
         c.limits = Some(LimitsSpec {
             memory: Some(64 * 1024 * 1024),
@@ -30916,7 +30916,7 @@ mod tests {
 
         let via_helper = servico_spec_and_m2_overlay_entries(&c, spec).unwrap();
 
-        let mut via_inline: Vec<(String, serde_yaml::Value)> = Vec::new();
+        let mut via_inline: Vec<(String, serde_norway::Value)> = Vec::new();
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for (k, v) in string_keyed_entries(spec) {
             seen.insert(k.to_string());
@@ -32695,7 +32695,7 @@ mod tests {
         // `helm.toolkit.fluxcd.io/v2` all consult the same canonical
         // constant, but the two `upsert_into_helmrelease_programs` test
         // fixtures (caixa-flux/src/lib.rs:928, 970) carry the value as
-        // a static raw-string literal inside a `serde_yaml::from_str`
+        // a static raw-string literal inside a `serde_norway::from_str`
         // input (the YAML parser is the unit-under-test there, not the
         // rendering — the literals are intentionally not threaded
         // through the lift). This pin trips at caixa-core build time
@@ -37586,7 +37586,7 @@ mod tests {
     #[test]
     fn pleme_program_in_aplicacao_selector_iterates_alphabetically() {
         // BTreeMap iteration is sorted by key — pin that the renderer
-        // (which translates the selector into a serde_yaml::Mapping
+        // (which translates the selector into a serde_norway::Mapping
         // by iteration) gets a deterministic key order. `aplicacao`
         // sorts before `program`, so the rendered YAML's
         // `matchLabels:` block appears in that order regardless of
@@ -37629,7 +37629,7 @@ mod tests {
         // emptiness contract (e.g. caixa-mesh's CNP labels block: the
         // policy's metadata.labels exists iff there are pleme-prefixed
         // labels to carry) depends on this being faithful.
-        let v: serde_yaml::Value = yaml_string_mapping(BTreeMap::<&'static str, String>::new());
+        let v: serde_norway::Value = yaml_string_mapping(BTreeMap::<&'static str, String>::new());
         let m = v.as_mapping().expect("mapping shape");
         assert!(m.is_empty());
     }
@@ -37845,7 +37845,7 @@ mod tests {
         // means an empty pleme-io selector at the call site renders
         // as the canonical "no labels declared, match nothing
         // specific" shape rather than an outright missing key).
-        let v: serde_yaml::Value = label_selector(BTreeMap::<&'static str, String>::new());
+        let v: serde_norway::Value = label_selector(BTreeMap::<&'static str, String>::new());
         let m = v.as_mapping().expect("mapping shape");
         assert_eq!(m.len(), 1);
         let inner = m
@@ -38071,7 +38071,7 @@ mod tests {
 
     #[test]
     fn kube_resource_skeleton_top_level_iterates_in_insert_order() {
-        // The top-level Mapping is a plain serde_yaml::Mapping (insert-
+        // The top-level Mapping is a plain serde_norway::Mapping (insert-
         // ordered), and the skeleton inserts apiVersion → kind →
         // metadata in that order. Pin so a future refactor doesn't
         // silently shift the rendered YAML's top-level key order
@@ -39522,8 +39522,8 @@ mod tests {
             // signal the peer downstream renderers key off).
             if let (Ok(cascade_spec), Ok(compound_spec)) = (cascade, compound) {
                 assert_eq!(
-                    serde_yaml::to_string(&cascade_spec).expect("cascade AplicacaoSpec serializes"),
-                    serde_yaml::to_string(&compound_spec)
+                    serde_norway::to_string(&cascade_spec).expect("cascade AplicacaoSpec serializes"),
+                    serde_norway::to_string(&compound_spec)
                         .expect("compound AplicacaoSpec serializes"),
                     "compound helper's Ok arm must return byte-equal AplicacaoSpec to cascade"
                 );
@@ -39822,9 +39822,9 @@ mod tests {
             // return byte-for-byte (via serde YAML round-trip).
             if let (Ok(cascade_spec), Ok(compound_spec)) = (cascade, compound) {
                 assert_eq!(
-                    serde_yaml::to_string(&cascade_spec)
+                    serde_norway::to_string(&cascade_spec)
                         .expect("cascade SupervisorSpec serializes"),
-                    serde_yaml::to_string(&compound_spec)
+                    serde_norway::to_string(&compound_spec)
                         .expect("compound SupervisorSpec serializes"),
                     "compound helper's Ok arm must return byte-equal SupervisorSpec to cascade"
                 );
@@ -40103,8 +40103,8 @@ mod tests {
         // single emission gate, and a malformed `outer: {}` (the
         // empty-mapping form some K8s parsers reject) is structurally
         // impossible by construction.
-        let v: Option<serde_yaml::Value> = single_field_overlay::<u32, _>(None, "attempts", |n| {
-            serde_yaml::Value::Number(n.into())
+        let v: Option<serde_norway::Value> = single_field_overlay::<u32, _>(None, "attempts", |n| {
+            serde_norway::Value::Number(n.into())
         });
         assert!(v.is_none());
     }
@@ -40117,7 +40117,7 @@ mod tests {
         // as a malformed `timeouts: { request: "30s", <leak>: ... }`
         // overlay block).
         let v = single_field_overlay(Some(30u32), "attempts", |n| {
-            serde_yaml::Value::Number(n.into())
+            serde_norway::Value::Number(n.into())
         })
         .expect("Some arm yields Some(...)");
         let m = v.as_mapping().expect("mapping shape");
@@ -40135,13 +40135,13 @@ mod tests {
         // attempt counts), and a derived `Bool` (for tristate enums).
         // Mirrors the three landed overlays' shapes letter-for-letter.
         let dur = single_field_overlay(Some("30s".to_string()), "request", |s| {
-            serde_yaml::Value::String(s)
+            serde_norway::Value::String(s)
         })
         .unwrap();
         assert_eq!(dur.get("request").and_then(|v| v.as_str()), Some("30s"));
 
         let num = single_field_overlay(Some(3u32), "attempts", |n| {
-            serde_yaml::Value::Number(n.into())
+            serde_norway::Value::Number(n.into())
         })
         .unwrap();
         assert_eq!(num.get("attempts").and_then(|v| v.as_u64()), Some(3));
@@ -40160,7 +40160,7 @@ mod tests {
         // rather than duplicated across the production emitter site
         // and this generic-helper pin.
         let mode = single_field_overlay(Some(true), CILIUM_KEY_MODE, |b| {
-            serde_yaml::Value::String(cilium_auth_mode(b).into())
+            serde_norway::Value::String(cilium_auth_mode(b).into())
         })
         .unwrap();
         assert_eq!(
@@ -40180,7 +40180,7 @@ mod tests {
         // every overlay (`timeouts: { timeouts: { request: "30s" } }`
         // post-insertion).
         let v = single_field_overlay(Some(30u32), "attempts", |n| {
-            serde_yaml::Value::Number(n.into())
+            serde_norway::Value::Number(n.into())
         })
         .unwrap();
         let m = v.as_mapping().unwrap();
@@ -40201,11 +40201,11 @@ mod tests {
         // overlay is computed once per renderer call (so the closure
         // runs exactly once) and `.clone()`d into each rule of the
         // emitted sequence. Pin that the returned Value is in fact
-        // cloneable (a `serde_yaml::Value` always is, but the test
+        // cloneable (a `serde_norway::Value` always is, but the test
         // pins the contract end-to-end so a future refactor that
         // returns a non-Cloneable wrapper surfaces here).
         let v = single_field_overlay(Some(30u32), "attempts", |n| {
-            serde_yaml::Value::Number(n.into())
+            serde_norway::Value::Number(n.into())
         })
         .unwrap();
         let v_clone = v.clone();
@@ -40226,9 +40226,9 @@ mod tests {
         // `upsert_helmrelease_inserts_under_spec_values_programs` at
         // the HelmRelease layer) — the same shape at the typed-
         // primitive layer as the two production sites.
-        let mut arr: Vec<serde_yaml::Value> = Vec::new();
-        let entry: serde_yaml::Value =
-            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://x } }").unwrap();
+        let mut arr: Vec<serde_norway::Value> = Vec::new();
+        let entry: serde_norway::Value =
+            serde_norway::from_str("{ name: hello-rio, module: { source: oci://x } }").unwrap();
         let inserted =
             upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
         assert!(inserted, "empty sequence + new entry must append");
@@ -40246,11 +40246,11 @@ mod tests {
         // so the upsert falls through to the append-new tail (never
         // replacing) and returns `Ok(true)`. Pins the append-only
         // semantic that keeps every unrelated entry untouched.
-        let mut arr: Vec<serde_yaml::Value> = vec![
-            serde_yaml::from_str("{ name: other, module: { source: github:foo/bar } }").unwrap(),
+        let mut arr: Vec<serde_norway::Value> = vec![
+            serde_norway::from_str("{ name: other, module: { source: github:foo/bar } }").unwrap(),
         ];
-        let entry: serde_yaml::Value =
-            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://x } }").unwrap();
+        let entry: serde_norway::Value =
+            serde_norway::from_str("{ name: hello-rio, module: { source: oci://x } }").unwrap();
         let inserted =
             upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
         assert!(inserted);
@@ -40278,11 +40278,11 @@ mod tests {
         // `upsert_replaces_existing_entry` /
         // `upsert_helmrelease_replaces_existing` tests
         // ([`caixa_flux`]).
-        let mut arr: Vec<serde_yaml::Value> = vec![
-            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://old } }").unwrap(),
+        let mut arr: Vec<serde_norway::Value> = vec![
+            serde_norway::from_str("{ name: hello-rio, module: { source: oci://old } }").unwrap(),
         ];
-        let entry: serde_yaml::Value =
-            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://new } }").unwrap();
+        let entry: serde_norway::Value =
+            serde_norway::from_str("{ name: hello-rio, module: { source: oci://new } }").unwrap();
         let inserted =
             upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
         assert!(!inserted, "matching name must replace, not append");
@@ -40310,13 +40310,13 @@ mod tests {
         // would silently reorder every downstream consumer's iteration
         // window. Same declaration-order-preservation contract the
         // aggregator side relies on.
-        let mut arr: Vec<serde_yaml::Value> = vec![
-            serde_yaml::from_str("{ name: alpha, module: { source: github:a/a } }").unwrap(),
-            serde_yaml::from_str("{ name: beta, module: { source: github:b/old } }").unwrap(),
-            serde_yaml::from_str("{ name: gamma, module: { source: github:g/g } }").unwrap(),
+        let mut arr: Vec<serde_norway::Value> = vec![
+            serde_norway::from_str("{ name: alpha, module: { source: github:a/a } }").unwrap(),
+            serde_norway::from_str("{ name: beta, module: { source: github:b/old } }").unwrap(),
+            serde_norway::from_str("{ name: gamma, module: { source: github:g/g } }").unwrap(),
         ];
-        let entry: serde_yaml::Value =
-            serde_yaml::from_str("{ name: beta, module: { source: github:b/new } }").unwrap();
+        let entry: serde_norway::Value =
+            serde_norway::from_str("{ name: beta, module: { source: github:b/new } }").unwrap();
         let inserted =
             upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
         assert!(!inserted);
@@ -40351,9 +40351,9 @@ mod tests {
         // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
         // per-entry upsert, the `caixa-otel` per-scrape upsert —
         // surfaces its own typed variant).
-        let mut arr: Vec<serde_yaml::Value> = Vec::new();
-        let entry: serde_yaml::Value =
-            serde_yaml::from_str("{ module: { source: oci://x } }").unwrap();
+        let mut arr: Vec<serde_norway::Value> = Vec::new();
+        let entry: serde_norway::Value =
+            serde_norway::from_str("{ module: { source: oci://x } }").unwrap();
         let err = upsert_named_entry(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || {
             "missing-name".to_string()
         })
@@ -40374,9 +40374,9 @@ mod tests {
         // upsert_named_entry_calls_error_closure_on_missing_name_key
         // pin — both non-string-scalar paths route through the same
         // caller-owned diagnostic.
-        let mut arr: Vec<serde_yaml::Value> = Vec::new();
-        let entry: serde_yaml::Value =
-            serde_yaml::from_str("{ name: 42, module: { source: oci://x } }").unwrap();
+        let mut arr: Vec<serde_norway::Value> = Vec::new();
+        let entry: serde_norway::Value =
+            serde_norway::from_str("{ name: 42, module: { source: oci://x } }").unwrap();
         let err =
             upsert_named_entry(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || 7u32).unwrap_err();
         assert_eq!(err, 7u32);
@@ -40394,10 +40394,10 @@ mod tests {
         // promoting `id:` alongside `name:`) reaches for the same
         // helper with a different key rather than re-inlining the
         // upsert loop.
-        let mut arr: Vec<serde_yaml::Value> =
-            vec![serde_yaml::from_str("{ id: alpha, payload: original }").unwrap()];
-        let entry: serde_yaml::Value =
-            serde_yaml::from_str("{ id: alpha, payload: replaced }").unwrap();
+        let mut arr: Vec<serde_norway::Value> =
+            vec![serde_norway::from_str("{ id: alpha, payload: original }").unwrap()];
+        let entry: serde_norway::Value =
+            serde_norway::from_str("{ id: alpha, payload: replaced }").unwrap();
         let inserted = upsert_named_entry::<()>(&mut arr, entry, "id", || ()).unwrap();
         assert!(!inserted, "matching `id:` must replace, not append");
         assert_eq!(arr.len(), 1);
@@ -46022,7 +46022,7 @@ mod tests {
     fn computeunit_yaml_extension_rejects_no_extension() {
         // No-extension shape — the canonical "I declared the slot
         // but forgot the `.computeunit.yaml` suffix" footgun. The
-        // peer caixa-helm / caixa-flux `serde_yaml::from_str`
+        // peer caixa-helm / caixa-flux `serde_norway::from_str`
         // consumer can't infer the file type from the path alone, so
         // the gate refuses the value at validate time.
         for relpath in ["servicos/demo", "demo", "servicos/sub/nested"] {
@@ -49293,13 +49293,13 @@ mod tests {
         // sub-block keys of a canonical in-tree `ComputeUnit` YAML —
         // the same shape [`caixa_flux::programs_yaml_entry`] and
         // [`caixa_helm::build_values_yaml`] consume via
-        // `serde_yaml::from_str`. Pins the const-to-schema round-trip
+        // `serde_norway::from_str`. Pins the const-to-schema round-trip
         // so a future ComputeUnit-CRD schema rebrand (a `binary:` /
         // `component:` / `invoke:` / `caps:` / `spec.wasm.*` axis
         // rename the ABSORPTION-ROADMAP.md M4-M5 trajectory names)
         // surfaces here as a build error rather than as a silent
         // per-Servico wasm-runtime-binding drop at cluster-apply time.
-        let cu: serde_yaml::Value = serde_yaml::from_str(
+        let cu: serde_norway::Value = serde_norway::from_str(
             r#"
 apiVersion: wasm.pleme.io/v1alpha1
 kind: ComputeUnit
@@ -49411,48 +49411,48 @@ spec:
         // for the key (e.g. `Value::Tagged`) is a compile-visible break,
         // not a silent per-consumer regression at the K8s-artifact-emit
         // surface.
-        let mut m = serde_yaml::Mapping::new();
-        let prior = m.insert_str_key("spec", serde_yaml::Value::Bool(true));
+        let mut m = serde_norway::Mapping::new();
+        let prior = m.insert_str_key("spec", serde_norway::Value::Bool(true));
         assert!(
             prior.is_none(),
             "insert_str_key returns None on first insertion, mirroring \
-             serde_yaml::Mapping::insert"
+             serde_norway::Mapping::insert"
         );
         // Key is exactly the `Value::String` promotion of the input.
         let got = m
-            .get(serde_yaml::Value::String("spec".to_string()))
+            .get(serde_norway::Value::String("spec".to_string()))
             .expect("inserted key is present under Value::String promotion");
         assert_eq!(
             got,
-            &serde_yaml::Value::Bool(true),
+            &serde_norway::Value::Bool(true),
             "insert_str_key routes value verbatim to the underlying \
-             serde_yaml::Mapping::insert"
+             serde_norway::Mapping::insert"
         );
     }
 
     #[test]
     fn mapping_ext_insert_str_key_returns_prior_value_on_replace() {
-        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // The trait method mirrors [`serde_norway::Mapping::insert`]'s
         // return contract: the prior value at that key, or `None` if
         // absent. Pin the replace-returns-prior semantic so a future
         // refactor that swaps to a `HashMap::entry`-style flow doesn't
         // silently drop the prior-value handoff downstream consumers may
         // reach for (the M4 per-`:politicas` overlay merger, the future
         // `feira app deploy` idempotent-write dry-run comparator).
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key("kind", serde_yaml::Value::String("Gateway".into()));
-        let prior = m.insert_str_key("kind", serde_yaml::Value::String("HTTPRoute".into()));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key("kind", serde_norway::Value::String("Gateway".into()));
+        let prior = m.insert_str_key("kind", serde_norway::Value::String("HTTPRoute".into()));
         assert_eq!(
             prior,
-            Some(serde_yaml::Value::String("Gateway".into())),
+            Some(serde_norway::Value::String("Gateway".into())),
             "insert_str_key returns the prior value when replacing an existing key"
         );
         let got = m
-            .get(serde_yaml::Value::String("kind".to_string()))
+            .get(serde_norway::Value::String("kind".to_string()))
             .expect("key is still present after replace");
         assert_eq!(
             got,
-            &serde_yaml::Value::String("HTTPRoute".into()),
+            &serde_norway::Value::String("HTTPRoute".into()),
             "replaced value is now the most-recently-inserted one"
         );
     }
@@ -49467,13 +49467,13 @@ spec:
         // (a differently-quoted key, a different `Value` variant) at
         // every routed consumer — pin the equivalence so the trait
         // remains a drop-in replacement.
-        let mut via_trait = serde_yaml::Mapping::new();
-        via_trait.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Gateway".into()));
+        let mut via_trait = serde_norway::Mapping::new();
+        via_trait.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Gateway".into()));
 
-        let mut via_inline = serde_yaml::Mapping::new();
+        let mut via_inline = serde_norway::Mapping::new();
         via_inline.insert(
-            serde_yaml::Value::String(KUBE_KEY_KIND.into()),
-            serde_yaml::Value::String("Gateway".into()),
+            serde_norway::Value::String(KUBE_KEY_KIND.into()),
+            serde_norway::Value::String("Gateway".into()),
         );
 
         assert_eq!(
@@ -49487,13 +49487,13 @@ spec:
     #[test]
     fn mapping_get_bare_str_key_byte_equals_value_string_wrapped_form() {
         // The read-side twin of the `insert_str_key`-vs-hand-written pin.
-        // `serde_yaml::Mapping::get<I: Index>` accepts any `I: Index`;
+        // `serde_norway::Mapping::get<I: Index>` accepts any `I: Index`;
         // the crate ships `impl Index for str` (routing through a
         // no-allocation `HashLikeValue(&str)` bucket lookup) and
         // `impl Index for Value` (matching the `Value::String(_)`
         // key verbatim). The ~78 test-side probes across `caixa-mesh`,
         // `caixa-flux`, and `caixa-core::render` that previously spelled
-        // out `.get(serde_yaml::Value::String(<KEY>.into()))` were
+        // out `.get(serde_norway::Value::String(<KEY>.into()))` were
         // swept onto the shorter `.get(<KEY>)` form because the two
         // must resolve to the same bucket for the sweep to be a
         // drop-in. Pin the equivalence — the `HashLikeValue(&str)`
@@ -49502,12 +49502,12 @@ spec:
         // absence path (`None` when the key is missing) — otherwise
         // a future `serde_yaml` upgrade could silently divert every
         // swept probe past the value the emitter inserted.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Gateway".into()));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Gateway".into()));
         // Present-key path: both forms find the same value.
         assert_eq!(
             m.get(KUBE_KEY_KIND),
-            m.get(serde_yaml::Value::String(KUBE_KEY_KIND.into())),
+            m.get(serde_norway::Value::String(KUBE_KEY_KIND.into())),
             "mapping.get(<KEY>) must byte-equal \
              mapping.get(Value::String(<KEY>.into())) — otherwise the \
              ~78 swept test-side probes drift silently past the value \
@@ -49516,7 +49516,7 @@ spec:
         // Absent-key path: both forms return None.
         assert_eq!(
             m.get(KUBE_KEY_SPEC),
-            m.get(serde_yaml::Value::String(KUBE_KEY_SPEC.into())),
+            m.get(serde_norway::Value::String(KUBE_KEY_SPEC.into())),
             "absent-key lookup via bare-&str must byte-equal absent-key \
              lookup via Value::String — both must return None so the \
              swept `assert!(_.get(K).is_none())` shape stays load-bearing"
@@ -49524,7 +49524,7 @@ spec:
         // contains_key parity: both forms agree on present + absent.
         assert_eq!(
             m.contains_key(KUBE_KEY_KIND),
-            m.contains_key(serde_yaml::Value::String(KUBE_KEY_KIND.into())),
+            m.contains_key(serde_norway::Value::String(KUBE_KEY_KIND.into())),
             "mapping.contains_key(<KEY>) must byte-equal \
              mapping.contains_key(Value::String(<KEY>.into())) — \
              otherwise the swept `assert!(_.contains_key(K))` shape \
@@ -49532,7 +49532,7 @@ spec:
         );
         assert_eq!(
             m.contains_key(KUBE_KEY_SPEC),
-            m.contains_key(serde_yaml::Value::String(KUBE_KEY_SPEC.into())),
+            m.contains_key(serde_norway::Value::String(KUBE_KEY_SPEC.into())),
             "absent-key contains_key via bare-&str must byte-equal \
              absent-key contains_key via Value::String"
         );
@@ -49541,13 +49541,13 @@ spec:
     #[test]
     fn mapping_get_mut_bare_str_key_byte_equals_value_string_wrapped_form() {
         // The mutation-path twin of the read-side pin above.
-        // `serde_yaml::Mapping::get_mut<I: Index>` accepts any
+        // `serde_norway::Mapping::get_mut<I: Index>` accepts any
         // `I: Index` — the crate ships `impl Index for str` (routing
         // through the same no-allocation `HashLikeValue(&str)` bucket
         // lookup the read-side `get` / `contains_key` sweep landed on
         // in 0e84fb9) and `impl Index for Value` (matching the
         // `Value::String(_)` key verbatim). Until this pin landed the
-        // sole production `.get_mut(serde_yaml::Value::String(<KEY>.into()))`
+        // sole production `.get_mut(serde_norway::Value::String(<KEY>.into()))`
         // probe — [`caixa_flux::upsert_into_helmrelease_programs`]'s
         // `root.get_mut(…)` HelmRelease-side spec-mutate at
         // `caixa-flux/src/lib.rs:845` (which the sibling
@@ -49571,8 +49571,8 @@ spec:
         // pin on the sibling `get` / `contains_key` axes; together the
         // two pins pin every `Index`-polymorphic probe axis the
         // caixa-flux upsert path walks.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Gateway".into()));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Gateway".into()));
         // Present-key path: both forms find the same slot.
         // Cross-check by mutating through the bare-&str path and
         // observing the mutation via the Value::String path (and vice
@@ -49582,11 +49582,11 @@ spec:
             let via_bare = m
                 .get_mut(KUBE_KEY_KIND)
                 .expect("present key must resolve via bare-&str");
-            *via_bare = serde_yaml::Value::String("HTTPRoute".into());
+            *via_bare = serde_norway::Value::String("HTTPRoute".into());
         }
         assert_eq!(
-            m.get(serde_yaml::Value::String(KUBE_KEY_KIND.into())),
-            Some(&serde_yaml::Value::String("HTTPRoute".into())),
+            m.get(serde_norway::Value::String(KUBE_KEY_KIND.into())),
+            Some(&serde_norway::Value::String("HTTPRoute".into())),
             "mutation via mapping.get_mut(<KEY>) must be visible via \
              mapping.get(Value::String(<KEY>.into())) — otherwise the \
              swept `get_mut` writer-side probe drifts past the value \
@@ -49594,13 +49594,13 @@ spec:
         );
         {
             let via_wrapped = m
-                .get_mut(serde_yaml::Value::String(KUBE_KEY_KIND.into()))
+                .get_mut(serde_norway::Value::String(KUBE_KEY_KIND.into()))
                 .expect("present key must also resolve via Value::String");
-            *via_wrapped = serde_yaml::Value::String("Gateway".into());
+            *via_wrapped = serde_norway::Value::String("Gateway".into());
         }
         assert_eq!(
             m.get(KUBE_KEY_KIND),
-            Some(&serde_yaml::Value::String("Gateway".into())),
+            Some(&serde_norway::Value::String("Gateway".into())),
             "mutation via mapping.get_mut(Value::String(<KEY>.into())) \
              must be visible via mapping.get(<KEY>) — the two paths \
              address the same bucket in both directions"
@@ -49613,7 +49613,7 @@ spec:
             "absent-key mapping.get_mut(<KEY>) must return None"
         );
         assert!(
-            m.get_mut(serde_yaml::Value::String(KUBE_KEY_SPEC.into()))
+            m.get_mut(serde_norway::Value::String(KUBE_KEY_SPEC.into()))
                 .is_none(),
             "absent-key mapping.get_mut(Value::String(<KEY>.into())) \
              must also return None — the two forms must agree on \
@@ -49633,19 +49633,19 @@ spec:
         // at the K8s-artifact-emit surface. Peer with
         // [`mapping_ext_insert_str_key_promotes_key_to_yaml_string`] on
         // the sibling `insert_str_key` primitive's key-promotion pin.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         let prior = m.insert_string("kind", "Gateway");
         assert!(
             prior.is_none(),
             "insert_string returns None on first insertion, mirroring \
-             serde_yaml::Mapping::insert"
+             serde_norway::Mapping::insert"
         );
         let got = m
             .get("kind")
             .expect("inserted key is present under Value::String promotion");
         assert_eq!(
             got,
-            &serde_yaml::Value::String("Gateway".into()),
+            &serde_norway::Value::String("Gateway".into()),
             "insert_string routes value verbatim through Value::String \
              promotion"
         );
@@ -49653,7 +49653,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_string_returns_prior_value_on_replace() {
-        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // The trait method mirrors [`serde_norway::Mapping::insert`]'s
         // return contract: the prior value at that key, or `None` if
         // absent. Pin the replace-returns-prior semantic so a future
         // refactor that swaps to a `HashMap::entry`-style flow doesn't
@@ -49662,12 +49662,12 @@ spec:
         // [`mapping_ext_insert_str_key_returns_prior_value_on_replace`]
         // on the sibling `insert_str_key` primitive's replace-semantics
         // pin.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(KUBE_KEY_KIND, "Gateway");
         let prior = m.insert_string(KUBE_KEY_KIND, "HTTPRoute");
         assert_eq!(
             prior,
-            Some(serde_yaml::Value::String("Gateway".into())),
+            Some(serde_norway::Value::String("Gateway".into())),
             "insert_string returns the prior value when replacing an \
              existing key"
         );
@@ -49676,7 +49676,7 @@ spec:
             .expect("key is still present after replace");
         assert_eq!(
             got,
-            &serde_yaml::Value::String("HTTPRoute".into()),
+            &serde_norway::Value::String("HTTPRoute".into()),
             "replaced value is now the most-recently-inserted one"
         );
     }
@@ -49695,20 +49695,20 @@ spec:
         // `.to_string()`, integer → `.to_string()`) converge on the same
         // `Value::String` promotion, since the ~17 call sites cover all
         // three input flavors.
-        let mut via_trait = serde_yaml::Mapping::new();
+        let mut via_trait = serde_norway::Mapping::new();
         via_trait.insert_string(KUBE_KEY_KIND, "Gateway");
         via_trait.insert_string(KUBE_KEY_NAME, String::from("hello"));
         via_trait.insert_string(KUBE_KEY_PORT, 8080u16.to_string());
 
-        let mut via_inline = serde_yaml::Mapping::new();
-        via_inline.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Gateway".into()));
+        let mut via_inline = serde_norway::Mapping::new();
+        via_inline.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Gateway".into()));
         via_inline.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String(String::from("hello")),
+            serde_norway::Value::String(String::from("hello")),
         );
         via_inline.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::String(8080u16.to_string()),
+            serde_norway::Value::String(8080u16.to_string()),
         );
 
         assert_eq!(
@@ -49721,7 +49721,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_number_promotes_value_to_yaml_number() {
-        // The trait method promotes an arbitrary `Into<serde_yaml::Number>`
+        // The trait method promotes an arbitrary `Into<serde_norway::Number>`
         // value to `Value::Number(value.into())` — pin the promotion so a
         // future refactor that reaches for a different `Value` variant
         // for the integer-scalar payload (e.g. `Value::Tagged` under a
@@ -49733,12 +49733,12 @@ spec:
         // [`mapping_ext_insert_string_promotes_value_to_yaml_string`] on
         // the sibling `insert_string` primitive's string-scalar
         // promotion pin.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         let prior = m.insert_number(KUBE_KEY_PORT, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT);
         assert!(
             prior.is_none(),
             "insert_number returns None on first insertion, mirroring \
-             serde_yaml::Mapping::insert"
+             serde_norway::Mapping::insert"
         );
         let got = m
             .get(KUBE_KEY_PORT)
@@ -49751,7 +49751,7 @@ spec:
              the as_u64 accessor decodes verbatim"
         );
         assert!(
-            matches!(got, serde_yaml::Value::Number(_)),
+            matches!(got, serde_norway::Value::Number(_)),
             "the promoted value is Value::Number, not Value::String — a \
              stringy-port drift would emit `port: \"80\"` (rejected by \
              Gateway API v1 apiserver as a type mismatch)"
@@ -49760,7 +49760,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_number_returns_prior_value_on_replace() {
-        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // The trait method mirrors [`serde_norway::Mapping::insert`]'s
         // return contract: the prior value at that key, or `None` if
         // absent. Pin the replace-returns-prior semantic so a future
         // refactor that swaps to a `HashMap::entry`-style flow doesn't
@@ -49768,11 +49768,11 @@ spec:
         // may reach for. Peer with
         // [`mapping_ext_insert_string_returns_prior_value_on_replace`] on
         // the sibling `insert_string` primitive's replace-semantics pin.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_number(KUBE_KEY_PORT, 80u16);
         let prior = m.insert_number(KUBE_KEY_PORT, 443u16);
         assert_eq!(
-            prior.as_ref().and_then(serde_yaml::Value::as_u64),
+            prior.as_ref().and_then(serde_norway::Value::as_u64),
             Some(80),
             "insert_number returns the prior value when replacing an \
              existing key — the u16 payload round-trips verbatim through \
@@ -49803,18 +49803,18 @@ spec:
         // listener-port, cd60fde) and a `u16` typed-field arm (the
         // per-`entrada.port` backend-target Servico port routed through
         // the `AplicacaoSpec` `:entrada :port` slot).
-        let mut via_trait = serde_yaml::Mapping::new();
+        let mut via_trait = serde_norway::Mapping::new();
         via_trait.insert_number(KUBE_KEY_PORT, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT);
         via_trait.insert_number(GATEWAY_API_KEY_VALUE, 8443u16);
 
-        let mut via_inline = serde_yaml::Mapping::new();
+        let mut via_inline = serde_norway::Mapping::new();
         via_inline.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
+            serde_norway::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
         );
         via_inline.insert_str_key(
             GATEWAY_API_KEY_VALUE,
-            serde_yaml::Value::Number(8443u16.into()),
+            serde_norway::Value::Number(8443u16.into()),
         );
 
         assert_eq!(
@@ -49828,7 +49828,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_mapping_promotes_value_to_yaml_mapping() {
-        // The trait method promotes an arbitrary `serde_yaml::Mapping`
+        // The trait method promotes an arbitrary `serde_norway::Mapping`
         // value to `Value::Mapping(value)` — pin the promotion so a
         // future refactor that reaches for a different `Value` variant
         // for the nested-Mapping payload (e.g. `Value::Tagged` under a
@@ -49840,21 +49840,21 @@ spec:
         // and with
         // [`mapping_ext_insert_str_key_promotes_key_to_yaml_string`] on
         // the base `insert_str_key` primitive's key-promotion pin.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_string(KUBE_KEY_NAME, "hello-rio");
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         let prior = m.insert_mapping(KUBE_KEY_METADATA, inner.clone());
         assert!(
             prior.is_none(),
             "insert_mapping returns None on first insertion, mirroring \
-             serde_yaml::Mapping::insert"
+             serde_norway::Mapping::insert"
         );
         let got = m
             .get(KUBE_KEY_METADATA)
             .expect("inserted key is present under Value::Mapping promotion");
         assert_eq!(
             got,
-            &serde_yaml::Value::Mapping(inner),
+            &serde_norway::Value::Mapping(inner),
             "insert_mapping routes value verbatim through Value::Mapping \
              promotion"
         );
@@ -49862,7 +49862,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_mapping_returns_prior_value_on_replace() {
-        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // The trait method mirrors [`serde_norway::Mapping::insert`]'s
         // return contract: the prior value at that key, or `None` if
         // absent. Pin the replace-returns-prior semantic so a future
         // refactor that swaps to a `HashMap::entry`-style flow doesn't
@@ -49873,16 +49873,16 @@ spec:
         // [`mapping_ext_insert_str_key_returns_prior_value_on_replace`]
         // on the sibling primitive-pair members' replace-semantics
         // pins.
-        let mut first_inner = serde_yaml::Mapping::new();
+        let mut first_inner = serde_norway::Mapping::new();
         first_inner.insert_string(KUBE_KEY_NAME, "first");
-        let mut second_inner = serde_yaml::Mapping::new();
+        let mut second_inner = serde_norway::Mapping::new();
         second_inner.insert_string(KUBE_KEY_NAME, "second");
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_mapping(KUBE_KEY_METADATA, first_inner.clone());
         let prior = m.insert_mapping(KUBE_KEY_METADATA, second_inner.clone());
         assert_eq!(
             prior,
-            Some(serde_yaml::Value::Mapping(first_inner)),
+            Some(serde_norway::Value::Mapping(first_inner)),
             "insert_mapping returns the prior value when replacing an \
              existing key"
         );
@@ -49891,7 +49891,7 @@ spec:
             .expect("key is still present after replace");
         assert_eq!(
             got,
-            &serde_yaml::Value::Mapping(second_inner),
+            &serde_norway::Value::Mapping(second_inner),
             "replaced value is now the most-recently-inserted one"
         );
     }
@@ -49909,21 +49909,21 @@ spec:
         // an empty inner Mapping (no silent is_empty short-circuit) and
         // a populated inner Mapping (the `metadata` / `spec` /
         // `spec.rules[].path` sub-block shape).
-        let mut inner_empty = serde_yaml::Mapping::new();
+        let mut inner_empty = serde_norway::Mapping::new();
         let _ = &mut inner_empty; // keep as mut for parity with populated arm below
-        let mut inner_populated = serde_yaml::Mapping::new();
+        let mut inner_populated = serde_norway::Mapping::new();
         inner_populated.insert_string(KUBE_KEY_NAME, "hello-rio");
         inner_populated.insert_string(KUBE_KEY_NAMESPACE, DEFAULT_NAMESPACE);
 
-        let mut via_trait = serde_yaml::Mapping::new();
+        let mut via_trait = serde_norway::Mapping::new();
         via_trait.insert_mapping(KUBE_KEY_SPEC, inner_empty.clone());
         via_trait.insert_mapping(KUBE_KEY_METADATA, inner_populated.clone());
 
-        let mut via_inline = serde_yaml::Mapping::new();
-        via_inline.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(inner_empty));
+        let mut via_inline = serde_norway::Mapping::new();
+        via_inline.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(inner_empty));
         via_inline.insert_str_key(
             KUBE_KEY_METADATA,
-            serde_yaml::Value::Mapping(inner_populated),
+            serde_norway::Value::Mapping(inner_populated),
         );
 
         assert_eq!(
@@ -49951,22 +49951,22 @@ spec:
         // on the sibling `insert_string` primitive's scalar-promotion
         // pin.
         let inner = vec![
-            serde_yaml::Value::String("hello".into()),
-            serde_yaml::Value::String("world".into()),
+            serde_norway::Value::String("hello".into()),
+            serde_norway::Value::String("world".into()),
         ];
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         let prior = m.insert_sequence(GATEWAY_API_KEY_HOSTNAMES, inner.clone());
         assert!(
             prior.is_none(),
             "insert_sequence returns None on first insertion, mirroring \
-             serde_yaml::Mapping::insert"
+             serde_norway::Mapping::insert"
         );
         let got = m
             .get(GATEWAY_API_KEY_HOSTNAMES)
             .expect("inserted key is present under Value::Sequence promotion");
         assert_eq!(
             got,
-            &serde_yaml::Value::Sequence(inner),
+            &serde_norway::Value::Sequence(inner),
             "insert_sequence routes value verbatim through Value::Sequence \
              promotion"
         );
@@ -49974,7 +49974,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_sequence_returns_prior_value_on_replace() {
-        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // The trait method mirrors [`serde_norway::Mapping::insert`]'s
         // return contract: the prior value at that key, or `None` if
         // absent. Pin the replace-returns-prior semantic so a future
         // refactor that swaps to a `HashMap::entry`-style flow doesn't
@@ -49986,17 +49986,17 @@ spec:
         // [`mapping_ext_insert_str_key_returns_prior_value_on_replace`]
         // on the sibling primitive-quadruple members' replace-semantics
         // pins.
-        let first: Vec<serde_yaml::Value> = vec![serde_yaml::Value::String("a".into())];
-        let second: Vec<serde_yaml::Value> = vec![
-            serde_yaml::Value::String("b".into()),
-            serde_yaml::Value::String("c".into()),
+        let first: Vec<serde_norway::Value> = vec![serde_norway::Value::String("a".into())];
+        let second: Vec<serde_norway::Value> = vec![
+            serde_norway::Value::String("b".into()),
+            serde_norway::Value::String("c".into()),
         ];
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_sequence(KUBE_KEY_RULES, first.clone());
         let prior = m.insert_sequence(KUBE_KEY_RULES, second.clone());
         assert_eq!(
             prior,
-            Some(serde_yaml::Value::Sequence(first)),
+            Some(serde_norway::Value::Sequence(first)),
             "insert_sequence returns the prior value when replacing an \
              existing key"
         );
@@ -50005,7 +50005,7 @@ spec:
             .expect("key is still present after replace");
         assert_eq!(
             got,
-            &serde_yaml::Value::Sequence(second),
+            &serde_norway::Value::Sequence(second),
             "replaced value is now the most-recently-inserted one"
         );
     }
@@ -50024,33 +50024,33 @@ spec:
         // singleton-Value inner Vec (the `fromEndpoints[<selector>]` /
         // `hostnames[<host>]` singleton shape), and a multi-Value inner
         // Vec (the `toPorts[…]` / `rules[…]` multi-entry shape).
-        let inner_empty: Vec<serde_yaml::Value> = Vec::new();
-        let inner_singleton: Vec<serde_yaml::Value> =
-            vec![serde_yaml::Value::String("example.com".into())];
-        let mut host_entry = serde_yaml::Mapping::new();
+        let inner_empty: Vec<serde_norway::Value> = Vec::new();
+        let inner_singleton: Vec<serde_norway::Value> =
+            vec![serde_norway::Value::String("example.com".into())];
+        let mut host_entry = serde_norway::Mapping::new();
         host_entry.insert_string(KUBE_KEY_NAME, "svc-a");
-        let mut port_entry = serde_yaml::Mapping::new();
+        let mut port_entry = serde_norway::Mapping::new();
         port_entry.insert_string(KUBE_KEY_NAME, "svc-b");
-        let inner_multi: Vec<serde_yaml::Value> = vec![
-            serde_yaml::Value::Mapping(host_entry.clone()),
-            serde_yaml::Value::Mapping(port_entry.clone()),
+        let inner_multi: Vec<serde_norway::Value> = vec![
+            serde_norway::Value::Mapping(host_entry.clone()),
+            serde_norway::Value::Mapping(port_entry.clone()),
         ];
 
-        let mut via_trait = serde_yaml::Mapping::new();
+        let mut via_trait = serde_norway::Mapping::new();
         via_trait.insert_sequence(CILIUM_KEY_TO_PORTS, inner_empty.clone());
         via_trait.insert_sequence(GATEWAY_API_KEY_HOSTNAMES, inner_singleton.clone());
         via_trait.insert_sequence(KUBE_KEY_RULES, inner_multi.clone());
 
-        let mut via_inline = serde_yaml::Mapping::new();
+        let mut via_inline = serde_norway::Mapping::new();
         via_inline.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(inner_empty),
+            serde_norway::Value::Sequence(inner_empty),
         );
         via_inline.insert_str_key(
             GATEWAY_API_KEY_HOSTNAMES,
-            serde_yaml::Value::Sequence(inner_singleton),
+            serde_norway::Value::Sequence(inner_singleton),
         );
-        via_inline.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(inner_multi));
+        via_inline.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(inner_multi));
 
         assert_eq!(
             via_trait, via_inline,
@@ -50080,24 +50080,24 @@ spec:
         // / `mapping_ext_insert_string_promotes_value_to_yaml_string`
         // first-insert pins on the sibling MappingExt primitive
         // members.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             GATEWAY_API_KEY_NAME,
-            serde_yaml::Value::String("gw-listener".into()),
+            serde_norway::Value::String("gw-listener".into()),
         );
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         let prior = m.insert_singleton_mapping_sequence(GATEWAY_API_KEY_LISTENERS, inner.clone());
         assert_eq!(
             prior, None,
             "insert_singleton_mapping_sequence returns None on first insertion, \
-             mirroring serde_yaml::Mapping::insert"
+             mirroring serde_norway::Mapping::insert"
         );
         let got = m
             .get(GATEWAY_API_KEY_LISTENERS)
             .expect("inserted key is present under Value::Sequence promotion");
         assert_eq!(
             got,
-            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner)]),
+            &serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner)]),
             "insert_singleton_mapping_sequence routes value verbatim through \
              the singleton_mapping_sequence(_) helper wrap"
         );
@@ -50105,7 +50105,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_singleton_mapping_sequence_returns_prior_value_on_replace() {
-        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // The trait method mirrors [`serde_norway::Mapping::insert`]'s
         // return contract: the prior value at that key, or `None` if
         // absent. Pin the replace-returns-prior semantic so a future
         // refactor that swaps to a `HashMap::entry`-style flow doesn't
@@ -50113,18 +50113,18 @@ spec:
         // may reach for. Peer with the sibling
         // `mapping_ext_insert_sequence_returns_prior_value_on_replace`
         // and its siblings on the primitive-quintuple axis.
-        let mut first = serde_yaml::Mapping::new();
-        first.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("a".into()));
-        let mut second = serde_yaml::Mapping::new();
-        second.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("b".into()));
-        let mut m = serde_yaml::Mapping::new();
+        let mut first = serde_norway::Mapping::new();
+        first.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("a".into()));
+        let mut second = serde_norway::Mapping::new();
+        second.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("b".into()));
+        let mut m = serde_norway::Mapping::new();
         m.insert_singleton_mapping_sequence(GATEWAY_API_KEY_PARENT_REFS, first.clone());
         let prior =
             m.insert_singleton_mapping_sequence(GATEWAY_API_KEY_PARENT_REFS, second.clone());
         assert_eq!(
             prior,
-            Some(serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::Mapping(first)
+            Some(serde_norway::Value::Sequence(vec![
+                serde_norway::Value::Mapping(first)
             ])),
             "insert_singleton_mapping_sequence returns the prior value \
              when replacing an existing key"
@@ -50134,7 +50134,7 @@ spec:
             .expect("key is still present after replace");
         assert_eq!(
             got,
-            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(second)]),
+            &serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(second)]),
             "replaced value is now the most-recently-inserted singleton \
              mapping sequence"
         );
@@ -50157,27 +50157,27 @@ spec:
         // `CILIUM_KEY_HTTP` / `CILIUM_KEY_INGRESS` singleton-rule
         // shape), and a multi-key inner Mapping (the
         // `GATEWAY_API_KEY_LISTENERS` per-listener shape).
-        let inner_empty = serde_yaml::Mapping::new();
-        let mut inner_single_key = serde_yaml::Mapping::new();
+        let inner_empty = serde_norway::Mapping::new();
+        let mut inner_single_key = serde_norway::Mapping::new();
         inner_single_key
-            .insert_str_key(CILIUM_KEY_PATH, serde_yaml::Value::String("/health".into()));
-        let mut inner_multi_key = serde_yaml::Mapping::new();
+            .insert_str_key(CILIUM_KEY_PATH, serde_norway::Value::String("/health".into()));
+        let mut inner_multi_key = serde_norway::Mapping::new();
         inner_multi_key.insert_str_key(
             GATEWAY_API_KEY_NAME,
-            serde_yaml::Value::String("http".into()),
+            serde_norway::Value::String("http".into()),
         );
         inner_multi_key.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
+            serde_norway::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
         );
 
-        let mut via_trait = serde_yaml::Mapping::new();
+        let mut via_trait = serde_norway::Mapping::new();
         via_trait.insert_singleton_mapping_sequence(CILIUM_KEY_HTTP, inner_empty.clone());
         via_trait.insert_singleton_mapping_sequence(CILIUM_KEY_INGRESS, inner_single_key.clone());
         via_trait
             .insert_singleton_mapping_sequence(GATEWAY_API_KEY_LISTENERS, inner_multi_key.clone());
 
-        let mut via_inline = serde_yaml::Mapping::new();
+        let mut via_inline = serde_norway::Mapping::new();
         via_inline.insert_str_key(CILIUM_KEY_HTTP, singleton_mapping_sequence(inner_empty));
         via_inline.insert_str_key(
             CILIUM_KEY_INGRESS,
@@ -50211,13 +50211,13 @@ spec:
         // `caixa-flux` idempotent-upsert sites. Peer with the sibling
         // [`mapping_ext_insert_str_key_promotes_key_to_yaml_string`] on
         // the fresh-emit axis of the same key promotion.
-        let mut m = serde_yaml::Mapping::new();
-        let default_val = serde_yaml::Value::Sequence(Vec::new());
+        let mut m = serde_norway::Mapping::new();
+        let default_val = serde_norway::Value::Sequence(Vec::new());
         let inserted = m.entry_str_key("programs").or_insert(default_val.clone());
         assert_eq!(
             inserted, &default_val,
             "entry_str_key(K).or_insert(D) returns &mut D on the absent-key \
-             path, mirroring serde_yaml::mapping::Entry::or_insert"
+             path, mirroring serde_norway::mapping::Entry::or_insert"
         );
         // Key is exactly the `Value::String` promotion of the input.
         let got = m
@@ -50226,13 +50226,13 @@ spec:
         assert_eq!(
             got, &default_val,
             "entry_str_key routes the default verbatim to the underlying \
-             serde_yaml::Mapping::entry(...).or_insert(...) path"
+             serde_norway::Mapping::entry(...).or_insert(...) path"
         );
     }
 
     #[test]
     fn mapping_ext_entry_str_key_leaves_prior_value_untouched_on_or_insert_when_present() {
-        // The trait method mirrors [`serde_yaml::mapping::Entry::or_insert`]'s
+        // The trait method mirrors [`serde_norway::mapping::Entry::or_insert`]'s
         // present-key contract: the prior value is preserved, and the
         // returned `&mut Value` points at that prior value (NOT the
         // discarded default). Pin the leave-prior-untouched semantic so a
@@ -50245,18 +50245,18 @@ spec:
         // replace-and-return-prior semantic, not the `entry.or_insert`
         // preserve-prior semantic — the two APIs partition the
         // `Mapping`-write surface exactly on this axis).
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_str_key(
             FLEET_PROGRAMS_KEY_PROGRAMS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("existing".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("existing".into())]),
         );
-        let discarded_default = serde_yaml::Value::Sequence(Vec::new());
+        let discarded_default = serde_norway::Value::Sequence(Vec::new());
         let returned = m
             .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
             .or_insert(discarded_default);
         assert_eq!(
             returned,
-            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("existing".into())]),
+            &serde_norway::Value::Sequence(vec![serde_norway::Value::String("existing".into())]),
             "entry_str_key(K).or_insert(D) returns &mut prior on the \
              present-key path — the discarded default must not overwrite \
              the emitter's prior write"
@@ -50267,7 +50267,7 @@ spec:
             .expect("key is still present after or_insert on the present-key path");
         assert_eq!(
             got,
-            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("existing".into())]),
+            &serde_norway::Value::Sequence(vec![serde_norway::Value::String("existing".into())]),
             "or_insert on the present-key path preserves the prior value \
              verbatim — no clobber, no reshape"
         );
@@ -50294,16 +50294,16 @@ spec:
         // pin on the fresh-emit axis).
         //
         // Absent-key path — the vacant `or_insert` branch.
-        let mut via_trait_absent = serde_yaml::Mapping::new();
+        let mut via_trait_absent = serde_norway::Mapping::new();
         via_trait_absent
             .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
-            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
-        let mut via_inline_absent = serde_yaml::Mapping::new();
+            .or_insert(serde_norway::Value::Sequence(Vec::new()));
+        let mut via_inline_absent = serde_norway::Mapping::new();
         via_inline_absent
-            .entry(serde_yaml::Value::String(
+            .entry(serde_norway::Value::String(
                 FLEET_PROGRAMS_KEY_PROGRAMS.into(),
             ))
-            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
+            .or_insert(serde_norway::Value::Sequence(Vec::new()));
         assert_eq!(
             via_trait_absent, via_inline_absent,
             "entry_str_key(K).or_insert(D) must byte-equal \
@@ -50319,17 +50319,17 @@ spec:
         // `matches_hand_written_promotion` pin already gates), so the
         // present-key path here inherits the promotion-agreement guarantee
         // from that peer and tests only the entry-API branch difference.
-        let seed = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
-        let mut via_trait_present = serde_yaml::Mapping::new();
+        let seed = serde_norway::Value::Mapping(serde_norway::Mapping::new());
+        let mut via_trait_present = serde_norway::Mapping::new();
         via_trait_present.insert_str_key(FLUX_KEY_VALUES, seed.clone());
         via_trait_present
             .entry_str_key(FLUX_KEY_VALUES)
-            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
-        let mut via_inline_present = serde_yaml::Mapping::new();
+            .or_insert(serde_norway::Value::Sequence(Vec::new()));
+        let mut via_inline_present = serde_norway::Mapping::new();
         via_inline_present.insert_str_key(FLUX_KEY_VALUES, seed);
         via_inline_present
-            .entry(serde_yaml::Value::String(FLUX_KEY_VALUES.into()))
-            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
+            .entry(serde_norway::Value::String(FLUX_KEY_VALUES.into()))
+            .or_insert(serde_norway::Value::Sequence(Vec::new()));
         assert_eq!(
             via_trait_present, via_inline_present,
             "entry_str_key(K).or_insert(D) must byte-equal \
@@ -50358,7 +50358,7 @@ spec:
         // upsert. Peer with the sibling
         // [`mapping_ext_entry_or_default_sequence_seeds_empty_inner_when_absent`]
         // on the sibling list-container axis.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         {
             let inner = m
                 .entry_or_default_mapping(FLUX_KEY_VALUES)
@@ -50377,7 +50377,7 @@ spec:
             .expect("or_default seeded the key under Value::String promotion");
         assert_eq!(
             got,
-            &serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            &serde_norway::Value::Mapping(serde_norway::Mapping::new()),
             "entry_or_default_mapping seeds Value::Mapping(Mapping::new()) \
              verbatim on the absent-key arm — no reshape, no wrap"
         );
@@ -50386,7 +50386,7 @@ spec:
     #[test]
     fn mapping_ext_entry_or_default_mapping_preserves_prior_mapping_on_present_arm() {
         // Present-key path with matching variant — the helper mirrors
-        // [`serde_yaml::mapping::Entry::or_insert_with`]'s occupied
+        // [`serde_norway::mapping::Entry::or_insert_with`]'s occupied
         // branch: the prior value is preserved, and the returned
         // `&mut Mapping` points at that prior inner Mapping (NOT a
         // fresh empty default). Pin the leave-prior-untouched semantic
@@ -50394,9 +50394,9 @@ spec:
         // overwrite flow doesn't silently clobber every idempotent-
         // container-upsert consumer (the `feira app deploy` per-cluster
         // write path, the M4 per-cluster HelmRelease overlay merger).
-        let mut m = serde_yaml::Mapping::new();
-        let mut prior_inner = serde_yaml::Mapping::new();
-        prior_inner.insert_str_key(HELM_VALUES_KEY_ENABLED, serde_yaml::Value::Bool(true));
+        let mut m = serde_norway::Mapping::new();
+        let mut prior_inner = serde_norway::Mapping::new();
+        prior_inner.insert_str_key(HELM_VALUES_KEY_ENABLED, serde_norway::Value::Bool(true));
         m.insert_mapping(FLUX_KEY_VALUES, prior_inner.clone());
         {
             let inner = m
@@ -50415,7 +50415,7 @@ spec:
             .expect("key is still present after or_default on the present-key path");
         assert_eq!(
             got,
-            &serde_yaml::Value::Mapping(prior_inner),
+            &serde_norway::Value::Mapping(prior_inner),
             "or_default on the present-key path preserves the prior \
              value verbatim — no clobber, no reshape"
         );
@@ -50434,7 +50434,7 @@ spec:
         // be a mapping")` site — the mismatched-variant arm is
         // load-bearing for the domain-error diagnostic path, not just
         // a corner case.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(FLUX_KEY_VALUES, "not-a-mapping");
         let result = m.entry_or_default_mapping(FLUX_KEY_VALUES);
         assert!(
@@ -50448,7 +50448,7 @@ spec:
             .expect("mismatched-variant prior value stays present after variant-check");
         assert_eq!(
             got,
-            &serde_yaml::Value::String("not-a-mapping".into()),
+            &serde_norway::Value::String("not-a-mapping".into()),
             "None arm on variant mismatch leaves the prior value \
              untouched — the caller's domain-error path fires without \
              clobbering the user-authored data"
@@ -50463,7 +50463,7 @@ spec:
         // `Vec<Value>`. Peer with
         // [`mapping_ext_entry_or_default_mapping_seeds_empty_inner_when_absent`]
         // on the nested-Mapping-container axis.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         {
             let inner = m
                 .entry_or_default_sequence(FLEET_PROGRAMS_KEY_PROGRAMS)
@@ -50480,7 +50480,7 @@ spec:
             .expect("or_default seeded the key under Value::String promotion");
         assert_eq!(
             got,
-            &serde_yaml::Value::Sequence(Vec::new()),
+            &serde_norway::Value::Sequence(Vec::new()),
             "entry_or_default_sequence seeds Value::Sequence(Vec::new()) \
              verbatim on the absent-key arm — no reshape, no wrap"
         );
@@ -50489,15 +50489,15 @@ spec:
     #[test]
     fn mapping_ext_entry_or_default_sequence_preserves_prior_sequence_on_present_arm() {
         // Present-key path with matching variant — the helper mirrors
-        // [`serde_yaml::mapping::Entry::or_insert_with`]'s occupied
+        // [`serde_norway::mapping::Entry::or_insert_with`]'s occupied
         // branch: the prior `Vec` is preserved, and the returned
         // `&mut Vec<Value>` points at that prior inner Vec (NOT a
         // fresh empty default). The exact idempotent-upsert semantic
         // caixa-flux's `upsert_into_programs_yaml` /
         // `upsert_into_helmrelease_programs` depend on to preserve
         // prior `programs[]` entries across per-Servico rewrites.
-        let mut m = serde_yaml::Mapping::new();
-        let prior_inner = vec![serde_yaml::Value::String("existing".into())];
+        let mut m = serde_norway::Mapping::new();
+        let prior_inner = vec![serde_norway::Value::String("existing".into())];
         m.insert_sequence(FLEET_PROGRAMS_KEY_PROGRAMS, prior_inner.clone());
         {
             let inner = m
@@ -50515,7 +50515,7 @@ spec:
             .expect("key is still present after or_default on the present-key path");
         assert_eq!(
             got,
-            &serde_yaml::Value::Sequence(prior_inner),
+            &serde_norway::Value::Sequence(prior_inner),
             "or_default on the present-key path preserves the prior \
              value verbatim — no clobber, no reshape"
         );
@@ -50532,7 +50532,7 @@ spec:
         // silently overwrite user-authored non-Sequence data at the
         // canonical caixa-flux `Error::MissingField("programs must be
         // a sequence")` site.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(FLEET_PROGRAMS_KEY_PROGRAMS, "not-a-sequence");
         let result = m.entry_or_default_sequence(FLEET_PROGRAMS_KEY_PROGRAMS);
         assert!(
@@ -50546,7 +50546,7 @@ spec:
             .expect("mismatched-variant prior value stays present after variant-check");
         assert_eq!(
             got,
-            &serde_yaml::Value::String("not-a-sequence".into()),
+            &serde_norway::Value::String("not-a-sequence".into()),
             "None arm on variant mismatch leaves the prior value \
              untouched — the caller's domain-error path fires without \
              clobbering the user-authored data"
@@ -50568,7 +50568,7 @@ spec:
         // the author's default when no `:politicas` slot is set — a
         // silent `Value::Null` emission would land a K8s CRD schema
         // rejection at every unset-slot Aplicacao).
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         let prior = m.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, None);
         assert_eq!(
             prior, None,
@@ -50596,17 +50596,17 @@ spec:
         // insert-returns-None contract so a future refactor that reaches
         // for a different `Value` variant for the key (e.g.
         // `Value::Tagged`) or breaks the underlying
-        // [`serde_yaml::Mapping::insert`] return contract is a compile-
+        // [`serde_norway::Mapping::insert`] return contract is a compile-
         // visible break, not a silent per-consumer regression at the 3
         // lifted `caixa-mesh` overlay-insert sites. Peer with the sibling
         // [`mapping_ext_insert_str_key_promotes_key_to_yaml_string`] on
         // the always-1 arity axis of the same key promotion.
-        let mut m = serde_yaml::Mapping::new();
-        let overlay = serde_yaml::Value::Mapping({
-            let mut inner = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
+        let overlay = serde_norway::Value::Mapping({
+            let mut inner = serde_norway::Mapping::new();
             inner.insert_str_key(
                 CILIUM_KEY_MODE,
-                serde_yaml::Value::String("required".into()),
+                serde_norway::Value::String("required".into()),
             );
             inner
         });
@@ -50614,7 +50614,7 @@ spec:
         assert_eq!(
             prior, None,
             "insert_str_key_if_some(K, Some(&V)) returns None on first \
-             insertion, mirroring serde_yaml::Mapping::insert"
+             insertion, mirroring serde_norway::Mapping::insert"
         );
         // Key is exactly the `Value::String` promotion of the input.
         let got = m
@@ -50641,7 +50641,7 @@ spec:
 
     #[test]
     fn mapping_ext_insert_str_key_if_some_some_arm_returns_prior_value_on_replace() {
-        // The Some arm mirrors [`serde_yaml::Mapping::insert`]'s return
+        // The Some arm mirrors [`serde_norway::Mapping::insert`]'s return
         // contract on the replace-existing path: the prior value at that
         // key, surfaced verbatim. Pin the replace-returns-prior semantic
         // so a future refactor that reaches for an `entry.or_insert`-
@@ -50650,13 +50650,13 @@ spec:
         // `:politicas` overlay is meant to override an author-provided
         // sub-block if one was present, not preserve it — the
         // replace-and-return-prior semantic is load-bearing).
-        let mut m = serde_yaml::Mapping::new();
-        let existing = serde_yaml::Value::String("cluster-default".into());
-        let overlay = serde_yaml::Value::Mapping({
-            let mut inner = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
+        let existing = serde_norway::Value::String("cluster-default".into());
+        let overlay = serde_norway::Value::Mapping({
+            let mut inner = serde_norway::Mapping::new();
             inner.insert_str_key(
                 GATEWAY_API_KEY_REQUEST,
-                serde_yaml::Value::String("30s".into()),
+                serde_norway::Value::String("30s".into()),
             );
             inner
         });
@@ -50698,20 +50698,20 @@ spec:
         // (replace-and-return-prior), None arm on present key (no
         // touch — the axis's load-bearing "author's value wins when
         // overlay is unset" contract).
-        let overlay = serde_yaml::Value::Mapping({
-            let mut inner = serde_yaml::Mapping::new();
+        let overlay = serde_norway::Value::Mapping({
+            let mut inner = serde_norway::Mapping::new();
             inner.insert_str_key(
                 CILIUM_KEY_MODE,
-                serde_yaml::Value::String("required".into()),
+                serde_norway::Value::String("required".into()),
             );
             inner
         });
 
         // Case 1: None arm on empty mapping — both routes no-op.
-        let mut via_trait_none = serde_yaml::Mapping::new();
+        let mut via_trait_none = serde_norway::Mapping::new();
         via_trait_none.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, None);
-        let via_inline_none = serde_yaml::Mapping::new();
-        let overlay_slot_none: Option<serde_yaml::Value> = None;
+        let via_inline_none = serde_norway::Mapping::new();
+        let overlay_slot_none: Option<serde_norway::Value> = None;
         let mut via_inline_none_mut = via_inline_none.clone();
         if let Some(a) = &overlay_slot_none {
             via_inline_none_mut.insert_str_key(CILIUM_KEY_AUTHENTICATION, a.clone());
@@ -50724,9 +50724,9 @@ spec:
         );
 
         // Case 2: Some arm on empty mapping — both routes fresh-insert.
-        let mut via_trait_some = serde_yaml::Mapping::new();
+        let mut via_trait_some = serde_norway::Mapping::new();
         via_trait_some.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, Some(&overlay));
-        let mut via_inline_some = serde_yaml::Mapping::new();
+        let mut via_inline_some = serde_norway::Mapping::new();
         let overlay_slot_some = Some(overlay.clone());
         if let Some(a) = &overlay_slot_some {
             via_inline_some.insert_str_key(CILIUM_KEY_AUTHENTICATION, a.clone());
@@ -50742,12 +50742,12 @@ spec:
 
         // Case 3: Some arm on present key — both routes replace-and-
         // return-prior.
-        let existing = serde_yaml::Value::String("cluster-default".into());
-        let mut via_trait_replace = serde_yaml::Mapping::new();
+        let existing = serde_norway::Value::String("cluster-default".into());
+        let mut via_trait_replace = serde_norway::Mapping::new();
         via_trait_replace.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
         let trait_prior =
             via_trait_replace.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, Some(&overlay));
-        let mut via_inline_replace = serde_yaml::Mapping::new();
+        let mut via_inline_replace = serde_norway::Mapping::new();
         via_inline_replace.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
         let overlay_slot_replace = Some(overlay.clone());
         let inline_prior = if let Some(a) = &overlay_slot_replace {
@@ -50772,12 +50772,12 @@ spec:
         // author's value verbatim. The load-bearing "author's value
         // wins when overlay is unset" contract the three lifted sites
         // depend on.
-        let mut via_trait_preserve = serde_yaml::Mapping::new();
+        let mut via_trait_preserve = serde_norway::Mapping::new();
         via_trait_preserve.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
         via_trait_preserve.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, None);
-        let mut via_inline_preserve = serde_yaml::Mapping::new();
+        let mut via_inline_preserve = serde_norway::Mapping::new();
         via_inline_preserve.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
-        let overlay_slot_preserve: Option<serde_yaml::Value> = None;
+        let overlay_slot_preserve: Option<serde_norway::Value> = None;
         if let Some(a) = &overlay_slot_preserve {
             via_inline_preserve.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, a.clone());
         }
@@ -50817,9 +50817,9 @@ spec:
         // Gateway API `spec.rules[]` per-path order, the top-level CNP
         // and programs.yaml document order all depend on the append
         // semantics).
-        let mut seq: Vec<serde_yaml::Value> = Vec::new();
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("first".into()));
+        let mut seq: Vec<serde_norway::Value> = Vec::new();
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("first".into()));
         seq.push_mapping(m.clone());
         assert_eq!(
             seq.len(),
@@ -50829,7 +50829,7 @@ spec:
         );
         assert_eq!(
             seq[0],
-            serde_yaml::Value::Mapping(m),
+            serde_norway::Value::Mapping(m),
             "the appended element must be the caller's Mapping wrapped \
              verbatim as Value::Mapping — no reshape, no clone-and-drop"
         );
@@ -50846,13 +50846,13 @@ spec:
         // append sites (where THEORY.md §V.2.7 render determinism
         // pins the per-iteration emission order to the source
         // `:contratos` / `:paths` / `:membros` declaration order).
-        let mut seq: Vec<serde_yaml::Value> = Vec::new();
-        let mut first = serde_yaml::Mapping::new();
-        first.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("a".into()));
-        let mut second = serde_yaml::Mapping::new();
-        second.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("b".into()));
-        let mut third = serde_yaml::Mapping::new();
-        third.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("c".into()));
+        let mut seq: Vec<serde_norway::Value> = Vec::new();
+        let mut first = serde_norway::Mapping::new();
+        first.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("a".into()));
+        let mut second = serde_norway::Mapping::new();
+        second.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("b".into()));
+        let mut third = serde_norway::Mapping::new();
+        third.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("c".into()));
         seq.push_mapping(first.clone());
         seq.push_mapping(second.clone());
         seq.push_mapping(third.clone());
@@ -50864,9 +50864,9 @@ spec:
         assert_eq!(
             seq,
             vec![
-                serde_yaml::Value::Mapping(first),
-                serde_yaml::Value::Mapping(second),
-                serde_yaml::Value::Mapping(third),
+                serde_norway::Value::Mapping(first),
+                serde_norway::Value::Mapping(second),
+                serde_norway::Value::Mapping(third),
             ],
             "push_mapping preserves per-iteration insertion order — the \
              axis's render-determinism contract at the 4 lifted \
@@ -50877,7 +50877,7 @@ spec:
     #[test]
     fn sequence_ext_push_mapping_matches_hand_written_composition() {
         // Cross-check the trait method against the hand-written
-        // `<vec>.push(serde_yaml::Value::Mapping(<M>))` three-token
+        // `<vec>.push(serde_norway::Value::Mapping(<M>))` three-token
         // block the 4 lifted `caixa-mesh` append call sites previously
         // carried. A drift between the trait method's routing and the
         // inline `Value::Mapping(_)` promotion would silently emit a
@@ -50888,12 +50888,12 @@ spec:
         // populated, and empty-payload cases.
 
         // Case 1: fresh-empty Vec + non-empty Mapping payload.
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("policy-a".into()));
-        let mut via_trait: Vec<serde_yaml::Value> = Vec::new();
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("policy-a".into()));
+        let mut via_trait: Vec<serde_norway::Value> = Vec::new();
         via_trait.push_mapping(inner.clone());
-        let mut via_inline: Vec<serde_yaml::Value> = Vec::new();
-        via_inline.push(serde_yaml::Value::Mapping(inner.clone()));
+        let mut via_inline: Vec<serde_norway::Value> = Vec::new();
+        via_inline.push(serde_norway::Value::Mapping(inner.clone()));
         assert_eq!(
             via_trait, via_inline,
             "push_mapping(M) on empty Vec must byte-equal \
@@ -50904,11 +50904,11 @@ spec:
         // Case 2: prior-populated Vec + non-empty Mapping payload — pin
         // that the append fires at the tail, not at the head or the
         // middle.
-        let seed = serde_yaml::Value::String("seed".into());
-        let mut via_trait_populated: Vec<serde_yaml::Value> = vec![seed.clone()];
+        let seed = serde_norway::Value::String("seed".into());
+        let mut via_trait_populated: Vec<serde_norway::Value> = vec![seed.clone()];
         via_trait_populated.push_mapping(inner.clone());
-        let mut via_inline_populated: Vec<serde_yaml::Value> = vec![seed];
-        via_inline_populated.push(serde_yaml::Value::Mapping(inner.clone()));
+        let mut via_inline_populated: Vec<serde_norway::Value> = vec![seed];
+        via_inline_populated.push(serde_norway::Value::Mapping(inner.clone()));
         assert_eq!(
             via_trait_populated, via_inline_populated,
             "push_mapping(M) on populated Vec must byte-equal \
@@ -50923,10 +50923,10 @@ spec:
         // (Cilium CNP `spec.ingress[].toPorts[].rules.http[]` with an
         // empty match set) require an empty inner object to distinguish
         // "explicitly-empty" from "absent".
-        let mut via_trait_empty: Vec<serde_yaml::Value> = Vec::new();
-        via_trait_empty.push_mapping(serde_yaml::Mapping::new());
-        let mut via_inline_empty: Vec<serde_yaml::Value> = Vec::new();
-        via_inline_empty.push(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let mut via_trait_empty: Vec<serde_norway::Value> = Vec::new();
+        via_trait_empty.push_mapping(serde_norway::Mapping::new());
+        let mut via_inline_empty: Vec<serde_norway::Value> = Vec::new();
+        via_inline_empty.push(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             via_trait_empty, via_inline_empty,
             "push_mapping(empty Mapping) must byte-equal \
@@ -50950,11 +50950,11 @@ spec:
         // 0-or-1-element `Option`-shaped emission axis) is a
         // compile-visible break, not a silent per-caller regression at
         // every K8s-CRD-list-shape-required emit site.
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("hello".into()));
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("hello".into()));
         let out = singleton_mapping_sequence(inner.clone());
         match out {
-            serde_yaml::Value::Sequence(seq) => {
+            serde_norway::Value::Sequence(seq) => {
                 assert_eq!(
                     seq.len(),
                     1,
@@ -50963,7 +50963,7 @@ spec:
                 );
                 assert_eq!(
                     seq[0],
-                    serde_yaml::Value::Mapping(inner),
+                    serde_norway::Value::Mapping(inner),
                     "the sole element must be the caller's Mapping wrapped \
                      verbatim as Value::Mapping — no reshape, no clone-and-drop"
                 );
@@ -50985,15 +50985,15 @@ spec:
         // "absent"). Pin the shape so a future refactor that reaches
         // for an is_empty()-guarded short-circuit is a test-visible
         // break, not a silent behavior shift.
-        let out = singleton_mapping_sequence(serde_yaml::Mapping::new());
+        let out = singleton_mapping_sequence(serde_norway::Mapping::new());
         let seq = match out {
-            serde_yaml::Value::Sequence(s) => s,
+            serde_norway::Value::Sequence(s) => s,
             other => panic!("expected Value::Sequence, got {other:?}"),
         };
         assert_eq!(seq.len(), 1, "empty inner still wraps as a 1-element seq");
         assert_eq!(
             seq[0],
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
             "the sole element is an empty Value::Mapping, verbatim"
         );
     }
@@ -51008,18 +51008,18 @@ spec:
         // outer variant, a differently-wrapped inner Mapping) at every
         // routed consumer — pin the byte-equivalence so the helper
         // remains a drop-in replacement.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             GATEWAY_API_KEY_NAME,
-            serde_yaml::Value::String("gw-listener".into()),
+            serde_norway::Value::String("gw-listener".into()),
         );
         inner.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
+            serde_norway::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
         );
 
         let via_helper = singleton_mapping_sequence(inner.clone());
-        let via_inline = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner)]);
+        let via_inline = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner)]);
 
         assert_eq!(
             via_helper, via_inline,
@@ -51038,20 +51038,20 @@ spec:
         // shape to drive their per-destination insert — a drift in
         // yielded item type is a compile-visible break, not a silent
         // shape shift.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             COMPUTEUNIT_SPEC_KEY_MODULE,
-            serde_yaml::Value::String("oci://…".into()),
+            serde_norway::Value::String("oci://…".into()),
         );
         spec.insert_str_key(
             COMPUTEUNIT_SPEC_KEY_TRIGGER,
-            serde_yaml::Value::String("http".into()),
+            serde_norway::Value::String("http".into()),
         );
         spec.insert_str_key(
             COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        let v = serde_yaml::Value::Mapping(spec);
+        let v = serde_norway::Value::Mapping(spec);
         let keys: Vec<&str> = string_keyed_entries(&v).map(|(k, _)| k).collect();
         assert_eq!(
             keys,
@@ -51073,7 +51073,7 @@ spec:
             .find(|(k, _)| *k == COMPUTEUNIT_SPEC_KEY_MODULE)
             .map(|(_, v)| v.clone())
             .expect("module entry present");
-        assert_eq!(module, serde_yaml::Value::String("oci://…".into()));
+        assert_eq!(module, serde_norway::Value::String("oci://…".into()));
     }
 
     #[test]
@@ -51088,11 +51088,11 @@ spec:
         // parser but not at the renderer entry point — so a legally-
         // authored `spec: null` short-circuits without raising.
         for shape in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             let count = string_keyed_entries(&shape).count();
             assert_eq!(
@@ -51117,24 +51117,24 @@ spec:
         // `.as_str().unwrap()` (which would panic on a numeric key) is
         // a test-visible break, not a runtime regression at the first
         // ComputeUnit YAML that carries one.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert(
-            serde_yaml::Value::String(COMPUTEUNIT_SPEC_KEY_MODULE.into()),
-            serde_yaml::Value::String("oci://…".into()),
+            serde_norway::Value::String(COMPUTEUNIT_SPEC_KEY_MODULE.into()),
+            serde_norway::Value::String("oci://…".into()),
         );
         spec.insert(
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::String("dropped".into()),
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::String("dropped".into()),
         );
         spec.insert(
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("also-dropped".into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("also-dropped".into()),
         );
         spec.insert(
-            serde_yaml::Value::String(COMPUTEUNIT_SPEC_KEY_TRIGGER.into()),
-            serde_yaml::Value::String("http".into()),
+            serde_norway::Value::String(COMPUTEUNIT_SPEC_KEY_TRIGGER.into()),
+            serde_norway::Value::String("http".into()),
         );
-        let v = serde_yaml::Value::Mapping(spec);
+        let v = serde_norway::Value::Mapping(spec);
         let keys: Vec<&str> = string_keyed_entries(&v).map(|(k, _)| k).collect();
         assert_eq!(
             keys,
@@ -51157,27 +51157,27 @@ spec:
         // emit a different destination map at every routed consumer —
         // pin the byte-equivalence so the helper remains a drop-in
         // replacement for both renderers' prior five-line block.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             COMPUTEUNIT_SPEC_KEY_MODULE,
-            serde_yaml::Value::String("oci://ghcr.io/pleme-io/hello-rio:0.1.0".into()),
+            serde_norway::Value::String("oci://ghcr.io/pleme-io/hello-rio:0.1.0".into()),
         );
         spec.insert(
-            serde_yaml::Value::Number(1.into()),
-            serde_yaml::Value::String("silently-dropped".into()),
+            serde_norway::Value::Number(1.into()),
+            serde_norway::Value::String("silently-dropped".into()),
         );
         spec.insert_str_key(
             COMPUTEUNIT_SPEC_KEY_TRIGGER,
-            serde_yaml::Value::String("http".into()),
+            serde_norway::Value::String("http".into()),
         );
-        let v = serde_yaml::Value::Mapping(spec);
+        let v = serde_norway::Value::Mapping(spec);
 
-        let via_helper: Vec<(String, serde_yaml::Value)> = string_keyed_entries(&v)
+        let via_helper: Vec<(String, serde_norway::Value)> = string_keyed_entries(&v)
             .map(|(k, v)| (k.to_string(), v.clone()))
             .collect();
 
-        let mut via_inline: Vec<(String, serde_yaml::Value)> = Vec::new();
-        if let serde_yaml::Value::Mapping(map) = &v {
+        let mut via_inline: Vec<(String, serde_norway::Value)> = Vec::new();
+        if let serde_norway::Value::Mapping(map) = &v {
             for (k, v) in map {
                 if let Some(s) = k.as_str() {
                     via_inline.push((s.to_string(), v.clone()));
@@ -51206,7 +51206,7 @@ spec:
         // (Mapping preserves insertion order the same way `serde_yaml`
         // renders the emitted document, so the diagnostic quotes the
         // keys back in the same shape the routed renderer emitted).
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(M3_PLACEMENT_KEY_ESTRATEGIA, "Sharded");
         m.insert_string(M3_PLACEMENT_KEY_CLUSTERS, "rio,mar");
         m.insert_string(M3_PLACEMENT_KEY_SHARD_KEY, "$tenantId");
@@ -51243,15 +51243,15 @@ spec:
         // the sibling `string_keyed_entries` (18711) iterator carries
         // on the paired production-side sub-mapping `spec.*`-splice
         // axis.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(KUBE_KEY_NAME, "kept-1");
         m.insert(
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::String("dropped-number-key".into()),
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::String("dropped-number-key".into()),
         );
         m.insert(
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("dropped-bool-key".into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("dropped-bool-key".into()),
         );
         m.insert_string(KUBE_KEY_NAMESPACE, "kept-2");
         let keys = mapping_string_keys(&m);
@@ -51273,13 +51273,13 @@ spec:
         // Cardinality-arm pin: an empty Mapping yields an empty
         // Vec<String>. The routed assert-side diagnostic sites all
         // interpolate the returned Vec via `{keys:?}` on drift-
-        // detection failure — a fresh-empty Mapping (a serde_yaml::to_value
+        // detection failure — a fresh-empty Mapping (a serde_norway::to_value
         // on a struct whose every field carried `#[serde(skip_serializing_if)]`
         // and every field's slot resolved to the skip arm) must render
         // as `[]` rather than raise, so the diagnostic on such a
         // regression names the empty-emit shape explicitly rather
         // than short-circuiting the outer assert.
-        let m = serde_yaml::Mapping::new();
+        let m = serde_norway::Mapping::new();
         let keys = mapping_string_keys(&m);
         assert!(
             keys.is_empty(),
@@ -51307,11 +51307,11 @@ spec:
         // `string_keyed_entries_matches_prior_inline_walk` pin
         // established on the paired production-side sub-mapping
         // splice axis.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(HELM_CHART_DEPENDENCY_KEY_NAME, "pleme-computeunit");
         m.insert(
-            serde_yaml::Value::Number(1.into()),
-            serde_yaml::Value::String("silently-dropped".into()),
+            serde_norway::Value::Number(1.into()),
+            serde_norway::Value::String("silently-dropped".into()),
         );
         m.insert_string(HELM_CHART_DEPENDENCY_KEY_VERSION, "0.1.0");
         m.insert_string(HELM_CHART_DEPENDENCY_KEY_REPOSITORY, "oci://ghcr.io");
@@ -51344,7 +51344,7 @@ spec:
         // borrowed arity every routed test-side
         // `assert_eq!(keys, vec![<KEY_CONST>, ...])` byte-compare
         // reaches through.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(KUBE_KEY_API_VERSION, "cilium.io/v2");
         m.insert_string(KUBE_KEY_KIND, "CiliumNetworkPolicy");
         m.insert_string(KUBE_KEY_METADATA, "…");
@@ -51373,15 +51373,15 @@ spec:
         // `.as_str().unwrap()` (which would panic on a numeric key)
         // is a test-visible break, not a runtime regression at the
         // first drift-detection diagnostic.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(KUBE_KEY_LABELS, "kept-1");
         m.insert(
-            serde_yaml::Value::Number(7.into()),
-            serde_yaml::Value::String("dropped-number-key".into()),
+            serde_norway::Value::Number(7.into()),
+            serde_norway::Value::String("dropped-number-key".into()),
         );
         m.insert(
-            serde_yaml::Value::Bool(false),
-            serde_yaml::Value::String("dropped-bool-key".into()),
+            serde_norway::Value::Bool(false),
+            serde_norway::Value::String("dropped-bool-key".into()),
         );
         m.insert_string(KUBE_KEY_NAME, "kept-2");
         let keys = mapping_str_keys(&m);
@@ -51405,7 +51405,7 @@ spec:
         // `mapping_string_keys` empty-arm pin, closing the empty-
         // cardinality behavior at both ownership arities on the same
         // key-only enumeration axis.
-        let m = serde_yaml::Mapping::new();
+        let m = serde_norway::Mapping::new();
         let keys = mapping_str_keys(&m);
         assert!(
             keys.is_empty(),
@@ -51430,11 +51430,11 @@ spec:
         // routed diagnostic — mirrors the discipline the sibling
         // `mapping_string_keys_matches_prior_inline_collect` pin
         // established on the owned-`Vec<String>` altitude.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(HELM_CHART_DEPENDENCY_KEY_NAME, "pleme-computeunit");
         m.insert(
-            serde_yaml::Value::Number(3.into()),
-            serde_yaml::Value::String("silently-dropped".into()),
+            serde_norway::Value::Number(3.into()),
+            serde_norway::Value::String("silently-dropped".into()),
         );
         m.insert_string(HELM_CHART_DEPENDENCY_KEY_VERSION, "0.1.0");
         m.insert_string(HELM_CHART_DEPENDENCY_KEY_REPOSITORY, "oci://ghcr.io");
@@ -51464,7 +51464,7 @@ spec:
         // paired entry-arity axis, distinguishing this helper's
         // `Vec<&str>` return from the owned `Vec<String>` the sibling
         // `mapping_string_keys` returns.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_string(KUBE_KEY_NAME, "value-1");
         m.insert_string(KUBE_KEY_NAMESPACE, "value-2");
         let keys = mapping_str_keys(&m);
@@ -51491,10 +51491,10 @@ spec:
         // given a Sequence of three string-shaped entries inserted in a
         // fixed order, yield a `Vec<&str>` that borrows into the input
         // and preserves the sequence's natural iteration order.
-        let sequence = serde_yaml::Sequence::from(vec![
-            serde_yaml::Value::String("rio".into()),
-            serde_yaml::Value::String("mar".into()),
-            serde_yaml::Value::String("sol".into()),
+        let sequence = serde_norway::Sequence::from(vec![
+            serde_norway::Value::String("rio".into()),
+            serde_norway::Value::String("mar".into()),
+            serde_norway::Value::String("sol".into()),
         ]);
         let values = sequence_str_values(&sequence);
         assert_eq!(
@@ -51520,14 +51520,14 @@ spec:
         // that reaches for `.as_str().unwrap()` (which would panic on
         // a numeric entry) is a test-visible break, not a runtime
         // regression at the first drift-detection diagnostic.
-        let sequence = serde_yaml::Sequence::from(vec![
-            serde_yaml::Value::String("kept-1".into()),
-            serde_yaml::Value::Number(7.into()),
-            serde_yaml::Value::Bool(false),
-            serde_yaml::Value::String("kept-2".into()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Sequence(serde_yaml::Sequence::new()),
+        let sequence = serde_norway::Sequence::from(vec![
+            serde_norway::Value::String("kept-1".into()),
+            serde_norway::Value::Number(7.into()),
+            serde_norway::Value::Bool(false),
+            serde_norway::Value::String("kept-2".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Sequence(serde_norway::Sequence::new()),
         ]);
         let values = sequence_str_values(&sequence);
         assert_eq!(
@@ -51553,7 +51553,7 @@ spec:
         // — every routed assert-side byte-compare against an empty
         // `vec![]` on drift-detection failure renders cleanly rather
         // than raising.
-        let sequence = serde_yaml::Sequence::new();
+        let sequence = serde_norway::Sequence::new();
         let values = sequence_str_values(&sequence);
         assert!(
             values.is_empty(),
@@ -51577,12 +51577,12 @@ spec:
         // mirrors the discipline the sibling
         // `mapping_str_keys_matches_prior_inline_iter_filter_map_collect`
         // pin established on the mapping-keys enumeration axis.
-        let sequence = serde_yaml::Sequence::from(vec![
-            serde_yaml::Value::String("rio".into()),
-            serde_yaml::Value::Number(3.into()),
-            serde_yaml::Value::String("mar".into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("sol".into()),
+        let sequence = serde_norway::Sequence::from(vec![
+            serde_norway::Value::String("rio".into()),
+            serde_norway::Value::Number(3.into()),
+            serde_norway::Value::String("mar".into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("sol".into()),
         ]);
 
         let via_helper = sequence_str_values(&sequence);
@@ -51608,9 +51608,9 @@ spec:
         // `mapping_str_keys_borrows_into_input_mapping` pin on the
         // paired mapping-keys axis, distinguishing this helper's
         // `Vec<&str>` return from any future owned-`Vec<String>` peer.
-        let sequence = serde_yaml::Sequence::from(vec![
-            serde_yaml::Value::String("value-1".into()),
-            serde_yaml::Value::String("value-2".into()),
+        let sequence = serde_norway::Sequence::from(vec![
+            serde_norway::Value::String("value-1".into()),
+            serde_norway::Value::String("value-2".into()),
         ]);
         let values = sequence_str_values(&sequence);
         for (yielded, from_sequence) in values.iter().zip(sequence.iter()) {
@@ -51637,18 +51637,18 @@ spec:
         // pin) reaches through this exact string-scalar readback, and a
         // drift in the borrowed-string contract would silently regress
         // every routed site's per-CR filter equality.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_str_field(&value, KUBE_KEY_NAME),
@@ -51682,7 +51682,7 @@ spec:
         // caixa-mesh test-side `.unwrap()` after equality-filter —
         // both depend on this None-arm for their fallback / test-harness
         // semantics.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_metadata_str_field(&value, KUBE_KEY_NAME),
             None,
@@ -51698,11 +51698,11 @@ spec:
         // the Value::Null / Value::Sequence / Value::String shapes an
         // external YAML document may parse into.
         for shape in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_metadata_str_field(&shape, KUBE_KEY_NAME),
@@ -51727,14 +51727,14 @@ spec:
         // the middle-hop None-arm so a future refactor that reaches for
         // `.get(field).unwrap()` (which would panic on a legally-omitted
         // axis-key) is a test-visible break.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("cluster-scoped-cr".into()),
+            serde_norway::Value::String("cluster-scoped-cr".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE),
             None,
@@ -51758,17 +51758,17 @@ spec:
         // a numeric axis-value) is a test-visible break, not a runtime
         // regression at the first schema-invalid CR the reader sees.
         for non_string in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut metadata = serde_yaml::Mapping::new();
+            let mut metadata = serde_norway::Mapping::new();
             metadata.insert_str_key(KUBE_KEY_NAME, non_string.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_str_field(&value, KUBE_KEY_NAME),
                 None,
@@ -51791,18 +51791,18 @@ spec:
         // fallback semantics — pin the byte-equivalence so the helper
         // remains a drop-in replacement for every routed site's prior
         // three-line block.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-payment-to-cart".into()),
+            serde_norway::Value::String("checkout-payment-to-cart".into()),
         );
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [KUBE_KEY_NAME, KUBE_KEY_NAMESPACE] {
             let via_helper = kube_metadata_str_field(&value, field);
@@ -51826,12 +51826,12 @@ spec:
         // shape-gate `kube_*_field` accessor family + the value-level
         // `kube_str`/`kube_seq`/`kube_map`/`kube_bool`/`kube_u64` peers.
         // Every helper in the family folds its trailing shape gate via
-        // `.and_then(serde_yaml::Value::as_<arity>)` in fn-reference form
+        // `.and_then(serde_norway::Value::as_<arity>)` in fn-reference form
         // — matching the posture the bool + u64 arms landed at first
         // (21659, 21750, 22228, 22346, 22853, 22932, 23280, 23388, 24729,
         // 24940) and the map + str + seq arms then converged to. The
         // load-bearing invariant this pin surfaces: for each of the five
-        // shape-gate arities the `serde_yaml::Value::as_<arity>` method
+        // shape-gate arities the `serde_norway::Value::as_<arity>` method
         // coerces to the `for<'a> fn(&'a Value) -> Option<&'a X>` (or
         // `fn(&Value) -> Option<X>` for the owned-arity bool/u64) fn-
         // pointer type `Option::and_then`'s `F: FnOnce(T) -> Option<U>`
@@ -51847,17 +51847,17 @@ spec:
         // The pin lives at the type level (fn-pointer coercion) rather
         // than as a byte-level runtime assertion: a runtime pin cannot
         // distinguish `.and_then(|v| v.as_X())` from
-        // `.and_then(serde_yaml::Value::as_X)` — both produce identical
+        // `.and_then(serde_norway::Value::as_X)` — both produce identical
         // output on every input — so the only faithful source-level
         // convergence pin is the type-level coercion below.
-        const _AS_STR: for<'a> fn(&'a serde_yaml::Value) -> Option<&'a str> =
-            serde_yaml::Value::as_str;
-        const _AS_SEQ: for<'a> fn(&'a serde_yaml::Value) -> Option<&'a serde_yaml::Sequence> =
-            serde_yaml::Value::as_sequence;
-        const _AS_MAP: for<'a> fn(&'a serde_yaml::Value) -> Option<&'a serde_yaml::Mapping> =
-            serde_yaml::Value::as_mapping;
-        const _AS_BOOL: fn(&serde_yaml::Value) -> Option<bool> = serde_yaml::Value::as_bool;
-        const _AS_U64: fn(&serde_yaml::Value) -> Option<u64> = serde_yaml::Value::as_u64;
+        const _AS_STR: for<'a> fn(&'a serde_norway::Value) -> Option<&'a str> =
+            serde_norway::Value::as_str;
+        const _AS_SEQ: for<'a> fn(&'a serde_norway::Value) -> Option<&'a serde_norway::Sequence> =
+            serde_norway::Value::as_sequence;
+        const _AS_MAP: for<'a> fn(&'a serde_norway::Value) -> Option<&'a serde_norway::Mapping> =
+            serde_norway::Value::as_mapping;
+        const _AS_BOOL: fn(&serde_norway::Value) -> Option<bool> = serde_norway::Value::as_bool;
+        const _AS_U64: fn(&serde_norway::Value) -> Option<u64> = serde_norway::Value::as_u64;
     }
 
     #[test]
@@ -51877,16 +51877,16 @@ spec:
         // string-scalar readback, and a drift in the borrowed-string
         // contract would silently regress every routed site's
         // per-CR filter / discriminator-pin equality.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(GATEWAY_API_API_VERSION.into()),
+            serde_norway::Value::String(GATEWAY_API_API_VERSION.into()),
         );
         cr.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_str_field(&value, KUBE_KEY_API_VERSION),
@@ -51919,7 +51919,7 @@ spec:
         // helper's None return so the prior no-panic contract holds.
         // Also verify on non-Mapping outer Value shapes an external
         // YAML document may parse into.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_root_str_field(&value, KUBE_KEY_API_VERSION),
             None,
@@ -51939,11 +51939,11 @@ spec:
         );
 
         for shape in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_root_str_field(&shape, KUBE_KEY_KIND),
@@ -51969,15 +51969,15 @@ spec:
         // a runtime regression at the first schema-invalid CR the
         // reader sees.
         for non_string in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_KIND, non_string.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_root_str_field(&value, KUBE_KEY_KIND),
                 None,
@@ -52000,16 +52000,16 @@ spec:
         // per-document apiVersion / kind pin — pin the byte-
         // equivalence so the helper remains a drop-in replacement for
         // every routed site's prior two-line block.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+            serde_norway::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
         );
         cr.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(FLUX_KIND_HELM_RELEASE.into()),
+            serde_norway::Value::String(FLUX_KIND_HELM_RELEASE.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [KUBE_KEY_API_VERSION, KUBE_KEY_KIND] {
             let via_helper = kube_root_str_field(&value, field);
@@ -52037,26 +52037,26 @@ spec:
         // navigation primitive (or splits one further) surfaces here
         // as a test-visible break, not a silent regression at the
         // first routed caller's per-CR readback drift.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+            serde_norway::Value::String(CILIUM_API_VERSION.into()),
         );
         cr.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(CILIUM_KIND_NETWORK_POLICY.into()),
+            serde_norway::Value::String(CILIUM_KIND_NETWORK_POLICY.into()),
         );
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_str_field(&value, KUBE_KEY_API_VERSION),
@@ -52087,12 +52087,12 @@ spec:
         // class every future re-lift on the peer-axis surface (a
         // hypothetical `kube_api_version_is` peer, `kube_group_is` on a
         // multi-group router harness) would otherwise reopen.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert!(kube_kind_is(&value, GATEWAY_API_KIND_GATEWAY));
         assert_eq!(
@@ -52112,19 +52112,19 @@ spec:
         // kube_kind_is(d, X))`) rely on the false-on-mismatch shape to
         // skip the wrong CRs across the multi-doc mesh emission and
         // land on the intended per-kind document.
-        let mut cr_wrong_kind = serde_yaml::Mapping::new();
+        let mut cr_wrong_kind = serde_norway::Mapping::new();
         cr_wrong_kind.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
         );
         assert!(!kube_kind_is(
-            &serde_yaml::Value::Mapping(cr_wrong_kind),
+            &serde_norway::Value::Mapping(cr_wrong_kind),
             GATEWAY_API_KIND_GATEWAY,
         ));
 
-        let cr_no_kind = serde_yaml::Mapping::new();
+        let cr_no_kind = serde_norway::Mapping::new();
         assert!(!kube_kind_is(
-            &serde_yaml::Value::Mapping(cr_no_kind),
+            &serde_norway::Value::Mapping(cr_no_kind),
             GATEWAY_API_KIND_GATEWAY,
         ));
     }
@@ -52141,19 +52141,19 @@ spec:
         // multi-doc-navigator axis (a hypothetical
         // `filter_by_kind` peer that carries the same underlying
         // predicate but returns an iterator) would otherwise reopen.
-        let mut gateway = serde_yaml::Mapping::new();
+        let mut gateway = serde_norway::Mapping::new();
         gateway.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let mut route = serde_yaml::Mapping::new();
+        let mut route = serde_norway::Mapping::new();
         route.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
         );
         let docs = vec![
-            serde_yaml::Value::Mapping(gateway),
-            serde_yaml::Value::Mapping(route),
+            serde_norway::Value::Mapping(gateway),
+            serde_norway::Value::Mapping(route),
         ];
 
         // Lifted navigator agrees with the inline combinator chain
@@ -52174,7 +52174,7 @@ spec:
         // to distinguish "no such CR in this emission" from "wrong
         // shape" in their `.unwrap()` / `.expect(...)` follow-ups.
         assert_eq!(find_by_kind(&docs, CILIUM_KIND_NETWORK_POLICY), None);
-        let empty: Vec<serde_yaml::Value> = Vec::new();
+        let empty: Vec<serde_norway::Value> = Vec::new();
         assert_eq!(find_by_kind(&empty, GATEWAY_API_KIND_GATEWAY), None);
     }
 
@@ -52190,25 +52190,25 @@ spec:
         // first-match contract keeps the M4 caller-side "the first
         // hit is the primary" convention aligned with the helper's
         // combinator half.
-        let mut gateway_a = serde_yaml::Mapping::new();
+        let mut gateway_a = serde_norway::Mapping::new();
         gateway_a.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let mut meta_a = serde_yaml::Mapping::new();
-        meta_a.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("primary".into()));
-        gateway_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
-        let mut gateway_b = serde_yaml::Mapping::new();
+        let mut meta_a = serde_norway::Mapping::new();
+        meta_a.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("primary".into()));
+        gateway_a.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_a));
+        let mut gateway_b = serde_norway::Mapping::new();
         gateway_b.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let mut meta_b = serde_yaml::Mapping::new();
-        meta_b.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("secondary".into()));
-        gateway_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let mut meta_b = serde_norway::Mapping::new();
+        meta_b.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("secondary".into()));
+        gateway_b.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_b));
         let docs = vec![
-            serde_yaml::Value::Mapping(gateway_a),
-            serde_yaml::Value::Mapping(gateway_b),
+            serde_norway::Value::Mapping(gateway_a),
+            serde_norway::Value::Mapping(gateway_b),
         ];
 
         let first = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).unwrap();
@@ -52242,12 +52242,12 @@ spec:
         // sub-`metadata.{name, namespace}` coordinate pair, together
         // closing the accessor-arity witness on every canonical per-CR
         // axis the substrate emits + reads back.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(CILIUM_KIND_NETWORK_POLICY.into()),
+            serde_norway::Value::String(CILIUM_KIND_NETWORK_POLICY.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(kube_kind(&value), Some(CILIUM_KIND_NETWORK_POLICY));
         assert_eq!(
@@ -52277,7 +52277,7 @@ spec:
         // the pinned-axis variant preserves the same total-function
         // contract every consumer site's `.unwrap_or(...)` /
         // `Some(...) ==` follow-up depends on.
-        let empty = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let empty = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_kind(&empty),
             None,
@@ -52286,16 +52286,16 @@ spec:
         );
 
         for non_string in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_KIND, non_string.clone());
             assert_eq!(
-                kube_kind(&serde_yaml::Value::Mapping(cr)),
+                kube_kind(&serde_norway::Value::Mapping(cr)),
                 None,
                 "kube_kind must return None when top-level kind: carries \
                  a non-string YAML type ({non_string:?})",
@@ -52330,12 +52330,12 @@ spec:
         // peer `kube_name` / `kube_namespace` byte-equivalence pins
         // carry on the sub-`metadata:` axis half of the same accessor-
         // arity peer-set.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+            serde_norway::Value::String(CILIUM_API_VERSION.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(kube_api_version(&value), Some(CILIUM_API_VERSION));
         assert_eq!(
@@ -52370,7 +52370,7 @@ spec:
         // preserves the same total-function contract every consumer
         // site's `.unwrap_or(...)` / `Some(...) ==` follow-up depends
         // on.
-        let empty = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let empty = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_api_version(&empty),
             None,
@@ -52379,16 +52379,16 @@ spec:
         );
 
         for non_string in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_API_VERSION, non_string.clone());
             assert_eq!(
-                kube_api_version(&serde_yaml::Value::Mapping(cr)),
+                kube_api_version(&serde_norway::Value::Mapping(cr)),
                 None,
                 "kube_api_version must return None when top-level \
                  apiVersion: carries a non-string YAML type \
@@ -52424,12 +52424,12 @@ spec:
         // `kube_namespace_is` byte-equivalence pins carry on the
         // sub-`metadata:` axis half of the same predicate-arity
         // peer-set.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+            serde_norway::Value::String(CILIUM_API_VERSION.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert!(kube_api_version_is(&value, CILIUM_API_VERSION));
         assert_eq!(
@@ -52460,19 +52460,19 @@ spec:
         // sibling `kube_kind_is_false_on_mismatched_kind_and_missing_kind`
         // pin on the sibling top-level `kind:` half of the same
         // canonical `(apiVersion, kind)` discriminator-pair closure.
-        let mut cr_wrong_api_version = serde_yaml::Mapping::new();
+        let mut cr_wrong_api_version = serde_norway::Mapping::new();
         cr_wrong_api_version.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+            serde_norway::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
         );
         assert!(!kube_api_version_is(
-            &serde_yaml::Value::Mapping(cr_wrong_api_version),
+            &serde_norway::Value::Mapping(cr_wrong_api_version),
             CILIUM_API_VERSION,
         ));
 
-        let cr_no_api_version = serde_yaml::Mapping::new();
+        let cr_no_api_version = serde_norway::Mapping::new();
         assert!(!kube_api_version_is(
-            &serde_yaml::Value::Mapping(cr_no_api_version),
+            &serde_norway::Value::Mapping(cr_no_api_version),
             CILIUM_API_VERSION,
         ));
     }
@@ -52495,12 +52495,12 @@ spec:
         // `kube_name_is_composes_on_lifted_kube_name_accessor` +
         // `kube_namespace_is_composes_on_lifted_kube_namespace_accessor`
         // pins on the three sibling accessor-composition axes.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+            serde_norway::Value::String(CILIUM_API_VERSION.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         for candidate in [
             CILIUM_API_VERSION,
@@ -52537,19 +52537,19 @@ spec:
         // extends the same combinator-shape guarantee onto the top-
         // level CRD-group/version half of the canonical
         // `(apiVersion, kind)` coordinate pair.
-        let mut cilium = serde_yaml::Mapping::new();
+        let mut cilium = serde_norway::Mapping::new();
         cilium.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+            serde_norway::Value::String(CILIUM_API_VERSION.into()),
         );
-        let mut helm_release = serde_yaml::Mapping::new();
+        let mut helm_release = serde_norway::Mapping::new();
         helm_release.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+            serde_norway::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
         );
         let docs = vec![
-            serde_yaml::Value::Mapping(cilium),
-            serde_yaml::Value::Mapping(helm_release),
+            serde_norway::Value::Mapping(cilium),
+            serde_norway::Value::Mapping(helm_release),
         ];
 
         assert_eq!(
@@ -52571,7 +52571,7 @@ spec:
             find_by_api_version(&docs, FLUX_GITREPOSITORY_API_VERSION),
             None,
         );
-        let empty: Vec<serde_yaml::Value> = Vec::new();
+        let empty: Vec<serde_norway::Value> = Vec::new();
         assert_eq!(find_by_api_version(&empty, CILIUM_API_VERSION), None);
     }
 
@@ -52592,25 +52592,25 @@ spec:
         // `find_by_name_returns_first_match_on_duplicate_name` +
         // `find_by_namespace_returns_first_match_on_duplicate_namespace`
         // pins on the three sibling navigator axes.
-        let mut primary = serde_yaml::Mapping::new();
+        let mut primary = serde_norway::Mapping::new();
         primary.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+            serde_norway::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
         );
-        let mut meta_a = serde_yaml::Mapping::new();
-        meta_a.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("primary".into()));
-        primary.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
-        let mut secondary = serde_yaml::Mapping::new();
+        let mut meta_a = serde_norway::Mapping::new();
+        meta_a.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("primary".into()));
+        primary.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_a));
+        let mut secondary = serde_norway::Mapping::new();
         secondary.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+            serde_norway::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
         );
-        let mut meta_b = serde_yaml::Mapping::new();
-        meta_b.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("secondary".into()));
-        secondary.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let mut meta_b = serde_norway::Mapping::new();
+        meta_b.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("secondary".into()));
+        secondary.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_b));
         let docs = vec![
-            serde_yaml::Value::Mapping(primary),
-            serde_yaml::Value::Mapping(secondary),
+            serde_norway::Value::Mapping(primary),
+            serde_norway::Value::Mapping(secondary),
         ];
 
         let first = find_by_api_version(&docs, FLUX_HELMRELEASE_API_VERSION).unwrap();
@@ -52633,12 +52633,12 @@ spec:
         // `kube_name_is_composes_on_lifted_kube_name_accessor` +
         // `kube_namespace_is_composes_on_lifted_kube_namespace_accessor`
         // pins on the two `metadata.*` sub-axis predicates.
-        let mut cr_gw = serde_yaml::Mapping::new();
+        let mut cr_gw = serde_norway::Mapping::new();
         cr_gw.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr_gw);
+        let value = serde_norway::Value::Mapping(cr_gw);
 
         for candidate in [
             GATEWAY_API_KIND_GATEWAY,
@@ -52677,19 +52677,19 @@ spec:
         // scoping-axis closure-witness pins on the two sub-`metadata:`
         // coordinates — together the three witnesses bracket every
         // canonical per-CR axis the substrate emits.
-        let mut cr_gw = serde_yaml::Mapping::new();
+        let mut cr_gw = serde_norway::Mapping::new();
         cr_gw.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let mut cr_route = serde_yaml::Mapping::new();
+        let mut cr_route = serde_norway::Mapping::new();
         cr_route.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
         );
         let docs = vec![
-            serde_yaml::Value::Mapping(cr_gw),
-            serde_yaml::Value::Mapping(cr_route),
+            serde_norway::Value::Mapping(cr_gw),
+            serde_norway::Value::Mapping(cr_route),
         ];
 
         for kind in [
@@ -52735,14 +52735,14 @@ spec:
         // accessor pin asserts the readback intent, the predicate pin
         // asserts the equality-wrap intent, together bracketing the
         // two-arity closure the identity axis carries at V0.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(kube_name(&value), Some("checkout-cart-to-catalog"));
         assert_eq!(
@@ -52775,19 +52775,19 @@ spec:
         // pin on the predicate-arity half — the accessor short-
         // circuits to `None`, the predicate short-circuits through it
         // to `false` — same underlying vacuous-`None` gate.
-        let cr_no_metadata = serde_yaml::Mapping::new();
+        let cr_no_metadata = serde_norway::Mapping::new();
         assert_eq!(
-            kube_name(&serde_yaml::Value::Mapping(cr_no_metadata)),
+            kube_name(&serde_norway::Value::Mapping(cr_no_metadata)),
             None,
             "kube_name must return None when the enclosing metadata: \
              block is absent",
         );
 
-        let empty_meta = serde_yaml::Mapping::new();
-        let mut cr_no_name = serde_yaml::Mapping::new();
-        cr_no_name.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        let empty_meta = serde_norway::Mapping::new();
+        let mut cr_no_name = serde_norway::Mapping::new();
+        cr_no_name.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(empty_meta));
         assert_eq!(
-            kube_name(&serde_yaml::Value::Mapping(cr_no_name)),
+            kube_name(&serde_norway::Value::Mapping(cr_no_name)),
             None,
             "kube_name must return None when the sub-name: scalar is \
              absent inside a present metadata: block",
@@ -52809,25 +52809,25 @@ spec:
         // widening (accepting numeric `metadata.name: 42` as the
         // stringified `"42"`, an aliased YAML integer under a fresh
         // `Value::from` conversion) is caught before it lands.
-        let mut metadata_int = serde_yaml::Mapping::new();
-        metadata_int.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::from(42u64));
-        let mut cr_int = serde_yaml::Mapping::new();
-        cr_int.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_int));
+        let mut metadata_int = serde_norway::Mapping::new();
+        metadata_int.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::from(42u64));
+        let mut cr_int = serde_norway::Mapping::new();
+        cr_int.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_int));
         assert_eq!(
-            kube_name(&serde_yaml::Value::Mapping(cr_int)),
+            kube_name(&serde_norway::Value::Mapping(cr_int)),
             None,
             "kube_name must return None when metadata.name carries a \
              non-string YAML type (numeric here)",
         );
 
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key("nested", serde_yaml::Value::String("value".into()));
-        let mut metadata_map = serde_yaml::Mapping::new();
-        metadata_map.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::Mapping(inner));
-        let mut cr_map = serde_yaml::Mapping::new();
-        cr_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_map));
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key("nested", serde_norway::Value::String("value".into()));
+        let mut metadata_map = serde_norway::Mapping::new();
+        metadata_map.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::Mapping(inner));
+        let mut cr_map = serde_norway::Mapping::new();
+        cr_map.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_map));
         assert_eq!(
-            kube_name(&serde_yaml::Value::Mapping(cr_map)),
+            kube_name(&serde_norway::Value::Mapping(cr_map)),
             None,
             "kube_name must return None when metadata.name carries a \
              nested mapping (invalid CR shape per K8s API-machinery)",
@@ -52857,14 +52857,14 @@ spec:
         // canonical K8s API-machinery per-CR disambiguation pair
         // together, bracketing the two coordinates the emit-side
         // `kube_resource_skeleton` writes into every rendered CR.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(kube_namespace(&value), Some(DEFAULT_NAMESPACE));
         assert_eq!(
@@ -52900,9 +52900,9 @@ spec:
         // ComputeUnit YAML omits `metadata.namespace`. Peer of the
         // sibling `kube_name_none_when_metadata_block_absent_or_name_absent`
         // pin on the identity-axis half.
-        let cr_no_metadata = serde_yaml::Mapping::new();
+        let cr_no_metadata = serde_norway::Mapping::new();
         assert_eq!(
-            kube_namespace(&serde_yaml::Value::Mapping(cr_no_metadata)),
+            kube_namespace(&serde_norway::Value::Mapping(cr_no_metadata)),
             None,
             "kube_namespace must return None when the enclosing \
              metadata: block is absent — the caixa-flux \
@@ -52910,11 +52910,11 @@ spec:
              None-arm to substitute DEFAULT_NAMESPACE",
         );
 
-        let empty_meta = serde_yaml::Mapping::new();
-        let mut cr_no_namespace = serde_yaml::Mapping::new();
-        cr_no_namespace.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        let empty_meta = serde_norway::Mapping::new();
+        let mut cr_no_namespace = serde_norway::Mapping::new();
+        cr_no_namespace.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(empty_meta));
         assert_eq!(
-            kube_namespace(&serde_yaml::Value::Mapping(cr_no_namespace)),
+            kube_namespace(&serde_norway::Value::Mapping(cr_no_namespace)),
             None,
             "kube_namespace must return None when the \
              sub-namespace: scalar is absent inside a present \
@@ -52941,25 +52941,25 @@ spec:
         // of the sibling
         // `kube_name_none_when_metadata_name_carries_non_string_type`
         // pin on the identity-axis half.
-        let mut metadata_int = serde_yaml::Mapping::new();
-        metadata_int.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::from(42u64));
-        let mut cr_int = serde_yaml::Mapping::new();
-        cr_int.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_int));
+        let mut metadata_int = serde_norway::Mapping::new();
+        metadata_int.insert_str_key(KUBE_KEY_NAMESPACE, serde_norway::Value::from(42u64));
+        let mut cr_int = serde_norway::Mapping::new();
+        cr_int.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_int));
         assert_eq!(
-            kube_namespace(&serde_yaml::Value::Mapping(cr_int)),
+            kube_namespace(&serde_norway::Value::Mapping(cr_int)),
             None,
             "kube_namespace must return None when metadata.namespace \
              carries a non-string YAML type (numeric here)",
         );
 
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key("nested", serde_yaml::Value::String("value".into()));
-        let mut metadata_map = serde_yaml::Mapping::new();
-        metadata_map.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::Mapping(inner));
-        let mut cr_map = serde_yaml::Mapping::new();
-        cr_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_map));
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key("nested", serde_norway::Value::String("value".into()));
+        let mut metadata_map = serde_norway::Mapping::new();
+        metadata_map.insert_str_key(KUBE_KEY_NAMESPACE, serde_norway::Value::Mapping(inner));
+        let mut cr_map = serde_norway::Mapping::new();
+        cr_map.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_map));
         assert_eq!(
-            kube_namespace(&serde_yaml::Value::Mapping(cr_map)),
+            kube_namespace(&serde_norway::Value::Mapping(cr_map)),
             None,
             "kube_namespace must return None when metadata.namespace \
              carries a nested mapping (invalid CR shape per K8s \
@@ -52994,14 +52994,14 @@ spec:
             "flux-system",
         ];
         for ns in namespaces {
-            let mut metadata = serde_yaml::Mapping::new();
+            let mut metadata = serde_norway::Mapping::new();
             metadata.insert_str_key(
                 KUBE_KEY_NAMESPACE,
-                serde_yaml::Value::String(ns.to_string()),
+                serde_norway::Value::String(ns.to_string()),
             );
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_namespace(&value),
                 kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE),
@@ -53038,11 +53038,11 @@ spec:
         // [`Entrada::hostname`]) carries on their respective per-slot
         // `&str`-return accessors.
         let ns = "tatara-system".to_string();
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::String(ns.clone()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAMESPACE, serde_norway::Value::String(ns.clone()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         // Accessor must return the same byte-string as the underlying
         // parametric helper's readback — the composition contract.
@@ -53077,14 +53077,14 @@ spec:
         // the sibling `find_by_name_matches_inline_iter_find_kube_name_is_shape`
         // pin on the navigator arity — the navigator composes on the
         // predicate, the predicate composes on the accessor.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-payment".into()),
+            serde_norway::Value::String("checkout-cart-to-payment".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_name_is(&value, "checkout-cart-to-payment"),
@@ -53113,14 +53113,14 @@ spec:
         // bookkeeping) would otherwise reopen. Peer of the sibling
         // `kube_kind_is_matches_lifted_kube_root_str_field_equality_shape`
         // pin on the `kind:` discriminator axis.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert!(kube_name_is(&value, "checkout-cart-to-catalog"));
         assert_eq!(
@@ -53143,29 +53143,29 @@ spec:
         // document. Peer of the sibling
         // `kube_kind_is_false_on_mismatched_kind_and_missing_kind` pin
         // on the `kind:` discriminator axis.
-        let mut wrong_meta = serde_yaml::Mapping::new();
+        let mut wrong_meta = serde_norway::Mapping::new();
         wrong_meta.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-payment-to-cart".into()),
+            serde_norway::Value::String("checkout-payment-to-cart".into()),
         );
-        let mut cr_wrong_name = serde_yaml::Mapping::new();
-        cr_wrong_name.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(wrong_meta));
+        let mut cr_wrong_name = serde_norway::Mapping::new();
+        cr_wrong_name.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(wrong_meta));
         assert!(!kube_name_is(
-            &serde_yaml::Value::Mapping(cr_wrong_name),
+            &serde_norway::Value::Mapping(cr_wrong_name),
             "checkout-cart-to-catalog",
         ));
 
-        let cr_no_metadata = serde_yaml::Mapping::new();
+        let cr_no_metadata = serde_norway::Mapping::new();
         assert!(!kube_name_is(
-            &serde_yaml::Value::Mapping(cr_no_metadata),
+            &serde_norway::Value::Mapping(cr_no_metadata),
             "checkout-cart-to-catalog",
         ));
 
-        let empty_meta = serde_yaml::Mapping::new();
-        let mut cr_no_name = serde_yaml::Mapping::new();
-        cr_no_name.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        let empty_meta = serde_norway::Mapping::new();
+        let mut cr_no_name = serde_norway::Mapping::new();
+        cr_no_name.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(empty_meta));
         assert!(!kube_name_is(
-            &serde_yaml::Value::Mapping(cr_no_name),
+            &serde_norway::Value::Mapping(cr_no_name),
             "checkout-cart-to-catalog",
         ));
     }
@@ -53184,23 +53184,23 @@ spec:
         // reopen. Peer of the sibling
         // `find_by_kind_matches_inline_iter_find_kube_kind_is_shape`
         // pin on the `kind:` discriminator axis.
-        let mut meta_a = serde_yaml::Mapping::new();
+        let mut meta_a = serde_norway::Mapping::new();
         meta_a.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
-        let mut policy_a = serde_yaml::Mapping::new();
-        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
-        let mut meta_b = serde_yaml::Mapping::new();
+        let mut policy_a = serde_norway::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_a));
+        let mut meta_b = serde_norway::Mapping::new();
         meta_b.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-payment-to-cart".into()),
+            serde_norway::Value::String("checkout-payment-to-cart".into()),
         );
-        let mut policy_b = serde_yaml::Mapping::new();
-        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let mut policy_b = serde_norway::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_b));
         let docs = vec![
-            serde_yaml::Value::Mapping(policy_a),
-            serde_yaml::Value::Mapping(policy_b),
+            serde_norway::Value::Mapping(policy_a),
+            serde_norway::Value::Mapping(policy_b),
         ];
 
         assert_eq!(
@@ -53219,7 +53219,7 @@ spec:
         // "no such CR in this emission" from "wrong shape" in their
         // `.unwrap()` / `.expect(...)` follow-ups.
         assert_eq!(find_by_name(&docs, "checkout-cart-to-payment"), None);
-        let empty: Vec<serde_yaml::Value> = Vec::new();
+        let empty: Vec<serde_norway::Value> = Vec::new();
         assert_eq!(find_by_name(&empty, "checkout-cart-to-catalog"), None);
     }
 
@@ -53240,31 +53240,31 @@ spec:
         // helper's combinator half. Peer of the sibling
         // `find_by_kind_returns_first_match_on_duplicate_kind` pin on
         // the `kind:` discriminator axis.
-        let mut meta_a = serde_yaml::Mapping::new();
+        let mut meta_a = serde_norway::Mapping::new();
         meta_a.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
         meta_a.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("cluster-a".into()),
+            serde_norway::Value::String("cluster-a".into()),
         );
-        let mut policy_a = serde_yaml::Mapping::new();
-        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
-        let mut meta_b = serde_yaml::Mapping::new();
+        let mut policy_a = serde_norway::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_a));
+        let mut meta_b = serde_norway::Mapping::new();
         meta_b.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
         meta_b.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("cluster-b".into()),
+            serde_norway::Value::String("cluster-b".into()),
         );
-        let mut policy_b = serde_yaml::Mapping::new();
-        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let mut policy_b = serde_norway::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_b));
         let docs = vec![
-            serde_yaml::Value::Mapping(policy_a),
-            serde_yaml::Value::Mapping(policy_b),
+            serde_norway::Value::Mapping(policy_a),
+            serde_norway::Value::Mapping(policy_b),
         ];
 
         let first = find_by_name(&docs, "checkout-cart-to-catalog").unwrap();
@@ -53289,14 +53289,14 @@ spec:
         // lift, not a second co-ordinated inline rewrite. Peer of the
         // sibling `kube_name_is_composes_on_lifted_kube_name_accessor`
         // pin on the identity axis.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("tatara-system".into()),
+            serde_norway::Value::String("tatara-system".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_namespace_is(&value, "tatara-system"),
@@ -53327,14 +53327,14 @@ spec:
         // bookkeeping) would otherwise reopen. Peer of the sibling
         // `kube_name_is_matches_lifted_kube_metadata_str_field_equality_shape`
         // pin on the identity axis.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert!(kube_namespace_is(&value, DEFAULT_NAMESPACE));
         assert_eq!(
@@ -53363,29 +53363,29 @@ spec:
         // Peer of the sibling
         // `kube_name_is_false_on_mismatched_name_and_missing_name` pin
         // on the identity axis.
-        let mut wrong_meta = serde_yaml::Mapping::new();
+        let mut wrong_meta = serde_norway::Mapping::new();
         wrong_meta.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("flux-system".into()),
+            serde_norway::Value::String("flux-system".into()),
         );
-        let mut cr_wrong_ns = serde_yaml::Mapping::new();
-        cr_wrong_ns.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(wrong_meta));
+        let mut cr_wrong_ns = serde_norway::Mapping::new();
+        cr_wrong_ns.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(wrong_meta));
         assert!(!kube_namespace_is(
-            &serde_yaml::Value::Mapping(cr_wrong_ns),
+            &serde_norway::Value::Mapping(cr_wrong_ns),
             DEFAULT_NAMESPACE,
         ));
 
-        let cr_no_metadata = serde_yaml::Mapping::new();
+        let cr_no_metadata = serde_norway::Mapping::new();
         assert!(!kube_namespace_is(
-            &serde_yaml::Value::Mapping(cr_no_metadata),
+            &serde_norway::Value::Mapping(cr_no_metadata),
             DEFAULT_NAMESPACE,
         ));
 
-        let empty_meta = serde_yaml::Mapping::new();
-        let mut cr_no_ns = serde_yaml::Mapping::new();
-        cr_no_ns.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        let empty_meta = serde_norway::Mapping::new();
+        let mut cr_no_ns = serde_norway::Mapping::new();
+        cr_no_ns.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(empty_meta));
         assert!(!kube_namespace_is(
-            &serde_yaml::Value::Mapping(cr_no_ns),
+            &serde_norway::Value::Mapping(cr_no_ns),
             DEFAULT_NAMESPACE,
         ));
     }
@@ -53404,23 +53404,23 @@ spec:
         // otherwise reopen. Peer of the sibling
         // `find_by_name_matches_inline_iter_find_kube_name_is_shape`
         // pin on the identity axis.
-        let mut meta_a = serde_yaml::Mapping::new();
+        let mut meta_a = serde_norway::Mapping::new();
         meta_a.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("tatara-system".into()),
+            serde_norway::Value::String("tatara-system".into()),
         );
-        let mut policy_a = serde_yaml::Mapping::new();
-        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
-        let mut meta_b = serde_yaml::Mapping::new();
+        let mut policy_a = serde_norway::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_a));
+        let mut meta_b = serde_norway::Mapping::new();
         meta_b.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("flux-system".into()),
+            serde_norway::Value::String("flux-system".into()),
         );
-        let mut policy_b = serde_yaml::Mapping::new();
-        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let mut policy_b = serde_norway::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_b));
         let docs = vec![
-            serde_yaml::Value::Mapping(policy_a),
-            serde_yaml::Value::Mapping(policy_b),
+            serde_norway::Value::Mapping(policy_a),
+            serde_norway::Value::Mapping(policy_b),
         ];
 
         assert_eq!(
@@ -53443,7 +53443,7 @@ spec:
         // emitted CRs would silently short-circuit as `Some(...)` and
         // never exercise the None-arm.
         assert_eq!(find_by_namespace(&docs, "kube-system"), None);
-        let empty: Vec<serde_yaml::Value> = Vec::new();
+        let empty: Vec<serde_norway::Value> = Vec::new();
         assert_eq!(find_by_namespace(&empty, "tatara-system"), None);
     }
 
@@ -53463,31 +53463,31 @@ spec:
         // helper's combinator half. Peer of the sibling
         // `find_by_name_returns_first_match_on_duplicate_name` pin on
         // the identity axis.
-        let mut meta_a = serde_yaml::Mapping::new();
+        let mut meta_a = serde_norway::Mapping::new();
         meta_a.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
         meta_a.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("tatara-system".into()),
+            serde_norway::Value::String("tatara-system".into()),
         );
-        let mut policy_a = serde_yaml::Mapping::new();
-        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
-        let mut meta_b = serde_yaml::Mapping::new();
+        let mut policy_a = serde_norway::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_a));
+        let mut meta_b = serde_norway::Mapping::new();
         meta_b.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-payment-to-cart".into()),
+            serde_norway::Value::String("checkout-payment-to-cart".into()),
         );
         meta_b.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("tatara-system".into()),
+            serde_norway::Value::String("tatara-system".into()),
         );
-        let mut policy_b = serde_yaml::Mapping::new();
-        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let mut policy_b = serde_norway::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta_b));
         let docs = vec![
-            serde_yaml::Value::Mapping(policy_a),
-            serde_yaml::Value::Mapping(policy_b),
+            serde_norway::Value::Mapping(policy_a),
+            serde_norway::Value::Mapping(policy_b),
         ];
 
         let first = find_by_namespace(&docs, "tatara-system").unwrap();
@@ -53516,20 +53516,20 @@ spec:
         // canonical_label_set`) reaches through this exact sub-mapping
         // readback, and a drift on the borrowed-mapping contract would
         // silently regress the enumeration's `for (k, _) in labels` walk.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels.insert_str_key(
             LABEL_CONTRATO,
-            serde_yaml::Value::String("cart-to-catalog".into()),
+            serde_norway::Value::String("cart-to-catalog".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels.clone()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels.clone()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_labels(&value),
@@ -53553,7 +53553,7 @@ spec:
         // block) is a test-visible break. Peer of the sibling
         // `kube_metadata_str_field_returns_none_when_metadata_block_absent`
         // pin on the scalar-arity peer.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_metadata_labels(&value),
             None,
@@ -53565,11 +53565,11 @@ spec:
 
         // Also verify the shape on non-Mapping outer Value shapes.
         for shape in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_metadata_labels(&shape),
@@ -53595,14 +53595,14 @@ spec:
         // label grouping at the K8s-resource axis today; pin the
         // middle-hop None-arm so this readback preserves the emit-
         // side's short-circuit semantic on the reverse.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-gateway".into()),
+            serde_norway::Value::String("checkout-gateway".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_labels(&value),
             None,
@@ -53627,17 +53627,17 @@ spec:
         // labels-value) is a test-visible break, not a runtime
         // regression at the first schema-invalid CR the reader sees.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("labels-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("labels-as-string".into()),
         ] {
-            let mut metadata = serde_yaml::Mapping::new();
+            let mut metadata = serde_norway::Mapping::new();
             metadata.insert_str_key(KUBE_KEY_LABELS, non_mapping.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_labels(&value),
                 None,
@@ -53663,20 +53663,20 @@ spec:
         // the routed site's prior three-line block. Peer of the
         // sibling `kube_metadata_str_field_matches_prior_inline_chain`
         // pin on the scalar-arity peer.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels.insert_str_key(
             LABEL_CONTRATO,
-            serde_yaml::Value::String("payment-to-cart".into()),
+            serde_norway::Value::String("payment-to-cart".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         let via_helper = kube_metadata_labels(&value);
         let via_inline = value
@@ -53702,20 +53702,20 @@ spec:
         // readback) reach through this exact string-scalar readback,
         // and a drift on the borrowed-string contract would silently
         // regress both routed sites' equality comparison.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels.insert_str_key(
             LABEL_CONTRATO,
-            serde_yaml::Value::String("cart-to-catalog".into()),
+            serde_norway::Value::String("cart-to-catalog".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_label(&value, LABEL_APLICACAO),
@@ -53745,7 +53745,7 @@ spec:
         // the two routed caixa-mesh label-value probes preserve the
         // None-arm semantics that keep their `.expect(...)` /
         // `.map(String::from)` follow-ups sound.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_metadata_label(&value, LABEL_APLICACAO),
             None,
@@ -53757,14 +53757,14 @@ spec:
 
         // Present metadata but absent labels sub-block — the
         // composed sub-mapping accessor's middle-hop None-arm.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-gateway".into()),
+            serde_norway::Value::String("checkout-gateway".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_label(&value, LABEL_APLICACAO),
             None,
@@ -53787,16 +53787,16 @@ spec:
         // future consumers can distinguish "no such label" from
         // "wrong shape" in their `.unwrap_or_default(...)` /
         // `.expect(...)` follow-ups.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_label(&value, LABEL_CONTRATO),
             None,
@@ -53818,19 +53818,19 @@ spec:
         // (which would panic on a numeric label-value) is a test-
         // visible break.
         for non_string in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut labels = serde_yaml::Mapping::new();
+            let mut labels = serde_norway::Mapping::new();
             labels.insert_str_key(LABEL_APLICACAO, non_string.clone());
-            let mut metadata = serde_yaml::Mapping::new();
-            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut metadata = serde_norway::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_label(&value, LABEL_APLICACAO),
                 None,
@@ -53855,20 +53855,20 @@ spec:
         // the sub-mapping accessor) is a test-visible break, matching
         // the sibling `kube_name_is_composes_on_lifted_kube_name_
         // accessor` pin's discipline on the identity-axis composition.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels.insert_str_key(
             LABEL_CONTRATO,
-            serde_yaml::Value::String("cart-to-payment".into()),
+            serde_norway::Value::String("cart-to-payment".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for label in [LABEL_APLICACAO, LABEL_CONTRATO] {
             let via_helper = kube_metadata_label(&value, label);
@@ -53898,20 +53898,20 @@ spec:
         // block. Peer of the sibling `kube_metadata_str_field_matches_
         // prior_inline_chain` pin on the scalar-arity peer at the
         // shallower `metadata.<field>` navigation depth.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels.insert_str_key(
             LABEL_CONTRATO,
-            serde_yaml::Value::String("cart-to-catalog".into()),
+            serde_norway::Value::String("cart-to-catalog".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for label in [LABEL_APLICACAO, LABEL_CONTRATO] {
             let via_helper = kube_metadata_label(&value, label);
@@ -53944,20 +53944,20 @@ spec:
         // `app-operator`'s per-Aplicacao selector-based reconciler
         // MESH-COMPOSITION §III.2 #5) reach through this exact
         // string-scalar equality.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels.insert_str_key(
             LABEL_CONTRATO,
-            serde_yaml::Value::String("cart-to-catalog".into()),
+            serde_norway::Value::String("cart-to-catalog".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert!(
             kube_metadata_label_is(&value, LABEL_APLICACAO, "checkout"),
@@ -53983,16 +53983,16 @@ spec:
         // a future selector-consumer's `if kube_metadata_label_is(...)
         // { … }` gate does not silently short-circuit onto a
         // structurally-adjacent CR whose selector value drifted.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert!(
             !kube_metadata_label_is(&value, LABEL_APLICACAO, "orders"),
@@ -54018,50 +54018,50 @@ spec:
         // specific branching at every consumer site.
 
         // Arm 1: missing metadata block.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert!(
             !kube_metadata_label_is(&value, LABEL_APLICACAO, "checkout"),
             "predicate must return false when metadata block absent"
         );
 
         // Arm 2: present metadata but absent labels sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-gateway".into()),
+            serde_norway::Value::String("checkout-gateway".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert!(
             !kube_metadata_label_is(&value, LABEL_APLICACAO, "checkout"),
             "predicate must return false when labels sub-block absent"
         );
 
         // Arm 3: labels sub-block present but requested label absent.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert!(
             !kube_metadata_label_is(&value, LABEL_CONTRATO, "cart-to-catalog"),
             "predicate must return false when requested label key absent"
         );
 
         // Arm 4: label present but non-string value.
-        let mut labels = serde_yaml::Mapping::new();
-        labels.insert_str_key(LABEL_APLICACAO, serde_yaml::Value::Number(42.into()));
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut labels = serde_norway::Mapping::new();
+        labels.insert_str_key(LABEL_APLICACAO, serde_norway::Value::Number(42.into()));
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert!(
             !kube_metadata_label_is(&value, LABEL_APLICACAO, "42"),
             "predicate must return false when label value is non-string \
@@ -54085,20 +54085,20 @@ spec:
         // matching the sibling `kube_name_is_composes_on_lifted_kube_
         // name_accessor` pin's discipline on the identity-axis
         // composition.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels.insert_str_key(
             LABEL_CONTRATO,
-            serde_yaml::Value::String("cart-to-payment".into()),
+            serde_norway::Value::String("cart-to-payment".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (label, expected) in [
             (LABEL_APLICACAO, "checkout"),
@@ -54131,14 +54131,14 @@ spec:
         // / `find_by_api_version` navigators' first-match contract on
         // the sibling scalar-key axes.
         let make = |name: &str, program: &str| {
-            let mut labels = serde_yaml::Mapping::new();
-            labels.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String(program.into()));
-            let mut metadata = serde_yaml::Mapping::new();
-            metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String(name.into()));
-            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            serde_yaml::Value::Mapping(cr)
+            let mut labels = serde_norway::Mapping::new();
+            labels.insert_str_key(LABEL_PROGRAM, serde_norway::Value::String(program.into()));
+            let mut metadata = serde_norway::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String(name.into()));
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            serde_norway::Value::Mapping(cr)
         };
         let docs = vec![
             make("cart-a", "cart"),
@@ -54173,13 +54173,13 @@ spec:
         // `if let Some(cr) = find_by_label(...) { … }` gate does not
         // silently short-circuit onto a structurally-adjacent CR.
         let make = |program: &str| {
-            let mut labels = serde_yaml::Mapping::new();
-            labels.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String(program.into()));
-            let mut metadata = serde_yaml::Mapping::new();
-            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            serde_yaml::Value::Mapping(cr)
+            let mut labels = serde_norway::Mapping::new();
+            labels.insert_str_key(LABEL_PROGRAM, serde_norway::Value::String(program.into()));
+            let mut metadata = serde_norway::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            serde_norway::Value::Mapping(cr)
         };
         let docs = vec![make("cart"), make("payment")];
 
@@ -54207,14 +54207,14 @@ spec:
         // is a test-visible break, matching the sibling `find_by_name
         // _composes_on_lifted_kube_name_is_predicate` pin's discipline.
         let make = |name: &str, program: &str| {
-            let mut labels = serde_yaml::Mapping::new();
-            labels.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String(program.into()));
-            let mut metadata = serde_yaml::Mapping::new();
-            metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String(name.into()));
-            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            serde_yaml::Value::Mapping(cr)
+            let mut labels = serde_norway::Mapping::new();
+            labels.insert_str_key(LABEL_PROGRAM, serde_norway::Value::String(program.into()));
+            let mut metadata = serde_norway::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String(name.into()));
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            serde_norway::Value::Mapping(cr)
         };
         let docs = vec![make("cart-a", "cart"), make("payment-a", "payment")];
 
@@ -54345,14 +54345,14 @@ spec:
         let hr = parse_yaml_at_path(&files, FLUX_HELMRELEASE_YAML_FILENAME);
         assert!(
             kube_api_version_is(&hr, "helm.toolkit.fluxcd.io/v2"),
-            "parse_yaml_at_path must return a parsed serde_yaml::Value \
+            "parse_yaml_at_path must return a parsed serde_norway::Value \
              carrying the leaf's YAML at the path axis",
         );
         assert_eq!(
             kube_kind(&hr).map(String::from),
             Some(String::from("HelmRelease")),
             "parse_yaml_at_path must parse the leaf's contents through \
-             serde_yaml::from_str verbatim so downstream kube_* \
+             serde_norway::from_str verbatim so downstream kube_* \
              navigators bind to the same Value the inline two-step \
              produced",
         );
@@ -54387,7 +54387,7 @@ spec:
         // Sad-path arm — the parse-failure panic message reproduces the
         // shape the converged callers previously carried inline
         // (`.expect("kustomization.yaml parses as YAML")`), extended
-        // with the underlying `serde_yaml::Error` for far-easier root-
+        // with the underlying `serde_norway::Error` for far-easier root-
         // cause naming than the prior bare-string form. A structurally-
         // invalid YAML body (unbalanced mapping-flow-style braces
         // opened at column 0) reliably triggers the parse-error arm.
@@ -54405,8 +54405,8 @@ spec:
         //
         //   let f = find_file_by_path(&files, <FILENAME>)
         //       .expect("<filename>.yaml present");
-        //   let parsed: serde_yaml::Value =
-        //       serde_yaml::from_str(&f.contents)
+        //   let parsed: serde_norway::Value =
+        //       serde_norway::from_str(&f.contents)
         //           .expect("<filename>.yaml parses as YAML");
         //
         // 49 test-side caixa-flux (39) + caixa-helm (10) per-artifact
@@ -54450,13 +54450,13 @@ spec:
             let via_helper = parse_yaml_at_path(&files, filename);
             let file =
                 find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
-            let via_inline: serde_yaml::Value = serde_yaml::from_str(&file.contents)
+            let via_inline: serde_norway::Value = serde_norway::from_str(&file.contents)
                 .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
             assert_eq!(
                 via_helper, via_inline,
                 "parse_yaml_at_path(&files, {filename:?}) must byte-\
                  equal the prior inline `find_file_by_path(&files, \
-                 {filename:?}).expect(...) + serde_yaml::from_str(&_.contents).expect(...)` \
+                 {filename:?}).expect(...) + serde_norway::from_str(&_.contents).expect(...)` \
                  two-step — otherwise the 49 routed per-artifact YAML \
                  readback sites drift silently on the parse-target or \
                  leaf-path axis",
@@ -54532,12 +54532,12 @@ spec:
     fn parse_yaml_at_path_as_panics_on_unparseable_typed_target() {
         // Sad-path arm — the typed-parse-failure panic message
         // reproduces the shape the converged callers previously carried
-        // inline (`.unwrap()` on `serde_yaml::from_str::<ChartYaml>(...)`,
+        // inline (`.unwrap()` on `serde_norway::from_str::<ChartYaml>(...)`,
         // which produced the canonical `Result::unwrap` panic naming
         // nothing about which leaf or which typed-parse boundary the
         // parser tripped over). The lifted helper's message names both
         // the leaf that failed (`Chart.yaml`) and the underlying
-        // `serde_yaml::Error` — for a caller-typed target this is
+        // `serde_norway::Error` — for a caller-typed target this is
         // strictly better than the untyped-Value-arity, since the error
         // now names the specific per-field boundary
         // (`missing field ...`, `invalid type ...`) the caller-passed
@@ -54559,7 +54559,7 @@ spec:
         //
         //   let chart_file = find_file_by_path(&files, <FILENAME>)
         //       .unwrap(); // or .expect("<filename> present")
-        //   let chart: T = serde_yaml::from_str(&chart_file.contents).unwrap();
+        //   let chart: T = serde_norway::from_str(&chart_file.contents).unwrap();
         //
         // 9 test-side caixa-helm per-`Chart.yaml`-typed-parse readback
         // sites previously carried around the readback intent "parse
@@ -54590,13 +54590,13 @@ spec:
         let via_helper: MiniChart = parse_yaml_at_path_as(&files, filename);
         let file =
             find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
-        let via_inline: MiniChart = serde_yaml::from_str(&file.contents)
+        let via_inline: MiniChart = serde_norway::from_str(&file.contents)
             .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
         assert_eq!(
             via_helper, via_inline,
             "parse_yaml_at_path_as::<MiniChart>(&files, {filename:?}) \
              must byte-equal the prior inline `find_file_by_path(&files, \
-             {filename:?}).unwrap() + serde_yaml::from_str::<T>(&_.contents).unwrap()` \
+             {filename:?}).unwrap() + serde_norway::from_str::<T>(&_.contents).unwrap()` \
              two-step — otherwise the 9 routed per-artifact typed-\
              parse readback sites drift silently on the parse-\
              target or leaf-path axis",
@@ -54617,20 +54617,20 @@ spec:
         // on the sub-`metadata.labels` sub-block: both accessors gate
         // on Mapping shape and return `Option<&Mapping>` on their
         // respective pinned canonical sub-block axis-key.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(
-                serde_yaml::Mapping::new(),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(
+                serde_norway::Mapping::new(),
             )]),
         );
         spec.insert_str_key(
             CILIUM_KEY_ENDPOINT_SELECTOR,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec.clone()));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec.clone()));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec(&value),
@@ -54655,7 +54655,7 @@ spec:
         // block) is a test-visible break. Peer of the sibling
         // `kube_metadata_labels_returns_none_when_metadata_block_absent`
         // pin on the sub-`metadata.labels` sub-block accessor.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec(&value),
             None,
@@ -54666,11 +54666,11 @@ spec:
 
         // Also verify the shape on non-Mapping outer Value shapes.
         for shape in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_spec(&shape),
@@ -54699,15 +54699,15 @@ spec:
         // `kube_metadata_labels_returns_none_when_labels_carries_non_mapping_type`
         // pin on the sub-`metadata.labels` sub-block accessor.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("spec-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("spec-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec(&value),
                 None,
@@ -54733,18 +54733,18 @@ spec:
         // two-line block. Peer of the sibling
         // `kube_metadata_labels_matches_prior_inline_chain` pin on the
         // sub-`metadata.labels` sub-block accessor.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_PARENT_REFS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         let via_helper = kube_spec(&value);
         let via_inline = value.get(KUBE_KEY_SPEC).and_then(|s| s.as_mapping());
@@ -54775,19 +54775,19 @@ spec:
         // rewire that bypasses the helper (a private inline two-hop
         // chain copy) is a test-visible break.
         let ingress =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-marker".into())]);
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("ingress-marker".into())]);
         let listeners =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-marker".into())]);
-        let parent_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("listener-marker".into())]);
+        let parent_refs = serde_norway::Value::Sequence(vec![serde_norway::Value::String(
             "parent-ref-marker".into(),
         )]);
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(CILIUM_KEY_INGRESS, ingress.clone());
         spec.insert_str_key(GATEWAY_API_KEY_LISTENERS, listeners.clone());
         spec.insert_str_key(GATEWAY_API_KEY_PARENT_REFS, parent_refs.clone());
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (sub_field, expected) in [
             (CILIUM_KEY_INGRESS, &ingress),
@@ -54832,19 +54832,19 @@ spec:
         // the composed-scalar-arity accessor on the sub-
         // `metadata.labels.<label>` axis.
         let ingress =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-marker".into())]);
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("ingress-marker".into())]);
         let listeners =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-marker".into())]);
-        let parent_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("listener-marker".into())]);
+        let parent_refs = serde_norway::Value::Sequence(vec![serde_norway::Value::String(
             "parent-ref-marker".into(),
         )]);
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(CILIUM_KEY_INGRESS, ingress.clone());
         spec.insert_str_key(GATEWAY_API_KEY_LISTENERS, listeners.clone());
         spec.insert_str_key(GATEWAY_API_KEY_PARENT_REFS, parent_refs.clone());
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (sub_field, expected) in [
             (CILIUM_KEY_INGRESS, &ingress),
@@ -54878,12 +54878,12 @@ spec:
         // pin on the composed accessor on the sub-`metadata.labels`
         // axis.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_spec_field(&shape, CILIUM_KEY_INGRESS),
@@ -54914,15 +54914,15 @@ spec:
         // `kube_metadata_label_returns_none_when_labels_block_absent`
         // pin.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("spec-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("spec-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_field(&value, CILIUM_KEY_INGRESS),
                 None,
@@ -54947,11 +54947,11 @@ spec:
         // rather than a panic. Peer of the sibling
         // `kube_metadata_label_returns_none_when_requested_label_absent`
         // pin on the composed sub-`metadata.labels.<label>` accessor.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_field(&value, GATEWAY_API_KEY_LISTENERS),
             None,
@@ -54979,19 +54979,19 @@ spec:
         // `kube_metadata_label_composes_on_lifted_kube_metadata_labels_accessor`
         // pin on the composed sub-`metadata.labels.<label>` accessor.
         let ingress =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-marker".into())]);
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("ingress-marker".into())]);
         let listeners =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-marker".into())]);
-        let parent_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("listener-marker".into())]);
+        let parent_refs = serde_norway::Value::Sequence(vec![serde_norway::Value::String(
             "parent-ref-marker".into(),
         )]);
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(CILIUM_KEY_INGRESS, ingress);
         spec.insert_str_key(GATEWAY_API_KEY_LISTENERS, listeners);
         spec.insert_str_key(GATEWAY_API_KEY_PARENT_REFS, parent_refs);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             CILIUM_KEY_INGRESS,
@@ -55027,19 +55027,19 @@ spec:
         // Peer of the sibling
         // `kube_metadata_label_matches_prior_inline_chain` pin.
         let ingress =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-marker".into())]);
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("ingress-marker".into())]);
         let listeners =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-marker".into())]);
-        let parent_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("listener-marker".into())]);
+        let parent_refs = serde_norway::Value::Sequence(vec![serde_norway::Value::String(
             "parent-ref-marker".into(),
         )]);
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(CILIUM_KEY_INGRESS, ingress);
         spec.insert_str_key(GATEWAY_API_KEY_LISTENERS, listeners);
         spec.insert_str_key(GATEWAY_API_KEY_PARENT_REFS, parent_refs);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             CILIUM_KEY_INGRESS,
@@ -55073,18 +55073,18 @@ spec:
         // `spec:` sub-block: both accessors gate on Mapping shape and
         // return `Option<&Mapping>` on their respective pinned
         // canonical sub-block axis-key.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("checkout".into()));
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("checkout".into()));
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_METADATA,
-            serde_yaml::Value::Mapping(metadata.clone()),
+            serde_norway::Value::Mapping(metadata.clone()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata(&value),
@@ -55110,7 +55110,7 @@ spec:
         // block) is a test-visible break. Peer of the sibling
         // `kube_spec_returns_none_when_spec_sub_block_absent` pin on
         // the sub-`spec:` sub-block accessor.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_metadata(&value),
             None,
@@ -55122,11 +55122,11 @@ spec:
 
         // Also verify the shape on non-Mapping outer Value shapes.
         for shape in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_metadata(&shape),
@@ -55155,15 +55155,15 @@ spec:
         // `kube_spec_returns_none_when_spec_carries_non_mapping_type`
         // pin on the sub-`spec:` sub-block accessor.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("metadata-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("metadata-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_METADATA, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata(&value),
                 None,
@@ -55190,24 +55190,24 @@ spec:
         // for the routed site's prior two-line block. Peer of the
         // sibling `kube_spec_matches_prior_inline_chain` pin on the
         // sub-`spec:` sub-block accessor.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         let via_helper = kube_metadata(&value);
         let via_inline = value.get(KUBE_KEY_METADATA).and_then(|m| m.as_mapping());
@@ -55236,21 +55236,21 @@ spec:
         // `KUBE_KEY_LABELS` for the labels sub-block presence probe)
         // so a future rewire that bypasses the helper (a private
         // inline two-hop chain copy) is a test-visible break.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let name_value = serde_yaml::Value::String("checkout-cart-to-catalog".into());
-        let namespace_value = serde_yaml::Value::String(DEFAULT_NAMESPACE.into());
-        let labels_value = serde_yaml::Value::Mapping(labels);
-        let mut metadata = serde_yaml::Mapping::new();
+        let name_value = serde_norway::Value::String("checkout-cart-to-catalog".into());
+        let namespace_value = serde_norway::Value::String(DEFAULT_NAMESPACE.into());
+        let labels_value = serde_norway::Value::Mapping(labels);
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(KUBE_KEY_NAME, name_value.clone());
         metadata.insert_str_key(KUBE_KEY_NAMESPACE, namespace_value.clone());
         metadata.insert_str_key(KUBE_KEY_LABELS, labels_value.clone());
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (sub_field, expected) in [
             (KUBE_KEY_NAME, &name_value),
@@ -55295,21 +55295,21 @@ spec:
         // sibling scalar-arity pinned accessors ([`kube_name`],
         // [`kube_namespace`], [`kube_metadata_labels`]) each close on
         // top with a per-axis shape-gate.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let name_value = serde_yaml::Value::String("checkout-cart-to-catalog".into());
-        let namespace_value = serde_yaml::Value::String(DEFAULT_NAMESPACE.into());
-        let labels_value = serde_yaml::Value::Mapping(labels);
-        let mut metadata = serde_yaml::Mapping::new();
+        let name_value = serde_norway::Value::String("checkout-cart-to-catalog".into());
+        let namespace_value = serde_norway::Value::String(DEFAULT_NAMESPACE.into());
+        let labels_value = serde_norway::Value::Mapping(labels);
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(KUBE_KEY_NAME, name_value.clone());
         metadata.insert_str_key(KUBE_KEY_NAMESPACE, namespace_value.clone());
         metadata.insert_str_key(KUBE_KEY_LABELS, labels_value.clone());
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_field(&value, KUBE_KEY_NAME),
@@ -55354,16 +55354,16 @@ spec:
         // all (a raw scalar / a Sequence-shaped document). Both take
         // the outer-arm short-circuit through [`kube_metadata`]'s
         // shape-gate.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String(GATEWAY_API_API_VERSION.into()),
+            serde_norway::Value::String(GATEWAY_API_API_VERSION.into()),
         );
         cr.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+            serde_norway::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
         for field in [KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, KUBE_KEY_LABELS] {
             assert_eq!(
                 kube_metadata_field(&value, field),
@@ -55376,10 +55376,10 @@ spec:
         }
 
         let non_mapping_shapes = [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(false),
-            serde_yaml::Value::String("scalar-shaped-doc".into()),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("seq".into())]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(false),
+            serde_norway::Value::String("scalar-shaped-doc".into()),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("seq".into())]),
         ];
         for shape in non_mapping_shapes {
             assert_eq!(
@@ -55405,15 +55405,15 @@ spec:
         // shapes so the composed accessor preserves the None-arm the
         // caller's downstream continuations depend on.
         let non_mapping_shapes = [
-            ("String", serde_yaml::Value::String("checkout".into())),
-            ("Sequence", serde_yaml::Value::Sequence(vec![])),
-            ("Bool", serde_yaml::Value::Bool(true)),
-            ("Null", serde_yaml::Value::Null),
+            ("String", serde_norway::Value::String("checkout".into())),
+            ("Sequence", serde_norway::Value::Sequence(vec![])),
+            ("Bool", serde_norway::Value::Bool(true)),
+            ("Null", serde_norway::Value::Null),
         ];
         for (label, shape) in non_mapping_shapes {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_METADATA, shape);
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_field(&value, KUBE_KEY_NAME),
                 None,
@@ -55439,11 +55439,11 @@ spec:
         // none-arm so a caller pattern-matching on `Some(&Value)` gets
         // the semantic the sibling `metadata.get(KUBE_KEY_LABELS).
         // is_none()` shape spelled inline.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("checkout".into()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("checkout".into()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_field(&value, KUBE_KEY_LABELS),
             None,
@@ -55477,15 +55477,15 @@ spec:
         // of the sibling `kube_spec_field_composes_on_lifted_
         // kube_spec_accessor` pin on the sub-`spec:` axis's
         // composed-on-lifted-sub-mapping composition.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("checkout".into()));
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("checkout".into()));
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [KUBE_KEY_NAME, KUBE_KEY_NAMESPACE] {
             let via_helper = kube_metadata_field(&value, field);
@@ -55515,24 +55515,24 @@ spec:
         // `.and_then(|v| v.get(<DEEPER_KEY>))`) unchanged. Peer of
         // the sibling `kube_spec_field_matches_prior_inline_chain`
         // byte-equivalence pin on the sub-`spec:` axis.
-        let mut labels = serde_yaml::Mapping::new();
+        let mut labels = serde_norway::Mapping::new();
         labels.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+            serde_norway::Value::String("checkout-cart-to-catalog".into()),
         );
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+            serde_norway::Value::String(DEFAULT_NAMESPACE.into()),
         );
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, KUBE_KEY_LABELS] {
             let via_helper = kube_metadata_field(&value, field);
@@ -55564,31 +55564,31 @@ spec:
         // axes. Structural mirror of the sibling
         // `kube_spec_map_field_reads_sub_spec_field_mapping` pin on the
         // sub-`spec.<field>` sub-mapping-arity axis.
-        let mut labels_body = serde_yaml::Mapping::new();
+        let mut labels_body = serde_norway::Mapping::new();
         labels_body.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
         labels_body.insert_str_key(
             "app.kubernetes.io/name",
-            serde_yaml::Value::String("cart".into()),
+            serde_norway::Value::String("cart".into()),
         );
-        let mut annotations_body = serde_yaml::Mapping::new();
+        let mut annotations_body = serde_norway::Mapping::new();
         annotations_body.insert_str_key(
             "kubectl.kubernetes.io/last-applied-configuration",
-            serde_yaml::Value::String("{}".into()),
+            serde_norway::Value::String("{}".into()),
         );
-        let empty_map = serde_yaml::Mapping::new();
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
-        metadata.insert_str_key("annotations", serde_yaml::Value::Mapping(annotations_body));
-        metadata.insert_str_key("selector", serde_yaml::Value::Mapping(empty_map));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let empty_map = serde_norway::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels_body));
+        metadata.insert_str_key("annotations", serde_norway::Value::Mapping(annotations_body));
+        metadata.insert_str_key("selector", serde_norway::Value::Mapping(empty_map));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
-            kube_metadata_map_field(&value, KUBE_KEY_LABELS).map(serde_yaml::Mapping::len),
+            kube_metadata_map_field(&value, KUBE_KEY_LABELS).map(serde_norway::Mapping::len),
             Some(2),
             "kube_metadata_map_field must read metadata.labels as a two-\
              entry mapping — the caixa-mesh per-CNP label-surface \
@@ -55597,7 +55597,7 @@ spec:
              `kube_metadata_labels` peer pins this same axis"
         );
         assert_eq!(
-            kube_metadata_map_field(&value, "annotations").map(serde_yaml::Mapping::len),
+            kube_metadata_map_field(&value, "annotations").map(serde_norway::Mapping::len),
             Some(1),
             "kube_metadata_map_field must read metadata.annotations as a \
              one-entry mapping — the parametric `<field>` axis stays \
@@ -55606,7 +55606,7 @@ spec:
              readback reaches for the same helper with a different key"
         );
         assert_eq!(
-            kube_metadata_map_field(&value, "selector").map(serde_yaml::Mapping::len),
+            kube_metadata_map_field(&value, "selector").map(serde_norway::Mapping::len),
             Some(0),
             "kube_metadata_map_field must read metadata.selector as an \
              empty mapping when the emitter writes a legally-empty block \
@@ -55627,12 +55627,12 @@ spec:
         // pin on the composed sub-`spec.<field>` sub-mapping-arity
         // accessor axis.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_metadata_map_field(&shape, KUBE_KEY_LABELS),
@@ -55657,15 +55657,15 @@ spec:
         // arity accessor — the caller's `.get(<KEY>)` / `.expect(...)`
         // continuation stays a total function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("metadata-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("metadata-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_METADATA, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_map_field(&value, KUBE_KEY_LABELS),
                 None,
@@ -55688,11 +55688,11 @@ spec:
         // `metadata.labels` readback that finds no `metadata.labels`
         // sub-field expects None here (routing the "no labels"
         // fallback) rather than a panic.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_map_field(&value, KUBE_KEY_LABELS),
             None,
@@ -55718,17 +55718,17 @@ spec:
         // break, not a runtime regression at the first schema-invalid
         // CR the reader sees.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("labels-as-string".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("labels-as-string".into()),
+            serde_norway::Value::Sequence(vec![]),
         ] {
-            let mut metadata = serde_yaml::Mapping::new();
+            let mut metadata = serde_norway::Mapping::new();
             metadata.insert_str_key(KUBE_KEY_LABELS, non_mapping.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_map_field(&value, KUBE_KEY_LABELS),
                 None,
@@ -55760,22 +55760,22 @@ spec:
         // `kube_spec_map_field_composes_on_lifted_kube_spec_field_accessor`
         // composition pin on the sub-`spec.<field>` sub-mapping-arity
         // accessor axis.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key(
             KUBE_KEY_LABELS,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         metadata.insert_str_key(
             "annotations",
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         metadata.insert_str_key(
             "selector",
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [KUBE_KEY_LABELS, "annotations", "selector"] {
             let via_composed = kube_metadata_map_field(&value, sub_field);
@@ -55805,28 +55805,28 @@ spec:
         // representative sub-field axis-keys so the composed helper
         // remains a drop-in replacement for the routed sites' prior
         // three-hop block.
-        let mut labels_body = serde_yaml::Mapping::new();
+        let mut labels_body = serde_norway::Mapping::new();
         labels_body.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut annotations_body = serde_yaml::Mapping::new();
+        let mut annotations_body = serde_norway::Mapping::new();
         annotations_body.insert_str_key(
             "kubectl.kubernetes.io/last-applied-configuration",
-            serde_yaml::Value::String("{}".into()),
+            serde_norway::Value::String("{}".into()),
         );
-        let mut selector_body = serde_yaml::Mapping::new();
+        let mut selector_body = serde_norway::Mapping::new();
         selector_body.insert_str_key(
             "matchLabels",
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
-        metadata.insert_str_key("annotations", serde_yaml::Value::Mapping(annotations_body));
-        metadata.insert_str_key("selector", serde_yaml::Value::Mapping(selector_body));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels_body));
+        metadata.insert_str_key("annotations", serde_norway::Value::Mapping(annotations_body));
+        metadata.insert_str_key("selector", serde_norway::Value::Mapping(selector_body));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [KUBE_KEY_LABELS, "annotations", "selector"] {
             let via_helper = kube_metadata_map_field(&value, sub_field);
@@ -55860,16 +55860,16 @@ spec:
         // mirror of the way sibling [`kube_name`] / [`kube_namespace`]
         // recompose on the parametric [`kube_metadata_str_field`]
         // primitive.
-        let mut labels_body = serde_yaml::Mapping::new();
+        let mut labels_body = serde_norway::Mapping::new();
         labels_body.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels_body));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_labels(&value),
@@ -55902,26 +55902,26 @@ spec:
         // sibling `kube_metadata_map_field_reads_sub_metadata_field_mapping`
         // pin on the peer sub-mapping-arity axis of the same
         // `metadata:` sub-block.
-        let mut owner_ref = serde_yaml::Mapping::new();
+        let mut owner_ref = serde_norway::Mapping::new();
         owner_ref.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String("mesh.pleme.io/v1alpha1".into()),
+            serde_norway::Value::String("mesh.pleme.io/v1alpha1".into()),
         );
-        owner_ref.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Aplicacao".into()));
-        owner_ref.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("checkout".into()));
-        let owner_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(owner_ref)]);
-        let finalizers = serde_yaml::Value::Sequence(vec![
-            serde_yaml::Value::String("caixa.pleme.io/build-cleanup".into()),
-            serde_yaml::Value::String("caixa.pleme.io/lacre-release".into()),
+        owner_ref.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Aplicacao".into()));
+        owner_ref.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("checkout".into()));
+        let owner_refs = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(owner_ref)]);
+        let finalizers = serde_norway::Value::Sequence(vec![
+            serde_norway::Value::String("caixa.pleme.io/build-cleanup".into()),
+            serde_norway::Value::String("caixa.pleme.io/lacre-release".into()),
         ]);
-        let empty_seq = serde_yaml::Value::Sequence(vec![]);
-        let mut metadata = serde_yaml::Mapping::new();
+        let empty_seq = serde_norway::Value::Sequence(vec![]);
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key("ownerReferences", owner_refs);
         metadata.insert_str_key("finalizers", finalizers);
         metadata.insert_str_key("managedFields", empty_seq);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_seq_field(&value, "ownerReferences").map(Vec::len),
@@ -55966,12 +55966,12 @@ spec:
         // pin on the composed sub-`metadata.<field>` sub-mapping-arity
         // accessor axis.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_metadata_seq_field(&shape, "ownerReferences"),
@@ -55996,15 +55996,15 @@ spec:
         // arity accessor — the caller's `.iter()` / `.first()`
         // continuation stays a total function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("metadata-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("metadata-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_METADATA, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_seq_field(&value, "ownerReferences"),
                 None,
@@ -56027,11 +56027,11 @@ spec:
         // `metadata.ownerReferences` readback that finds no such
         // sub-field expects None here (routing the "no owner
         // references" fallback) rather than a panic.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_seq_field(&value, "ownerReferences"),
             None,
@@ -56058,17 +56058,17 @@ spec:
         // a scalar axis-value) is a test-visible break, not a runtime
         // regression at the first schema-invalid CR the reader sees.
         for non_sequence in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("owner-refs-as-string".into()),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("owner-refs-as-string".into()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut metadata = serde_yaml::Mapping::new();
+            let mut metadata = serde_norway::Mapping::new();
             metadata.insert_str_key("ownerReferences", non_sequence.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_seq_field(&value, "ownerReferences"),
                 None,
@@ -56104,13 +56104,13 @@ spec:
         // `kube_metadata_map_field_composes_on_lifted_kube_metadata_field_accessor`
         // composition pin on the peer sub-mapping-arity axis of the
         // same `metadata:` sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key("ownerReferences", serde_yaml::Value::Sequence(vec![]));
-        metadata.insert_str_key("finalizers", serde_yaml::Value::Sequence(vec![]));
-        metadata.insert_str_key("managedFields", serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key("ownerReferences", serde_norway::Value::Sequence(vec![]));
+        metadata.insert_str_key("finalizers", serde_norway::Value::Sequence(vec![]));
+        metadata.insert_str_key("managedFields", serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in ["ownerReferences", "finalizers", "managedFields"] {
             let via_composed = kube_metadata_seq_field(&value, sub_field);
@@ -56142,20 +56142,20 @@ spec:
         // replacement for any three-hop block a future
         // `metadata.ownerReferences` / `metadata.finalizers` /
         // `metadata.managedFields` consumer might reach for.
-        let mut owner_ref = serde_yaml::Mapping::new();
-        owner_ref.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        let owner_refs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(owner_ref)]);
-        let finalizers = serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(
+        let mut owner_ref = serde_norway::Mapping::new();
+        owner_ref.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        let owner_refs = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(owner_ref)]);
+        let finalizers = serde_norway::Value::Sequence(vec![serde_norway::Value::String(
             "caixa.pleme.io/build-cleanup".into(),
         )]);
-        let managed_fields = serde_yaml::Value::Sequence(vec![]);
-        let mut metadata = serde_yaml::Mapping::new();
+        let managed_fields = serde_norway::Value::Sequence(vec![]);
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_str_key("ownerReferences", owner_refs);
         metadata.insert_str_key("finalizers", finalizers);
         metadata.insert_str_key("managedFields", managed_fields);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in ["ownerReferences", "finalizers", "managedFields"] {
             let via_helper = kube_metadata_seq_field(&value, sub_field);
@@ -56203,12 +56203,12 @@ spec:
         // `kube_metadata_seq_field_reads_sub_metadata_field_sequence`
         // pin on the peer sequence-arity axis of the same `metadata:`
         // sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_number("generation", 7u64);
         metadata.insert_number("deletionGracePeriodSeconds", 30u64);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_u64_field(&value, "generation"),
@@ -56247,12 +56247,12 @@ spec:
         // pin on the composed sub-`spec.<field>` integer-arity accessor
         // axis one axis over.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_metadata_u64_field(&shape, "generation"),
@@ -56278,15 +56278,15 @@ spec:
         // `assert_eq!(_, Some(<expected>))` continuation stays a total
         // function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("metadata-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("metadata-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_METADATA, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_u64_field(&value, "generation"),
                 None,
@@ -56311,11 +56311,11 @@ spec:
         // yet stamped with a per-revision counter) expects None here
         // (routing the "no observed generation yet" fallback the
         // reconciler-loop takes on first-write) rather than a panic.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_u64_field(&value, "generation"),
             None,
@@ -56348,17 +56348,17 @@ spec:
         // pin on the sub-`spec.<field>` integer-arity accessor axis one
         // axis over.
         for non_u64 in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("7".into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("7".into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut metadata = serde_yaml::Mapping::new();
+            let mut metadata = serde_norway::Mapping::new();
             metadata.insert_str_key("generation", non_u64.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_u64_field(&value, "generation"),
                 None,
@@ -56395,17 +56395,17 @@ spec:
         // `kube_metadata_seq_field_composes_on_lifted_kube_metadata_field_accessor`
         // composition pin on the peer sub-`metadata.<field>` sequence-
         // arity accessor axis of the same `metadata:` sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_number("generation", 7u64);
         metadata.insert_number("deletionGracePeriodSeconds", 30u64);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in ["generation", "deletionGracePeriodSeconds"] {
             let via_composed = kube_metadata_u64_field(&value, sub_field);
             let via_delegation =
-                kube_metadata_field(&value, sub_field).and_then(serde_yaml::Value::as_u64);
+                kube_metadata_field(&value, sub_field).and_then(serde_norway::Value::as_u64);
             assert_eq!(
                 via_composed, via_delegation,
                 "kube_metadata_u64_field(v, {sub_field:?}) must equal \
@@ -56437,7 +56437,7 @@ spec:
         // arity and of the sibling
         // `kube_metadata_seq_field_matches_prior_inline_chain` pin on
         // the peer sequence-arity of the same `metadata:` sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
+        let mut metadata = serde_norway::Mapping::new();
         metadata.insert_number("generation", 7u64);
         metadata.insert_number("deletionGracePeriodSeconds", 30u64);
         // Off-shape axes route through the same composed helper — the
@@ -56446,13 +56446,13 @@ spec:
         // correctly-typed arm.
         metadata.insert_string(KUBE_KEY_NAME, "cart");
         metadata.insert_str_key(KUBE_KEY_LABELS, {
-            let mut labels = serde_yaml::Mapping::new();
+            let mut labels = serde_norway::Mapping::new();
             labels.insert_string("app", "cart");
-            serde_yaml::Value::Mapping(labels)
+            serde_norway::Value::Mapping(labels)
         });
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             "generation",                 // present-and-integer arm
@@ -56465,7 +56465,7 @@ spec:
             let via_inline = value
                 .get(KUBE_KEY_METADATA)
                 .and_then(|m| m.get(sub_field))
-                .and_then(serde_yaml::Value::as_u64);
+                .and_then(serde_norway::Value::as_u64);
             assert_eq!(
                 via_helper, via_inline,
                 "kube_metadata_u64_field(v, {sub_field:?}) must yield \
@@ -56496,15 +56496,15 @@ spec:
         // break. Structural mirror of
         // `kube_metadata_labels_recomposes_on_lifted_kube_metadata_map_field`
         // on the sub-mapping-arity axis.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
         metadata.insert_str_key(
             KUBE_KEY_NAMESPACE,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [KUBE_KEY_NAME, KUBE_KEY_NAMESPACE] {
             assert_eq!(
@@ -56543,12 +56543,12 @@ spec:
         // `kube_metadata_u64_field_reads_sub_metadata_field_u64_scalar`
         // pin on the peer integer-arity axis of the same `metadata:`
         // sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key("pausedReconcile", serde_yaml::Value::Bool(true));
-        metadata.insert_str_key("finalizersPending", serde_yaml::Value::Bool(false));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key("pausedReconcile", serde_norway::Value::Bool(true));
+        metadata.insert_str_key("finalizersPending", serde_norway::Value::Bool(false));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_metadata_bool_field(&value, "pausedReconcile"),
@@ -56586,12 +56586,12 @@ spec:
         // pin on the composed sub-`spec.<field>` boolean-arity accessor
         // axis one axis over.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_metadata_bool_field(&shape, "pausedReconcile"),
@@ -56616,15 +56616,15 @@ spec:
         // / `assert_eq!(_, Some(<expected>))` continuation stays a total
         // function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("metadata-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("metadata-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_METADATA, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_bool_field(&value, "pausedReconcile"),
                 None,
@@ -56649,11 +56649,11 @@ spec:
         // stamped with its identity-toggle sub-field) expects None here
         // (routing the "no explicit opt-in" fallback the controller
         // takes on first-write) rather than a panic.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_metadata_bool_field(&value, "pausedReconcile"),
             None,
@@ -56685,17 +56685,17 @@ spec:
         // pin on the sub-`spec.<field>` boolean-arity accessor axis one
         // axis over.
         for non_bool in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(1u64.into()),
-            serde_yaml::Value::String("true".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(1u64.into()),
+            serde_norway::Value::String("true".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut metadata = serde_yaml::Mapping::new();
+            let mut metadata = serde_norway::Mapping::new();
             metadata.insert_str_key("pausedReconcile", non_bool.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_metadata_bool_field(&value, "pausedReconcile"),
                 None,
@@ -56732,17 +56732,17 @@ spec:
         // `kube_metadata_u64_field_composes_on_lifted_kube_metadata_field_accessor`
         // composition pin on the peer sub-`metadata.<field>` integer-
         // arity accessor axis of the same `metadata:` sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key("pausedReconcile", serde_yaml::Value::Bool(true));
-        metadata.insert_str_key("finalizersPending", serde_yaml::Value::Bool(false));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key("pausedReconcile", serde_norway::Value::Bool(true));
+        metadata.insert_str_key("finalizersPending", serde_norway::Value::Bool(false));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in ["pausedReconcile", "finalizersPending"] {
             let via_composed = kube_metadata_bool_field(&value, sub_field);
             let via_delegation =
-                kube_metadata_field(&value, sub_field).and_then(serde_yaml::Value::as_bool);
+                kube_metadata_field(&value, sub_field).and_then(serde_norway::Value::as_bool);
             assert_eq!(
                 via_composed, via_delegation,
                 "kube_metadata_bool_field(v, {sub_field:?}) must equal \
@@ -56774,22 +56774,22 @@ spec:
         // arity and of the sibling
         // `kube_metadata_u64_field_matches_prior_inline_chain` pin on
         // the peer integer-arity of the same `metadata:` sub-block.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key("pausedReconcile", serde_yaml::Value::Bool(true));
-        metadata.insert_str_key("finalizersPending", serde_yaml::Value::Bool(false));
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key("pausedReconcile", serde_norway::Value::Bool(true));
+        metadata.insert_str_key("finalizersPending", serde_norway::Value::Bool(false));
         // Off-shape axes route through the same composed helper — the
         // present-key + wrong-shape arm's None-fold must also stay
         // byte-identical to the inline chain, not just the present-and-
         // correctly-typed arm.
         metadata.insert_string(KUBE_KEY_NAME, "cart");
         metadata.insert_str_key(KUBE_KEY_LABELS, {
-            let mut labels = serde_yaml::Mapping::new();
+            let mut labels = serde_norway::Mapping::new();
             labels.insert_string("app", "cart");
-            serde_yaml::Value::Mapping(labels)
+            serde_norway::Value::Mapping(labels)
         });
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             "pausedReconcile",   // present-and-boolean arm (true)
@@ -56802,7 +56802,7 @@ spec:
             let via_inline = value
                 .get(KUBE_KEY_METADATA)
                 .and_then(|m| m.get(sub_field))
-                .and_then(serde_yaml::Value::as_bool);
+                .and_then(serde_norway::Value::as_bool);
             assert_eq!(
                 via_helper, via_inline,
                 "kube_metadata_bool_field(v, {sub_field:?}) must yield \
@@ -56833,22 +56833,22 @@ spec:
         // `kube_metadata_str_field_reads_metadata_name_and_namespace_string_scalars`
         // pin on the sub-`metadata:` axis's composed scalar-str-arity
         // accessor.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             FLUX_KUSTOMIZATION_KEY_PATH,
-            serde_yaml::Value::String("clusters/rio/apps/checkout".into()),
+            serde_norway::Value::String("clusters/rio/apps/checkout".into()),
         );
         spec.insert_str_key(
             FLUX_KUSTOMIZATION_KEY_TIMEOUT,
-            serde_yaml::Value::String(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT.into()),
+            serde_norway::Value::String(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT.into()),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
-            serde_yaml::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
+            serde_norway::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
@@ -56884,12 +56884,12 @@ spec:
         // `kube_spec_field_returns_none_when_spec_sub_block_absent` pin
         // covers on the direct scalar-arity primitive.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_spec_str_field(&shape, FLUX_KUSTOMIZATION_KEY_PATH),
@@ -56912,15 +56912,15 @@ spec:
         // accessor — the caller's `.expect(...)` / `.unwrap_or(...)`
         // continuation stays a total function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("spec-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("spec-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
                 None,
@@ -56943,14 +56943,14 @@ spec:
         // Kustomization `spec.path` readback that finds no `spec.path`
         // sub-field expects None here (routing the fallback path)
         // rather than a panic.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             FLUX_KUSTOMIZATION_KEY_TIMEOUT,
-            serde_yaml::Value::String(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT.into()),
+            serde_norway::Value::String(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
             None,
@@ -56979,17 +56979,17 @@ spec:
         // pin on the composed sub-`metadata.<field>` scalar-str-arity
         // accessor.
         for non_string in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut spec = serde_yaml::Mapping::new();
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PATH, non_string.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_str_field(&value, FLUX_KUSTOMIZATION_KEY_PATH),
                 None,
@@ -57020,19 +57020,19 @@ spec:
         // `kube_metadata_field_composes_on_lifted_kube_metadata_accessor`
         // composition pins on the same composed-on-lifted-primitive
         // axis.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             FLUX_KUSTOMIZATION_KEY_PATH,
-            serde_yaml::Value::String("path-marker".into()),
+            serde_norway::Value::String("path-marker".into()),
         );
         spec.insert_str_key(
             FLUX_GITREPOSITORY_KEY_URL,
-            serde_yaml::Value::String("https://example.com/repo.git".into()),
+            serde_norway::Value::String("https://example.com/repo.git".into()),
         );
-        spec.insert_str_key(FLUX_KEY_INTERVAL, serde_yaml::Value::String("5m".into()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key(FLUX_KEY_INTERVAL, serde_norway::Value::String("5m".into()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             FLUX_KUSTOMIZATION_KEY_PATH,
@@ -57066,22 +57066,22 @@ spec:
         // equivalence across three representative sub-field axis-keys
         // so the composed helper remains a drop-in replacement for the
         // routed site's prior two-line block.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             FLUX_KUSTOMIZATION_KEY_PATH,
-            serde_yaml::Value::String("clusters/rio/apps/hello".into()),
+            serde_norway::Value::String("clusters/rio/apps/hello".into()),
         );
         spec.insert_str_key(
             FLUX_GITREPOSITORY_KEY_URL,
-            serde_yaml::Value::String("https://github.com/pleme-io/k8s.git".into()),
+            serde_norway::Value::String("https://github.com/pleme-io/k8s.git".into()),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
-            serde_yaml::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
+            serde_norway::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             FLUX_KUSTOMIZATION_KEY_PATH,
@@ -57119,25 +57119,25 @@ spec:
         // Structural mirror of the sibling
         // `kube_spec_str_field_reads_sub_spec_field_string_scalar` pin
         // on the sub-`spec.<field>` string-scalar arity axis.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("rule-a".into()),
-                serde_yaml::Value::String("rule-b".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("rule-a".into()),
+                serde_norway::Value::String("rule-b".into()),
             ]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("listener-0".into())]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_HOSTNAMES,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_seq_field(&value, CILIUM_KEY_INGRESS).map(std::vec::Vec::len),
@@ -57176,12 +57176,12 @@ spec:
         // pin on the composed sub-`spec.<field>` scalar-str-arity
         // accessor axis.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_spec_seq_field(&shape, CILIUM_KEY_INGRESS),
@@ -57204,15 +57204,15 @@ spec:
         // sequence-arity accessor — the caller's `.iter()` /
         // `.expect(...)` continuation stays a total function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("spec-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("spec-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_seq_field(&value, CILIUM_KEY_INGRESS),
                 None,
@@ -57235,14 +57235,14 @@ spec:
         // `spec.ingress` readback that finds no `spec.ingress` sub-field
         // expects None here (routing the "no ingress rules" fallback)
         // rather than a panic.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_field(&value, CILIUM_KEY_INGRESS),
             None,
@@ -57272,17 +57272,17 @@ spec:
         // pin on the composed sub-`spec.<field>` scalar-str-arity
         // accessor.
         for non_sequence in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("ingress-as-string".into()),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("ingress-as-string".into()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut spec = serde_yaml::Mapping::new();
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(CILIUM_KEY_INGRESS, non_sequence.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_seq_field(&value, CILIUM_KEY_INGRESS),
                 None,
@@ -57312,22 +57312,22 @@ spec:
         // `kube_spec_str_field_composes_on_lifted_kube_spec_field_accessor`
         // composition pin on the sub-`spec.<field>` scalar-str-arity
         // axis.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("ingress-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("ingress-0".into())]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("listener-0".into()),
-                serde_yaml::Value::String("listener-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("listener-0".into()),
+                serde_norway::Value::String("listener-1".into()),
             ]),
         );
-        spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             CILIUM_KEY_INGRESS,
@@ -57361,22 +57361,22 @@ spec:
         // equivalence across three representative sub-field axis-keys
         // so the composed helper remains a drop-in replacement for the
         // routed sites' prior two-line block.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_PARENT_REFS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("gateway-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("gateway-0".into())]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_HOSTNAMES,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("a.example.com".into()),
-                serde_yaml::Value::String("b.example.com".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("a.example.com".into()),
+                serde_norway::Value::String("b.example.com".into()),
             ]),
         );
-        spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             GATEWAY_API_KEY_PARENT_REFS,
@@ -57413,28 +57413,28 @@ spec:
         // `kube_spec_str_field_reads_sub_spec_field_string_scalar` and
         // `kube_spec_seq_field_reads_sub_spec_field_sequence` pins on
         // the sub-`spec.<field>` string-scalar and sequence arity axes.
-        let mut values_body = serde_yaml::Mapping::new();
-        values_body.insert_str_key("a", serde_yaml::Value::String("1".into()));
-        values_body.insert_str_key("b", serde_yaml::Value::String("2".into()));
-        let mut source_ref_body = serde_yaml::Mapping::new();
+        let mut values_body = serde_norway::Mapping::new();
+        values_body.insert_str_key("a", serde_norway::Value::String("1".into()));
+        values_body.insert_str_key("b", serde_norway::Value::String("2".into()));
+        let mut source_ref_body = serde_norway::Mapping::new();
         source_ref_body.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("GitRepository".into()),
+            serde_norway::Value::String("GitRepository".into()),
         );
-        let empty_map = serde_yaml::Mapping::new();
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_VALUES, serde_yaml::Value::Mapping(values_body));
+        let empty_map = serde_norway::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_VALUES, serde_norway::Value::Mapping(values_body));
         spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Mapping(source_ref_body),
+            serde_norway::Value::Mapping(source_ref_body),
         );
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(empty_map));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(empty_map));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
-            kube_spec_map_field(&value, FLUX_KEY_VALUES).map(serde_yaml::Mapping::len),
+            kube_spec_map_field(&value, FLUX_KEY_VALUES).map(serde_norway::Mapping::len),
             Some(2),
             "kube_spec_map_field must read spec.values as a two-entry \
              mapping — the caixa-flux per-`HelmRelease` per-cluster \
@@ -57442,7 +57442,7 @@ spec:
              DEFAULT_LIBRARY_NAME`-wrapped override navigation"
         );
         assert_eq!(
-            kube_spec_map_field(&value, FLUX_KEY_SOURCE_REF).map(serde_yaml::Mapping::len),
+            kube_spec_map_field(&value, FLUX_KEY_SOURCE_REF).map(serde_norway::Mapping::len),
             Some(1),
             "kube_spec_map_field must read spec.sourceRef as a one-\
              entry mapping — the caixa-flux per-`Kustomization` \
@@ -57450,7 +57450,7 @@ spec:
              axis"
         );
         assert_eq!(
-            kube_spec_map_field(&value, FLUX_KEY_CHART).map(serde_yaml::Mapping::len),
+            kube_spec_map_field(&value, FLUX_KEY_CHART).map(serde_norway::Mapping::len),
             Some(0),
             "kube_spec_map_field must read spec.chart as an empty \
              mapping when the emitter writes a legally-empty block \
@@ -57472,12 +57472,12 @@ spec:
         // pins on the composed sub-`spec.<field>` scalar-str-arity and
         // sequence-arity accessor axes.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_spec_map_field(&shape, FLUX_KEY_VALUES),
@@ -57500,15 +57500,15 @@ spec:
         // sub-mapping-arity accessor — the caller's `.get(<KEY>)` /
         // `.expect(...)` continuation stays a total function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("spec-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("spec-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_map_field(&value, FLUX_KEY_VALUES),
                 None,
@@ -57531,14 +57531,14 @@ spec:
         // `HelmRelease` `spec.values` readback that finds no
         // `spec.values` sub-field expects None here (routing the "no
         // overrides" fallback) rather than a panic.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_map_field(&value, FLUX_KEY_VALUES),
             None,
@@ -57569,17 +57569,17 @@ spec:
         // pins on the composed sub-`spec.<field>` scalar-str-arity and
         // sequence-arity accessors.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("values-as-string".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("values-as-string".into()),
+            serde_norway::Value::Sequence(vec![]),
         ] {
-            let mut spec = serde_yaml::Mapping::new();
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KEY_VALUES, non_mapping.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_map_field(&value, FLUX_KEY_VALUES),
                 None,
@@ -57611,22 +57611,22 @@ spec:
         // `kube_spec_seq_field_composes_on_lifted_kube_spec_field_accessor`
         // composition pins on the sub-`spec.<field>` scalar-str-arity
         // and sequence-arity accessors.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             FLUX_KEY_VALUES,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         spec.insert_str_key(
             FLUX_KEY_CHART,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [FLUX_KEY_VALUES, FLUX_KEY_SOURCE_REF, FLUX_KEY_CHART] {
             let via_composed = kube_spec_map_field(&value, sub_field);
@@ -57656,30 +57656,30 @@ spec:
         // representative sub-field axis-keys so the composed helper
         // remains a drop-in replacement for the routed sites' prior
         // two-line block.
-        let mut values_body = serde_yaml::Mapping::new();
-        values_body.insert_str_key("enabled", serde_yaml::Value::Bool(true));
-        let mut source_ref_body = serde_yaml::Mapping::new();
+        let mut values_body = serde_norway::Mapping::new();
+        values_body.insert_str_key("enabled", serde_norway::Value::Bool(true));
+        let mut source_ref_body = serde_norway::Mapping::new();
         source_ref_body.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("GitRepository".into()),
+            serde_norway::Value::String("GitRepository".into()),
         );
         source_ref_body
-            .insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("bootstrap".into()));
-        let mut chart_body = serde_yaml::Mapping::new();
+            .insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("bootstrap".into()));
+        let mut chart_body = serde_norway::Mapping::new();
         chart_body.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_VALUES, serde_yaml::Value::Mapping(values_body));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_VALUES, serde_norway::Value::Mapping(values_body));
         spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Mapping(source_ref_body),
+            serde_norway::Value::Mapping(source_ref_body),
         );
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart_body));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart_body));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [FLUX_KEY_VALUES, FLUX_KEY_SOURCE_REF, FLUX_KEY_CHART] {
             let via_helper = kube_spec_map_field(&value, sub_field);
@@ -57721,13 +57721,13 @@ spec:
         // `kube_spec_map_field_reads_sub_spec_field_mapping` pins on
         // the peer sub-`spec.<field>` string-scalar / sequence / sub-
         // mapping arity axes.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(true));
         spec.insert_string(FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE, "false");
-        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key("suspend", serde_norway::Value::Bool(false));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
@@ -57765,12 +57765,12 @@ spec:
         // pins on the peer sub-`spec.<field>` scalar-str / sequence /
         // sub-mapping-arity accessor axes.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_spec_bool_field(&shape, FLUX_KUSTOMIZATION_KEY_PRUNE),
@@ -57794,15 +57794,15 @@ spec:
         // `assert_eq!(_, Some(<expected>))` continuation stays a total
         // function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("spec-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("spec-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
                 None,
@@ -57826,11 +57826,11 @@ spec:
         // sub-field expects None here (routing the "no explicit
         // sweep-what-you-removed opt-in" fallback to the Flux v2
         // controller's own `false`-shaped default) rather than a panic.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key("suspend", serde_norway::Value::Bool(false));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
             None,
@@ -57862,17 +57862,17 @@ spec:
         // pins on the composed sub-`spec.<field>` scalar-str-arity /
         // sequence-arity / sub-mapping-arity accessors.
         for non_bool in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(1u64.into()),
-            serde_yaml::Value::String("true".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(1u64.into()),
+            serde_norway::Value::String("true".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut spec = serde_yaml::Mapping::new();
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, non_bool.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_bool_field(&value, FLUX_KUSTOMIZATION_KEY_PRUNE),
                 None,
@@ -57907,16 +57907,16 @@ spec:
         // `kube_spec_map_field_composes_on_lifted_kube_spec_field_accessor`
         // composition pins on the sub-`spec.<field>` scalar-str-arity /
         // sequence-arity / sub-mapping-arity accessors.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
-        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(true));
+        spec.insert_str_key("suspend", serde_norway::Value::Bool(false));
         spec.insert_str_key(
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
-            serde_yaml::Value::Bool(true),
+            serde_norway::Value::Bool(true),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             FLUX_KUSTOMIZATION_KEY_PRUNE,
@@ -57925,7 +57925,7 @@ spec:
         ] {
             let via_composed = kube_spec_bool_field(&value, sub_field);
             let via_delegation =
-                kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_bool);
+                kube_spec_field(&value, sub_field).and_then(serde_norway::Value::as_bool);
             assert_eq!(
                 via_composed, via_delegation,
                 "kube_spec_bool_field(v, {sub_field:?}) must equal the \
@@ -57959,13 +57959,13 @@ spec:
         // `kube_spec_seq_field_matches_prior_inline_chain`, and
         // `kube_spec_map_field_matches_prior_inline_chain` pins one
         // arity over on the composed sub-`spec.<field>` boolean-arity.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
-        spec.insert_str_key("suspend", serde_yaml::Value::Bool(false));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(true));
+        spec.insert_str_key("suspend", serde_norway::Value::Bool(false));
         spec.insert_string(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE, "true");
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             FLUX_KUSTOMIZATION_KEY_PRUNE,
@@ -57974,7 +57974,7 @@ spec:
         ] {
             let via_helper = kube_spec_bool_field(&value, sub_field);
             let via_inline =
-                kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_bool);
+                kube_spec_field(&value, sub_field).and_then(serde_norway::Value::as_bool);
             assert_eq!(
                 via_helper, via_inline,
                 "kube_spec_bool_field(v, {sub_field:?}) must yield the \
@@ -58018,12 +58018,12 @@ spec:
         // `kube_spec_bool_field_reads_sub_spec_field_boolean_scalar`
         // pins on the peer sub-`spec.<field>` string-scalar / sequence /
         // sub-mapping / boolean-arity axes.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
         spec.insert_number(KUBE_KEY_PORT, 8080u64);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
@@ -58061,12 +58061,12 @@ spec:
         // pins on the peer sub-`spec.<field>` scalar-str / sequence /
         // sub-mapping / boolean-arity accessor axes.
         for shape in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_spec_u64_field(&shape, FLUX_HELMRELEASE_KEY_RETRIES),
@@ -58090,15 +58090,15 @@ spec:
         // `assert_eq!(_, Some(<expected>))` continuation stays a total
         // function.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("spec-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("spec-as-string".into()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_SPEC, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
                 None,
@@ -58122,11 +58122,11 @@ spec:
         // sub-field expects None here (routing the "no explicit retry
         // cap opt-in" fallback to the Flux v2 helm-controller's own
         // scalar-default) rather than a panic.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_number(KUBE_KEY_PORT, 8080u64);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
             None,
@@ -58158,17 +58158,17 @@ spec:
         // pins on the composed sub-`spec.<field>` scalar-str / sequence /
         // sub-mapping / boolean-arity accessors.
         for non_u64 in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("3".into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("3".into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut spec = serde_yaml::Mapping::new();
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_HELMRELEASE_KEY_RETRIES, non_u64.clone());
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
                 None,
@@ -58204,13 +58204,13 @@ spec:
         // `kube_spec_bool_field_composes_on_lifted_kube_spec_field_accessor`
         // composition pins on the sub-`spec.<field>` scalar-str-arity /
         // sequence-arity / sub-mapping-arity / boolean-arity accessors.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
         spec.insert_number(KUBE_KEY_PORT, 8080u64);
         spec.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             FLUX_HELMRELEASE_KEY_RETRIES,
@@ -58219,7 +58219,7 @@ spec:
         ] {
             let via_composed = kube_spec_u64_field(&value, sub_field);
             let via_delegation =
-                kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_u64);
+                kube_spec_field(&value, sub_field).and_then(serde_norway::Value::as_u64);
             assert_eq!(
                 via_composed, via_delegation,
                 "kube_spec_u64_field(v, {sub_field:?}) must equal the \
@@ -58255,7 +58255,7 @@ spec:
         // `kube_spec_map_field_matches_prior_inline_chain`, and
         // `kube_spec_bool_field_matches_prior_inline_chain` pins one
         // arity over on the composed sub-`spec.<field>` integer-arity.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
         spec.insert_number(KUBE_KEY_PORT, 8080u64);
         spec.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
@@ -58264,10 +58264,10 @@ spec:
         // byte-identical to the inline chain, not just the present-and-
         // correctly-typed arm.
         spec.insert_string("chartName", "hello-rio");
-        spec.insert_str_key("prune", serde_yaml::Value::Bool(true));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key("prune", serde_norway::Value::Bool(true));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             FLUX_HELMRELEASE_KEY_RETRIES,
@@ -58278,7 +58278,7 @@ spec:
             "missing",   // absent arm
         ] {
             let via_helper = kube_spec_u64_field(&value, sub_field);
-            let via_inline = kube_spec_field(&value, sub_field).and_then(serde_yaml::Value::as_u64);
+            let via_inline = kube_spec_field(&value, sub_field).and_then(serde_norway::Value::as_u64);
             assert_eq!(
                 via_helper, via_inline,
                 "kube_spec_u64_field(v, {sub_field:?}) must yield the \
@@ -58611,43 +58611,43 @@ spec:
         // pinned axes ([`KUBE_KEY_METADATA`], [`KUBE_KEY_SPEC`]) plus
         // an open-ended peer axis-key (`status`) that the parametric
         // `<field>` axis leaves reachable without a fresh helper.
-        let mut labels_body = serde_yaml::Mapping::new();
+        let mut labels_body = serde_norway::Mapping::new();
         labels_body.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut metadata_body = serde_yaml::Mapping::new();
-        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
-        let mut spec_body = serde_yaml::Mapping::new();
-        spec_body.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut status_body = serde_yaml::Mapping::new();
+        let mut metadata_body = serde_norway::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels_body));
+        let mut spec_body = serde_norway::Mapping::new();
+        spec_body.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut status_body = serde_norway::Mapping::new();
         status_body.insert_str_key(
             "observedGeneration",
-            serde_yaml::Value::Number(serde_yaml::Number::from(1_u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(1_u64)),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_body));
-        cr.insert_str_key("status", serde_yaml::Value::Mapping(status_body));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_body));
+        cr.insert_str_key("status", serde_norway::Value::Mapping(status_body));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
-            kube_root_map_field(&value, KUBE_KEY_METADATA).map(serde_yaml::Mapping::len),
+            kube_root_map_field(&value, KUBE_KEY_METADATA).map(serde_norway::Mapping::len),
             Some(2),
             "kube_root_map_field must read the top-level `metadata:` \
              sub-mapping as a two-entry mapping (name + labels) — the \
              pinned peer `kube_metadata` now composes on this axis"
         );
         assert_eq!(
-            kube_root_map_field(&value, KUBE_KEY_SPEC).map(serde_yaml::Mapping::len),
+            kube_root_map_field(&value, KUBE_KEY_SPEC).map(serde_norway::Mapping::len),
             Some(1),
             "kube_root_map_field must read the top-level `spec:` \
              sub-mapping as a one-entry mapping (rules) — the pinned \
              peer `kube_spec` now composes on this axis"
         );
         assert_eq!(
-            kube_root_map_field(&value, "status").map(serde_yaml::Mapping::len),
+            kube_root_map_field(&value, "status").map(serde_norway::Mapping::len),
             Some(1),
             "kube_root_map_field must read the top-level `status:` \
              sub-mapping as a one-entry mapping — the parametric \
@@ -58666,12 +58666,12 @@ spec:
         // bare status-scoped document that carries no `spec:` body).
         // The helper folds this to `None` so the readback stays a
         // total function.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("CiliumNetworkPolicy".into()),
+            serde_norway::Value::String("CiliumNetworkPolicy".into()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_map_field(&value, KUBE_KEY_METADATA),
@@ -58698,13 +58698,13 @@ spec:
         // contract that pins both `metadata:` and `spec:` as Mappings,
         // tolerated here as `None` so the readback stays a total
         // function).
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_METADATA,
-            serde_yaml::Value::String("this-should-be-a-mapping".into()),
+            serde_norway::Value::String("this-should-be-a-mapping".into()),
         );
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
-        let value = serde_yaml::Value::Mapping(cr);
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Sequence(vec![]));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_map_field(&value, KUBE_KEY_METADATA),
@@ -58730,7 +58730,7 @@ spec:
         // non-Mapping YAML type. Unlike the sub-`metadata:` / sub-
         // `spec:` peers which need an explicit `.as_mapping()` gate
         // on the outer sub-block, the root-axis variant needs no
-        // explicit outer shape gate — [`serde_yaml::Value::get`]
+        // explicit outer shape gate — [`serde_norway::Value::get`]
         // already short-circuits to None on non-Mapping outer values.
         // Pin the None arm across the four non-Mapping outer shapes
         // (Null, Bool, Number, String, Sequence) so a future
@@ -58738,11 +58738,11 @@ spec:
         // shape contract lights up here rather than silently
         // desynchronizing the root axis from its sub-axis peers.
         let outer_shapes = [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::String("not-a-mapping".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::String("not-a-mapping".into()),
+            serde_norway::Value::Sequence(vec![]),
         ];
         for outer in outer_shapes {
             assert_eq!(
@@ -58767,16 +58767,16 @@ spec:
         // pinned per-axis accessor and its parametric substrate
         // primitive is a substrate invariant, not a per-call-site
         // coincidence.
-        let mut metadata_body = serde_yaml::Mapping::new();
-        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
-        let with_metadata = serde_yaml::Value::Mapping(cr);
-        let without_metadata = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let mut metadata_body = serde_norway::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
+        let with_metadata = serde_norway::Value::Mapping(cr);
+        let without_metadata = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         let non_mapping_metadata = {
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::String("bad".into()));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::String("bad".into()));
+            serde_norway::Value::Mapping(cr)
         };
 
         for value in [&with_metadata, &without_metadata, &non_mapping_metadata] {
@@ -58800,16 +58800,16 @@ spec:
         // routed short-circuit arm. Structural mirror of the sibling
         // `kube_metadata_composes_on_lifted_kube_root_map_field_accessor`
         // pin on the peer canonical top-level sub-mapping-arity axis.
-        let mut spec_body = serde_yaml::Mapping::new();
-        spec_body.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_body));
-        let with_spec = serde_yaml::Value::Mapping(cr);
-        let without_spec = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let mut spec_body = serde_norway::Mapping::new();
+        spec_body.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_body));
+        let with_spec = serde_norway::Value::Mapping(cr);
+        let without_spec = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         let non_mapping_spec = {
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Sequence(vec![]));
+            serde_norway::Value::Mapping(cr)
         };
 
         for value in [&with_spec, &without_spec, &non_mapping_spec] {
@@ -58836,17 +58836,17 @@ spec:
         // from that inline shape lights up here rather than silently
         // splitting the two pinned peers back apart across the
         // substrate.
-        let mut metadata_body = serde_yaml::Mapping::new();
+        let mut metadata_body = serde_norway::Mapping::new();
         metadata_body.insert_str_key(
             KUBE_KEY_LABELS,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut spec_body = serde_yaml::Mapping::new();
-        spec_body.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_body));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec_body = serde_norway::Mapping::new();
+        spec_body.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_body));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [KUBE_KEY_METADATA, KUBE_KEY_SPEC, "status", "data"] {
             assert_eq!(
@@ -58878,17 +58878,17 @@ spec:
         // without a fresh helper. Structural mirror of the sibling
         // `kube_root_map_field_reads_top_level_field_mapping` pin on
         // the peer sub-mapping-arity root axis.
-        let mut program = serde_yaml::Mapping::new();
+        let mut program = serde_norway::Mapping::new();
         program.insert_str_key(
             FLEET_PROGRAMS_KEY_NAME,
-            serde_yaml::Value::String("hello-rio".into()),
+            serde_norway::Value::String("hello-rio".into()),
         );
-        let programs = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(program)]);
-        let items = serde_yaml::Value::Sequence(vec![]);
-        let mut values = serde_yaml::Mapping::new();
+        let programs = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(program)]);
+        let items = serde_norway::Value::Sequence(vec![]);
+        let mut values = serde_norway::Mapping::new();
         values.insert_str_key(FLEET_PROGRAMS_KEY_PROGRAMS, programs);
         values.insert_str_key("items", items);
-        let value = serde_yaml::Value::Mapping(values);
+        let value = serde_norway::Value::Mapping(values);
 
         assert_eq!(
             kube_root_seq_field(&value, FLEET_PROGRAMS_KEY_PROGRAMS).map(Vec::len),
@@ -58922,9 +58922,9 @@ spec:
         // function. Structural mirror of the sibling
         // `kube_root_map_field_returns_none_when_field_absent` pin on
         // the peer sub-mapping-arity root axis.
-        let mut values = serde_yaml::Mapping::new();
-        values.insert_str_key(HELM_VALUES_KEY_ENABLED, serde_yaml::Value::Bool(true));
-        let value = serde_yaml::Value::Mapping(values);
+        let mut values = serde_norway::Mapping::new();
+        values.insert_str_key(HELM_VALUES_KEY_ENABLED, serde_norway::Value::Bool(true));
+        let value = serde_norway::Value::Mapping(values);
 
         assert_eq!(
             kube_root_seq_field(&value, FLEET_PROGRAMS_KEY_PROGRAMS),
@@ -58949,15 +58949,15 @@ spec:
         // regression at the first schema-invalid document the reader
         // sees.
         for non_sequence in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(false),
-            serde_yaml::Value::Number(serde_yaml::Number::from(0_u64)),
-            serde_yaml::Value::String("programs-as-string".into()),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(false),
+            serde_norway::Value::Number(serde_norway::Number::from(0_u64)),
+            serde_norway::Value::String("programs-as-string".into()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut values = serde_yaml::Mapping::new();
+            let mut values = serde_norway::Mapping::new();
             values.insert_str_key(FLEET_PROGRAMS_KEY_PROGRAMS, non_sequence.clone());
-            let value = serde_yaml::Value::Mapping(values);
+            let value = serde_norway::Value::Mapping(values);
             assert_eq!(
                 kube_root_seq_field(&value, FLEET_PROGRAMS_KEY_PROGRAMS),
                 None,
@@ -58976,7 +58976,7 @@ spec:
         // Mapping YAML type. Unlike the sub-`metadata:` / sub-`spec:`
         // seq peers which need an explicit `.as_mapping()` gate on the
         // outer sub-block, the root-axis variant needs no explicit
-        // outer shape gate — [`serde_yaml::Value::get`] already short-
+        // outer shape gate — [`serde_norway::Value::get`] already short-
         // circuits to None on non-Mapping outer values. Pin the None-
         // arm across the five non-Mapping outer shapes so a future
         // serde_yaml revision that changes the `Value::get` outer-
@@ -58986,11 +58986,11 @@ spec:
         // `kube_root_map_field_short_circuits_when_outer_value_is_non_mapping`
         // pin on the peer sub-mapping-arity root axis.
         let outer_shapes = [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::String("not-a-mapping".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::String("not-a-mapping".into()),
+            serde_norway::Value::Sequence(vec![]),
         ];
         for outer in outer_shapes {
             assert_eq!(
@@ -59017,18 +59017,18 @@ spec:
         // the substrate. Structural mirror of the sibling
         // `kube_root_map_field_matches_prior_inline_chain` pin on the
         // peer sub-mapping-arity root axis.
-        let mut program = serde_yaml::Mapping::new();
+        let mut program = serde_norway::Mapping::new();
         program.insert_str_key(
             FLEET_PROGRAMS_KEY_NAME,
-            serde_yaml::Value::String("hello-rio".into()),
+            serde_norway::Value::String("hello-rio".into()),
         );
-        let mut values = serde_yaml::Mapping::new();
+        let mut values = serde_norway::Mapping::new();
         values.insert_str_key(
             FLEET_PROGRAMS_KEY_PROGRAMS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(program)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(program)]),
         );
-        values.insert_str_key("items", serde_yaml::Value::Sequence(vec![]));
-        let value = serde_yaml::Value::Mapping(values);
+        values.insert_str_key("items", serde_norway::Value::Sequence(vec![]));
+        let value = serde_norway::Value::Mapping(values);
 
         for field in [FLEET_PROGRAMS_KEY_PROGRAMS, "items", "documents"] {
             assert_eq!(
@@ -59068,10 +59068,10 @@ spec:
         // `kube_root_seq_field_reads_top_level_field_sequence` pins on
         // the peer root-axis string-scalar / sub-mapping / sequence
         // arity axes.
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key("paused", serde_yaml::Value::Bool(true));
-        cr.insert_str_key("disabled", serde_yaml::Value::Bool(false));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key("paused", serde_norway::Value::Bool(true));
+        cr.insert_str_key("disabled", serde_norway::Value::Bool(false));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_bool_field(&value, "paused"),
@@ -59111,9 +59111,9 @@ spec:
         // `kube_root_map_field_returns_none_when_field_absent`, and
         // `kube_root_seq_field_returns_none_when_field_absent` pins
         // on the peer root-axis shape-gate accessors.
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key("enabled", serde_yaml::Value::Bool(true));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key("enabled", serde_norway::Value::Bool(true));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_bool_field(&value, "paused"),
@@ -59145,15 +59145,15 @@ spec:
         // `kube_root_seq_field_returns_none_when_field_carries_non_sequence_type`
         // pin on the sequence-arity variant.
         for non_bool in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(1u64.into()),
-            serde_yaml::Value::String("true".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(1u64.into()),
+            serde_norway::Value::String("true".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key("paused", non_bool.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_root_bool_field(&value, "paused"),
                 None,
@@ -59175,7 +59175,7 @@ spec:
         // sub-`spec:` boolean-arity peers which need an explicit
         // `.as_mapping()` gate on the outer sub-block, the root-axis
         // variant needs no explicit outer shape gate —
-        // [`serde_yaml::Value::get`] already short-circuits to None
+        // [`serde_norway::Value::get`] already short-circuits to None
         // on non-Mapping outer values. Pin the None-arm across the
         // five non-Mapping outer shapes so a future serde_yaml
         // revision that changes the `Value::get` outer-shape
@@ -59187,11 +59187,11 @@ spec:
         // + `kube_root_seq_field_short_circuits_when_outer_value_is_non_mapping`
         // pins on the peer root-axis shape-gate accessors.
         let outer_shapes = [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::String("not-a-mapping".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::String("not-a-mapping".into()),
+            serde_norway::Value::Sequence(vec![]),
         ];
         for outer in outer_shapes {
             assert_eq!(
@@ -59225,16 +59225,16 @@ spec:
         // sibling
         // `kube_spec_bool_field_composes_on_lifted_kube_spec_field_accessor`
         // pin on the sub-`spec.<field>` boolean-arity accessor.
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key("paused", serde_yaml::Value::Bool(true));
-        cr.insert_str_key("disabled", serde_yaml::Value::Bool(false));
-        cr.insert_str_key("enabled", serde_yaml::Value::Bool(true));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key("paused", serde_norway::Value::Bool(true));
+        cr.insert_str_key("disabled", serde_norway::Value::Bool(false));
+        cr.insert_str_key("enabled", serde_norway::Value::Bool(true));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in ["paused", "disabled", "enabled"] {
             let via_composed = kube_root_bool_field(&value, field);
             let via_delegation =
-                kube_root_field(&value, field).and_then(serde_yaml::Value::as_bool);
+                kube_root_field(&value, field).and_then(serde_norway::Value::as_bool);
             assert_eq!(
                 via_composed, via_delegation,
                 "kube_root_bool_field(v, {field:?}) must equal the \
@@ -59260,16 +59260,16 @@ spec:
         // the peer root-axis shape-gate accessors, and of the
         // sibling `kube_spec_bool_field_matches_prior_inline_chain`
         // pin on the sub-`spec.<field>` boolean-arity accessor.
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key("paused", serde_yaml::Value::Bool(true));
-        cr.insert_str_key("disabled", serde_yaml::Value::Bool(false));
-        cr.insert_str_key("wrong_shape", serde_yaml::Value::String("true".into()));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key("paused", serde_norway::Value::Bool(true));
+        cr.insert_str_key("disabled", serde_norway::Value::Bool(false));
+        cr.insert_str_key("wrong_shape", serde_norway::Value::String("true".into()));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in ["paused", "disabled", "wrong_shape", "absent"] {
             assert_eq!(
                 kube_root_bool_field(&value, field),
-                value.get(field).and_then(serde_yaml::Value::as_bool),
+                value.get(field).and_then(serde_norway::Value::as_bool),
                 "kube_root_bool_field(v, {field:?}) must yield the \
                  same Option<bool> as the prior inline \
                  `value.get({field:?}).and_then(|v| v.as_bool())` \
@@ -59297,15 +59297,15 @@ spec:
         // pinned axis and `None` on every off-arity axis — a fold-
         // through cross-check that no arity leaks between the four
         // shape-gate peers.
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key("str_axis", serde_yaml::Value::String("value".into()));
-        cr.insert_str_key("seq_axis", serde_yaml::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key("str_axis", serde_norway::Value::String("value".into()));
+        cr.insert_str_key("seq_axis", serde_norway::Value::Sequence(vec![]));
         cr.insert_str_key(
             "map_axis",
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        cr.insert_str_key("bool_axis", serde_yaml::Value::Bool(true));
-        let value = serde_yaml::Value::Mapping(cr);
+        cr.insert_str_key("bool_axis", serde_norway::Value::Bool(true));
+        let value = serde_norway::Value::Mapping(cr);
 
         // On-arity: each shape-gate peer returns Some on its own
         // axis.
@@ -59382,10 +59382,10 @@ spec:
         // `kube_root_bool_field_reads_top_level_field_boolean_scalar`
         // pins on the peer root-axis string-scalar / sub-mapping /
         // sequence / boolean arity axes.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
         cr.insert_number(KUBE_KEY_PORT, 8080u64);
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_u64_field(&value, FLUX_HELMRELEASE_KEY_RETRIES),
@@ -59425,9 +59425,9 @@ spec:
         // `kube_root_seq_field_returns_none_when_field_absent`, and
         // `kube_root_bool_field_returns_none_when_field_absent` pins
         // on the peer root-axis shape-gate accessors.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_u64_field(&value, KUBE_KEY_PORT),
@@ -59459,15 +59459,15 @@ spec:
         // `kube_root_bool_field_returns_none_when_field_carries_non_boolean_type`
         // pin on the boolean-arity variant.
         for non_u64 in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("3".into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("3".into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut cr = serde_yaml::Mapping::new();
+            let mut cr = serde_norway::Mapping::new();
             cr.insert_str_key(KUBE_KEY_PORT, non_u64.clone());
-            let value = serde_yaml::Value::Mapping(cr);
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_root_u64_field(&value, KUBE_KEY_PORT),
                 None,
@@ -59488,7 +59488,7 @@ spec:
         // sub-`spec:` integer-arity peers which need an explicit
         // `.as_mapping()` gate on the outer sub-block, the root-axis
         // variant needs no explicit outer shape gate —
-        // [`serde_yaml::Value::get`] already short-circuits to None on
+        // [`serde_norway::Value::get`] already short-circuits to None on
         // non-Mapping outer values. Pin the None-arm across the five
         // non-Mapping outer shapes so a future serde_yaml revision
         // that changes the `Value::get` outer-shape contract lights up
@@ -59501,11 +59501,11 @@ spec:
         // + `kube_root_bool_field_short_circuits_when_outer_value_is_non_mapping`
         // pins on the peer root-axis shape-gate accessors.
         let outer_shapes = [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::String("not-a-mapping".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::String("not-a-mapping".into()),
+            serde_norway::Value::Sequence(vec![]),
         ];
         for outer in outer_shapes {
             assert_eq!(
@@ -59541,11 +59541,11 @@ spec:
         // sibling
         // `kube_spec_u64_field_composes_on_lifted_kube_spec_field_accessor`
         // pin on the sub-`spec.<field>` integer-arity accessor.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
         cr.insert_number(KUBE_KEY_PORT, 8080u64);
         cr.insert_number(GATEWAY_API_KEY_ATTEMPTS, 5u64);
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [
             FLUX_HELMRELEASE_KEY_RETRIES,
@@ -59553,7 +59553,7 @@ spec:
             GATEWAY_API_KEY_ATTEMPTS,
         ] {
             let via_composed = kube_root_u64_field(&value, field);
-            let via_delegation = kube_root_field(&value, field).and_then(serde_yaml::Value::as_u64);
+            let via_delegation = kube_root_field(&value, field).and_then(serde_norway::Value::as_u64);
             assert_eq!(
                 via_composed, via_delegation,
                 "kube_root_u64_field(v, {field:?}) must equal the \
@@ -59580,12 +59580,12 @@ spec:
         // the peer root-axis shape-gate accessors, and of the sibling
         // `kube_spec_u64_field_matches_prior_inline_chain` pin on the
         // sub-`spec.<field>` integer-arity accessor.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_number(FLUX_HELMRELEASE_KEY_RETRIES, 3u64);
         cr.insert_number(KUBE_KEY_PORT, 8080u64);
-        cr.insert_str_key("wrong_shape", serde_yaml::Value::String("3".into()));
-        cr.insert_str_key("wrong_shape_bool", serde_yaml::Value::Bool(true));
-        let value = serde_yaml::Value::Mapping(cr);
+        cr.insert_str_key("wrong_shape", serde_norway::Value::String("3".into()));
+        cr.insert_str_key("wrong_shape_bool", serde_norway::Value::Bool(true));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [
             FLUX_HELMRELEASE_KEY_RETRIES,
@@ -59596,7 +59596,7 @@ spec:
         ] {
             assert_eq!(
                 kube_root_u64_field(&value, field),
-                value.get(field).and_then(serde_yaml::Value::as_u64),
+                value.get(field).and_then(serde_norway::Value::as_u64),
                 "kube_root_u64_field(v, {field:?}) must yield the same \
                  Option<u64> as the prior inline \
                  `value.get({field:?}).and_then(|v| v.as_u64())` chain \
@@ -59627,16 +59627,16 @@ spec:
         // `kube_root_bool_field_closes_root_axis_quartet_with_shape_gate_peers`
         // pin's coverage at the fifth arity without disturbing that
         // pin's historical closure at four.
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key("str_axis", serde_yaml::Value::String("value".into()));
-        cr.insert_str_key("seq_axis", serde_yaml::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key("str_axis", serde_norway::Value::String("value".into()));
+        cr.insert_str_key("seq_axis", serde_norway::Value::Sequence(vec![]));
         cr.insert_str_key(
             "map_axis",
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        cr.insert_str_key("bool_axis", serde_yaml::Value::Bool(true));
+        cr.insert_str_key("bool_axis", serde_norway::Value::Bool(true));
         cr.insert_number("u64_axis", 42u64);
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         // On-arity: each shape-gate peer returns Some on its own axis.
         assert_eq!(kube_root_str_field(&value, "str_axis"), Some("value"));
@@ -59704,19 +59704,19 @@ spec:
         // YAML document without any trailing shape gate — the same
         // scalar-Value substrate primitive `kube_metadata_field` and
         // `kube_spec_field` peer at their respective sub-axes.
-        let mut metadata_body = serde_yaml::Mapping::new();
-        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("hello-rio".into()));
-        let mut spec_body = serde_yaml::Mapping::new();
-        spec_body.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
+        let mut metadata_body = serde_norway::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("hello-rio".into()));
+        let mut spec_body = serde_norway::Mapping::new();
+        spec_body.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String("mesh.pleme.io/v1alpha1".into()),
+            serde_norway::Value::String("mesh.pleme.io/v1alpha1".into()),
         );
-        cr.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Aplicacao".into()));
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_body));
-        let value = serde_yaml::Value::Mapping(cr);
+        cr.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Aplicacao".into()));
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_body));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_field(&value, KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
@@ -59748,9 +59748,9 @@ spec:
         // sub-block (e.g. a bare status-scoped document with no
         // `spec:`) short-circuits to `None` via the underlying
         // `Value::get` none-arm — the readback stays a total function.
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Aplicacao".into()));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Aplicacao".into()));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_root_field(&value, KUBE_KEY_SPEC),
@@ -59767,17 +59767,17 @@ spec:
     #[test]
     fn kube_root_field_short_circuits_when_outer_value_is_non_mapping() {
         // None-arm pin (non-Mapping outer Value): the underlying
-        // `serde_yaml::Value::get` already short-circuits to `None`
+        // `serde_norway::Value::get` already short-circuits to `None`
         // on any non-Mapping outer value, so the root-axis
         // primitive stays a total function without an explicit
         // outer shape gate. Structural mirror of the same
         // short-circuit behavior the two shape-gated peers
         // `kube_root_map_field` and `kube_root_seq_field` pin.
         for outer in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
         ] {
             assert_eq!(
                 kube_root_field(&outer, KUBE_KEY_KIND),
@@ -59804,20 +59804,20 @@ spec:
         // `kube_metadata_field_matches_prior_inline_chain` /
         // `kube_spec_field_matches_prior_inline_chain` pins on the
         // sub-axis scalar-Value accessor primitives.
-        let mut metadata_body = serde_yaml::Mapping::new();
-        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("hello-rio".into()));
-        let mut cr = serde_yaml::Mapping::new();
+        let mut metadata_body = serde_norway::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("hello-rio".into()));
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String("mesh.pleme.io/v1alpha1".into()),
+            serde_norway::Value::String("mesh.pleme.io/v1alpha1".into()),
         );
-        cr.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Aplicacao".into()));
-        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+        cr.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Aplicacao".into()));
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
         cr.insert_str_key(
             FLEET_PROGRAMS_KEY_PROGRAMS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [
             KUBE_KEY_API_VERSION,
@@ -59847,17 +59847,17 @@ spec:
         // `kube_metadata_str_field_recomposes_on_lifted_kube_metadata_field`
         // / `kube_spec_str_field_composes_on_lifted_kube_spec_field_accessor`
         // pins on the sub-axis peers.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_API_VERSION,
-            serde_yaml::Value::String("mesh.pleme.io/v1alpha1".into()),
+            serde_norway::Value::String("mesh.pleme.io/v1alpha1".into()),
         );
-        cr.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Aplicacao".into()));
+        cr.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Aplicacao".into()));
         cr.insert_str_key(
             KUBE_KEY_METADATA,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let value = serde_yaml::Value::Mapping(cr);
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [
             KUBE_KEY_API_VERSION,
@@ -59884,17 +59884,17 @@ spec:
         // across every axis. Structural mirror of the sibling
         // `kube_metadata_map_field_composes_on_lifted_kube_metadata_field_accessor`
         // pin on the sub-`metadata:` axis.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_METADATA,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        cr.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Aplicacao".into()));
-        let value = serde_yaml::Value::Mapping(cr);
+        cr.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Aplicacao".into()));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [KUBE_KEY_METADATA, KUBE_KEY_SPEC, KUBE_KEY_KIND, "status"] {
             assert_eq!(
@@ -59916,13 +59916,13 @@ spec:
         // across every axis. Structural mirror of the sibling
         // `kube_metadata_seq_field_composes_on_lifted_kube_metadata_field_accessor`
         // pin on the sub-`metadata:` axis.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             FLEET_PROGRAMS_KEY_PROGRAMS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        cr.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Aplicacao".into()));
-        let value = serde_yaml::Value::Mapping(cr);
+        cr.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Aplicacao".into()));
+        let value = serde_norway::Value::Mapping(cr);
 
         for field in [
             FLEET_PROGRAMS_KEY_PROGRAMS,
@@ -59958,18 +59958,18 @@ spec:
         // gates; a drift on the borrowed-mapping contract would
         // silently regress every routed per-selector selector-value
         // probe.
-        let mut selector = serde_yaml::Mapping::new();
+        let mut selector = serde_norway::Mapping::new();
         selector.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        selector.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String("cart".into()));
-        let mut outer = serde_yaml::Mapping::new();
+        selector.insert_str_key(LABEL_PROGRAM, serde_norway::Value::String("cart".into()));
+        let mut outer = serde_norway::Mapping::new();
         outer.insert_str_key(
             KUBE_KEY_MATCH_LABELS,
-            serde_yaml::Value::Mapping(selector.clone()),
+            serde_norway::Value::Mapping(selector.clone()),
         );
-        let value = serde_yaml::Value::Mapping(outer);
+        let value = serde_norway::Value::Mapping(outer);
 
         assert_eq!(
             kube_match_labels(&value),
@@ -59996,7 +59996,7 @@ spec:
         // test-visible break. Peer of the sibling
         // `kube_metadata_labels_returns_none_when_labels_sub_block_absent`
         // pin on the CR-side labels axis.
-        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let value = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_match_labels(&value),
             None,
@@ -60008,11 +60008,11 @@ spec:
 
         // Also verify the shape on non-Mapping outer Value shapes.
         for shape in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Number(0.into()),
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Number(0.into()),
+            serde_norway::Value::Bool(false),
         ] {
             assert_eq!(
                 kube_match_labels(&shape),
@@ -60042,15 +60042,15 @@ spec:
         // `kube_metadata_labels_returns_none_when_labels_carries_non_mapping_type`
         // pin on the CR-side labels axis.
         for non_mapping in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Number(42.into()),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::String("matchLabels-as-string".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Number(42.into()),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::String("matchLabels-as-string".into()),
         ] {
-            let mut outer = serde_yaml::Mapping::new();
+            let mut outer = serde_norway::Mapping::new();
             outer.insert_str_key(KUBE_KEY_MATCH_LABELS, non_mapping.clone());
-            let value = serde_yaml::Value::Mapping(outer);
+            let value = serde_norway::Value::Mapping(outer);
             assert_eq!(
                 kube_match_labels(&value),
                 None,
@@ -60077,15 +60077,15 @@ spec:
         // two-line block. Peer of the sibling
         // `kube_metadata_labels_matches_prior_inline_chain` pin on
         // the CR-side labels axis.
-        let mut selector = serde_yaml::Mapping::new();
-        selector.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String("catalog".into()));
+        let mut selector = serde_norway::Mapping::new();
+        selector.insert_str_key(LABEL_PROGRAM, serde_norway::Value::String("catalog".into()));
         selector.insert_str_key(
             LABEL_APLICACAO,
-            serde_yaml::Value::String("checkout".into()),
+            serde_norway::Value::String("checkout".into()),
         );
-        let mut outer = serde_yaml::Mapping::new();
-        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_yaml::Value::Mapping(selector));
-        let value = serde_yaml::Value::Mapping(outer);
+        let mut outer = serde_norway::Mapping::new();
+        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_norway::Value::Mapping(selector));
+        let value = serde_norway::Value::Mapping(outer);
 
         let via_helper = kube_match_labels(&value);
         let via_inline = value
@@ -60111,11 +60111,11 @@ spec:
         // `kube_metadata_map_field(_, KUBE_KEY_LABELS)` — the
         // selector-side sub-mapping accessor stands on the parametric
         // sub-mapping-arity primitive with its axis-key pinned inside.
-        let mut selector = serde_yaml::Mapping::new();
-        selector.insert_str_key(LABEL_PROGRAM, serde_yaml::Value::String("cart".into()));
-        let mut outer = serde_yaml::Mapping::new();
-        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_yaml::Value::Mapping(selector));
-        let value = serde_yaml::Value::Mapping(outer);
+        let mut selector = serde_norway::Mapping::new();
+        selector.insert_str_key(LABEL_PROGRAM, serde_norway::Value::String("cart".into()));
+        let mut outer = serde_norway::Mapping::new();
+        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_norway::Value::Mapping(selector));
+        let value = serde_norway::Value::Mapping(outer);
 
         assert_eq!(
             kube_match_labels(&value),
@@ -60131,9 +60131,9 @@ spec:
 
         // Also verify the None arms recompose pairwise.
         for empty in [
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("scalar".into()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("scalar".into()),
         ] {
             assert_eq!(
                 kube_match_labels(&empty),
@@ -60147,18 +60147,18 @@ spec:
 
     // ── kube_match_label + kube_match_label_is lift ─────────────────────
 
-    fn match_labels_selector(entries: &[(&str, &str)]) -> serde_yaml::Value {
+    fn match_labels_selector(entries: &[(&str, &str)]) -> serde_norway::Value {
         // Test-side selector builder: `{matchLabels: {<k>: <v>, ...}}`
         // — the canonical outer shape every LabelSelector-consumer in
         // caixa-mesh reads via [`kube_match_labels`] / [`kube_match_label`]
         // / [`kube_match_label_is`].
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         for (k, v) in entries {
-            inner.insert_str_key(k, serde_yaml::Value::String((*v).into()));
+            inner.insert_str_key(k, serde_norway::Value::String((*v).into()));
         }
-        let mut outer = serde_yaml::Mapping::new();
-        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_yaml::Value::Mapping(inner));
-        serde_yaml::Value::Mapping(outer)
+        let mut outer = serde_norway::Mapping::new();
+        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_norway::Value::Mapping(inner));
+        serde_norway::Value::Mapping(outer)
     }
 
     #[test]
@@ -60208,7 +60208,7 @@ spec:
         // `kube_metadata_map_field` pre-navigation.
 
         // Arm 1: outer `matchLabels:` absent.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_match_label(&bare, LABEL_APLICACAO),
             None,
@@ -60217,12 +60217,12 @@ spec:
         );
 
         // Arm 2: `matchLabels:` present but non-Mapping.
-        let mut outer = serde_yaml::Mapping::new();
+        let mut outer = serde_norway::Mapping::new();
         outer.insert_str_key(
             KUBE_KEY_MATCH_LABELS,
-            serde_yaml::Value::String("bogus".into()),
+            serde_norway::Value::String("bogus".into()),
         );
-        let non_map = serde_yaml::Value::Mapping(outer);
+        let non_map = serde_norway::Value::Mapping(outer);
         assert_eq!(
             kube_match_label(&non_map, LABEL_APLICACAO),
             None,
@@ -60241,11 +60241,11 @@ spec:
         );
 
         // Arm 4: `<label>` present but non-string.
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key(LABEL_APLICACAO, serde_yaml::Value::Number(42.into()));
-        let mut outer = serde_yaml::Mapping::new();
-        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_yaml::Value::Mapping(inner));
-        let non_string = serde_yaml::Value::Mapping(outer);
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key(LABEL_APLICACAO, serde_norway::Value::Number(42.into()));
+        let mut outer = serde_norway::Mapping::new();
+        outer.insert_str_key(KUBE_KEY_MATCH_LABELS, serde_norway::Value::Mapping(inner));
+        let non_string = serde_norway::Value::Mapping(outer);
         assert_eq!(
             kube_match_label(&non_string, LABEL_APLICACAO),
             None,
@@ -60317,7 +60317,7 @@ spec:
             "kube_match_label_is must resolve false when the requested \
              `<label>` key is absent from the selector"
         );
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert!(
             !kube_match_label_is(&bare, LABEL_APLICACAO, "checkout"),
             "kube_match_label_is must resolve false when the outer \
@@ -60364,21 +60364,21 @@ spec:
         // sibling `kube_spec_seq_field_reads_sub_spec_field_sequence`
         // pin on the same sub-`spec.<field>` axis at the head-selector
         // arity.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("ingress-0".into()),
-                serde_yaml::Value::String("ingress-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("ingress-0".into()),
+                serde_norway::Value::String("ingress-1".into()),
             ]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("listener-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("listener-0".into())]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_seq_first(&value, CILIUM_KEY_INGRESS).and_then(|v| v.as_str()),
@@ -60411,7 +60411,7 @@ spec:
 
         // Arm 1: outer `spec:` block absent (folds through kube_spec
         // outer-arm short-circuit).
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_seq_first(&bare, CILIUM_KEY_INGRESS),
             None,
@@ -60423,12 +60423,12 @@ spec:
 
         // Arm 2: `spec:` present but non-Mapping (folds through
         // kube_spec shape-gate short-circuit).
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let non_mapping_spec = serde_yaml::Value::Mapping(cr);
+        let non_mapping_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first(&non_mapping_spec, CILIUM_KEY_INGRESS),
             None,
@@ -60439,14 +60439,14 @@ spec:
 
         // Arm 3: requested `<field>` axis-key absent from `spec:`
         // sub-mapping (folds through kube_spec_field trailing miss).
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("only-listener".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("only-listener".into())]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_ingress = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first(&no_ingress, CILIUM_KEY_INGRESS),
             None,
@@ -60457,14 +60457,14 @@ spec:
 
         // Arm 4: `<field>` present but non-sequence (folds through
         // kube_spec_seq_field trailing `.as_sequence()` shape-gate).
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::String("ingress-as-string".into()),
+            serde_norway::Value::String("ingress-as-string".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let non_seq_ingress = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let non_seq_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first(&non_seq_ingress, CILIUM_KEY_INGRESS),
             None,
@@ -60478,11 +60478,11 @@ spec:
         // head-selector empty-arm). Distinct from the four upstream
         // arms — the sequence is legally-emitted, it just carries no
         // head entry to read.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let empty_ingress = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let empty_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first(&empty_ingress, CILIUM_KEY_INGRESS),
             None,
@@ -60511,22 +60511,22 @@ spec:
         // `kube_spec_seq_field_composes_on_lifted_kube_spec_field_accessor`
         // composition pin on the parent sub-`spec.<field>` sequence-
         // arity axis.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("ingress-0".into()),
-                serde_yaml::Value::String("ingress-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("ingress-0".into()),
+                serde_norway::Value::String("ingress-1".into()),
             ]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_PARENT_REFS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("gateway-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("gateway-0".into())]),
         );
-        spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             CILIUM_KEY_INGRESS,
@@ -60561,22 +60561,22 @@ spec:
         // (routed CNP, HTTPRoute, and Gateway first-entry sites) so
         // the composed helper remains a drop-in replacement for the
         // routed sites' prior two-line block.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("only-ingress".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("only-ingress".into())]),
         );
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("listener-0".into()),
-                serde_yaml::Value::String("listener-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("listener-0".into()),
+                serde_norway::Value::String("listener-1".into()),
             ]),
         );
-        spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        spec.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for sub_field in [
             CILIUM_KEY_INGRESS,
@@ -60609,20 +60609,20 @@ spec:
         // two-hop `get → as_sequence` navigation but stops before the
         // trailing head-selector so the whole tail (not just the head)
         // reaches the caller.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("to-ports-0".into()),
-                serde_yaml::Value::String("to-ports-1".into()),
-                serde_yaml::Value::String("to-ports-2".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("to-ports-0".into()),
+                serde_norway::Value::String("to-ports-1".into()),
+                serde_norway::Value::String("to-ports-2".into()),
             ]),
         );
         inner.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("from-endpoints-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("from-endpoints-0".into())]),
         );
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         let to_ports = kube_seq(&value, CILIUM_KEY_TO_PORTS)
             .expect("kube_seq must return the full toPorts sequence");
@@ -60655,7 +60655,7 @@ spec:
 
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<field>)` surface.
-        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        let scalar_receiver = serde_norway::Value::String("scalar".into());
         assert_eq!(
             kube_seq(&scalar_receiver, CILIUM_KEY_TO_PORTS),
             None,
@@ -60667,12 +60667,12 @@ spec:
 
         // Arm 2: requested `<field>` axis-key absent from receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("only-fe".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("only-fe".into())]),
         );
-        let missing_field = serde_yaml::Value::Mapping(only_other);
+        let missing_field = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_seq(&missing_field, CILIUM_KEY_TO_PORTS),
             None,
@@ -60682,12 +60682,12 @@ spec:
         );
 
         // Arm 3: `<field>` present but non-sequence.
-        let mut non_seq = serde_yaml::Mapping::new();
+        let mut non_seq = serde_norway::Mapping::new();
         non_seq.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::String("scalar-not-sequence".into()),
+            serde_norway::Value::String("scalar-not-sequence".into()),
         );
-        let non_seq_field = serde_yaml::Value::Mapping(non_seq);
+        let non_seq_field = serde_norway::Value::Mapping(non_seq);
         assert_eq!(
             kube_seq(&non_seq_field, CILIUM_KEY_TO_PORTS),
             None,
@@ -60712,9 +60712,9 @@ spec:
         // fold-through — the sibling head-selector accessor's
         // fold-through is right for its callers, this accessor's
         // preservation is right for its callers.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
-        let empty_seq_value = serde_yaml::Value::Mapping(m);
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(CILIUM_KEY_TO_PORTS, serde_norway::Value::Sequence(vec![]));
+        let empty_seq_value = serde_norway::Value::Mapping(m);
 
         let seq = kube_seq(&empty_seq_value, CILIUM_KEY_TO_PORTS);
         assert!(
@@ -60748,24 +60748,24 @@ spec:
         // and the Gateway API HTTPRoute nested brackets (matches) so
         // the composed helper stays a drop-in replacement for the
         // routed sites' prior two-line block.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("tp-0".into()),
-                serde_yaml::Value::String("tp-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("tp-0".into()),
+                serde_norway::Value::String("tp-1".into()),
             ]),
         );
         inner.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("fe-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("fe-0".into())]),
         );
-        inner.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_yaml::Value::Sequence(vec![]));
+        inner.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_norway::Value::Sequence(vec![]));
         inner.insert_str_key(
             CILIUM_KEY_HTTP,
-            serde_yaml::Value::String("scalar-not-a-seq".into()),
+            serde_norway::Value::String("scalar-not-a-seq".into()),
         );
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         for sub_field in [
             CILIUM_KEY_TO_PORTS,
@@ -60796,19 +60796,19 @@ spec:
         // one altitude below — this exercises the same head-selector
         // semantics on the inner nested-mapping receiver the
         // spec-anchored pin exercises on the outer per-CR body.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("to-ports-0".into()),
-                serde_yaml::Value::String("to-ports-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("to-ports-0".into()),
+                serde_norway::Value::String("to-ports-1".into()),
             ]),
         );
         inner.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("from-endpoints-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("from-endpoints-0".into())]),
         );
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         assert_eq!(
             kube_seq_first(&value, CILIUM_KEY_TO_PORTS).and_then(|v| v.as_str()),
@@ -60841,7 +60841,7 @@ spec:
         // `get(<field>)` surface (Value::get returns None on scalar
         // arms — string, bool, number, null — that expose no per-key
         // lookup).
-        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        let scalar_receiver = serde_norway::Value::String("scalar".into());
         assert_eq!(
             kube_seq_first(&scalar_receiver, CILIUM_KEY_TO_PORTS),
             None,
@@ -60853,12 +60853,12 @@ spec:
 
         // Arm 2: requested `<field>` axis-key absent from receiver's
         // mapping (Value::get trailing miss).
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("only-fe".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("only-fe".into())]),
         );
-        let missing_field = serde_yaml::Value::Mapping(only_other);
+        let missing_field = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_seq_first(&missing_field, CILIUM_KEY_TO_PORTS),
             None,
@@ -60869,12 +60869,12 @@ spec:
 
         // Arm 3: `<field>` present but non-sequence (trailing
         // `.as_sequence()` shape-gate short-circuit).
-        let mut non_seq = serde_yaml::Mapping::new();
+        let mut non_seq = serde_norway::Mapping::new();
         non_seq.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::String("scalar-not-sequence".into()),
+            serde_norway::Value::String("scalar-not-sequence".into()),
         );
-        let non_seq_field = serde_yaml::Value::Mapping(non_seq);
+        let non_seq_field = serde_norway::Value::Mapping(non_seq);
         assert_eq!(
             kube_seq_first(&non_seq_field, CILIUM_KEY_TO_PORTS),
             None,
@@ -60888,9 +60888,9 @@ spec:
         // head-selector empty-arm — distinct from the three upstream
         // arms, the sequence is legally-emitted, it just carries no
         // head entry to read).
-        let mut empty = serde_yaml::Mapping::new();
-        empty.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
-        let empty_seq = serde_yaml::Value::Mapping(empty);
+        let mut empty = serde_norway::Mapping::new();
+        empty.insert_str_key(CILIUM_KEY_TO_PORTS, serde_norway::Value::Sequence(vec![]));
+        let empty_seq = serde_norway::Value::Mapping(empty);
         assert_eq!(
             kube_seq_first(&empty_seq, CILIUM_KEY_TO_PORTS),
             None,
@@ -60916,24 +60916,24 @@ spec:
         // fromEndpoints) and the Gateway API HTTPRoute nested brackets
         // (backendRefs, matches) so the composed helper stays a drop-
         // in replacement for the routed sites' prior three-line block.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("tp-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("tp-0".into())]),
         );
         inner.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("fe-0".into()),
-                serde_yaml::Value::String("fe-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("fe-0".into()),
+                serde_norway::Value::String("fe-1".into()),
             ]),
         );
         inner.insert_str_key(
             GATEWAY_API_KEY_BACKEND_REFS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("br-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("br-0".into())]),
         );
-        inner.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_yaml::Value::Sequence(vec![]));
-        let value = serde_yaml::Value::Mapping(inner);
+        inner.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_norway::Value::Sequence(vec![]));
+        let value = serde_norway::Value::Mapping(inner);
 
         for sub_field in [
             CILIUM_KEY_TO_PORTS,
@@ -60972,28 +60972,28 @@ spec:
         // (spec.ingress[0].toPorts[0] on CNP, spec.rules[0].backendRefs[0]
         // on HTTPRoute) so a future refactor bypassing either peer is
         // a test-visible break.
-        let mut inner_ingress = serde_yaml::Mapping::new();
+        let mut inner_ingress = serde_norway::Mapping::new();
         inner_ingress.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("cnp-tp-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("cnp-tp-0".into())]),
         );
-        let mut inner_rule = serde_yaml::Mapping::new();
+        let mut inner_rule = serde_norway::Mapping::new();
         inner_rule.insert_str_key(
             GATEWAY_API_KEY_BACKEND_REFS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("route-br-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("route-br-0".into())]),
         );
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_ingress)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_ingress)]),
         );
         spec.insert_str_key(
             KUBE_KEY_RULES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_rule)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_rule)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             (CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
@@ -61030,31 +61030,31 @@ spec:
         // pin on the outer spec-anchored first-entry axis one altitude
         // above where this composed accessor closes the second `_seq_first`
         // hop.
-        let mut inner_ingress = serde_yaml::Mapping::new();
+        let mut inner_ingress = serde_norway::Mapping::new();
         inner_ingress.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("tp-0".into()),
-                serde_yaml::Value::String("tp-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("tp-0".into()),
+                serde_norway::Value::String("tp-1".into()),
             ]),
         );
-        let mut inner_rule = serde_yaml::Mapping::new();
+        let mut inner_rule = serde_norway::Mapping::new();
         inner_rule.insert_str_key(
             GATEWAY_API_KEY_BACKEND_REFS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("br-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("br-0".into())]),
         );
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_ingress)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_ingress)]),
         );
         spec.insert_str_key(
             KUBE_KEY_RULES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_rule)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_rule)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_seq_first_seq_first(&value, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS)
@@ -61092,7 +61092,7 @@ spec:
 
         // Arm 1: outer `spec:` block absent (folds through kube_spec
         // outer-arm short-circuit via the outer kube_spec_seq_first).
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_seq_first_seq_first(&bare, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
             None,
@@ -61101,12 +61101,12 @@ spec:
         );
 
         // Arm 2: `spec:` present but non-Mapping.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let non_mapping_spec = serde_yaml::Value::Mapping(cr);
+        let non_mapping_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first(
                 &non_mapping_spec,
@@ -61119,14 +61119,14 @@ spec:
         );
 
         // Arm 3: outer `<field>` axis-key absent from `spec:` sub-mapping.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("only-listener".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("only-listener".into())]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_ingress = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first(&no_ingress, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
             None,
@@ -61135,14 +61135,14 @@ spec:
         );
 
         // Arm 4: outer `<field>` present but non-sequence.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::String("ingress-as-string".into()),
+            serde_norway::Value::String("ingress-as-string".into()),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let non_seq_ingress = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let non_seq_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first(
                 &non_seq_ingress,
@@ -61155,11 +61155,11 @@ spec:
         );
 
         // Arm 5: outer sequence present but empty.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let empty_ingress = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let empty_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first(&empty_ingress, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
             None,
@@ -61181,15 +61181,15 @@ spec:
         // pin on the outer [`kube_spec_seq_first`] hop's five arms.
 
         // Arm 6: inner `<field>` axis-key absent from first outer entry.
-        let inner_missing = serde_yaml::Mapping::new();
-        let mut spec = serde_yaml::Mapping::new();
+        let inner_missing = serde_norway::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_missing)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_missing)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_to_ports = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_to_ports = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first(&no_to_ports, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
             None,
@@ -61201,25 +61201,25 @@ spec:
 
         // Arm 7: inner `<field>` present but non-sequence and empty
         // sequence collapse to the same None verdict via the inner hop.
-        let mut inner_non_seq = serde_yaml::Mapping::new();
+        let mut inner_non_seq = serde_norway::Mapping::new();
         inner_non_seq.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::String("tp-as-string".into()),
+            serde_norway::Value::String("tp-as-string".into()),
         );
-        let mut inner_empty = serde_yaml::Mapping::new();
-        inner_empty.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
+        let mut inner_empty = serde_norway::Mapping::new();
+        inner_empty.insert_str_key(CILIUM_KEY_TO_PORTS, serde_norway::Value::Sequence(vec![]));
         for (fixture, arm_label) in [
             (inner_non_seq, "inner non-sequence"),
             (inner_empty, "inner present-but-empty sequence"),
         ] {
-            let mut spec = serde_yaml::Mapping::new();
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(
                 CILIUM_KEY_INGRESS,
-                serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(fixture)]),
+                serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(fixture)]),
             );
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            let value = serde_yaml::Value::Mapping(cr);
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            let value = serde_norway::Value::Mapping(cr);
             assert_eq!(
                 kube_spec_seq_first_seq_first(&value, CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
                 None,
@@ -61248,36 +61248,36 @@ spec:
         // (rules + backendRefs / rules + matches) so the composed
         // helper stays a drop-in replacement for the routed sites' prior
         // two-line composition.
-        let mut inner_ingress = serde_yaml::Mapping::new();
+        let mut inner_ingress = serde_norway::Mapping::new();
         inner_ingress.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("tp-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("tp-0".into())]),
         );
         inner_ingress.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("fe-0".into()),
-                serde_yaml::Value::String("fe-1".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("fe-0".into()),
+                serde_norway::Value::String("fe-1".into()),
             ]),
         );
-        let mut inner_rule = serde_yaml::Mapping::new();
+        let mut inner_rule = serde_norway::Mapping::new();
         inner_rule.insert_str_key(
             GATEWAY_API_KEY_BACKEND_REFS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("br-0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("br-0".into())]),
         );
-        inner_rule.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_yaml::Value::Sequence(vec![]));
-        let mut spec = serde_yaml::Mapping::new();
+        inner_rule.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_norway::Value::Sequence(vec![]));
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_ingress)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_ingress)]),
         );
         spec.insert_str_key(
             KUBE_KEY_RULES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_rule)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_rule)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             (CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS),
@@ -61314,28 +61314,28 @@ spec:
         // header. Peer of the sibling
         // [`kube_spec_seq_first_seq_first`] positive-path pin at one
         // altitude above.
-        let mut port_tuple = serde_yaml::Mapping::new();
-        port_tuple.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::String("8080".into()));
-        port_tuple.insert_str_key(KUBE_KEY_PROTOCOL, serde_yaml::Value::String("TCP".into()));
-        let port_tuple_value = serde_yaml::Value::Mapping(port_tuple);
-        let mut to_ports_entry = serde_yaml::Mapping::new();
+        let mut port_tuple = serde_norway::Mapping::new();
+        port_tuple.insert_str_key(KUBE_KEY_PORT, serde_norway::Value::String("8080".into()));
+        port_tuple.insert_str_key(KUBE_KEY_PROTOCOL, serde_norway::Value::String("TCP".into()));
+        let port_tuple_value = serde_norway::Value::Mapping(port_tuple);
+        let mut to_ports_entry = serde_norway::Mapping::new();
         to_ports_entry.insert_str_key(
             CILIUM_KEY_PORTS,
-            serde_yaml::Value::Sequence(vec![port_tuple_value.clone()]),
+            serde_norway::Value::Sequence(vec![port_tuple_value.clone()]),
         );
-        let mut ingress_entry = serde_yaml::Mapping::new();
+        let mut ingress_entry = serde_norway::Mapping::new();
         ingress_entry.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(to_ports_entry)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(to_ports_entry)]),
         );
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(ingress_entry)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(ingress_entry)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
@@ -61369,7 +61369,7 @@ spec:
         // than re-enumerate every arm.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &bare,
@@ -61386,14 +61386,14 @@ spec:
 
         // Outer arm 2: `spec:` present but the outer `<outer>` sub-
         // field is absent.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             KUBE_KEY_RULES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("r0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("r0".into())]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_ingress = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &no_ingress,
@@ -61409,11 +61409,11 @@ spec:
         );
 
         // Outer arm 3: `<outer>` present-but-empty sequence.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_yaml::Value::Sequence(vec![]));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let empty_ingress = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(CILIUM_KEY_INGRESS, serde_norway::Value::Sequence(vec![]));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let empty_ingress = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &empty_ingress,
@@ -61430,15 +61430,15 @@ spec:
 
         // Mid arm: outer present but `<mid>` absent on the first outer
         // entry.
-        let ingress_entry = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
-        let mut spec = serde_yaml::Mapping::new();
+        let ingress_entry = serde_norway::Value::Mapping(serde_norway::Mapping::new());
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![ingress_entry]),
+            serde_norway::Value::Sequence(vec![ingress_entry]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_to_ports = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_to_ports = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &no_to_ports,
@@ -61455,16 +61455,16 @@ spec:
 
         // Mid arm: `<mid>[]` present-but-empty on the first outer
         // entry.
-        let mut ingress_entry = serde_yaml::Mapping::new();
-        ingress_entry.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
-        let mut spec = serde_yaml::Mapping::new();
+        let mut ingress_entry = serde_norway::Mapping::new();
+        ingress_entry.insert_str_key(CILIUM_KEY_TO_PORTS, serde_norway::Value::Sequence(vec![]));
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(ingress_entry)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(ingress_entry)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let empty_to_ports = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let empty_to_ports = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &empty_to_ports,
@@ -61496,25 +61496,25 @@ spec:
 
         // Helper: build the `spec.ingress[0].toPorts[0]` two-hop
         // bracket with a per-`toPorts[0]` mapping the test picks.
-        let build_cr = |to_ports_entry: serde_yaml::Value| -> serde_yaml::Value {
-            let mut ingress_entry = serde_yaml::Mapping::new();
+        let build_cr = |to_ports_entry: serde_norway::Value| -> serde_norway::Value {
+            let mut ingress_entry = serde_norway::Mapping::new();
             ingress_entry.insert_str_key(
                 CILIUM_KEY_TO_PORTS,
-                serde_yaml::Value::Sequence(vec![to_ports_entry]),
+                serde_norway::Value::Sequence(vec![to_ports_entry]),
             );
-            let mut spec = serde_yaml::Mapping::new();
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(
                 CILIUM_KEY_INGRESS,
-                serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(ingress_entry)]),
+                serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(ingress_entry)]),
             );
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Innermost arm 1: `<innermost>` sub-field absent on the first
         // mid entry.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &value,
@@ -61531,12 +61531,12 @@ spec:
 
         // Innermost arm 2: `<innermost>` sub-field present but non-
         // sequence.
-        let mut to_ports_entry = serde_yaml::Mapping::new();
+        let mut to_ports_entry = serde_norway::Mapping::new();
         to_ports_entry.insert_str_key(
             CILIUM_KEY_PORTS,
-            serde_yaml::Value::String("ports-as-string".into()),
+            serde_norway::Value::String("ports-as-string".into()),
         );
-        let value = build_cr(serde_yaml::Value::Mapping(to_ports_entry));
+        let value = build_cr(serde_norway::Value::Mapping(to_ports_entry));
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &value,
@@ -61552,9 +61552,9 @@ spec:
         );
 
         // Innermost arm 3: `<innermost>[]` present-but-empty.
-        let mut to_ports_entry = serde_yaml::Mapping::new();
-        to_ports_entry.insert_str_key(CILIUM_KEY_PORTS, serde_yaml::Value::Sequence(vec![]));
-        let value = build_cr(serde_yaml::Value::Mapping(to_ports_entry));
+        let mut to_ports_entry = serde_norway::Mapping::new();
+        to_ports_entry.insert_str_key(CILIUM_KEY_PORTS, serde_norway::Value::Sequence(vec![]));
+        let value = build_cr(serde_norway::Value::Mapping(to_ports_entry));
         assert_eq!(
             kube_spec_seq_first_seq_first_seq_first(
                 &value,
@@ -61585,27 +61585,27 @@ spec:
         // canonical composed axis so the composed helper stays a
         // drop-in replacement for the routed sites' prior two-line
         // composition.
-        let mut port_tuple = serde_yaml::Mapping::new();
-        port_tuple.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::String("8080".into()));
-        port_tuple.insert_str_key(KUBE_KEY_PROTOCOL, serde_yaml::Value::String("TCP".into()));
-        let mut to_ports_entry = serde_yaml::Mapping::new();
+        let mut port_tuple = serde_norway::Mapping::new();
+        port_tuple.insert_str_key(KUBE_KEY_PORT, serde_norway::Value::String("8080".into()));
+        port_tuple.insert_str_key(KUBE_KEY_PROTOCOL, serde_norway::Value::String("TCP".into()));
+        let mut to_ports_entry = serde_norway::Mapping::new();
         to_ports_entry.insert_str_key(
             CILIUM_KEY_PORTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(port_tuple)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(port_tuple)]),
         );
-        let mut ingress_entry = serde_yaml::Mapping::new();
+        let mut ingress_entry = serde_norway::Mapping::new();
         ingress_entry.insert_str_key(
             CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(to_ports_entry)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(to_ports_entry)]),
         );
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(ingress_entry)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(ingress_entry)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         let (outer, mid, innermost) = (CILIUM_KEY_INGRESS, CILIUM_KEY_TO_PORTS, CILIUM_KEY_PORTS);
         let via_composed = kube_spec_seq_first_seq_first_seq_first(&value, outer, mid, innermost);
@@ -61641,17 +61641,17 @@ spec:
         // and the value-level
         // `kube_str_reads_sub_field_scalar_str_borrowing_into_input_value`
         // pin one altitude down on the raw-receiver quintet.
-        let mut first_entry = serde_yaml::Mapping::new();
+        let mut first_entry = serde_norway::Mapping::new();
         first_entry.insert_string(GATEWAY_API_KEY_HOSTNAME, "checkout.quero.cloud");
         first_entry.insert_string(GATEWAY_API_KEY_NAME, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME);
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(first_entry)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(first_entry)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_seq_first_str(&value, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME,),
@@ -61680,7 +61680,7 @@ spec:
         // short-circuits vacuously without a bad-shape unwrap.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_seq_first_str(&bare, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME,),
             None,
@@ -61690,14 +61690,14 @@ spec:
         );
 
         // Outer arm 2: `<seq_field>` absent on `spec:`.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             KUBE_KEY_RULES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("r0".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("r0".into())]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_listeners = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_listeners = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_str(
                 &no_listeners,
@@ -61711,14 +61711,14 @@ spec:
         );
 
         // Outer arm 3: `<seq_field>[]` present-but-empty.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let empty_listeners = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let empty_listeners = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_seq_first_str(
                 &empty_listeners,
@@ -61744,20 +61744,20 @@ spec:
 
         // Helper: build the `spec.<seq>[0]` first-entry bracket with a
         // per-first-entry mapping the test picks.
-        let build_cr = |first_entry: serde_yaml::Value| -> serde_yaml::Value {
-            let mut spec = serde_yaml::Mapping::new();
+        let build_cr = |first_entry: serde_norway::Value| -> serde_norway::Value {
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(
                 GATEWAY_API_KEY_LISTENERS,
-                serde_yaml::Value::Sequence(vec![first_entry]),
+                serde_norway::Value::Sequence(vec![first_entry]),
             );
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Trailing arm 1: `<scalar_field>` sub-field absent on the first
         // outer entry.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_seq_first_str(&value, GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME,),
             None,
@@ -61770,15 +61770,15 @@ spec:
         // string. Pin across the representative non-string YAML shapes
         // the trailing `.as_str()` shape-gate rejects.
         for non_str in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("wrapped".into())]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("wrapped".into())]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut first_entry = serde_yaml::Mapping::new();
+            let mut first_entry = serde_norway::Mapping::new();
             first_entry.insert_str_key(GATEWAY_API_KEY_HOSTNAME, non_str.clone());
-            let value = build_cr(serde_yaml::Value::Mapping(first_entry));
+            let value = build_cr(serde_norway::Value::Mapping(first_entry));
             assert_eq!(
                 kube_spec_seq_first_str(
                     &value,
@@ -61809,17 +61809,17 @@ spec:
         // the sibling
         // `kube_spec_seq_first_seq_first_seq_first_matches_prior_inline_two_hop_composition`
         // pin on the nested-first-entry-family peer.
-        let mut first_entry = serde_yaml::Mapping::new();
+        let mut first_entry = serde_norway::Mapping::new();
         first_entry.insert_string(GATEWAY_API_KEY_HOSTNAME, "checkout.quero.cloud");
         first_entry.insert_string(GATEWAY_API_KEY_NAME, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME);
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_str_key(
             GATEWAY_API_KEY_LISTENERS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(first_entry)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(first_entry)]),
         );
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (seq_field, scalar_field) in [
             (GATEWAY_API_KEY_LISTENERS, GATEWAY_API_KEY_HOSTNAME),
@@ -61852,10 +61852,10 @@ spec:
         // exercises the same value-level two-hop navigation but with a
         // string-arity shape-gate instead of a sequence-arity or head-
         // selector one.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
         inner.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, "checkout");
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         assert_eq!(
             kube_str(&value, KUBE_KEY_PROTOCOL),
@@ -61885,7 +61885,7 @@ spec:
 
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<field>)` surface.
-        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        let scalar_receiver = serde_norway::Value::String("scalar".into());
         assert_eq!(
             kube_str(&scalar_receiver, KUBE_KEY_PROTOCOL),
             None,
@@ -61897,9 +61897,9 @@ spec:
 
         // Arm 2: requested `<field>` axis-key absent from receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, "other");
-        let missing_field = serde_yaml::Value::Mapping(only_other);
+        let missing_field = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_str(&missing_field, KUBE_KEY_PROTOCOL),
             None,
@@ -61909,12 +61909,12 @@ spec:
         );
 
         // Arm 3: `<field>` present but non-string.
-        let mut non_str = serde_yaml::Mapping::new();
+        let mut non_str = serde_norway::Mapping::new();
         non_str.insert_str_key(
             KUBE_KEY_PROTOCOL,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("not-a-str".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("not-a-str".into())]),
         );
-        let non_str_field = serde_yaml::Value::Mapping(non_str);
+        let non_str_field = serde_norway::Value::Mapping(non_str);
         assert_eq!(
             kube_str(&non_str_field, KUBE_KEY_PROTOCOL),
             None,
@@ -61938,16 +61938,16 @@ spec:
         // entry axes (name, aplicacao), and the Gateway API listener
         // axis (hostname) so the composed helper stays a drop-in
         // replacement for the routed sites' prior two-line block.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
         inner.insert_string(FLEET_PROGRAMS_KEY_NAME, "hello-rio");
         inner.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, "checkout");
         inner.insert_string(GATEWAY_API_KEY_HOSTNAME, "checkout.quero.cloud");
         inner.insert_str_key(
             CILIUM_KEY_HTTP,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("not-a-str".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("not-a-str".into())]),
         );
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         for sub_field in [
             KUBE_KEY_PROTOCOL,
@@ -61984,22 +61984,22 @@ spec:
         // canonical two-hop-nested outer/inner pairs (CNP ingress
         // fromEndpoints label; HTTPRoute rules matches path-type) so
         // the sibling-composition surface stays contract-preserving.
-        let mut inner_map = serde_yaml::Mapping::new();
+        let mut inner_map = serde_norway::Mapping::new();
         inner_map.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
-        let inner_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner_map)]);
+        let inner_seq = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(inner_map)]);
 
-        let mut outer_map = serde_yaml::Mapping::new();
+        let mut outer_map = serde_norway::Mapping::new();
         outer_map.insert_str_key(CILIUM_KEY_TO_PORTS, inner_seq);
 
-        let mut spec_map = serde_yaml::Mapping::new();
+        let mut spec_map = serde_norway::Mapping::new();
         spec_map.insert_str_key(
             CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(outer_map)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(outer_map)]),
         );
 
-        let mut root_map = serde_yaml::Mapping::new();
-        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
-        let value = serde_yaml::Value::Mapping(root_map);
+        let mut root_map = serde_norway::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_map));
+        let value = serde_norway::Value::Mapping(root_map);
 
         let via_composed = kube_spec_seq_first(&value, CILIUM_KEY_INGRESS)
             .and_then(|o| kube_seq_first(o, CILIUM_KEY_TO_PORTS))
@@ -62054,11 +62054,11 @@ spec:
         // positive-path pin one altitude up on the spec-anchored axis
         // and the value-level `kube_str_reads_sub_field_scalar_str_borrowing_into_input_value`
         // pin one altitude down on the one-hop scalar-str accessor.
-        let mut path_map = serde_yaml::Mapping::new();
+        let mut path_map = serde_norway::Mapping::new();
         path_map.insert_string(GATEWAY_API_KEY_VALUE, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH);
-        let mut match_entry = serde_yaml::Mapping::new();
-        match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_map));
-        let value = serde_yaml::Value::Mapping(match_entry);
+        let mut match_entry = serde_norway::Mapping::new();
+        match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_norway::Value::Mapping(path_map));
+        let value = serde_norway::Value::Mapping(match_entry);
 
         assert_eq!(
             kube_field_str(&value, GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE),
@@ -62082,7 +62082,7 @@ spec:
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<mid>)` navigation surface — the outer `kube_field`'s
         // scalar-arm `None` folds through.
-        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        let scalar_receiver = serde_norway::Value::String("scalar".into());
         assert_eq!(
             kube_field_str(
                 &scalar_receiver,
@@ -62098,9 +62098,9 @@ spec:
 
         // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(GATEWAY_API_KEY_NAME, "other");
-        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        let missing_mid = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_field_str(&missing_mid, GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE,),
             None,
@@ -62113,9 +62113,9 @@ spec:
         // Arm 3: `<mid>` middle-hop value present but carries a YAML
         // shape with no `get(<tail>)` navigation surface (the inner
         // scalar-arm `None` folds through).
-        let mut scalar_mid = serde_yaml::Mapping::new();
+        let mut scalar_mid = serde_norway::Mapping::new();
         scalar_mid.insert_string(GATEWAY_API_KEY_PATH, "scalar-not-mapping");
-        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        let scalar_mid_value = serde_norway::Value::Mapping(scalar_mid);
         assert_eq!(
             kube_field_str(
                 &scalar_mid_value,
@@ -62133,17 +62133,17 @@ spec:
         // Pin across the representative non-string YAML shapes the
         // trailing `.as_str()` shape-gate rejects.
         for non_str in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("wrapped".into())]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("wrapped".into())]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut path_map = serde_yaml::Mapping::new();
+            let mut path_map = serde_norway::Mapping::new();
             path_map.insert_str_key(GATEWAY_API_KEY_VALUE, non_str.clone());
-            let mut match_entry = serde_yaml::Mapping::new();
-            match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_map));
-            let value = serde_yaml::Value::Mapping(match_entry);
+            let mut match_entry = serde_norway::Mapping::new();
+            match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_norway::Value::Mapping(path_map));
+            let value = serde_norway::Value::Mapping(match_entry);
             assert_eq!(
                 kube_field_str(&value, GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE),
                 None,
@@ -62175,15 +62175,15 @@ spec:
         // line composition. Structural mirror of the sibling
         // `kube_spec_seq_first_str_matches_prior_inline_two_hop_composition`
         // pin on the spec-anchored composed-family peer.
-        let mut path_map = serde_yaml::Mapping::new();
+        let mut path_map = serde_norway::Mapping::new();
         path_map.insert_string(GATEWAY_API_KEY_VALUE, "/api/cart");
-        let mut match_entry = serde_yaml::Mapping::new();
-        match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_map));
+        let mut match_entry = serde_norway::Mapping::new();
+        match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_norway::Value::Mapping(path_map));
         // Sibling non-target axes so the same fixture drives the
         // present-key + missing-key + non-string arms of the
         // equivalence.
         match_entry.insert_string(GATEWAY_API_KEY_NAME, "http");
-        let value = serde_yaml::Value::Mapping(match_entry);
+        let value = serde_norway::Value::Mapping(match_entry);
 
         for (mid, tail) in [
             (GATEWAY_API_KEY_PATH, GATEWAY_API_KEY_VALUE),
@@ -62226,14 +62226,14 @@ spec:
         // positive-path pin one arity over on the same three-hop axis
         // and the value-level `kube_u64_reads_sub_field_scalar_integer_verbatim`
         // pin one altitude down on the one-hop scalar-`u64` accessor.
-        let mut retry_map = serde_yaml::Mapping::new();
+        let mut retry_map = serde_norway::Mapping::new();
         retry_map.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(3u64.into()),
+            serde_norway::Value::Number(3u64.into()),
         );
-        let mut rule_entry = serde_yaml::Mapping::new();
-        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
-        let value = serde_yaml::Value::Mapping(rule_entry);
+        let mut rule_entry = serde_norway::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(retry_map));
+        let value = serde_norway::Value::Mapping(rule_entry);
 
         assert_eq!(
             kube_field_u64(&value, GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
@@ -62259,7 +62259,7 @@ spec:
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<mid>)` navigation surface — the outer `kube_field`'s
         // scalar-arm `None` folds through.
-        let scalar_receiver = serde_yaml::Value::Number(42u64.into());
+        let scalar_receiver = serde_norway::Value::Number(42u64.into());
         assert_eq!(
             kube_field_u64(
                 &scalar_receiver,
@@ -62275,9 +62275,9 @@ spec:
 
         // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(GATEWAY_API_KEY_NAME, "other");
-        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        let missing_mid = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_field_u64(
                 &missing_mid,
@@ -62294,9 +62294,9 @@ spec:
         // Arm 3: `<mid>` middle-hop value present but carries a YAML
         // shape with no `get(<tail>)` navigation surface (the inner
         // scalar-arm `None` folds through).
-        let mut scalar_mid = serde_yaml::Mapping::new();
+        let mut scalar_mid = serde_norway::Mapping::new();
         scalar_mid.insert_string(GATEWAY_API_KEY_RETRY, "scalar-not-mapping");
-        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        let scalar_mid_value = serde_norway::Value::Mapping(scalar_mid);
         assert_eq!(
             kube_field_u64(
                 &scalar_mid_value,
@@ -62314,17 +62314,17 @@ spec:
         // Pin across the representative non-integer YAML shapes the
         // trailing `.as_u64()` shape-gate rejects.
         for non_int in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::String("three".into()),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Number(3u64.into())]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::String("three".into()),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Number(3u64.into())]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut retry_map = serde_yaml::Mapping::new();
+            let mut retry_map = serde_norway::Mapping::new();
             retry_map.insert_str_key(GATEWAY_API_KEY_ATTEMPTS, non_int.clone());
-            let mut rule_entry = serde_yaml::Mapping::new();
-            rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
-            let value = serde_yaml::Value::Mapping(rule_entry);
+            let mut rule_entry = serde_norway::Mapping::new();
+            rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(retry_map));
+            let value = serde_norway::Value::Mapping(rule_entry);
             assert_eq!(
                 kube_field_u64(&value, GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
                 None,
@@ -62359,18 +62359,18 @@ spec:
         // composition. Structural mirror of the sibling
         // `kube_field_str_matches_prior_inline_two_line_composition`
         // pin on the composed scalar-str-family peer one arity over.
-        let mut retry_map = serde_yaml::Mapping::new();
+        let mut retry_map = serde_norway::Mapping::new();
         retry_map.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(5u64.into()),
+            serde_norway::Value::Number(5u64.into()),
         );
-        let mut rule_entry = serde_yaml::Mapping::new();
-        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
+        let mut rule_entry = serde_norway::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(retry_map));
         // Sibling non-target axes so the same fixture drives the
         // present-key + missing-key + non-integer arms of the
         // equivalence.
         rule_entry.insert_string(GATEWAY_API_KEY_NAME, "retry");
-        let value = serde_yaml::Value::Mapping(rule_entry);
+        let value = serde_norway::Value::Mapping(rule_entry);
 
         for (mid, tail) in [
             (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
@@ -62419,17 +62419,17 @@ spec:
         // and the value-level
         // `kube_bool_reads_sub_field_scalar_boolean_verbatim`
         // pin one altitude down on the one-hop scalar-`bool` accessor.
-        let mut remediation_map = serde_yaml::Mapping::new();
+        let mut remediation_map = serde_norway::Mapping::new();
         remediation_map.insert_str_key(
             FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
-            serde_yaml::Value::Bool(true),
+            serde_norway::Value::Bool(true),
         );
-        let mut upgrade_entry = serde_yaml::Mapping::new();
+        let mut upgrade_entry = serde_norway::Mapping::new();
         upgrade_entry.insert_str_key(
             FLUX_HELMRELEASE_KEY_REMEDIATION,
-            serde_yaml::Value::Mapping(remediation_map),
+            serde_norway::Value::Mapping(remediation_map),
         );
-        let value = serde_yaml::Value::Mapping(upgrade_entry);
+        let value = serde_norway::Value::Mapping(upgrade_entry);
 
         assert_eq!(
             kube_field_bool(
@@ -62462,7 +62462,7 @@ spec:
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<mid>)` navigation surface — the outer `kube_field`'s
         // scalar-arm `None` folds through.
-        let scalar_receiver = serde_yaml::Value::Bool(true);
+        let scalar_receiver = serde_norway::Value::Bool(true);
         assert_eq!(
             kube_field_bool(
                 &scalar_receiver,
@@ -62478,9 +62478,9 @@ spec:
 
         // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(GATEWAY_API_KEY_NAME, "other");
-        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        let missing_mid = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_field_bool(
                 &missing_mid,
@@ -62497,9 +62497,9 @@ spec:
         // Arm 3: `<mid>` middle-hop value present but carries a YAML
         // shape with no `get(<tail>)` navigation surface (the inner
         // scalar-arm `None` folds through).
-        let mut scalar_mid = serde_yaml::Mapping::new();
+        let mut scalar_mid = serde_norway::Mapping::new();
         scalar_mid.insert_string(FLUX_HELMRELEASE_KEY_REMEDIATION, "scalar-not-mapping");
-        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        let scalar_mid_value = serde_norway::Value::Mapping(scalar_mid);
         assert_eq!(
             kube_field_bool(
                 &scalar_mid_value,
@@ -62517,23 +62517,23 @@ spec:
         // Pin across the representative non-boolean YAML shapes the
         // trailing `.as_bool()` shape-gate rejects.
         for non_bool in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::String("true".into()),
-            serde_yaml::Value::Number(serde_yaml::Number::from(1_u64)),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Bool(true)]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::String("true".into()),
+            serde_norway::Value::Number(serde_norway::Number::from(1_u64)),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Bool(true)]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut remediation_map = serde_yaml::Mapping::new();
+            let mut remediation_map = serde_norway::Mapping::new();
             remediation_map.insert_str_key(
                 FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
                 non_bool.clone(),
             );
-            let mut upgrade_entry = serde_yaml::Mapping::new();
+            let mut upgrade_entry = serde_norway::Mapping::new();
             upgrade_entry.insert_str_key(
                 FLUX_HELMRELEASE_KEY_REMEDIATION,
-                serde_yaml::Value::Mapping(remediation_map),
+                serde_norway::Value::Mapping(remediation_map),
             );
-            let value = serde_yaml::Value::Mapping(upgrade_entry);
+            let value = serde_norway::Value::Mapping(upgrade_entry);
             assert_eq!(
                 kube_field_bool(
                     &value,
@@ -62571,21 +62571,21 @@ spec:
         // `kube_field_u64_matches_prior_inline_two_line_composition`
         // pins on the composed scalar-str-family and scalar-integer-
         // family peers one arity over.
-        let mut remediation_map = serde_yaml::Mapping::new();
+        let mut remediation_map = serde_norway::Mapping::new();
         remediation_map.insert_str_key(
             FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
-            serde_yaml::Value::Bool(true),
+            serde_norway::Value::Bool(true),
         );
-        let mut upgrade_entry = serde_yaml::Mapping::new();
+        let mut upgrade_entry = serde_norway::Mapping::new();
         upgrade_entry.insert_str_key(
             FLUX_HELMRELEASE_KEY_REMEDIATION,
-            serde_yaml::Value::Mapping(remediation_map),
+            serde_norway::Value::Mapping(remediation_map),
         );
         // Sibling non-target axes so the same fixture drives the
         // present-key + missing-key + non-boolean arms of the
         // equivalence.
         upgrade_entry.insert_string(GATEWAY_API_KEY_NAME, "upgrade");
-        let value = serde_yaml::Value::Mapping(upgrade_entry);
+        let value = serde_norway::Value::Mapping(upgrade_entry);
 
         for (mid, tail) in [
             (
@@ -62647,16 +62647,16 @@ spec:
         // and the value-level
         // `kube_seq_reads_sub_field_sequence_borrowing_into_input_value`
         // pin one altitude down on the one-hop sequence accessor.
-        let mut http_rule = serde_yaml::Mapping::new();
+        let mut http_rule = serde_norway::Mapping::new();
         http_rule.insert_string(CILIUM_KEY_PATH, "/products/:id");
-        let http_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]);
+        let http_seq = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(http_rule)]);
 
-        let mut rules_body = serde_yaml::Mapping::new();
+        let mut rules_body = serde_norway::Mapping::new();
         rules_body.insert_str_key(CILIUM_KEY_HTTP, http_seq);
 
-        let mut to_ports_entry = serde_yaml::Mapping::new();
-        to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules_body));
-        let value = serde_yaml::Value::Mapping(to_ports_entry);
+        let mut to_ports_entry = serde_norway::Mapping::new();
+        to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Mapping(rules_body));
+        let value = serde_norway::Value::Mapping(to_ports_entry);
 
         let http_rules = kube_field_seq(&value, KUBE_KEY_RULES, CILIUM_KEY_HTTP)
             .expect("kube_field_seq must read the two-hop `rules.http` sequence verbatim");
@@ -62697,7 +62697,7 @@ spec:
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<mid>)` navigation surface — the outer `kube_field`'s
         // scalar-arm `None` folds through.
-        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        let scalar_receiver = serde_norway::Value::String("scalar".into());
         assert_eq!(
             kube_field_seq(&scalar_receiver, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
             None,
@@ -62709,9 +62709,9 @@ spec:
 
         // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(KUBE_KEY_NAME, "other");
-        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        let missing_mid = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_field_seq(&missing_mid, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
             None,
@@ -62724,9 +62724,9 @@ spec:
         // Arm 3: `<mid>` middle-hop value present but carries a YAML
         // shape with no `get(<tail>)` navigation surface (the inner
         // scalar-arm `None` folds through).
-        let mut scalar_mid = serde_yaml::Mapping::new();
+        let mut scalar_mid = serde_norway::Mapping::new();
         scalar_mid.insert_string(KUBE_KEY_RULES, "scalar-not-mapping");
-        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        let scalar_mid_value = serde_norway::Value::Mapping(scalar_mid);
         assert_eq!(
             kube_field_seq(&scalar_mid_value, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
             None,
@@ -62740,17 +62740,17 @@ spec:
         // the representative non-sequence YAML shapes the trailing
         // `.as_sequence()` shape-gate rejects.
         for non_seq in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::String("scalar-not-sequence".into()),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::String("scalar-not-sequence".into()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut rules_body = serde_yaml::Mapping::new();
+            let mut rules_body = serde_norway::Mapping::new();
             rules_body.insert_str_key(CILIUM_KEY_HTTP, non_seq.clone());
-            let mut to_ports_entry = serde_yaml::Mapping::new();
-            to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules_body));
-            let value = serde_yaml::Value::Mapping(to_ports_entry);
+            let mut to_ports_entry = serde_norway::Mapping::new();
+            to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Mapping(rules_body));
+            let value = serde_norway::Value::Mapping(to_ports_entry);
             assert_eq!(
                 kube_field_seq(&value, KUBE_KEY_RULES, CILIUM_KEY_HTTP),
                 None,
@@ -62785,18 +62785,18 @@ spec:
         // `kube_field_bool_matches_prior_inline_two_line_composition`,
         // and `kube_field_field_matches_prior_inline_two_line_composition`
         // pins on the composed shape-gated peers one arity over.
-        let mut http_rule = serde_yaml::Mapping::new();
+        let mut http_rule = serde_norway::Mapping::new();
         http_rule.insert_string(CILIUM_KEY_PATH, "/search");
-        let http_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]);
-        let mut rules_body = serde_yaml::Mapping::new();
+        let http_seq = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(http_rule)]);
+        let mut rules_body = serde_norway::Mapping::new();
         rules_body.insert_str_key(CILIUM_KEY_HTTP, http_seq);
-        let mut to_ports_entry = serde_yaml::Mapping::new();
-        to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules_body));
+        let mut to_ports_entry = serde_norway::Mapping::new();
+        to_ports_entry.insert_str_key(KUBE_KEY_RULES, serde_norway::Value::Mapping(rules_body));
         // Sibling non-target axes so the same fixture drives the
         // present-key + missing-key + middle-hop-non-mapping arms of
         // the equivalence.
         to_ports_entry.insert_string(KUBE_KEY_NAME, "rules");
-        let value = serde_yaml::Value::Mapping(to_ports_entry);
+        let value = serde_norway::Value::Mapping(to_ports_entry);
 
         for (mid, tail) in [
             (KUBE_KEY_RULES, CILIUM_KEY_HTTP),
@@ -62847,14 +62847,14 @@ spec:
         // positive-path pins one arity over on the same three-hop axis
         // and the value-level `kube_field` (one-hop pass-through) pin
         // one altitude down on the one-hop raw-`Value` accessor.
-        let mut retry_map = serde_yaml::Mapping::new();
+        let mut retry_map = serde_norway::Mapping::new();
         retry_map.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(3u64.into()),
+            serde_norway::Value::Number(3u64.into()),
         );
-        let mut rule_entry = serde_yaml::Mapping::new();
-        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
-        let value = serde_yaml::Value::Mapping(rule_entry);
+        let mut rule_entry = serde_norway::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(retry_map));
+        let value = serde_norway::Value::Mapping(rule_entry);
 
         let attempts = kube_field_field(&value, GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS)
             .expect("kube_field_field must read the two-hop `retry.attempts` raw Value verbatim");
@@ -62885,7 +62885,7 @@ spec:
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<mid>)` navigation surface — the outer `kube_field`'s
         // scalar-arm `None` folds through.
-        let scalar_receiver = serde_yaml::Value::Number(42u64.into());
+        let scalar_receiver = serde_norway::Value::Number(42u64.into());
         assert_eq!(
             kube_field_field(
                 &scalar_receiver,
@@ -62901,9 +62901,9 @@ spec:
 
         // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(GATEWAY_API_KEY_NAME, "other");
-        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        let missing_mid = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_field_field(
                 &missing_mid,
@@ -62920,9 +62920,9 @@ spec:
         // Arm 3: `<mid>` middle-hop value present but carries a YAML
         // shape with no `get(<tail>)` navigation surface (the inner
         // scalar-arm `None` folds through).
-        let mut scalar_mid = serde_yaml::Mapping::new();
+        let mut scalar_mid = serde_norway::Mapping::new();
         scalar_mid.insert_string(GATEWAY_API_KEY_RETRY, "scalar-not-mapping");
-        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        let scalar_mid_value = serde_norway::Value::Mapping(scalar_mid);
         assert_eq!(
             kube_field_field(
                 &scalar_mid_value,
@@ -62962,18 +62962,18 @@ spec:
         // `kube_field_u64_matches_prior_inline_two_line_composition`,
         // and `kube_field_bool_matches_prior_inline_two_line_composition`
         // pins on the composed shape-gated peers one arity over.
-        let mut retry_map = serde_yaml::Mapping::new();
+        let mut retry_map = serde_norway::Mapping::new();
         retry_map.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(5u64.into()),
+            serde_norway::Value::Number(5u64.into()),
         );
-        let mut rule_entry = serde_yaml::Mapping::new();
-        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
+        let mut rule_entry = serde_norway::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(retry_map));
         // Sibling non-target axes so the same fixture drives the
         // present-key + missing-key + middle-hop-non-mapping arms of
         // the equivalence.
         rule_entry.insert_string(GATEWAY_API_KEY_NAME, "retry");
-        let value = serde_yaml::Value::Mapping(rule_entry);
+        let value = serde_norway::Value::Mapping(rule_entry);
 
         for (mid, tail) in [
             (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
@@ -63029,15 +63029,15 @@ spec:
         // and the value-level
         // `kube_map`-anchored composition-symmetric pin one altitude
         // down on the one-hop sub-mapping accessor.
-        let mut labels_body = serde_yaml::Mapping::new();
+        let mut labels_body = serde_norway::Mapping::new();
         labels_body.insert_string(LABEL_APLICACAO, "shop");
 
-        let mut metadata_body = serde_yaml::Mapping::new();
-        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
+        let mut metadata_body = serde_norway::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels_body));
 
-        let mut root_map = serde_yaml::Mapping::new();
-        root_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
-        let value = serde_yaml::Value::Mapping(root_map);
+        let mut root_map = serde_norway::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
+        let value = serde_norway::Value::Mapping(root_map);
 
         let labels = kube_field_map(&value, KUBE_KEY_METADATA, KUBE_KEY_LABELS)
             .expect("kube_field_map must read the two-hop `metadata.labels` sub-mapping verbatim");
@@ -63080,7 +63080,7 @@ spec:
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<mid>)` navigation surface — the outer `kube_field`'s
         // scalar-arm `None` folds through.
-        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        let scalar_receiver = serde_norway::Value::String("scalar".into());
         assert_eq!(
             kube_field_map(&scalar_receiver, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
             None,
@@ -63092,9 +63092,9 @@ spec:
 
         // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(KUBE_KEY_NAME, "other");
-        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        let missing_mid = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_field_map(&missing_mid, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
             None,
@@ -63107,9 +63107,9 @@ spec:
         // Arm 3: `<mid>` middle-hop value present but carries a YAML
         // shape with no `get(<tail>)` navigation surface (the inner
         // scalar-arm `None` folds through).
-        let mut scalar_mid = serde_yaml::Mapping::new();
+        let mut scalar_mid = serde_norway::Mapping::new();
         scalar_mid.insert_string(KUBE_KEY_METADATA, "scalar-not-mapping");
-        let scalar_mid_value = serde_yaml::Value::Mapping(scalar_mid);
+        let scalar_mid_value = serde_norway::Value::Mapping(scalar_mid);
         assert_eq!(
             kube_field_map(&scalar_mid_value, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
             None,
@@ -63123,17 +63123,17 @@ spec:
         // the representative non-mapping YAML shapes the trailing
         // `.as_mapping()` shape-gate rejects.
         for non_map in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::String("scalar-not-mapping".into()),
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::String("scalar-not-mapping".into()),
+            serde_norway::Value::Sequence(vec![]),
         ] {
-            let mut metadata_body = serde_yaml::Mapping::new();
+            let mut metadata_body = serde_norway::Mapping::new();
             metadata_body.insert_str_key(KUBE_KEY_LABELS, non_map.clone());
-            let mut root_map = serde_yaml::Mapping::new();
-            root_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
-            let value = serde_yaml::Value::Mapping(root_map);
+            let mut root_map = serde_norway::Mapping::new();
+            root_map.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
+            let value = serde_norway::Value::Mapping(root_map);
             assert_eq!(
                 kube_field_map(&value, KUBE_KEY_METADATA, KUBE_KEY_LABELS),
                 None,
@@ -63170,17 +63170,17 @@ spec:
         // `kube_field_seq_matches_prior_inline_two_line_composition`,
         // and `kube_field_field_matches_prior_inline_two_line_composition`
         // pins on the composed shape-gated peers one arity over.
-        let mut labels_body = serde_yaml::Mapping::new();
+        let mut labels_body = serde_norway::Mapping::new();
         labels_body.insert_string(LABEL_APLICACAO, "shop");
-        let mut metadata_body = serde_yaml::Mapping::new();
-        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels_body));
-        let mut root_map = serde_yaml::Mapping::new();
-        root_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_body));
+        let mut metadata_body = serde_norway::Mapping::new();
+        metadata_body.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Mapping(labels_body));
+        let mut root_map = serde_norway::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata_body));
         // Sibling non-target axes so the same fixture drives the
         // present-key + missing-key + middle-hop-non-mapping arms of
         // the equivalence.
         root_map.insert_string(KUBE_KEY_NAME, "labels");
-        let value = serde_yaml::Value::Mapping(root_map);
+        let value = serde_norway::Value::Mapping(root_map);
 
         for (mid, tail) in [
             (KUBE_KEY_METADATA, KUBE_KEY_LABELS),
@@ -63225,18 +63225,18 @@ spec:
         // sweeps every representative shape the K8s apiserver `OpenAPI`
         // schema admits at the tail altitude.
         for tail in [
-            serde_yaml::Value::String("cart".into()),
-            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Sequence(vec![]),
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::String("cart".into()),
+            serde_norway::Value::Number(serde_norway::Number::from(8080u64)),
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Null,
+            serde_norway::Value::Sequence(vec![]),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         ] {
-            let mut mid_body = serde_yaml::Mapping::new();
+            let mut mid_body = serde_norway::Mapping::new();
             mid_body.insert_str_key(KUBE_KEY_NAME, tail.clone());
-            let mut root = serde_yaml::Mapping::new();
-            root.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(mid_body));
-            let value = serde_yaml::Value::Mapping(root);
+            let mut root = serde_norway::Mapping::new();
+            root.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(mid_body));
+            let value = serde_norway::Value::Mapping(root);
             assert!(
                 kube_field_has(&value, KUBE_KEY_SPEC, KUBE_KEY_NAME),
                 "kube_field_has must report present on the composed two-\
@@ -63273,7 +63273,7 @@ spec:
         // folds through.
         assert!(
             !kube_field_has(
-                &serde_yaml::Value::String("scalar".into()),
+                &serde_norway::Value::String("scalar".into()),
                 KUBE_KEY_SPEC,
                 KUBE_KEY_NAME,
             ),
@@ -63285,9 +63285,9 @@ spec:
 
         // Arm 2: `<mid>` middle-hop axis-key absent from the receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_string(KUBE_KEY_NAME, "other");
-        let missing_mid = serde_yaml::Value::Mapping(only_other);
+        let missing_mid = serde_norway::Value::Mapping(only_other);
         assert!(
             !kube_field_has(&missing_mid, KUBE_KEY_SPEC, KUBE_KEY_NAME),
             "kube_field_has must short-circuit to false when the requested \
@@ -63300,14 +63300,14 @@ spec:
         // `None` folds through). Pin across the representative non-mapping
         // YAML shapes the middle-hop `.get` cannot navigate.
         for scalar_mid in [
-            serde_yaml::Value::Null,
-            serde_yaml::Value::Bool(true),
-            serde_yaml::Value::Number(serde_yaml::Number::from(42_u64)),
-            serde_yaml::Value::String("scalar-not-mapping".into()),
+            serde_norway::Value::Null,
+            serde_norway::Value::Bool(true),
+            serde_norway::Value::Number(serde_norway::Number::from(42_u64)),
+            serde_norway::Value::String("scalar-not-mapping".into()),
         ] {
-            let mut root = serde_yaml::Mapping::new();
+            let mut root = serde_norway::Mapping::new();
             root.insert_str_key(KUBE_KEY_SPEC, scalar_mid.clone());
-            let value = serde_yaml::Value::Mapping(root);
+            let value = serde_norway::Value::Mapping(root);
             assert!(
                 !kube_field_has(&value, KUBE_KEY_SPEC, KUBE_KEY_NAME),
                 "kube_field_has must short-circuit to false when the \
@@ -63322,7 +63322,7 @@ spec:
     #[test]
     fn kube_field_has_reports_present_on_explicit_null_tail_matching_kube_has_semantic() {
         // Semantic pin: the shape-agnostic existence-probe reports present
-        // for an explicitly-null `<tail>` value — [`serde_yaml::Mapping::get`]
+        // for an explicitly-null `<tail>` value — [`serde_norway::Mapping::get`]
         // returns `Some(&Value::Null)` for an explicitly-null key, and this
         // predicate carries that semantic through to `true` bit-for-bit,
         // matching the sibling value-level [`kube_has`] posture one
@@ -63331,11 +63331,11 @@ spec:
         // treats null-as-absent (would break bit-for-bit equivalence with
         // the raw `.get(<mid>).and_then(|v| v.get(<tail>)).is_some()`
         // chain).
-        let mut mid_body = serde_yaml::Mapping::new();
-        mid_body.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::Null);
-        let mut root = serde_yaml::Mapping::new();
-        root.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(mid_body));
-        let value = serde_yaml::Value::Mapping(root);
+        let mut mid_body = serde_norway::Mapping::new();
+        mid_body.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::Null);
+        let mut root = serde_norway::Mapping::new();
+        root.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(mid_body));
+        let value = serde_norway::Value::Mapping(root);
         assert!(
             kube_field_has(&value, KUBE_KEY_SPEC, KUBE_KEY_NAME),
             "kube_field_has must report present for an explicit-null tail \
@@ -63373,18 +63373,18 @@ spec:
         // and `kube_field_map_matches_prior_inline_two_line_composition`
         // pins on the composed shape-gated / raw-tail peers one arity
         // over.
-        let mut retry_map = serde_yaml::Mapping::new();
+        let mut retry_map = serde_norway::Mapping::new();
         retry_map.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(5u64.into()),
+            serde_norway::Value::Number(5u64.into()),
         );
-        let mut rule_entry = serde_yaml::Mapping::new();
-        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
+        let mut rule_entry = serde_norway::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(retry_map));
         // Sibling non-target axes so the same fixture drives the
         // present-key + missing-key + middle-hop-non-mapping arms of the
         // equivalence.
         rule_entry.insert_string(GATEWAY_API_KEY_NAME, "retry");
-        let value = serde_yaml::Value::Mapping(rule_entry);
+        let value = serde_norway::Value::Mapping(rule_entry);
 
         for (mid, tail) in [
             // Present-key path: `retry.attempts` present.
@@ -63429,14 +63429,14 @@ spec:
         // consumer build time. Structural mirror of the sibling
         // `kube_has_recomposes_on_kube_field_at_the_existence_probe_arity`
         // recomposition pin one altitude down.
-        let mut retry_map = serde_yaml::Mapping::new();
+        let mut retry_map = serde_norway::Mapping::new();
         retry_map.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(3u64.into()),
+            serde_norway::Value::Number(3u64.into()),
         );
-        let mut rule_entry = serde_yaml::Mapping::new();
-        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(retry_map));
-        let value = serde_yaml::Value::Mapping(rule_entry);
+        let mut rule_entry = serde_norway::Mapping::new();
+        rule_entry.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(retry_map));
+        let value = serde_norway::Value::Mapping(rule_entry);
         for (mid, tail) in [
             (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_ATTEMPTS),
             (GATEWAY_API_KEY_RETRY, GATEWAY_API_KEY_HOSTNAME),
@@ -63466,13 +63466,13 @@ spec:
         // of the sibling scalar-str [`kube_str`] value-level accessor —
         // this exercises the same value-level two-hop navigation but
         // with an unsigned-integer shape-gate instead of the string one.
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::Number(8080u64.into()));
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_PORT, serde_norway::Value::Number(8080u64.into()));
         inner.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(3u64.into()),
+            serde_norway::Value::Number(3u64.into()),
         );
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         assert_eq!(
             kube_u64(&value, KUBE_KEY_PORT),
@@ -63503,7 +63503,7 @@ spec:
 
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<field>)` navigation surface.
-        let scalar_receiver = serde_yaml::Value::Number(42u64.into());
+        let scalar_receiver = serde_norway::Value::Number(42u64.into());
         assert_eq!(
             kube_u64(&scalar_receiver, KUBE_KEY_PORT),
             None,
@@ -63515,12 +63515,12 @@ spec:
 
         // Arm 2: requested `<field>` axis-key absent from receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(3u64.into()),
+            serde_norway::Value::Number(3u64.into()),
         );
-        let missing_field = serde_yaml::Value::Mapping(only_other);
+        let missing_field = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_u64(&missing_field, KUBE_KEY_PORT),
             None,
@@ -63531,9 +63531,9 @@ spec:
 
         // Arm 3: `<field>` present but non-integer (a string, the
         // wrong-arity shape the sibling [`kube_str`] axis owns).
-        let mut non_int = serde_yaml::Mapping::new();
+        let mut non_int = serde_norway::Mapping::new();
         non_int.insert_string(KUBE_KEY_PORT, "eight-thousand");
-        let non_int_field = serde_yaml::Value::Mapping(non_int);
+        let non_int_field = serde_norway::Value::Mapping(non_int);
         assert_eq!(
             kube_u64(&non_int_field, KUBE_KEY_PORT),
             None,
@@ -63560,18 +63560,18 @@ spec:
         // and the M2 `:limits :fuel` per-Servico cap axis
         // (M2_LIMITS_KEY_FUEL) so the composed helper stays a drop-in
         // replacement for the routed sites' prior two-line block.
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::Number(8080u64.into()));
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_PORT, serde_norway::Value::Number(8080u64.into()));
         inner.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(5u64.into()),
+            serde_norway::Value::Number(5u64.into()),
         );
         inner.insert_str_key(
             M2_LIMITS_KEY_FUEL,
-            serde_yaml::Value::Number(1_000_000u64.into()),
+            serde_norway::Value::Number(1_000_000u64.into()),
         );
         inner.insert_string(GATEWAY_API_KEY_HOSTNAME, "not-a-number");
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         for sub_field in [
             KUBE_KEY_PORT,
@@ -63580,7 +63580,7 @@ spec:
             GATEWAY_API_KEY_HOSTNAME,
         ] {
             let via_helper = kube_u64(&value, sub_field);
-            let via_inline = value.get(sub_field).and_then(serde_yaml::Value::as_u64);
+            let via_inline = value.get(sub_field).and_then(serde_norway::Value::as_u64);
             assert_eq!(
                 via_helper, via_inline,
                 "kube_u64(v, {sub_field:?}) must byte-equal the prior \
@@ -63606,23 +63606,23 @@ spec:
         // the sibling-composition surface stays contract-preserving —
         // parallels the sibling [`kube_str`] composition pin one arity
         // over on the scalar-str shape-gate.
-        let mut backend_map = serde_yaml::Mapping::new();
-        backend_map.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::Number(8080u64.into()));
+        let mut backend_map = serde_norway::Mapping::new();
+        backend_map.insert_str_key(KUBE_KEY_PORT, serde_norway::Value::Number(8080u64.into()));
         let backend_seq =
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(backend_map)]);
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(backend_map)]);
 
-        let mut rule_map = serde_yaml::Mapping::new();
+        let mut rule_map = serde_norway::Mapping::new();
         rule_map.insert_str_key(GATEWAY_API_KEY_BACKEND_REFS, backend_seq);
 
-        let mut spec_map = serde_yaml::Mapping::new();
+        let mut spec_map = serde_norway::Mapping::new();
         spec_map.insert_str_key(
             KUBE_KEY_RULES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(rule_map)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(rule_map)]),
         );
 
-        let mut root_map = serde_yaml::Mapping::new();
-        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
-        let value = serde_yaml::Value::Mapping(root_map);
+        let mut root_map = serde_norway::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_map));
+        let value = serde_norway::Value::Mapping(root_map);
 
         let via_composed = kube_spec_seq_first(&value, KUBE_KEY_RULES)
             .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_BACKEND_REFS))
@@ -63637,7 +63637,7 @@ spec:
             .and_then(|v| v.as_sequence())
             .and_then(|s| s.first())
             .and_then(|b| b.get(KUBE_KEY_PORT))
-            .and_then(serde_yaml::Value::as_u64);
+            .and_then(serde_norway::Value::as_u64);
         assert_eq!(
             via_composed, via_inline,
             "kube_spec_seq_first(v, RULES) + kube_seq_first(r, BACKEND_REFS) \
@@ -63670,24 +63670,24 @@ spec:
         // same value-level two-hop navigation but with a sub-mapping
         // shape-gate closing the quartet across the four principal K8s
         // apiserver OpenAPI schema shape arities.
-        let mut path_body = serde_yaml::Mapping::new();
+        let mut path_body = serde_norway::Mapping::new();
         path_body.insert_str_key(
             KUBE_KEY_TYPE,
-            serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
+            serde_norway::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
         );
         path_body.insert_string(GATEWAY_API_KEY_VALUE, "/hello");
-        let mut auth_body = serde_yaml::Mapping::new();
+        let mut auth_body = serde_norway::Mapping::new();
         auth_body.insert_str_key(
             CILIUM_KEY_MODE,
-            serde_yaml::Value::String(CILIUM_AUTH_MODE_REQUIRED.into()),
+            serde_norway::Value::String(CILIUM_AUTH_MODE_REQUIRED.into()),
         );
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_body));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(GATEWAY_API_KEY_PATH, serde_norway::Value::Mapping(path_body));
         m.insert_str_key(
             CILIUM_KEY_AUTHENTICATION,
-            serde_yaml::Value::Mapping(auth_body),
+            serde_norway::Value::Mapping(auth_body),
         );
-        let value = serde_yaml::Value::Mapping(m);
+        let value = serde_norway::Value::Mapping(m);
 
         let path = kube_map(&value, GATEWAY_API_KEY_PATH)
             .expect("kube_map must return the per-HTTPRouteMatch path sub-mapping");
@@ -63722,7 +63722,7 @@ spec:
 
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<field>)` navigation surface.
-        let scalar_receiver = serde_yaml::Value::String("scalar".into());
+        let scalar_receiver = serde_norway::Value::String("scalar".into());
         assert_eq!(
             kube_map(&scalar_receiver, GATEWAY_API_KEY_PATH),
             None,
@@ -63734,12 +63734,12 @@ spec:
 
         // Arm 2: requested `<field>` axis-key absent from receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_str_key(
             CILIUM_KEY_AUTHENTICATION,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let missing_field = serde_yaml::Value::Mapping(only_other);
+        let missing_field = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_map(&missing_field, GATEWAY_API_KEY_PATH),
             None,
@@ -63750,9 +63750,9 @@ spec:
 
         // Arm 3: `<field>` present but non-mapping (a scalar-str, the
         // wrong-arity shape the sibling [`kube_str`] axis owns).
-        let mut non_map = serde_yaml::Mapping::new();
+        let mut non_map = serde_norway::Mapping::new();
         non_map.insert_string(GATEWAY_API_KEY_PATH, "PathPrefix");
-        let non_map_field = serde_yaml::Value::Mapping(non_map);
+        let non_map_field = serde_norway::Value::Mapping(non_map);
         assert_eq!(
             kube_map(&non_map_field, GATEWAY_API_KEY_PATH),
             None,
@@ -63775,12 +63775,12 @@ spec:
         // reading, distinct from "no such field" — the load-bearing
         // distinction that lets the tail-continuation caller
         // distinguish the two at the cost of one arm's fold-through.
-        let mut m = serde_yaml::Mapping::new();
+        let mut m = serde_norway::Mapping::new();
         m.insert_str_key(
             GATEWAY_API_KEY_PATH,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let empty_map_value = serde_yaml::Value::Mapping(m);
+        let empty_map_value = serde_norway::Value::Mapping(m);
 
         let sub = kube_map(&empty_map_value, GATEWAY_API_KEY_PATH);
         assert!(
@@ -63815,21 +63815,21 @@ spec:
         // helm-values wrap (`<library>`) so the composed helper stays
         // a drop-in replacement for the routed sites' prior two-line
         // block.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             GATEWAY_API_KEY_TIMEOUTS,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         inner.insert_str_key(
             GATEWAY_API_KEY_RETRY,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         inner.insert_str_key(
             CILIUM_KEY_AUTHENTICATION,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
         inner.insert_string(DEFAULT_LIBRARY_NAME, "scalar-not-a-mapping");
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         for sub_field in [
             GATEWAY_API_KEY_TIMEOUTS,
@@ -63838,7 +63838,7 @@ spec:
             DEFAULT_LIBRARY_NAME,
         ] {
             let via_helper = kube_map(&value, sub_field);
-            let via_inline = value.get(sub_field).and_then(serde_yaml::Value::as_mapping);
+            let via_inline = value.get(sub_field).and_then(serde_norway::Value::as_mapping);
             assert_eq!(
                 via_helper, via_inline,
                 "kube_map(v, {sub_field:?}) must byte-equal the prior \
@@ -63863,28 +63863,28 @@ spec:
         // the sibling-composition surface stays contract-preserving —
         // parallels the sibling [`kube_u64`] / [`kube_str`] composition
         // pins one arity over on the scalar shape-gates.
-        let mut path_body = serde_yaml::Mapping::new();
+        let mut path_body = serde_norway::Mapping::new();
         path_body.insert_str_key(
             KUBE_KEY_TYPE,
-            serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
+            serde_norway::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
         );
 
-        let mut match_map = serde_yaml::Mapping::new();
-        match_map.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_body));
-        let match_seq = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(match_map)]);
+        let mut match_map = serde_norway::Mapping::new();
+        match_map.insert_str_key(GATEWAY_API_KEY_PATH, serde_norway::Value::Mapping(path_body));
+        let match_seq = serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(match_map)]);
 
-        let mut rule_map = serde_yaml::Mapping::new();
+        let mut rule_map = serde_norway::Mapping::new();
         rule_map.insert_str_key(GATEWAY_API_KEY_MATCHES, match_seq);
 
-        let mut spec_map = serde_yaml::Mapping::new();
+        let mut spec_map = serde_norway::Mapping::new();
         spec_map.insert_str_key(
             KUBE_KEY_RULES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(rule_map)]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::Mapping(rule_map)]),
         );
 
-        let mut root_map = serde_yaml::Mapping::new();
-        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
-        let value = serde_yaml::Value::Mapping(root_map);
+        let mut root_map = serde_norway::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_map));
+        let value = serde_norway::Value::Mapping(root_map);
 
         let via_composed = kube_spec_seq_first(&value, KUBE_KEY_RULES)
             .and_then(|r| kube_seq_first(r, GATEWAY_API_KEY_MATCHES))
@@ -63899,7 +63899,7 @@ spec:
             .and_then(|v| v.as_sequence())
             .and_then(|s| s.first())
             .and_then(|m| m.get(GATEWAY_API_KEY_PATH))
-            .and_then(serde_yaml::Value::as_mapping);
+            .and_then(serde_norway::Value::as_mapping);
         assert_eq!(
             via_composed, via_inline,
             "kube_spec_seq_first(v, RULES) + kube_seq_first(r, MATCHES) \
@@ -63939,16 +63939,16 @@ spec:
         // this exercises the same value-level two-hop navigation but
         // with a boolean shape-gate closing the quintet across the
         // five principal K8s apiserver OpenAPI schema shape arities.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
-            serde_yaml::Value::Bool(true),
+            serde_norway::Value::Bool(true),
         );
         inner.insert_str_key(
             FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Bool(false),
         );
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         assert_eq!(
             kube_bool(&value, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
@@ -63986,7 +63986,7 @@ spec:
 
         // Arm 1: receiver carries a scalar YAML type with no
         // `get(<field>)` navigation surface.
-        let scalar_receiver = serde_yaml::Value::Bool(true);
+        let scalar_receiver = serde_norway::Value::Bool(true);
         assert_eq!(
             kube_bool(&scalar_receiver, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
             None,
@@ -63998,12 +63998,12 @@ spec:
 
         // Arm 2: requested `<field>` axis-key absent from receiver's
         // mapping.
-        let mut only_other = serde_yaml::Mapping::new();
+        let mut only_other = serde_norway::Mapping::new();
         only_other.insert_str_key(
             FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
-            serde_yaml::Value::Bool(true),
+            serde_norway::Value::Bool(true),
         );
-        let missing_field = serde_yaml::Value::Mapping(only_other);
+        let missing_field = serde_norway::Value::Mapping(only_other);
         assert_eq!(
             kube_bool(&missing_field, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
             None,
@@ -64014,12 +64014,12 @@ spec:
 
         // Arm 3: `<field>` present but non-boolean (a scalar-integer,
         // the wrong-arity shape the sibling [`kube_u64`] axis owns).
-        let mut non_bool = serde_yaml::Mapping::new();
+        let mut non_bool = serde_norway::Mapping::new();
         non_bool.insert_str_key(
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
-            serde_yaml::Value::Number(1u64.into()),
+            serde_norway::Value::Number(1u64.into()),
         );
-        let non_bool_field = serde_yaml::Value::Mapping(non_bool);
+        let non_bool_field = serde_norway::Value::Mapping(non_bool);
         assert_eq!(
             kube_bool(&non_bool_field, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE),
             None,
@@ -64052,18 +64052,18 @@ spec:
         // peer's inner axis-key) so the composed helper stays a drop-
         // in replacement for every current + future routed site's
         // prior two-line block.
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
-            serde_yaml::Value::Bool(true),
+            serde_norway::Value::Bool(true),
         );
         inner.insert_str_key(
             FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
-            serde_yaml::Value::Bool(false),
+            serde_norway::Value::Bool(false),
         );
-        inner.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        inner.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(true));
         inner.insert_string(GATEWAY_API_KEY_HOSTNAME, "not-a-bool");
-        let value = serde_yaml::Value::Mapping(inner);
+        let value = serde_norway::Value::Mapping(inner);
 
         for sub_field in [
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
@@ -64072,7 +64072,7 @@ spec:
             GATEWAY_API_KEY_HOSTNAME,
         ] {
             let via_helper = kube_bool(&value, sub_field);
-            let via_inline = value.get(sub_field).and_then(serde_yaml::Value::as_bool);
+            let via_inline = value.get(sub_field).and_then(serde_norway::Value::as_bool);
             assert_eq!(
                 via_helper, via_inline,
                 "kube_bool(v, {sub_field:?}) must byte-equal the \
@@ -64104,21 +64104,21 @@ spec:
         // `_composes_naturally_below_kube_seq_first` pins that walk
         // through a first-entry sequence prelude the routed boolean
         // sites never traverse).
-        let mut install_map = serde_yaml::Mapping::new();
+        let mut install_map = serde_norway::Mapping::new();
         install_map.insert_str_key(
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
-            serde_yaml::Value::Bool(true),
+            serde_norway::Value::Bool(true),
         );
 
-        let mut spec_map = serde_yaml::Mapping::new();
+        let mut spec_map = serde_norway::Mapping::new();
         spec_map.insert_str_key(
             FLUX_HELMRELEASE_KEY_INSTALL,
-            serde_yaml::Value::Mapping(install_map),
+            serde_norway::Value::Mapping(install_map),
         );
 
-        let mut root_map = serde_yaml::Mapping::new();
-        root_map.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec_map));
-        let value = serde_yaml::Value::Mapping(root_map);
+        let mut root_map = serde_norway::Mapping::new();
+        root_map.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec_map));
+        let value = serde_norway::Value::Mapping(root_map);
 
         let via_composed = kube_spec_field(&value, FLUX_HELMRELEASE_KEY_INSTALL)
             .and_then(|i| kube_bool(i, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE));
@@ -64127,7 +64127,7 @@ spec:
             .and_then(|s| s.as_mapping())
             .and_then(|m| m.get(FLUX_HELMRELEASE_KEY_INSTALL))
             .and_then(|i| i.get(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE))
-            .and_then(serde_yaml::Value::as_bool);
+            .and_then(serde_norway::Value::as_bool);
         assert_eq!(
             via_composed, via_inline,
             "kube_spec_field(v, INSTALL) + kube_bool(i, \
@@ -64152,9 +64152,9 @@ spec:
         // Receiver-arm closure pin: the value-level quintet
         // ([`kube_str`], [`kube_u64`], [`kube_bool`], [`kube_seq`],
         // [`kube_map`]) now accepts either receiver-arm the
-        // [`KubeReceiver`] sealed trait admits — [`serde_yaml::Value`]
+        // [`KubeReceiver`] sealed trait admits — [`serde_norway::Value`]
         // (the pre-existing arm the ~103 routed callsites already
-        // reach through) and [`serde_yaml::Mapping`] (the new arm the
+        // reach through) and [`serde_norway::Mapping`] (the new arm the
         // 7 routed test-side receiver-`&Mapping` callsites in
         // [`caixa-mesh`] fold onto after this lift). Before the trait
         // landed the 7 sites re-inlined the two-line
@@ -64164,32 +64164,32 @@ spec:
         // `&Mapping` returned from
         // [`kube_map`] / [`kube_metadata`] / [`kube_spec`] /
         // [`kube_match_labels`]. This pin exercises each of the five
-        // arities on a fresh `serde_yaml::Mapping` receiver so a
+        // arities on a fresh `serde_norway::Mapping` receiver so a
         // future refactor that breaks the [`KubeReceiver`] impl for
-        // [`serde_yaml::Mapping`] (or accidentally reverts the
+        // [`serde_norway::Mapping`] (or accidentally reverts the
         // quintet's signature to the concrete `&Value` receiver-arm)
         // surfaces here.
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut metadata = serde_norway::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
 
-        let mut receiver = serde_yaml::Mapping::new();
+        let mut receiver = serde_norway::Mapping::new();
         receiver.insert_str_key(
             M3_PLACEMENT_KEY_ESTRATEGIA,
-            serde_yaml::Value::String(M3_PLACEMENT_ESTRATEGIA_REPLICATED.into()),
+            serde_norway::Value::String(M3_PLACEMENT_ESTRATEGIA_REPLICATED.into()),
         );
         receiver.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(serde_yaml::Number::from(3u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(3u64)),
         );
-        receiver.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        receiver.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(true));
         receiver.insert_str_key(
             M3_PLACEMENT_KEY_CLUSTERS,
-            serde_yaml::Value::Sequence(vec![
-                serde_yaml::Value::String("rio".into()),
-                serde_yaml::Value::String("mar".into()),
+            serde_norway::Value::Sequence(vec![
+                serde_norway::Value::String("rio".into()),
+                serde_norway::Value::String("mar".into()),
             ]),
         );
-        receiver.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        receiver.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(metadata));
 
         assert_eq!(
             kube_str(&receiver, M3_PLACEMENT_KEY_ESTRATEGIA),
@@ -64244,7 +64244,7 @@ spec:
         // content, dispatching each of the five value-level primitives
         // through the [`KubeReceiver`] `&Mapping` arm must return the
         // identical `Option<_>` verdict the pre-existing `&Value` arm
-        // returns — the [`serde_yaml::Value::Mapping`] wrapper the
+        // returns — the [`serde_norway::Value::Mapping`] wrapper the
         // `&Value` arm walks through is a pass-through around the same
         // `&Mapping` the new arm operates on directly, so a
         // discrepancy would indicate the trait's dispatch surface
@@ -64253,22 +64253,22 @@ spec:
         // refactor that swaps one arm's dispatch shape (e.g. replacing
         // `Mapping::get<I: Index>` with a different key-lookup shape)
         // is a test-visible break.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("catalog".into()));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("catalog".into()));
         m.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(8080u64)),
         );
-        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(false));
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(false));
         m.insert_str_key(
             KUBE_KEY_LABELS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("app".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("app".into())]),
         );
-        let mut sub = serde_yaml::Mapping::new();
-        sub.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Service".into()));
-        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(sub));
+        let mut sub = serde_norway::Mapping::new();
+        sub.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Service".into()));
+        m.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(sub));
 
-        let value = serde_yaml::Value::Mapping(m.clone());
+        let value = serde_norway::Value::Mapping(m.clone());
 
         assert_eq!(
             kube_str(&m, KUBE_KEY_NAME),
@@ -64310,25 +64310,25 @@ spec:
     fn kube_field_dispatches_through_kube_receiver_both_arms() {
         // Receiver-arm closure pin: the value-level raw-`Value` peer
         // ([`kube_field`]) dispatches through both receiver-arms the
-        // [`KubeReceiver`] sealed trait admits — [`serde_yaml::Value`]
-        // and [`serde_yaml::Mapping`]. The sixth arity closure that
+        // [`KubeReceiver`] sealed trait admits — [`serde_norway::Value`]
+        // and [`serde_norway::Mapping`]. The sixth arity closure that
         // mirrors what the shape-gated quintet ([`kube_str`], [`kube_u64`],
         // [`kube_bool`], [`kube_seq`], [`kube_map`]) already closed on the
         // trait axis. Exercises both arms on a fresh receiver so a future
         // refactor that breaks either [`KubeReceiver`] impl (or accidentally
         // reverts `kube_field`'s signature to a concrete receiver-arm)
         // surfaces here.
-        let mut inner = serde_yaml::Mapping::new();
-        inner.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut inner = serde_norway::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
 
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(inner));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(inner));
         m.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(serde_yaml::Number::from(3u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(3u64)),
         );
 
-        let value = serde_yaml::Value::Mapping(m.clone());
+        let value = serde_norway::Value::Mapping(m.clone());
 
         assert_eq!(
             kube_field(&m, KUBE_KEY_METADATA),
@@ -64347,7 +64347,7 @@ spec:
              axis-key"
         );
         assert_eq!(
-            kube_field(&m, GATEWAY_API_KEY_ATTEMPTS).and_then(serde_yaml::Value::as_u64),
+            kube_field(&m, GATEWAY_API_KEY_ATTEMPTS).and_then(serde_norway::Value::as_u64),
             Some(3u64),
             "kube_field composes naturally with the caller's downstream \
              shape-gate choice — the drop-in the middle-hop `.and_then\
@@ -64367,23 +64367,23 @@ spec:
         // sixth raw-`Value` arity. A discrepancy indicates the trait's
         // dispatch surface drifted from the inherent `get` on either
         // receiver-arm.
-        let mut sub = serde_yaml::Mapping::new();
-        sub.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Service".into()));
+        let mut sub = serde_norway::Mapping::new();
+        sub.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Service".into()));
 
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("catalog".into()));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("catalog".into()));
         m.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(8080u64)),
         );
-        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(false));
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(false));
         m.insert_str_key(
             KUBE_KEY_LABELS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("app".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("app".into())]),
         );
-        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(sub));
+        m.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(sub));
 
-        let value = serde_yaml::Value::Mapping(m.clone());
+        let value = serde_norway::Value::Mapping(m.clone());
 
         for field in [
             KUBE_KEY_NAME,
@@ -64410,33 +64410,33 @@ spec:
     #[test]
     fn kube_field_short_circuits_on_non_mapping_receiver() {
         // Short-circuit arm closure pin: [`kube_field`] on a scalar-arm
-        // receiver ([`serde_yaml::Value::String`] / [`Bool`] / [`Number`]
+        // receiver ([`serde_norway::Value::String`] / [`Bool`] / [`Number`]
         // / [`Null`]) returns `None` — the underlying inherent
-        // [`serde_yaml::Value::get`] short-circuits on scalar receivers
+        // [`serde_norway::Value::get`] short-circuits on scalar receivers
         // that expose no per-key lookup, and the trait method carries
         // that semantic through. Pins the total-function readback
         // contract at the same short-circuit arm the shape-gated
         // quintet already carries.
         assert_eq!(
-            kube_field(&serde_yaml::Value::String("scalar".into()), KUBE_KEY_NAME),
+            kube_field(&serde_norway::Value::String("scalar".into()), KUBE_KEY_NAME),
             None,
             "kube_field on a Value::String receiver must return None — \
              the scalar arm exposes no per-key lookup surface"
         );
         assert_eq!(
-            kube_field(&serde_yaml::Value::Bool(true), KUBE_KEY_NAME),
+            kube_field(&serde_norway::Value::Bool(true), KUBE_KEY_NAME),
             None,
             "kube_field on a Value::Bool receiver must return None — \
              the scalar arm exposes no per-key lookup surface"
         );
         assert_eq!(
-            kube_field(&serde_yaml::Value::Null, KUBE_KEY_NAME),
+            kube_field(&serde_norway::Value::Null, KUBE_KEY_NAME),
             None,
             "kube_field on a Value::Null receiver must return None — \
              the scalar arm exposes no per-key lookup surface"
         );
 
-        let m = serde_yaml::Mapping::new();
+        let m = serde_norway::Mapping::new();
         assert_eq!(
             kube_field(&m, KUBE_KEY_NAME),
             None,
@@ -64456,14 +64456,14 @@ spec:
         // [`caixa-flux`] fold onto after this lift. Pins the equivalence
         // at both the present-key path (both hops resolve) and the
         // short-circuit arms (outer miss, inner miss, non-mapping middle).
-        let mut inner = serde_yaml::Mapping::new();
+        let mut inner = serde_norway::Mapping::new();
         inner.insert_str_key(
             GATEWAY_API_KEY_ATTEMPTS,
-            serde_yaml::Value::Number(serde_yaml::Number::from(3u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(3u64)),
         );
-        let mut outer = serde_yaml::Mapping::new();
-        outer.insert_str_key(GATEWAY_API_KEY_RETRY, serde_yaml::Value::Mapping(inner));
-        let value = serde_yaml::Value::Mapping(outer);
+        let mut outer = serde_norway::Mapping::new();
+        outer.insert_str_key(GATEWAY_API_KEY_RETRY, serde_norway::Value::Mapping(inner));
+        let value = serde_norway::Value::Mapping(outer);
 
         let via_composed = kube_field(&value, GATEWAY_API_KEY_RETRY)
             .and_then(|r| kube_field(r, GATEWAY_API_KEY_ATTEMPTS));
@@ -64477,7 +64477,7 @@ spec:
              the drop-in the middle-hop re-inline sites fold onto"
         );
         assert!(
-            via_composed.is_some_and(serde_yaml::Value::is_u64),
+            via_composed.is_some_and(serde_norway::Value::is_u64),
             "the composed two-hop readback must land at a raw &Value \
              the caller then shape-gates through .is_u64() / kube_u64 \
              / .as_u64() — the composition surface stays parametric \
@@ -64485,7 +64485,7 @@ spec:
         );
 
         // Short-circuit arms: outer miss, inner miss.
-        let empty = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let empty = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_field(&empty, GATEWAY_API_KEY_RETRY)
                 .and_then(|r| kube_field(r, GATEWAY_API_KEY_ATTEMPTS)),
@@ -64494,12 +64494,12 @@ spec:
              so the composition short-circuits before the inner hop"
         );
 
-        let mut inner_empty = serde_yaml::Mapping::new();
+        let mut inner_empty = serde_norway::Mapping::new();
         inner_empty.insert_str_key(
             GATEWAY_API_KEY_RETRY,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let inner_miss = serde_yaml::Value::Mapping(inner_empty);
+        let inner_miss = serde_norway::Value::Mapping(inner_empty);
         assert_eq!(
             kube_field(&inner_miss, GATEWAY_API_KEY_RETRY)
                 .and_then(|r| kube_field(r, GATEWAY_API_KEY_ATTEMPTS)),
@@ -64524,21 +64524,21 @@ spec:
         // shape, then pins that each accessor returns the correct arm
         // and that off-arity accessors return None on the mismatched
         // axis-key.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
         m.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(8080u64)),
         );
-        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(true));
         m.insert_str_key(
             KUBE_KEY_LABELS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("app".into())]),
+            serde_norway::Value::Sequence(vec![serde_norway::Value::String("app".into())]),
         );
-        let mut sub = serde_yaml::Mapping::new();
-        sub.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Service".into()));
-        m.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(sub));
-        let value = serde_yaml::Value::Mapping(m);
+        let mut sub = serde_norway::Mapping::new();
+        sub.insert_str_key(KUBE_KEY_KIND, serde_norway::Value::String("Service".into()));
+        m.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(sub));
+        let value = serde_norway::Value::Mapping(m);
 
         assert!(
             kube_field(&value, KUBE_KEY_NAME).is_some(),
@@ -64594,15 +64594,15 @@ spec:
         // equivalence at both the present-key arm (any of the five
         // underlying YAML shapes — the predicate stays shape-agnostic)
         // and the absent-key arm, on both receiver arms.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
         m.insert_str_key(
             KUBE_KEY_PORT,
-            serde_yaml::Value::Number(serde_yaml::Number::from(8080u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(8080u64)),
         );
-        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_yaml::Value::Bool(true));
-        m.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Null);
-        let value = serde_yaml::Value::Mapping(m.clone());
+        m.insert_str_key(FLUX_KUSTOMIZATION_KEY_PRUNE, serde_norway::Value::Bool(true));
+        m.insert_str_key(KUBE_KEY_LABELS, serde_norway::Value::Null);
+        let value = serde_norway::Value::Mapping(m.clone());
 
         for field in [
             KUBE_KEY_NAME,                // String scalar arm
@@ -64662,31 +64662,31 @@ spec:
     #[test]
     fn kube_has_short_circuits_on_non_mapping_receiver() {
         // Short-circuit arm closure pin: [`kube_has`] on a scalar-arm
-        // receiver ([`serde_yaml::Value::String`] / [`Bool`] /
+        // receiver ([`serde_norway::Value::String`] / [`Bool`] /
         // [`Number`] / [`Null`]) returns `false` — the underlying
-        // inherent [`serde_yaml::Value::get`] short-circuits on scalar
+        // inherent [`serde_norway::Value::get`] short-circuits on scalar
         // receivers that expose no per-key lookup, and the sibling
         // trait-dispatch through [`KubeReceiver::field_value`] carries
         // that semantic through to the trailing `.is_some()` probe.
         // Peer pin to [`kube_field_short_circuits_on_non_mapping_receiver`]
         // one arity over on the same value-level primitive family.
         assert!(
-            !kube_has(&serde_yaml::Value::String("scalar".into()), KUBE_KEY_NAME),
+            !kube_has(&serde_norway::Value::String("scalar".into()), KUBE_KEY_NAME),
             "kube_has on a Value::String receiver must return false — \
              the scalar arm exposes no per-key lookup surface"
         );
         assert!(
-            !kube_has(&serde_yaml::Value::Bool(true), KUBE_KEY_NAME),
+            !kube_has(&serde_norway::Value::Bool(true), KUBE_KEY_NAME),
             "kube_has on a Value::Bool receiver must return false — \
              the scalar arm exposes no per-key lookup surface"
         );
         assert!(
-            !kube_has(&serde_yaml::Value::Null, KUBE_KEY_NAME),
+            !kube_has(&serde_norway::Value::Null, KUBE_KEY_NAME),
             "kube_has on a Value::Null receiver must return false — \
              the scalar arm exposes no per-key lookup surface"
         );
         assert!(
-            !kube_has(&serde_yaml::Mapping::new(), KUBE_KEY_NAME),
+            !kube_has(&serde_norway::Mapping::new(), KUBE_KEY_NAME),
             "kube_has on an empty Mapping receiver must return false — \
              the absent-key arm short-circuits at the underlying \
              `Mapping::get` miss"
@@ -64702,9 +64702,9 @@ spec:
         // the equivalence so a future divergence between the bool-
         // returning helper and its `Option<&Value>`-returning sibling
         // surfaces here rather than at consumer build time.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("cart".into()));
-        let value = serde_yaml::Value::Mapping(m.clone());
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("cart".into()));
+        let value = serde_norway::Value::Mapping(m.clone());
         for field in [KUBE_KEY_NAME, "never-inserted-axis"] {
             assert_eq!(
                 kube_has(&value, field),
@@ -64729,11 +64729,11 @@ spec:
     fn kube_has_matches_mapping_contains_key_across_swept_axis_keys() {
         // Substrate-level byte-equivalence pin: `kube_has(&mapping, K)`
         // on the `&Mapping` receiver arm must yield the same `bool` as
-        // the inherent [`serde_yaml::Mapping::contains_key`] method on
+        // the inherent [`serde_norway::Mapping::contains_key`] method on
         // every axis-key the routed test-side existence-probe re-inline
         // sweep across [`caixa-mesh`] and [`caixa-helm`] converges
         // onto the substrate primitive. The two shapes reach through
-        // the same [`serde_yaml::mapping::Index`] hash-bucket lookup
+        // the same [`serde_norway::mapping::Index`] hash-bucket lookup
         // ([`Mapping::contains_key`] delegates through `.get(K).is_some()`
         // internally, matching the [`kube_has`] body's
         // `.field_value(field).is_some()` at the sealed [`KubeReceiver`]
@@ -64750,7 +64750,7 @@ spec:
         // shapes of `contains_key` itself — bare-`&str` vs
         // `Value::String`-wrapped); this pin partitions the equivalence
         // between the two probe surfaces — [`kube_has`] (the substrate
-        // primitive) vs [`serde_yaml::Mapping::contains_key`] (the
+        // primitive) vs [`serde_norway::Mapping::contains_key`] (the
         // pre-sweep inline shape).
         //
         // Swept axis-keys span the four principal surfaces the
@@ -64761,37 +64761,37 @@ spec:
         // Chart.yaml surface (helm, ~5 sites) — enough diversity that
         // any per-key hash-bucket divergence surfaces here rather than
         // at a specific consumer site.
-        let mut m = serde_yaml::Mapping::new();
-        m.insert_str_key(M3_KEY_PLACEMENT, serde_yaml::Value::Null);
+        let mut m = serde_norway::Mapping::new();
+        m.insert_str_key(M3_KEY_PLACEMENT, serde_norway::Value::Null);
         m.insert_str_key(
             M3_PLACEMENT_KEY_ESTRATEGIA,
-            serde_yaml::Value::String("SingleNode".into()),
+            serde_norway::Value::String("SingleNode".into()),
         );
         m.insert_str_key(
             M3_PLACEMENT_KEY_CLUSTERS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        m.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_yaml::Value::Sequence(vec![]));
+        m.insert_str_key(GATEWAY_API_KEY_MATCHES, serde_norway::Value::Sequence(vec![]));
         m.insert_str_key(
             GATEWAY_API_KEY_BACKEND_REFS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
         m.insert_str_key(
             CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        m.insert_str_key(CILIUM_KEY_TO_PORTS, serde_yaml::Value::Sequence(vec![]));
+        m.insert_str_key(CILIUM_KEY_TO_PORTS, serde_norway::Value::Sequence(vec![]));
         m.insert_str_key(
             HELM_CHART_KEY_TYPE,
-            serde_yaml::Value::String("application".into()),
+            serde_norway::Value::String("application".into()),
         );
         m.insert_str_key(
             HELM_CHART_KEY_API_VERSION,
-            serde_yaml::Value::String("v2".into()),
+            serde_norway::Value::String("v2".into()),
         );
         m.insert_str_key(
             HELM_CHART_DEPENDENCY_KEY_NAME,
-            serde_yaml::Value::String("pleme-computeunit".into()),
+            serde_norway::Value::String("pleme-computeunit".into()),
         );
         for field in [
             // M3 placement block sub-keys (caixa-mesh sweep)
@@ -64847,18 +64847,18 @@ spec:
         // three altitudes so a future divergence between the primitive
         // and its sub-axis peers surfaces here rather than at consumer
         // build time.
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("catalog".into()));
-        let mut meta = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::String("catalog".into()));
+        let mut meta = serde_norway::Mapping::new();
         meta.insert_str_key(
             KUBE_KEY_NAME,
-            serde_yaml::Value::String("catalog-md".into()),
+            serde_norway::Value::String("catalog-md".into()),
         );
-        let mut root = serde_yaml::Mapping::new();
-        root.insert_str_key(KUBE_KEY_API_VERSION, serde_yaml::Value::String("v1".into()));
-        root.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        root.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta));
-        let value = serde_yaml::Value::Mapping(root);
+        let mut root = serde_norway::Mapping::new();
+        root.insert_str_key(KUBE_KEY_API_VERSION, serde_norway::Value::String("v1".into()));
+        root.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        root.insert_str_key(KUBE_KEY_METADATA, serde_norway::Value::Mapping(meta));
+        let value = serde_norway::Value::Mapping(root);
 
         assert_eq!(
             kube_root_field(&value, KUBE_KEY_API_VERSION),
@@ -64897,22 +64897,22 @@ spec:
         // the sibling [`kube_spec_seq_first_seq_first`] positive-path
         // pin on the composed two-hop nested-first-entry axis one
         // family over.
-        let mut source_ref = serde_yaml::Mapping::new();
+        let mut source_ref = serde_norway::Mapping::new();
         source_ref.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("GitRepository".into()),
+            serde_norway::Value::String("GitRepository".into()),
         );
         source_ref.insert_string(KUBE_KEY_NAME, "flux-system");
-        let source_ref_value = serde_yaml::Value::Mapping(source_ref);
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let source_ref_value = serde_norway::Value::Mapping(source_ref);
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, source_ref_value.clone());
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -64936,7 +64936,7 @@ spec:
         // vacuously without a bad-shape unwrap.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_spec_field(&bare, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -64946,12 +64946,12 @@ spec:
         );
 
         // Outer arm 2: `spec:` present but non-Mapping YAML type.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        let scalar_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_field(&scalar_spec, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -64962,11 +64962,11 @@ spec:
 
         // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
         // key absent.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_string(KUBE_KEY_NAME, "not-chart");
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_outer = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_outer = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_field(&no_outer, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -64990,17 +64990,17 @@ spec:
 
         // Helper: build the `spec.chart` outer bracket with a per-
         // `spec.chart` sub-value the test picks.
-        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
-            let mut spec = serde_yaml::Mapping::new();
+        let build_cr = |chart_value: serde_norway::Value| -> serde_norway::Value {
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KEY_CHART, chart_value);
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Inner arm 1: outer `<outer>` sub-value carries no inner
         // `spec:` sub-block.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_spec_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65012,9 +65012,9 @@ spec:
 
         // Inner arm 2: outer `<outer>` sub-value carries an inner
         // `spec:` axis-key that is present-but-non-Mapping.
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Sequence(vec![]));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65027,11 +65027,11 @@ spec:
         // Inner arm 3: outer `<outer>` sub-value carries an inner
         // `spec:` Mapping but `<inner>` axis-key absent from the inner
         // sub-mapping.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_string(KUBE_KEY_NAME, "not-source-ref");
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65059,36 +65059,36 @@ spec:
         // `kube_spec_seq_first_seq_first_matches_prior_inline_two_hop_composition`
         // pin one family over on the composed two-hop nested-first-entry
         // axis.
-        let mut source_ref = serde_yaml::Mapping::new();
+        let mut source_ref = serde_norway::Mapping::new();
         source_ref.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("GitRepository".into()),
+            serde_norway::Value::String("GitRepository".into()),
         );
         source_ref.insert_string(KUBE_KEY_NAME, "flux-system");
-        let mut chart_spec = serde_yaml::Mapping::new();
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Mapping(source_ref));
+        let mut chart_spec = serde_norway::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Mapping(source_ref));
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::String("charts/hello".into()),
+            serde_norway::Value::String("charts/hello".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
         // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so the
         // same fixture drives the inner-`spec`-absent arm too.
         chart.insert_string(KUBE_KEY_NAME, "chart-header");
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
         // Sibling axis: a non-`chart` outer key with a `spec:` sub-
         // mapping so the same fixture also drives the outer-`<outer>`-
         // present-but-no-`spec:` arm implicit through the outer hop.
-        let mut other_spec = serde_yaml::Mapping::new();
+        let mut other_spec = serde_norway::Mapping::new();
         other_spec.insert_string(KUBE_KEY_NAME, "other");
-        let mut other = serde_yaml::Mapping::new();
-        other.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(other_spec));
-        spec.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::Mapping(other));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut other = serde_norway::Mapping::new();
+        other.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(other_spec));
+        spec.insert_str_key(KUBE_KEY_NAME, serde_norway::Value::Mapping(other));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             // Load-bearing positive-path axis: 3 of 4 caller sites
@@ -65136,20 +65136,20 @@ spec:
         // continuation. Structural mirror of the sibling
         // `kube_field_map_matches_prior_inline_two_line_composition` pin
         // one family over.
-        let mut source_ref = serde_yaml::Mapping::new();
+        let mut source_ref = serde_norway::Mapping::new();
         source_ref.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("GitRepository".into()),
+            serde_norway::Value::String("GitRepository".into()),
         );
-        let mut chart_spec = serde_yaml::Mapping::new();
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Mapping(source_ref));
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart_spec = serde_norway::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Mapping(source_ref));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         let via_lifted = kube_spec_spec_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF);
         let via_raw = value
@@ -65186,18 +65186,18 @@ spec:
         // sibling `GitRepository` CRD. Peer of the sibling
         // [`kube_spec_str_field`] positive-path pin on the one-hop
         // `spec.<field>` axis one family over.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::String("charts/hello".into()),
+            serde_norway::Value::String("charts/hello".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_str_field(&value, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
@@ -65221,7 +65221,7 @@ spec:
         // vacuously without a bad-shape unwrap.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_spec_str_field(&bare, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
             None,
@@ -65231,12 +65231,12 @@ spec:
         );
 
         // Outer arm 2: `spec:` present but non-Mapping YAML type.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        let scalar_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_str_field(
                 &scalar_spec,
@@ -65252,11 +65252,11 @@ spec:
 
         // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
         // key absent.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_string(KUBE_KEY_NAME, "not-chart");
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_outer = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_outer = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_str_field(&no_outer, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
             None,
@@ -65277,17 +65277,17 @@ spec:
 
         // Helper: build the `spec.chart` outer bracket with a per-
         // `spec.chart` sub-value the test picks.
-        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
-            let mut spec = serde_yaml::Mapping::new();
+        let build_cr = |chart_value: serde_norway::Value| -> serde_norway::Value {
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KEY_CHART, chart_value);
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Inner arm 1: outer `<outer>` sub-value carries no inner
         // `spec:` sub-block.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_spec_str_field(&value, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
             None,
@@ -65299,9 +65299,9 @@ spec:
 
         // Inner arm 2: outer `<outer>` sub-value carries an inner
         // `spec:` axis-key that is present-but-non-Mapping.
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Sequence(vec![]));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_str_field(&value, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
             None,
@@ -65314,11 +65314,11 @@ spec:
         // Inner arm 3: outer `<outer>` sub-value carries an inner
         // `spec:` Mapping but `<inner>` axis-key absent from the inner
         // sub-mapping.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_string(KUBE_KEY_NAME, "not-chart");
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_str_field(&value, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
             None,
@@ -65341,21 +65341,21 @@ spec:
         // gate onto the helper so this arm collapses to `None` inside
         // the helper rather than at every routed caller's
         // `.and_then(|v| v.as_str())` trailer.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         // Innermost `<inner>` present but as a Sequence YAML type
         // rather than a scalar String — the trailing `.as_str()`
         // shape-gate short-circuit arm.
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::Sequence(vec![]),
+            serde_norway::Value::Sequence(vec![]),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_str_field(&value, FLUX_KEY_CHART, FLUX_HELMCHART_TEMPLATE_KEY_CHART),
@@ -65381,26 +65381,26 @@ spec:
         // `assert_eq!(..)`). Structural mirror of the sibling
         // `kube_spec_spec_field_matches_prior_inline_two_line_composition`
         // one arity below on the raw-`&Value` tail.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::String("charts/hello".into()),
+            serde_norway::Value::String("charts/hello".into()),
         );
         // Sibling axis: a non-string innermost value on a peer
         // axis-key so the same fixture drives the trailing `.as_str()`
         // short-circuit arm through the byte-equivalence loop.
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Sequence(vec![]));
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Sequence(vec![]));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
         // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so
         // the same fixture drives the inner-key-absent arm through
         // the outer-key-varying axis.
         chart.insert_string(KUBE_KEY_NAME, "chart-header");
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             // Load-bearing positive-path axis: the caller site walks
@@ -65445,22 +65445,22 @@ spec:
         // `kube_spec_spec_str_field_reads_nested_scalar_borrowing_into_input_value`
         // positive-path pin one arity down on the string-scalar tail of
         // the same composed nested-`spec:` envelope axis.
-        let mut source_ref = serde_yaml::Mapping::new();
+        let mut source_ref = serde_norway::Mapping::new();
         source_ref.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("GitRepository".into()),
+            serde_norway::Value::String("GitRepository".into()),
         );
         source_ref.insert_string(KUBE_KEY_NAME, "flux-system");
         let source_ref_mapping = source_ref.clone();
-        let mut chart_spec = serde_yaml::Mapping::new();
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Mapping(source_ref));
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart_spec = serde_norway::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Mapping(source_ref));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_map_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -65484,7 +65484,7 @@ spec:
         // outer arm.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_spec_map_field(&bare, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65494,12 +65494,12 @@ spec:
         );
 
         // Outer arm 2: `spec:` present but non-Mapping YAML type.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        let scalar_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_map_field(&scalar_spec, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65510,11 +65510,11 @@ spec:
 
         // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
         // key absent.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_string(KUBE_KEY_NAME, "not-chart");
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_outer = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_outer = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_map_field(&no_outer, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65537,17 +65537,17 @@ spec:
 
         // Helper: build the `spec.chart` outer bracket with a per-
         // `spec.chart` sub-value the test picks.
-        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
-            let mut spec = serde_yaml::Mapping::new();
+        let build_cr = |chart_value: serde_norway::Value| -> serde_norway::Value {
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KEY_CHART, chart_value);
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Inner arm 1: outer `<outer>` sub-value carries no inner
         // `spec:` sub-block.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_spec_map_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65559,9 +65559,9 @@ spec:
 
         // Inner arm 2: outer `<outer>` sub-value carries an inner
         // `spec:` axis-key that is present-but-non-Mapping.
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Sequence(vec![]));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_map_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65574,11 +65574,11 @@ spec:
         // Inner arm 3: outer `<outer>` sub-value carries an inner
         // `spec:` Mapping but `<inner>` axis-key absent from the inner
         // sub-mapping.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_string(KUBE_KEY_NAME, "not-source-ref");
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_map_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65601,18 +65601,18 @@ spec:
         // gate onto the helper so this arm collapses to `None` inside
         // the helper rather than at every routed caller's
         // `.and_then(|r| r.as_mapping())` trailer.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         // Innermost `<inner>` present but as a Sequence YAML type
         // rather than a Mapping — the trailing `.as_mapping()` shape-
         // gate short-circuit arm.
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Sequence(vec![]));
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Sequence(vec![]));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_map_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -65639,33 +65639,33 @@ spec:
         // sibling
         // `kube_spec_spec_str_field_matches_prior_inline_two_line_composition`
         // one arity below on the string-scalar tail.
-        let mut source_ref = serde_yaml::Mapping::new();
+        let mut source_ref = serde_norway::Mapping::new();
         source_ref.insert_str_key(
             KUBE_KEY_KIND,
-            serde_yaml::Value::String("GitRepository".into()),
+            serde_norway::Value::String("GitRepository".into()),
         );
         source_ref.insert_string(KUBE_KEY_NAME, "flux-system");
-        let mut chart_spec = serde_yaml::Mapping::new();
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Mapping(source_ref));
+        let mut chart_spec = serde_norway::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Mapping(source_ref));
         // Sibling axis: a non-Mapping innermost value on a peer
         // axis-key so the same fixture drives the trailing
         // `.as_mapping()` short-circuit arm through the byte-
         // equivalence loop.
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::String("charts/hello".into()),
+            serde_norway::Value::String("charts/hello".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
         // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so
         // the same fixture drives the inner-key-absent arm through
         // the outer-key-varying axis.
         chart.insert_string(KUBE_KEY_NAME, "chart-header");
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             // Load-bearing positive-path axis: the caller site walks
@@ -65713,22 +65713,22 @@ spec:
         // `kube_spec_spec_map_field_reads_nested_sub_mapping_borrowing_into_input_value`
         // positive-path pin one arity over on the sub-mapping tail of
         // the same composed nested-`spec:` envelope axis.
-        let values_from_seq = serde_yaml::Sequence::from(vec![
-            serde_yaml::Value::String("first-entry".into()),
-            serde_yaml::Value::String("second-entry".into()),
+        let values_from_seq = serde_norway::Sequence::from(vec![
+            serde_norway::Value::String("first-entry".into()),
+            serde_norway::Value::String("second-entry".into()),
         ]);
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Sequence(values_from_seq.clone()),
+            serde_norway::Value::Sequence(values_from_seq.clone()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -65751,7 +65751,7 @@ spec:
         // bad-shape outer arm.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_spec_seq_field(&bare, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65761,12 +65761,12 @@ spec:
         );
 
         // Outer arm 2: `spec:` present but non-Mapping YAML type.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        let scalar_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_seq_field(&scalar_spec, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65777,11 +65777,11 @@ spec:
 
         // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
         // key absent.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_string(KUBE_KEY_NAME, "not-chart");
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_outer = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_outer = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_seq_field(&no_outer, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65802,17 +65802,17 @@ spec:
         // hop's own short-circuit folds through the composed helper
         // unchanged.
 
-        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
-            let mut spec = serde_yaml::Mapping::new();
+        let build_cr = |chart_value: serde_norway::Value| -> serde_norway::Value {
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KEY_CHART, chart_value);
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Inner arm 1: outer `<outer>` sub-value carries no inner
         // `spec:` sub-block.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65827,9 +65827,9 @@ spec:
         // here — a shape that would trivially fold through the
         // trailing `.as_sequence()` gate if the intermediate `spec:`
         // Mapping shape-gate did not correctly reject it first).
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Sequence(vec![]));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Sequence(vec![]));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65844,11 +65844,11 @@ spec:
         // Inner arm 3: outer `<outer>` sub-value carries an inner
         // `spec:` Mapping but `<inner>` axis-key absent from the inner
         // sub-mapping.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_string(KUBE_KEY_NAME, "not-source-ref");
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -65871,21 +65871,21 @@ spec:
         // gate onto the helper so this arm collapses to `None` inside
         // the helper rather than at every routed caller's
         // `.and_then(|v| v.as_sequence())` trailer.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         // Innermost `<inner>` present but as a Mapping YAML type
         // rather than a Sequence — the trailing `.as_sequence()`
         // shape-gate short-circuit arm.
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            serde_norway::Value::Mapping(serde_norway::Mapping::new()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_seq_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -65913,14 +65913,14 @@ spec:
         // one arity over on the sub-mapping tail and
         // `kube_spec_spec_str_field_matches_prior_inline_two_line_composition`
         // two arities over on the string-scalar tail.
-        let values_from_seq = serde_yaml::Sequence::from(vec![
-            serde_yaml::Value::String("chart-values-1".into()),
-            serde_yaml::Value::String("chart-values-2".into()),
+        let values_from_seq = serde_norway::Sequence::from(vec![
+            serde_norway::Value::String("chart-values-1".into()),
+            serde_norway::Value::String("chart-values-2".into()),
         ]);
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Sequence(values_from_seq),
+            serde_norway::Value::Sequence(values_from_seq),
         );
         // Sibling axis: a non-Sequence innermost value on a peer
         // axis-key so the same fixture drives the trailing
@@ -65928,19 +65928,19 @@ spec:
         // equivalence loop.
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::String("charts/hello".into()),
+            serde_norway::Value::String("charts/hello".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
         // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so
         // the same fixture drives the inner-key-absent arm through
         // the outer-key-varying axis.
         chart.insert_string(KUBE_KEY_NAME, "chart-header");
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             // Load-bearing positive-path axis: the innermost value is
@@ -65985,15 +65985,15 @@ spec:
         // nested-`spec:` `_spec_spec_bool_field` accessor returns the
         // innermost `<inner>` `bool` — the actual leaf value the caller
         // decides against.
-        let mut chart_spec = serde_yaml::Mapping::new();
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Bool(true));
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart_spec = serde_norway::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Bool(true));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -66015,7 +66015,7 @@ spec:
         // bad-shape outer arm.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_spec_bool_field(&bare, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66025,12 +66025,12 @@ spec:
         );
 
         // Outer arm 2: `spec:` present but non-Mapping YAML type.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        let scalar_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_bool_field(&scalar_spec, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66041,11 +66041,11 @@ spec:
 
         // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
         // key absent.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_string(KUBE_KEY_NAME, "not-chart");
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_outer = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_outer = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_bool_field(&no_outer, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66066,17 +66066,17 @@ spec:
         // hop's own short-circuit folds through the composed helper
         // unchanged.
 
-        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
-            let mut spec = serde_yaml::Mapping::new();
+        let build_cr = |chart_value: serde_norway::Value| -> serde_norway::Value {
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KEY_CHART, chart_value);
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Inner arm 1: outer `<outer>` sub-value carries no inner
         // `spec:` sub-block.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66091,9 +66091,9 @@ spec:
         // a shape that would trivially fold through the trailing
         // `.as_bool()` gate if the intermediate `spec:` Mapping shape-
         // gate did not correctly reject it first).
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Bool(true));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Bool(true));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66108,11 +66108,11 @@ spec:
         // Inner arm 3: outer `<outer>` sub-value carries an inner
         // `spec:` Mapping but `<inner>` axis-key absent from the inner
         // sub-mapping.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_string(KUBE_KEY_NAME, "not-source-ref");
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66135,21 +66135,21 @@ spec:
         // gate onto the helper so this arm collapses to `None` inside
         // the helper rather than at every routed caller's
         // `.and_then(|v| v.as_bool())` trailer.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         // Innermost `<inner>` present but as a String YAML type rather
         // than a Bool — the trailing `.as_bool()` shape-gate short-
         // circuit arm.
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::String("not-a-bool".into()),
+            serde_norway::Value::String("not-a-bool".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_bool_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -66178,27 +66178,27 @@ spec:
         // and `kube_spec_spec_map_field_matches_prior_inline_two_line_\
         // composition` two arities over on the sub-mapping tail of the
         // same composed nested-`spec:` envelope axis.
-        let mut chart_spec = serde_yaml::Mapping::new();
-        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_yaml::Value::Bool(false));
+        let mut chart_spec = serde_norway::Mapping::new();
+        chart_spec.insert_str_key(FLUX_KEY_SOURCE_REF, serde_norway::Value::Bool(false));
         // Sibling axis-key: a non-Bool innermost value on a peer
         // axis-key so the same fixture drives the trailing
         // `.as_bool()` short-circuit arm through the byte-equivalence
         // loop.
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::String("charts/hello".into()),
+            serde_norway::Value::String("charts/hello".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
         // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so
         // the same fixture drives the inner-key-absent arm through
         // the outer-key-varying axis.
         chart.insert_string(KUBE_KEY_NAME, "chart-header");
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             // Load-bearing positive-path axis: the innermost value is
@@ -66217,7 +66217,7 @@ spec:
         ] {
             let via_composed = kube_spec_spec_bool_field(&value, outer, inner);
             let via_inline =
-                kube_spec_spec_field(&value, outer, inner).and_then(serde_yaml::Value::as_bool);
+                kube_spec_spec_field(&value, outer, inner).and_then(serde_norway::Value::as_bool);
             assert_eq!(
                 via_composed, via_inline,
                 "kube_spec_spec_bool_field(v, {outer:?}, {inner:?}) \
@@ -66245,18 +66245,18 @@ spec:
         // nested-`spec:` `_spec_spec_u64_field` accessor returns the
         // innermost `<inner>` `u64` — the actual magnitude the caller
         // decides against.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Number(serde_yaml::Number::from(7_u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(7_u64)),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_u64_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -66279,7 +66279,7 @@ spec:
         // bad-shape outer arm.
 
         // Outer arm 1: no top-level `spec:` sub-block.
-        let bare = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let bare = serde_norway::Value::Mapping(serde_norway::Mapping::new());
         assert_eq!(
             kube_spec_spec_u64_field(&bare, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66289,12 +66289,12 @@ spec:
         );
 
         // Outer arm 2: `spec:` present but non-Mapping YAML type.
-        let mut cr = serde_yaml::Mapping::new();
+        let mut cr = serde_norway::Mapping::new();
         cr.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::String("scalar-spec".into()),
+            serde_norway::Value::String("scalar-spec".into()),
         );
-        let scalar_spec = serde_yaml::Value::Mapping(cr);
+        let scalar_spec = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_u64_field(&scalar_spec, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66306,11 +66306,11 @@ spec:
 
         // Outer arm 3: `spec:` present as Mapping but `<outer>` axis-
         // key absent.
-        let mut spec = serde_yaml::Mapping::new();
+        let mut spec = serde_norway::Mapping::new();
         spec.insert_string(KUBE_KEY_NAME, "not-chart");
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let no_outer = serde_yaml::Value::Mapping(cr);
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let no_outer = serde_norway::Value::Mapping(cr);
         assert_eq!(
             kube_spec_spec_u64_field(&no_outer, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66331,17 +66331,17 @@ spec:
         // `kube_spec_field` hop's own short-circuit folds through the
         // composed helper unchanged.
 
-        let build_cr = |chart_value: serde_yaml::Value| -> serde_yaml::Value {
-            let mut spec = serde_yaml::Mapping::new();
+        let build_cr = |chart_value: serde_norway::Value| -> serde_norway::Value {
+            let mut spec = serde_norway::Mapping::new();
             spec.insert_str_key(FLUX_KEY_CHART, chart_value);
-            let mut cr = serde_yaml::Mapping::new();
-            cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-            serde_yaml::Value::Mapping(cr)
+            let mut cr = serde_norway::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+            serde_norway::Value::Mapping(cr)
         };
 
         // Inner arm 1: outer `<outer>` sub-value carries no inner
         // `spec:` sub-block.
-        let value = build_cr(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        let value = build_cr(serde_norway::Value::Mapping(serde_norway::Mapping::new()));
         assert_eq!(
             kube_spec_spec_u64_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66356,12 +66356,12 @@ spec:
         // — a shape that would trivially fold through the trailing
         // `.as_u64()` gate if the intermediate `spec:` Mapping shape-
         // gate did not correctly reject it first).
-        let mut chart = serde_yaml::Mapping::new();
+        let mut chart = serde_norway::Mapping::new();
         chart.insert_str_key(
             KUBE_KEY_SPEC,
-            serde_yaml::Value::Number(serde_yaml::Number::from(3_u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(3_u64)),
         );
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_u64_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66376,11 +66376,11 @@ spec:
         // Inner arm 3: outer `<outer>` sub-value carries an inner
         // `spec:` Mapping but `<inner>` axis-key absent from the inner
         // sub-mapping.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_string(KUBE_KEY_NAME, "not-source-ref");
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let value = build_cr(serde_yaml::Value::Mapping(chart));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let value = build_cr(serde_norway::Value::Mapping(chart));
         assert_eq!(
             kube_spec_spec_u64_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
             None,
@@ -66403,21 +66403,21 @@ spec:
         // gate onto the helper so this arm collapses to `None` inside
         // the helper rather than at every routed caller's
         // `.and_then(|v| v.as_u64())` trailer.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         // Innermost `<inner>` present but as a String YAML type rather
         // than a Number — the trailing `.as_u64()` shape-gate short-
         // circuit arm.
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::String("not-a-number".into()),
+            serde_norway::Value::String("not-a-number".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_u64_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -66434,7 +66434,7 @@ spec:
     #[test]
     fn kube_spec_spec_u64_field_returns_none_on_signed_negative_leaf_arm() {
         // Sibling short-circuit arm on the trailing `.as_u64()` shape-
-        // gate: `serde_yaml::Value::as_u64` rejects signed-negative
+        // gate: `serde_norway::Value::as_u64` rejects signed-negative
         // integers (a schema-invalid magnitude for a `uint64`-typed
         // sub-field per the K8s apiserver's `OpenAPI` schema for count/
         // cap/generation-shaped sub-fields). Pins that the composed
@@ -66442,18 +66442,18 @@ spec:
         // than silently wrapping through a per-consumer `.as_i64()`
         // narrowing — the substrate-side integer contract stays
         // unsigned end to end.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Number(serde_yaml::Number::from(-1_i64)),
+            serde_norway::Value::Number(serde_norway::Number::from(-1_i64)),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         assert_eq!(
             kube_spec_spec_u64_field(&value, FLUX_KEY_CHART, FLUX_KEY_SOURCE_REF),
@@ -66483,14 +66483,14 @@ spec:
         // `kube_spec_spec_map_field_matches_prior_inline_two_line_\
         // composition` three arities over on the sub-mapping tail of
         // the same composed nested-`spec:` envelope axis.
-        let mut chart_spec = serde_yaml::Mapping::new();
+        let mut chart_spec = serde_norway::Mapping::new();
         // Load-bearing positive-path: innermost value is a `u64` with
         // the specific value `0` — the shape a substrate-side default
         // fallback via `.unwrap_or(1)` would silently miss if the
         // helper drifted to conflate `Some(0)` with `None`.
         chart_spec.insert_str_key(
             FLUX_KEY_SOURCE_REF,
-            serde_yaml::Value::Number(serde_yaml::Number::from(0_u64)),
+            serde_norway::Value::Number(serde_norway::Number::from(0_u64)),
         );
         // Sibling axis-key: a non-Number innermost value on a peer
         // axis-key so the same fixture drives the trailing
@@ -66498,19 +66498,19 @@ spec:
         // loop.
         chart_spec.insert_str_key(
             FLUX_HELMCHART_TEMPLATE_KEY_CHART,
-            serde_yaml::Value::String("charts/hello".into()),
+            serde_norway::Value::String("charts/hello".into()),
         );
-        let mut chart = serde_yaml::Mapping::new();
-        chart.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(chart_spec));
+        let mut chart = serde_norway::Mapping::new();
+        chart.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(chart_spec));
         // Sibling axis: a non-`spec:` sub-mapping on `spec.chart` so
         // the same fixture drives the inner-key-absent arm through
         // the outer-key-varying axis.
         chart.insert_string(KUBE_KEY_NAME, "chart-header");
-        let mut spec = serde_yaml::Mapping::new();
-        spec.insert_str_key(FLUX_KEY_CHART, serde_yaml::Value::Mapping(chart));
-        let mut cr = serde_yaml::Mapping::new();
-        cr.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(spec));
-        let value = serde_yaml::Value::Mapping(cr);
+        let mut spec = serde_norway::Mapping::new();
+        spec.insert_str_key(FLUX_KEY_CHART, serde_norway::Value::Mapping(chart));
+        let mut cr = serde_norway::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_SPEC, serde_norway::Value::Mapping(spec));
+        let value = serde_norway::Value::Mapping(cr);
 
         for (outer, inner) in [
             // Load-bearing positive-path axis: the innermost value is
@@ -66529,7 +66529,7 @@ spec:
         ] {
             let via_composed = kube_spec_spec_u64_field(&value, outer, inner);
             let via_inline =
-                kube_spec_spec_field(&value, outer, inner).and_then(serde_yaml::Value::as_u64);
+                kube_spec_spec_field(&value, outer, inner).and_then(serde_norway::Value::as_u64);
             assert_eq!(
                 via_composed, via_inline,
                 "kube_spec_spec_u64_field(v, {outer:?}, {inner:?}) \
@@ -66556,7 +66556,7 @@ spec:
         }
         let opt: Option<u64> = Some(7);
         let mut buf: Vec<u8> = Vec::new();
-        let mut ser = serde_yaml::Serializer::new(&mut buf);
+        let mut ser = serde_norway::Serializer::new(&mut buf);
         serialize_option_via_str(&opt, &mut ser, render_seven)
             .expect("serialize_option_via_str Some-arm must succeed");
         drop(ser);
@@ -66585,7 +66585,7 @@ spec:
         }
         let opt: Option<u64> = None;
         let mut buf: Vec<u8> = Vec::new();
-        let mut ser = serde_yaml::Serializer::new(&mut buf);
+        let mut ser = serde_norway::Serializer::new(&mut buf);
         serialize_option_via_str(&opt, &mut ser, render_never)
             .expect("serialize_option_via_str None-arm must succeed");
         drop(ser);
@@ -66612,7 +66612,7 @@ spec:
                 .ok_or_else(|| format!("expected -tail suffix in {s:?}"))
                 .and_then(|head| head.parse::<u64>().map_err(|e| e.to_string()))
         }
-        let de = serde_yaml::Deserializer::from_str("\"42-tail\"");
+        let de = serde_norway::Deserializer::from_str("\"42-tail\"");
         let parsed = deserialize_option_via_str(de, parse_stripped)
             .expect("Some-arm deserialize must succeed");
         assert_eq!(
@@ -66636,7 +66636,7 @@ spec:
         fn parse_never(_: &str) -> Result<u64, String> {
             unreachable!("None arm must not call parse")
         }
-        let de = serde_yaml::Deserializer::from_str("null");
+        let de = serde_norway::Deserializer::from_str("null");
         let parsed =
             deserialize_option_via_str(de, parse_never).expect("None-arm deserialize must succeed");
         assert_eq!(
@@ -66662,7 +66662,7 @@ spec:
         fn parse_reject(s: &str) -> Result<u64, String> {
             Err(format!("reject {s:?}"))
         }
-        let de = serde_yaml::Deserializer::from_str("\"anything\"");
+        let de = serde_norway::Deserializer::from_str("\"anything\"");
         let err = deserialize_option_via_str(de, parse_reject)
             .expect_err("parse-error arm must surface as serde error");
         let err_text = err.to_string();

@@ -2609,7 +2609,7 @@ impl TryFrom<Vec<u8>> for WitShape {
 /// `String` — a future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
 /// admission-webhook body reader that hands the `spec.contratos[i].wit`
 /// census-label scalar off as an owned [`String`] after UTF-8 validation,
-/// a `serde_yaml::from_str` / `serde_json::from_str` de-serialize
+/// a `serde_norway::from_str` / `serde_json::from_str` de-serialize
 /// round-trip whose composer surfaces the `:contratos :wit` scalar as an
 /// owned [`String`] typed field, a `feira app graph --by-wit-shape`
 /// `clap`-derived arg-parse whose owned-`String` positional lands the
@@ -7441,7 +7441,7 @@ impl TryFrom<Vec<u8>> for RateLimit {
 /// that hands the `spec.politicas.rateLimit` scalar off as an owned
 /// [`String`] rather than a borrowed `&str`, a future `feira app policy`
 /// verb whose `clap`-derived arg surface hands the parser an owned
-/// [`String`] rather than a `&str`, a `serde_yaml::from_str` /
+/// [`String`] rather than a `&str`, a `serde_norway::from_str` /
 /// `serde_json::from_str` de-serialize round-trip that hands the composer
 /// an owned [`String`] typed field from a `spec.politicas.rateLimit` scalar,
 /// a per-`:contratos`-edge rate-limit-override overlay resolver reading
@@ -10036,7 +10036,7 @@ impl TryFrom<Vec<u8>> for RateLimitUnit {
 /// holds an owned `String` — a future M4
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook body reader that
 /// hands the `spec.politicas.rate-limit :window` canonical-suffix scalar off
-/// as an owned [`String`] after UTF-8 validation, a `serde_yaml::from_str`
+/// as an owned [`String`] after UTF-8 validation, a `serde_norway::from_str`
 /// / `serde_json::from_str` de-serialize round-trip whose composer surfaces
 /// the canonical-suffix scalar as an owned [`String`] typed field, a
 /// `feira app graph --by-rate-limit-unit` `clap`-derived arg-parse whose
@@ -13846,7 +13846,7 @@ impl TryFrom<Vec<u8>> for PlacementStrategy {
 /// holds an owned `String` — a future M4
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR admission-webhook body reader that
 /// hands the `spec.placement.estrategia` `PascalCase` scalar off as an
-/// owned [`String`] after UTF-8 validation, a `serde_yaml::from_str` /
+/// owned [`String`] after UTF-8 validation, a `serde_norway::from_str` /
 /// `serde_json::from_str` de-serialize round-trip whose composer surfaces
 /// the `:estrategia` scalar as an owned [`String`] typed field, a
 /// `feira app placement --set <SingleNode|Replicated|Sharded>`
@@ -15280,7 +15280,7 @@ impl AplicacaoSpec {
     /// `.estrategia()` diagnostic-carry pair), the
     /// [`caixa_mesh::programs_for_aplicacao`] per-Aplicacao programs.yaml
     /// per-entry placement-block emitter's outer
-    /// `serde_yaml::to_value(&spec.placement)` composite-serialization
+    /// `serde_norway::to_value(&spec.placement)` composite-serialization
     /// seed (which fans onto every per-cluster `programs[]` entry as a
     /// self-describing distribution overlay the aggregator filters by),
     /// and the `feira app graph` per-Aplicacao print line's paired
@@ -47350,7 +47350,7 @@ mod tests {
         // surface here before any per-renderer's CNP / Gateway /
         // HTTPRoute emission consumed the drifted default.
         let entrada: Entrada =
-            serde_yaml::from_str("host: checkout.quero.cloud\npara: cart\n").expect("yaml parses");
+            serde_norway::from_str("host: checkout.quero.cloud\npara: cart\n").expect("yaml parses");
         assert_eq!(
             entrada.port, DEFAULT_SERVICO_PORT,
             "the serde default must materialize as the lifted canonical Servico port"

@@ -89,7 +89,7 @@ impl GraphArgs {
         let processes = lower_file(&self.path, &self.namespace)?;
         for p in &processes {
             println!("---");
-            print!("{}", serde_yaml::to_string(p).context("serialize Process")?);
+            print!("{}", serde_norway::to_string(p).context("serialize Process")?);
         }
         Ok(())
     }
@@ -114,7 +114,7 @@ impl PlanArgs {
         let mut buf = String::new();
         for p in &processes {
             buf.push_str("---\n");
-            buf.push_str(&serde_yaml::to_string(p).context("serialize Process")?);
+            buf.push_str(&serde_norway::to_string(p).context("serialize Process")?);
         }
         if self.out == "-" {
             print!("{buf}");

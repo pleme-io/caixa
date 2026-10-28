@@ -146,8 +146,8 @@ impl Deploy {
     }
 }
 
-fn render_yaml_with_header(doc: &serde_yaml::Value, rel_path: &str) -> Result<String> {
-    let body = serde_yaml::to_string(doc)?;
+fn render_yaml_with_header(doc: &serde_norway::Value, rel_path: &str) -> Result<String> {
+    let body = serde_norway::to_string(doc)?;
     let header = format!(
         "# {rel_path}\n\
          # Cluster fleet manifest — HelmRelease whose spec.values.programs[]\n\

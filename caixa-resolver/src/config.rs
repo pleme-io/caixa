@@ -51,7 +51,7 @@ impl ResolverConfig {
         };
         let path = base.join("caixa").join("config.yaml");
         match std::fs::read_to_string(&path) {
-            Ok(src) => serde_yaml::from_str(&src).unwrap_or_default(),
+            Ok(src) => serde_norway::from_str(&src).unwrap_or_default(),
             Err(_) => Self::default(),
         }
     }

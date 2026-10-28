@@ -2266,7 +2266,7 @@ impl TryFrom<Vec<u8>> for RestartStrategy {
 /// an owned `String` — a future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
 /// admission-webhook body reader that hands the `spec.estrategia`
 /// `PascalCase` scalar off as an owned [`String`] after UTF-8 validation, a
-/// `serde_yaml::from_str` / `serde_json::from_str` de-serialize round-trip
+/// `serde_norway::from_str` / `serde_json::from_str` de-serialize round-trip
 /// whose composer surfaces the `:estrategia` scalar as an owned [`String`]
 /// typed field, a `feira supervisor --estrategia <OneForOne|OneForAll|
 /// RestForOne|SimpleOneForOne>` `clap`-derived arg-parse whose owned-`String`
@@ -4473,7 +4473,7 @@ impl TryFrom<Vec<u8>> for RestartPolicy {
 /// holds an owned `String` — a future M4 `mesh.pleme.io/v1alpha1/Supervisor`
 /// CR admission-webhook body reader that hands the
 /// `spec.children[].restart` `PascalCase` scalar off as an owned [`String`]
-/// after UTF-8 validation, a `serde_yaml::from_str` / `serde_json::from_str`
+/// after UTF-8 validation, a `serde_norway::from_str` / `serde_json::from_str`
 /// de-serialize round-trip whose composer surfaces the `:children :restart`
 /// scalar as an owned [`String`] typed field, a
 /// `feira supervisor --restart <Permanent|Temporary|Transient>`

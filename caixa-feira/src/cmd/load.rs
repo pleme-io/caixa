@@ -117,11 +117,11 @@ pub(crate) fn load_caixa(root: &Path) -> Result<Caixa> {
 }
 
 /// Read + parse a YAML file at `path` into an untyped
-/// [`serde_yaml::Value`].
+/// [`serde_norway::Value`].
 ///
 /// Closes the PRIME DIRECTIVE duplication on the per-verb YAML IO
 /// axis. Before this lift the same four-line shape —
-/// [`std::fs::read_to_string`] + [`serde_yaml::from_str`], both with
+/// [`std::fs::read_to_string`] + [`serde_norway::from_str`], both with
 /// verbatim `"reading {…}"` / `"parsing {…}"` `.with_context(...)`
 /// strings — appeared at every `feira` verb that consumes an
 /// arbitrary YAML file: the per-Servico computeunit loader (`feira
@@ -137,7 +137,7 @@ pub(crate) fn load_caixa(root: &Path) -> Result<Caixa> {
 ///
 /// After the lift every per-YAML `feira` verb routes through this
 /// helper: the `"reading {…}"` / `"parsing {…}"` context strings live
-/// at exactly one call-site, the underlying `serde_yaml::Error`
+/// at exactly one call-site, the underlying `serde_norway::Error`
 /// remains reachable on the anyhow cause chain (peer with the
 /// per-renderer [`caixa_core::KindMismatch`] /
 /// [`caixa_core::ServicoCountMismatch`] downcast discipline), and the
@@ -145,10 +145,10 @@ pub(crate) fn load_caixa(root: &Path) -> Result<Caixa> {
 /// independently-evolved copies. Mirrors [`load_caixa`] on the peer
 /// `<root>/caixa.lisp` axis, completing the canonical per-verb IO
 /// surface (the manifest loader + this YAML loader).
-pub(crate) fn load_yaml(path: &Path) -> Result<serde_yaml::Value> {
+pub(crate) fn load_yaml(path: &Path) -> Result<serde_norway::Value> {
     let src =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    serde_yaml::from_str(&src).with_context(|| format!("parsing {}", path.display()))
+    serde_norway::from_str(&src).with_context(|| format!("parsing {}", path.display()))
 }
 
 /// Validate a `feira` verb's `--cluster <name>` flag value at the
@@ -903,7 +903,7 @@ mod tests {
     #[test]
     fn load_yaml_accepts_well_formed_document() {
         // The canonical happy-path — a well-formed YAML document loads
-        // cleanly and the parsed [`serde_yaml::Value`] round-trips its
+        // cleanly and the parsed [`serde_norway::Value`] round-trips its
         // canonical top-level scalar. Peer with every per-verb
         // YAML-consuming entry-point: the per-Servico computeunit
         // loader (`super::chart::load_first_servico_yaml`) and the
@@ -916,7 +916,7 @@ mod tests {
         std::fs::write(&p, "name: hello\nport: 8080\n").expect("write yaml");
         let value = load_yaml(&p).expect("well-formed yaml must load");
         assert_eq!(
-            value.get("name").and_then(serde_yaml::Value::as_str),
+            value.get("name").and_then(serde_norway::Value::as_str),
             Some("hello"),
             "parsed yaml must round-trip the canonical top-level scalar"
         );
@@ -977,7 +977,7 @@ mod tests {
     fn load_yaml_parse_error_preserves_underlying_serde_yaml_error_on_chain() {
         // Peer to the parse-context pin above: the anyhow
         // `.with_context(...)` wrap preserves the underlying
-        // `serde_yaml::Error` on the cause chain — a future
+        // `serde_norway::Error` on the cause chain — a future
         // structured-output mode (`feira chart --json`, the future
         // `feira validate --strict` per-caixa admission verb, the M4
         // `feira reconcile --json` cluster-diff verb) can downcast
@@ -993,10 +993,10 @@ mod tests {
         let err = load_yaml(&p).expect_err("malformed yaml must error");
         let typed_reachable = err
             .chain()
-            .any(|e| e.downcast_ref::<serde_yaml::Error>().is_some());
+            .any(|e| e.downcast_ref::<serde_norway::Error>().is_some());
         assert!(
             typed_reachable,
-            "underlying serde_yaml::Error must remain reachable on the anyhow chain"
+            "underlying serde_norway::Error must remain reachable on the anyhow chain"
         );
     }
 

@@ -3449,7 +3449,7 @@ impl Caixa {
     /// resolve every declared migration script against the layout
     /// root), and the [`crate::render::servico_m2_overlay`] per-
     /// Servico M2 overlay emitter's `!caixa.upgrade_from.is_empty()`
-    /// presence gate + `serde_yaml::to_value(&caixa.upgrade_from)`
+    /// presence gate + `serde_norway::to_value(&caixa.upgrade_from)`
     /// projection (caixa-core/src/render.rs, which drives the
     /// `M2_KEY_UPGRADE_FROM`-keyed `serde_yaml` projection every
     /// `caixa-helm` / `caixa-flux` Servico values-block emitter fans
@@ -3512,7 +3512,7 @@ impl Caixa {
     /// narrowest borrow that supports every present + roadmapped
     /// consumer (`.iter()`, `.len()`, `.is_empty()`, `serde` slice-
     /// serialization through
-    /// `serde_yaml::to_value(&[UpgradeFromEntry])`) without leaking
+    /// `serde_norway::to_value(&[UpgradeFromEntry])`) without leaking
     /// the backing `Vec`'s grow/push/reserve surface no consumer of
     /// the typed view reaches for (the storage-side `Vec` remains
     /// reachable through the `pub upgrade_from` field for the
@@ -5940,7 +5940,7 @@ impl Caixa {
             LispSource,
             /// `:servicos` — ComputeUnit-CR YAML files the
             /// caixa-helm / caixa-flux renderers consume through
-            /// `serde_yaml::from_str`. Routes to
+            /// `serde_norway::from_str`. Routes to
             /// [`is_computeunit_yaml_extension`].
             ComputeUnitYaml,
         }
@@ -5959,7 +5959,7 @@ impl Caixa {
         // file, so [`CodePathFileType::None`] opts the slot out of any
         // file-type gate. `:servicos` is the `.computeunit.yaml`
         // ComputeUnit-CR axis (the peer caixa-helm / caixa-flux
-        // renderers consume each entry through `serde_yaml::from_str` as
+        // renderers consume each entry through `serde_norway::from_str` as
         // a typed `ComputeUnit` CR) — the lifted
         // [`is_computeunit_yaml_extension`] predicate gates the compound
         // `.computeunit.yaml` suffix. All three axes are surfaced through
@@ -6070,7 +6070,7 @@ impl Caixa {
                 //     `tatara_lisp::read` consumer);
                 //   - [`ComputeUnitYaml`] → [`is_computeunit_yaml_extension`]
                 //     for `:servicos` (the caixa-helm / caixa-flux
-                //     `serde_yaml::from_str` consumer's `ComputeUnit` CR
+                //     `serde_norway::from_str` consumer's `ComputeUnit` CR
                 //     accepted set);
                 //   - [`None`] for `:exe` — the nix-build derivation-
                 //     output axis has no terminating-extension contract.
@@ -6959,7 +6959,7 @@ pub enum ManifestError {
         "{slot} entry {} does not terminate in the `.computeunit.yaml` \
          compound suffix — every `:servicos` entry is a typed `ComputeUnit` \
          CR YAML file the peer caixa-helm / caixa-flux renderers consume \
-         through `serde_yaml::from_str` at chart / FluxCD bundle render \
+         through `serde_norway::from_str` at chart / FluxCD bundle render \
          time, so any other extension (`.yaml`, `.yml`, `.json`, the \
          off-by-one-segment `.computeunit-yaml`, the editor-backup \
          `.computeunit.yaml.bak`) or no-extension shape is structurally a \
@@ -11045,7 +11045,7 @@ mod tests {
     // The lifted [`crate::render::is_computeunit_yaml_extension`] predicate
     // now gates `:servicos` entries on the ComputeUnit-CR YAML file-type
     // contract. The peer caixa-helm / caixa-flux renderers consume each
-    // `:servicos` entry through `serde_yaml::from_str` as a typed
+    // `:servicos` entry through `serde_norway::from_str` as a typed
     // `ComputeUnit` CR — same downstream-consumer-shape lift as the peer
     // `:bibliotecas` `.lisp` gate (64772a9), here on the compound-suffix
     // axis `Path::extension` can't express on its own.
@@ -11055,7 +11055,7 @@ mod tests {
         // Canonical "I dragged the wrong file from the workspace tree"
         // footgun on the Servico axis. Without the gate the peer
         // caixa-helm / caixa-flux renderers hand the extensionless path
-        // to `serde_yaml::from_str` and fail with a parser-shaped
+        // to `serde_norway::from_str` and fail with a parser-shaped
         // diagnostic far from the source caixa.lisp, with no field
         // naming the offending `:servicos` entry.
         for relpath in ["servicos/demo", "demo", "servicos/sub/nested"] {
@@ -11079,7 +11079,7 @@ mod tests {
         // `.computeunit` segment" typo; the off-by-one-segment shapes
         // (`.computeunit-yaml` / `.computeunit_yaml`) silently pass the
         // bare `Path::extension` view but mismatch the typed compound
-        // suffix the renderers' `serde_yaml::from_str` consumer demands.
+        // suffix the renderers' `serde_norway::from_str` consumer demands.
         // Same sweep-posture as the peer
         // `validate_code_paths_rejects_wrong_extension_bibliotecas_entry`
         // (64772a9) on the sibling tatara-lisp-source axis.
@@ -16367,7 +16367,7 @@ mod tests {
         // accessor return a fresh-cloned copy on the `Some` arm (a
         // `LimitsSpec::clone()` projection) would silently break the
         // reference-identity pin the peer per-axis
-        // `serde_yaml::to_value(limits)` projection reads from.
+        // `serde_norway::to_value(limits)` projection reads from.
         use crate::LimitsSpec;
         use crate::render::{M2_KEY_LIMITS, servico_m2_overlay};
         let c = caixa_with_limits(Some(LimitsSpec {
@@ -16677,7 +16677,7 @@ mod tests {
         // silent detour that had the accessor return a fresh-cloned
         // copy on the `Some` arm (a `BehaviorSpec::clone()`
         // projection) would silently break the reference-identity
-        // pin the peer per-callback `serde_yaml::to_value(behavior)`
+        // pin the peer per-callback `serde_norway::to_value(behavior)`
         // projection reads from.
         //
         // Peer of the sibling
@@ -18907,7 +18907,7 @@ mod tests {
         // per-`:upgrade-from` M2 overlay emit arm must key off
         // [`Caixa::upgrade_from`], not the raw
         // `!caixa.upgrade_from.is_empty()` presence gate + the
-        // `serde_yaml::to_value(&caixa.upgrade_from)` projection.
+        // `serde_norway::to_value(&caixa.upgrade_from)` projection.
         // Structurally: a `Caixa { upgrade_from: vec![UpgradeFromEntry
         // { from: "0.0.1", instructions: vec![Restart] }], .. }` must
         // surface the `M2_KEY_UPGRADE_FROM` key with a per-entry
@@ -18920,7 +18920,7 @@ mod tests {
         // silent detour that had the accessor return a fresh-cloned
         // `Vec<UpgradeFromEntry>` copy would silently break the
         // reference-identity pin the peer per-entry
-        // `serde_yaml::to_value(caixa.upgrade_from())` projection
+        // `serde_norway::to_value(caixa.upgrade_from())` projection
         // reads from — the projection would clone once per accessor
         // call instead of borrowing the storage buffer verbatim.
         //

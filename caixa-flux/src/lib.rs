@@ -31,9 +31,9 @@
 //! use caixa_flux::programs_yaml_entry;
 //!
 //! let caixa = Caixa::from_lisp(src)?;
-//! let cu_yaml: serde_yaml::Value =
-//!     serde_yaml::from_str(std::fs::read_to_string("servicos/hello-rio.computeunit.yaml")?)?;
-//! let entry: serde_yaml::Value = programs_yaml_entry(&caixa, &cu_yaml)?;
+//! let cu_yaml: serde_norway::Value =
+//!     serde_norway::from_str(std::fs::read_to_string("servicos/hello-rio.computeunit.yaml")?)?;
+//! let entry: serde_norway::Value = programs_yaml_entry(&caixa, &cu_yaml)?;
 //! // → { name: hello-rio, namespace: tatara-system, module: { source: ... }, ... }
 //! ```
 //!
@@ -77,7 +77,7 @@ pub enum Error {
     #[error("computeunit yaml missing required field: {0}")]
     MissingField(&'static str),
     #[error("yaml: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(#[from] serde_norway::Error),
     #[error("render: {0}")]
     Render(#[from] caixa_core::RenderError),
 }
@@ -1791,7 +1791,7 @@ pub use caixa_core::servico_spec_and_m2_overlay_entries;
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
-/// The output is `serde_yaml::Value::Mapping`, so callers can splice
+/// The output is `serde_norway::Value::Mapping`, so callers can splice
 /// it into an existing `programs:` array without re-parsing the
 /// containing structure. Schema is enforced by
 /// `lareira-fleet-programs/values.schema.json` (`#/definitions/program`).
@@ -1804,8 +1804,8 @@ pub use caixa_core::servico_spec_and_m2_overlay_entries;
 ///   from `computeunit.spec.*` (verbatim — schemas already match)
 pub fn programs_yaml_entry(
     caixa: &Caixa,
-    computeunit_yaml: &serde_yaml::Value,
-) -> Result<serde_yaml::Value, Error> {
+    computeunit_yaml: &serde_norway::Value,
+) -> Result<serde_norway::Value, Error> {
     caixa_core::require_v0_servico_shape::<Error>(caixa)?;
 
     let spec = computeunit_yaml
@@ -1831,7 +1831,7 @@ pub fn programs_yaml_entry(
         .unwrap_or(DEFAULT_NAMESPACE)
         .to_string();
 
-    let mut entry = serde_yaml::Mapping::new();
+    let mut entry = serde_norway::Mapping::new();
     // Route the per-entry `name:` `String`-carry through the typed
     // [`caixa_core::Caixa::nome`] accessor (`caixa.nome().to_string()`)
     // instead of the raw `caixa.nome.clone()` field access — sibling
@@ -1874,7 +1874,7 @@ pub fn programs_yaml_entry(
         entry.entry_str_key(&k).or_insert(v);
     }
 
-    Ok(serde_yaml::Value::Mapping(entry))
+    Ok(serde_norway::Value::Mapping(entry))
 }
 
 /// Insert/upsert an entry into a `programs:` array nested under
@@ -1885,10 +1885,10 @@ pub fn programs_yaml_entry(
 /// [`upsert_into_programs_yaml`] — match by `name`, replace in place,
 /// otherwise append.
 pub fn upsert_into_helmrelease_programs(
-    helmrelease: serde_yaml::Value,
-    new_entry: serde_yaml::Value,
-) -> Result<(serde_yaml::Value, bool), Error> {
-    let serde_yaml::Value::Mapping(mut root) = helmrelease else {
+    helmrelease: serde_norway::Value,
+    new_entry: serde_norway::Value,
+) -> Result<(serde_norway::Value, bool), Error> {
+    let serde_norway::Value::Mapping(mut root) = helmrelease else {
         return Err(Error::MissingField(
             "expected mapping at root of HelmRelease",
         ));
@@ -1897,7 +1897,7 @@ pub fn upsert_into_helmrelease_programs(
     let spec = root
         .get_mut(KUBE_KEY_SPEC)
         .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
-    let serde_yaml::Value::Mapping(spec_map) = spec else {
+    let serde_norway::Value::Mapping(spec_map) = spec else {
         return Err(Error::MissingField("spec must be a mapping"));
     };
     let values_map = spec_map
@@ -1913,7 +1913,7 @@ pub fn upsert_into_helmrelease_programs(
         Error::MissingField(FLEET_PROGRAMS_KEY_NAME)
     })?;
 
-    Ok((serde_yaml::Value::Mapping(root), inserted))
+    Ok((serde_norway::Value::Mapping(root), inserted))
 }
 
 /// Insert/upsert an entry into a `programs:` array of an existing
@@ -1922,15 +1922,15 @@ pub fn upsert_into_helmrelease_programs(
 /// Idempotent: if an entry with the same `name` exists, replaces it
 /// in-place (preserving order). If not, appends. Returns the modified
 /// document. Operates on `Value` so callers can round-trip via
-/// `serde_yaml::from_str` / `to_string` without losing structure.
+/// `serde_norway::from_str` / `to_string` without losing structure.
 ///
 /// Returns the modified `programs_yaml` plus a `bool` indicating
 /// whether the entry was a new insert (`true`) or a replacement (`false`).
 pub fn upsert_into_programs_yaml(
-    programs_yaml: serde_yaml::Value,
-    new_entry: serde_yaml::Value,
-) -> Result<(serde_yaml::Value, bool), Error> {
-    let serde_yaml::Value::Mapping(mut root) = programs_yaml else {
+    programs_yaml: serde_norway::Value,
+    new_entry: serde_norway::Value,
+) -> Result<(serde_norway::Value, bool), Error> {
+    let serde_norway::Value::Mapping(mut root) = programs_yaml else {
         return Err(Error::MissingField(
             "expected mapping at root of values.yaml",
         ));
@@ -1944,7 +1944,7 @@ pub fn upsert_into_programs_yaml(
         Error::MissingField(FLEET_PROGRAMS_KEY_NAME)
     })?;
 
-    Ok((serde_yaml::Value::Mapping(root), inserted))
+    Ok((serde_norway::Value::Mapping(root), inserted))
 }
 
 // ── Cluster bundle (one-off / standalone path) ──────────────────────────
@@ -2601,8 +2601,8 @@ mod tests {
         }
     }
 
-    fn sample_cu_yaml() -> serde_yaml::Value {
-        serde_yaml::from_str(
+    fn sample_cu_yaml() -> serde_norway::Value {
+        serde_norway::from_str(
             r#"
 apiVersion: wasm.pleme.io/v1alpha1
 kind: ComputeUnit
@@ -4613,7 +4613,7 @@ spec:
     #[test]
     fn programs_yaml_entry_falls_back_to_default_namespace() {
         // A computeunit without metadata.namespace should default.
-        let cu: serde_yaml::Value = serde_yaml::from_str(
+        let cu: serde_norway::Value = serde_norway::from_str(
             r#"
 apiVersion: wasm.pleme.io/v1alpha1
 kind: ComputeUnit
@@ -4839,7 +4839,7 @@ spec:
 
     #[test]
     fn upsert_inserts_new_entry() {
-        let initial: serde_yaml::Value = serde_yaml::from_str(
+        let initial: serde_norway::Value = serde_norway::from_str(
             r#"
 enabled: true
 defaultNamespace: tatara-system
@@ -4860,7 +4860,7 @@ programs: []
 
     #[test]
     fn upsert_replaces_existing_entry() {
-        let initial: serde_yaml::Value = serde_yaml::from_str(
+        let initial: serde_norway::Value = serde_norway::from_str(
             r#"
 enabled: true
 defaultNamespace: tatara-system
@@ -4892,7 +4892,7 @@ programs:
 
     #[test]
     fn upsert_helmrelease_inserts_under_spec_values_programs() {
-        let initial: serde_yaml::Value = serde_yaml::from_str(
+        let initial: serde_norway::Value = serde_norway::from_str(
             r#"
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -4928,7 +4928,7 @@ spec:
 
     #[test]
     fn upsert_helmrelease_replaces_existing() {
-        let initial: serde_yaml::Value = serde_yaml::from_str(
+        let initial: serde_norway::Value = serde_norway::from_str(
             r#"
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -8144,13 +8144,13 @@ spec:
         // Per-crate byte-equivalence pin on the lifted
         // [`parse_yaml_at_path`] composed navigator: for every leaf the
         // `cluster_bundle` Flux v2 CR-trio emit writes, the lifted
-        // helper must return a [`serde_yaml::Value`] byte-equal to the
+        // helper must return a [`serde_norway::Value`] byte-equal to the
         // prior two-step
         //
         //   let f = find_file_by_path(&files, <FILENAME>)
         //       .expect("<filename>.yaml present");
-        //   let parsed: serde_yaml::Value =
-        //       serde_yaml::from_str(&f.contents)
+        //   let parsed: serde_norway::Value =
+        //       serde_norway::from_str(&f.contents)
         //           .expect("<filename>.yaml parses as YAML");
         //
         // the 38 test-side per-artifact YAML readback sites previously
@@ -8171,13 +8171,13 @@ spec:
             let via_helper = parse_yaml_at_path(&files, filename);
             let via_inline_file =
                 find_file_by_path(&files, filename).unwrap_or_else(|| panic!("{filename} present"));
-            let via_inline: serde_yaml::Value = serde_yaml::from_str(&via_inline_file.contents)
+            let via_inline: serde_norway::Value = serde_norway::from_str(&via_inline_file.contents)
                 .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
             assert_eq!(
                 via_helper, via_inline,
                 "parse_yaml_at_path(&files, {filename:?}) must byte-\
                  equal the prior two-step `find_file_by_path(&files, \
-                 {filename:?}).expect(...) + serde_yaml::from_str(&_.contents).expect(...)` \
+                 {filename:?}).expect(...) + serde_norway::from_str(&_.contents).expect(...)` \
                  combinator on every leaf the Flux v2 CR-trio emit \
                  writes — otherwise the 38 routed per-artifact YAML \
                  readback sites regress silently on the parse-target axis",

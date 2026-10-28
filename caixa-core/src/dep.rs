@@ -5369,7 +5369,7 @@ impl TryFrom<Vec<u8>> for DepList {
 /// `mesh.pleme.io/v1alpha1/Caixa` CR admission-webhook body reader
 /// that hands a per-manifest `spec.deps`/`spec.deps-dev` scalar off as
 /// an owned [`String`] after UTF-8 validation commits allocation, a
-/// `serde_yaml::from_str` / `serde_json::from_str` de-serialize
+/// `serde_norway::from_str` / `serde_json::from_str` de-serialize
 /// composer that surfaces the two-list dep-graph author-surface
 /// scalar as an owned [`String`] typed field, a future
 /// `feira dep --list <deps|deps-dev>` `clap`-derived arg-parse whose
