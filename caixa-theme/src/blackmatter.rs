@@ -91,7 +91,9 @@ pub const fn blackmatter_dark_role(s: Semantic) -> Role {
 }
 
 fn blackmatter_dark_color(s: Semantic) -> Rgb {
-    kazari::Theme::default().color(blackmatter_dark_role(s)).into()
+    kazari::Theme::default()
+        .color(blackmatter_dark_role(s))
+        .into()
 }
 
 // Invert background-assuming choices for readability on light terminals;
@@ -129,10 +131,20 @@ mod tests {
 
     #[test]
     fn paint_wraps_with_reset() {
-        let t = Theme::blackmatter_dark()
-            .with_capability(Capability::fixed(ColorLevel::Truecolor, 80, true));
+        let t = Theme::blackmatter_dark().with_capability(Capability::fixed(
+            ColorLevel::Truecolor,
+            80,
+            true,
+        ));
         let out = t.paint(Semantic::Error, "boom");
-        assert_eq!(out, format!("{}boom{}", t.ansi(Semantic::Error), crate::palette::ANSI_RESET));
+        assert_eq!(
+            out,
+            format!(
+                "{}boom{}",
+                t.ansi(Semantic::Error),
+                crate::palette::ANSI_RESET
+            )
+        );
         assert_eq!(t.ansi(Semantic::Error), Nord::NORD11.fg_ansi());
     }
 
