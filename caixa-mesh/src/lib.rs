@@ -3411,6 +3411,7 @@ mod tests {
             exe: vec![],
             bibliotecas: vec![],
             servicos: vec![],
+            caixotes: vec![],
             limits: None,
             behavior: None,
             upgrade_from: vec![],

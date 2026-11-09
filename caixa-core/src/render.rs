@@ -10281,6 +10281,10 @@ pub const LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT: &str = "upgrade-script";
 /// or the pin trips at build time.
 pub const LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA: &str = "biblioteca";
 
+/// The [`crate::LayoutError::MissingEntry`] kind a `:caixotes` entry
+/// surfaces under when its directory holds no `Cargo.toml`.
+pub const LAYOUT_MISSING_ENTRY_KIND_CAIXOTE: &str = "caixote";
+
 /// Canonical [`crate::LayoutError::MissingEntry`] `kind: &'static str`
 /// discriminator scalar the M0 `:kind Binario` typed slot's per-`:exe`
 /// entry on-disk-leaf existence gate surfaces under — the byte-string
@@ -30482,6 +30486,7 @@ mod tests {
             exe: vec![],
             bibliotecas: vec![],
             servicos: vec!["servicos/hello-rio.computeunit.yaml".into()],
+            caixotes: vec![],
             limits: None,
             behavior: None,
             upgrade_from: vec![],

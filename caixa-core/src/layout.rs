@@ -1088,6 +1088,15 @@ impl LayoutInvariants for StandardLayout {
             crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
         )?;
 
+        self.probe_declared_entries(
+            caixa
+                .caixotes()
+                .iter()
+                .map(|c| Path::new(c).join("Cargo.toml")),
+            root,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_CAIXOTE,
+        )?;
+
         let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
         self.probe_sandboxed_declared_entries(
             caixa.exe(),
@@ -2096,6 +2105,7 @@ mod tests {
             exe: vec![],
             bibliotecas: vec![],
             servicos: vec![],
+            caixotes: vec![],
             // M2 typed-substrate slots default to absent.
             limits: None,
             behavior: None,
@@ -4206,6 +4216,31 @@ mod tests {
     }
 
     // ── code-path shape gate (lifted to layout-level verify) ─────────────
+
+    #[test]
+    fn a_caixote_needs_its_cargo_manifest_on_disk() {
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let crate_manifest = root.join("demo-core").join("Cargo.toml");
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.caixotes = vec!["demo-core".into()];
+        let (m, l) = (manifest.clone(), default_lib.clone());
+        let without = StandardLayout::new().with_path_exists(move |p| p == m || p == l);
+        let err = without.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                LayoutError::MissingEntry { kind, path }
+                    if *kind == crate::render::LAYOUT_MISSING_ENTRY_KIND_CAIXOTE
+                        && *path == crate_manifest
+            ),
+            "got {err:?}",
+        );
+        let with = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == default_lib || p == crate_manifest);
+        with.verify(&c, &root).unwrap();
+    }
 
     #[test]
     fn code_path_violation_on_empty_bibliotecas_entry() {

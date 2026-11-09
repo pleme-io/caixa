@@ -2585,6 +2585,7 @@ mod tests {
             exe: vec![],
             bibliotecas: vec![],
             servicos: vec!["servicos/hello-rio.computeunit.yaml".into()],
+            caixotes: vec![],
             limits: None,
             behavior: None,
             upgrade_from: vec![],

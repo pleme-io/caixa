@@ -105,6 +105,13 @@ pub struct Caixa {
     #[serde(default)]
     pub servicos: Vec<String>,
 
+    /// Rust library crate directories of the repo's cargo workspace
+    /// (relative to the package root), released by the workspace's own
+    /// cargo pipeline. `feira build` never reads them, so they carry no
+    /// file-type contract; they share the path gates of every code slot.
+    #[serde(default)]
+    pub caixotes: Vec<String>,
+
     // ── M2 typed-substrate extensions per theory/ABSORPTION-ROADMAP.md ──
     //
     // All four are optional + default to "absent"; existing caixas
@@ -2045,6 +2052,11 @@ impl Caixa {
     #[must_use]
     pub const fn servicos(&self) -> &[String] {
         self.servicos.as_slice()
+    }
+
+    #[must_use]
+    pub const fn caixotes(&self) -> &[String] {
+        self.caixotes.as_slice()
     }
 
     /// Substrate-canonical per-`Caixa` `:deps` universal-axis
@@ -5985,6 +5997,7 @@ impl Caixa {
                 &self.servicos,
                 CodePathFileType::ComputeUnitYaml,
             ),
+            (":caixotes", &self.caixotes, CodePathFileType::None),
         ] {
             // Per-slot set-not-multiset gate on the typed code-path axis.
             // Every peer Vec-shaped author-supplied list past validate is
@@ -10473,6 +10486,52 @@ mod tests {
             vec!["servicos/demo.computeunit.yaml"],
         );
         c.validate_code_paths().unwrap();
+    }
+
+    #[test]
+    fn caixotes_take_a_bare_crate_directory_that_bibliotecas_refuses() {
+        let mut c = caixa_with_code_paths(vec![], vec![], vec![]);
+        c.caixotes = vec!["mirante-kube".into()];
+        c.validate_code_paths().unwrap();
+        let wrong = caixa_with_code_paths(vec!["mirante-kube"], vec![], vec![]);
+        assert!(matches!(
+            wrong.validate_code_paths().unwrap_err(),
+            ManifestError::CodePathNonLispExtension {
+                slot: ":bibliotecas",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn caixotes_share_the_path_gates_of_every_code_slot() {
+        let mut c = caixa_with_code_paths(vec![], vec![], vec![]);
+        c.caixotes = vec!["/etc/crate".into()];
+        assert!(matches!(
+            c.validate_code_paths().unwrap_err(),
+            ManifestError::CodePathAbsolute {
+                slot: ":caixotes",
+                ..
+            }
+        ));
+        c.caixotes = vec!["../escape".into()];
+        assert!(matches!(
+            c.validate_code_paths().unwrap_err(),
+            ManifestError::CodePathParentEscape {
+                slot: ":caixotes",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn caixotes_parse_from_the_lisp_surface() {
+        let src = Caixa::template("demo").replace(
+            ":bibliotecas",
+            ":caixotes (\"crates/demo-core\")\n  :bibliotecas",
+        );
+        let c = Caixa::from_lisp(&src).unwrap();
+        assert_eq!(c.caixotes(), ["crates/demo-core"]);
     }
 
     #[test]
