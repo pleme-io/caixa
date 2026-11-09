@@ -21,8 +21,7 @@
 //! (`emit_gha` in canteiro-speak). That emitter lives in
 //! `sui-supercacheci::canteiro`'s heavier execution tree (tokio,
 //! shigoto-scheduler, axum, sea-orm) — pulling it in here would defeat
-//! the entire point of the `canteiro-types` lean-crate fork (CANTEIRO
-//! §7.1-C, option B): a caixa consumer that wants only the pure,
+//! the entire point of the `canteiro-types` lean-crate fork: a caixa consumer that wants only the pure,
 //! wire-serializable types + DAG algebra, not canteiro's execution
 //! runtime. Emitting a real `.github/workflows/*.yml` from a validated
 //! [`RenderedAcao`] is the named next step for this crate (a peer of
