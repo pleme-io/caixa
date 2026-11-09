@@ -1393,7 +1393,7 @@ impl RenderedFile {
 /// `"30s\n"` (trailing LF) all survive the top-level `s.trim()`
 /// discipline and yield the same typed value at each codec — but
 /// serde round-trips to a *different* canonical form on the next
-/// emit, breaking the THEORY.md Part V render-determinism contract
+/// emit, breaking the render-determinism contract
 /// every typed slot carries.
 ///
 /// Peer of [`find_non_ascii_whitespace_char`] — the two predicates
@@ -1450,7 +1450,7 @@ pub fn find_ascii_whitespace_byte(s: &str) -> Option<u8> {
 /// `is_ascii_whitespace`), lands on the top-level `s.trim()` which
 /// silently strips the NBSP, parses to `64 * 1024 * 1024` bytes, and
 /// serde round-trips to the *different* canonical `"64MiB"` on next
-/// emit — breaking the THEORY.md Part V render-determinism contract
+/// emit — breaking the render-determinism contract
 /// every typed slot carries. Same class on every peer codec:
 /// `"\u{2028}30s"` (paste-from-web-doc line-separator prefix) →
 /// `Duration::from_secs(30)` → `"30s"`; `"\u{00A0}100/s"`
@@ -1575,7 +1575,7 @@ where
 /// leading-zero magnitude (`"030s"`, `"0100/s"`, `"0500m"`,
 /// `"0064MiB"`, `"01h"`) round-trips through `render_*` to a
 /// *different* canonical string on the next emit (`"30s"`, `"100/s"`,
-/// `"500m"`, `"64MiB"`, `"1h"`) — breaking the THEORY.md Part V
+/// `"500m"`, `"64MiB"`, `"1h"`) — breaking the
 /// render-determinism contract every typed slot carries the same way
 /// the leading-`+` shape did before the digit-only arm landed.
 ///
@@ -1640,7 +1640,7 @@ pub fn is_leading_zero_padded_magnitude(s: &str) -> bool {
 /// `"1.5KiB"`) round-trips through `render_*` to a *different*
 /// canonical string on the next emit (`"30s"`, `"500m"`, `"100/s"`,
 /// `"64MiB"`, `"1500ms"`, `"30s"`, `"1/s"`, `"1KiB"`) — breaking the
-/// THEORY.md Part V render-determinism contract every typed slot
+/// render-determinism contract every typed slot
 /// carries.
 ///
 /// The predicate deliberately treats the empty string as non-digit-only
@@ -4063,8 +4063,8 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///     (`":repo "https://github.com/foo/bar?tab=readme-ov-file"` vs
 ///     `":repo "https://github.com/foo/bar?utm_source=twitter"`)
 ///     resolve to the byte-identical upstream `git clone` but lock
-///     to two distinct BLAKE3 closures, defeating the THEORY.md
-///     §V.2 render-determinism contract on the same axis the `#`
+///     to two distinct BLAKE3 closures, defeating the
+///     render-determinism contract on the same axis the `#`
 ///     fragment arm closes. The Smart-HTTP transport (the layer
 ///     `git clone <https-url>` uses) appends its own
 ///     `?service=git-upload-pack` query internally; an
@@ -4376,8 +4376,8 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  encodes `{{` / `}}` to `%7B` / `%7D` on the wire (so \
                  the byte round-trips inconsistently between the \
                  lacre's per-dep content-address and the resolver's \
-                 `git clone <repo>` invocation, defeating the THEORY.md \
-                 §V.2 render-determinism contract on the same axis the \
+                 `git clone <repo>` invocation, defeating the \
+                 render-determinism contract on the same axis the \
                  fragment-`#`, query-`?`, and backslash-`\\` arms close) \
                  while every git porcelain entry-point fetches a \
                  nonexistent literal-`{{placeholder}}`-named path far \
@@ -5235,8 +5235,8 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  the byte to `%3D` on the wire — so two authors whose \
                  `:repo` values differ only in their `=` presence resolve \
                  to the byte-identical upstream `git clone` but lock to \
-                 two distinct BLAKE3 closures, defeating the THEORY.md \
-                 §V.2 render-determinism contract on the same axis the \
+                 two distinct BLAKE3 closures, defeating the \
+                 render-determinism contract on the same axis the \
                  fragment-`#`, query-`?`, backslash-`\\`, template-`{` / \
                  `}`, shell-redirection-`<` / `>`, backtick-`` ` ``, shell-\
                  pipe-`|`, shell-command-separator-`;`, shell-background-\
@@ -5516,7 +5516,7 @@ pub const CARGO_FEATURE_NAME_MAX_LEN: usize = 64;
 /// resolved-feature-set materializer, the future per-WitContract
 /// `:caracteristicas`-shaped capability-set axis if WIT worlds grow a
 /// typed feature toggle, the future per-`UpgradeInstruction` per-
-/// capability set axis the §V.2 mes-build extension would carry) —
+/// capability set axis the mes-build extension would carry) —
 /// wraps the same reason in its own typed `*Invalid { <axis>, reason }`
 /// variant. The reason wording is axis-agnostic ("Cargo feature names
 /// reject leading `-`") so every call site reading the same diagnostic
@@ -10873,7 +10873,7 @@ pub const COMPUTEUNIT_MODULE_KEY_SOURCE: &str = "source";
 /// off this exact spelling to filter entries by `placement.clusters`
 /// for cross-cluster fanout and to dispatch
 /// on `placement.estrategia` for distributed-app takeover semantics
-/// (§II.1, §V cross-cluster federation). Lifted as a const alongside
+/// (cross-cluster federation). Lifted as a const alongside
 /// the M2 keys so the Aplicacao-side renderer
 /// ([`crate::aplicacao::Placement`] → caixa-mesh
 /// `programs_for_aplicacao`) and every consumer (the M4 cluster-fanout
@@ -13408,8 +13408,8 @@ pub const FLUX_GITREPOSITORY_API_VERSION: &str = "source.toolkit.fluxcd.io/v1";
 /// silently comes up with the prior reconciled state) with no diagnostic
 /// naming the kind-drift root cause far from the source caixa.lisp.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -13484,8 +13484,8 @@ pub const FLUX_KIND_GIT_REPOSITORY: &str = "GitRepository";
 /// `Reconciling` forever with no diagnostic naming the kind-drift
 /// root cause far from the source caixa.lisp.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -13627,8 +13627,8 @@ pub const FLUX_KUSTOMIZATION_API_VERSION: &str = "kustomize.toolkit.fluxcd.io/v1
 /// never reconciling and every downstream per-Servico `dependsOn` chain
 /// freezing at the kustomize-controller's CRD-lookup boundary.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -13720,8 +13720,8 @@ pub const FLUX_KIND_KUSTOMIZATION: &str = "Kustomization";
 /// two per-CR format-string templates + five per-test-fixture probe
 /// sites).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -13787,8 +13787,8 @@ pub const FLUX_KEY_SOURCE_REF: &str = "sourceRef";
 /// than scattered across the one per-CR format-string template + two
 /// per-test-fixture probe sites).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -13889,8 +13889,8 @@ pub const FLUX_KEY_CHART: &str = "chart";
 /// two-CRD-groups-sharing-a-string sibling `"path"` re-exports
 /// established on the peer canonical-axis-independence surface.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -13952,8 +13952,8 @@ pub const FLUX_HELMCHART_TEMPLATE_KEY_CHART: &str = "chart";
 /// upsert-side write-side navigation + three per-test-fixture probe
 /// sites).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -14021,8 +14021,8 @@ pub const FLUX_KEY_VALUES: &str = "values";
 /// rather than scattered across the one emit-side format-string template +
 /// three per-test-fixture probe sites).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -14107,8 +14107,8 @@ pub const FLUX_KEY_HEALTH_CHECKS: &str = "healthChecks";
 /// *three-CR-shared-body-key* triplet the Flux v2 reconcile-poll cadence
 /// contract shares across all three per-cluster-bundle CRDs.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -14386,8 +14386,8 @@ pub const FLUX_GITREPOSITORY_KEY_URL: &str = "url";
 ///     drifted filename with the per-Servico release cycle silently
 ///     frozen at "waiting on healthCheck".
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// filename to a typed substrate-side `&'static str` on the same
@@ -14453,8 +14453,8 @@ pub const FLUX_HELMRELEASE_YAML_FILENAME: &str = "helmrelease.yaml";
 /// last-applied state with no field naming the filename-drift root
 /// cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// filename to a typed substrate-side `&'static str` on the same
@@ -14515,8 +14515,8 @@ pub const FLUX_GITREPOSITORY_YAML_FILENAME: &str = "gitrepository.yaml";
 /// parent Kustomization gating their health, with no field naming
 /// the filename-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// filename to a typed substrate-side `&'static str` on the same
@@ -14577,8 +14577,8 @@ pub const FLUX_KUSTOMIZATION_YAML_FILENAME: &str = "kustomization.yaml";
 /// fixtures — four occurrences of the same load-bearing Gateway API
 /// CRD-group/version convention, drift-prone by construction.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -14647,8 +14647,8 @@ pub const GATEWAY_API_API_VERSION: &str = "gateway.networking.k8s.io/v1";
 ///     `(:de, :para)` intra-mesh L4 contract drops at the eBPF data
 ///     plane with no field naming the version-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -14722,8 +14722,8 @@ pub const CILIUM_API_VERSION: &str = "cilium.io/v2";
 /// intra-mesh L4/L7 contrato flow dropping at the eBPF data plane with
 /// no field naming the kind-discriminator-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -14817,8 +14817,8 @@ pub const CILIUM_KIND_NETWORK_POLICY: &str = "CiliumNetworkPolicy";
 /// downstream `to_ports.get("rules").is_none()` assertion succeeds
 /// vacuously because `to_ports` is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -14914,8 +14914,8 @@ pub const CILIUM_KEY_TO_PORTS: &str = "toPorts";
 /// short-circuits vacuously because the outer selector-lookup is itself
 /// `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15024,8 +15024,8 @@ pub const CILIUM_KEY_ENDPOINT_SELECTOR: &str = "endpointSelector";
 /// `authentication` — rides through the same short-circuited outer
 /// axis-lookup with no field naming the drift root cause).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15129,8 +15129,8 @@ pub const CILIUM_KEY_INGRESS: &str = "ingress";
 /// chain short-circuits vacuously because the outer identity-source-
 /// lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15236,8 +15236,8 @@ pub const CILIUM_KEY_FROM_ENDPOINTS: &str = "fromEndpoints";
 /// `.and_then(|p| p.get("port"))` chain short-circuits vacuously because
 /// the outer L4-port-tuple-list-container lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15357,8 +15357,8 @@ pub const CILIUM_KEY_PORTS: &str = "ports";
 /// `.and_then(|a| a.get("mode"))` chain short-circuits vacuously
 /// because the outer mutual-auth-body-lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15451,8 +15451,8 @@ pub const CILIUM_KEY_AUTHENTICATION: &str = "authentication";
 /// default-authentication mode with no field naming the mutual-auth-
 /// mode-discriminator-leaf-axis-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15541,8 +15541,8 @@ pub const CILIUM_KEY_MODE: &str = "mode";
 /// L4-only fallback dispatch with no field naming the L7-HTTP-rule-list-
 /// discriminator-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15637,8 +15637,8 @@ pub const CILIUM_KEY_HTTP: &str = "http";
 /// any-URL-path fallback with no field naming the URL-path-predicate-
 /// leaf-axis-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15743,8 +15743,8 @@ pub const CILIUM_KEY_PATH: &str = "path";
 /// `:entrada` flow dropping at the gateway-class-controller's reconcile
 /// loop with no field naming the kind-discriminator-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15820,8 +15820,8 @@ pub const GATEWAY_API_KIND_GATEWAY: &str = "Gateway";
 /// multiple occurrences of the same load-bearing Gateway-API-CRD-`kind`-
 /// discriminator convention, drift-prone by construction.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15904,8 +15904,8 @@ pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
 /// deprecation cycle, would land at this one const rather than
 /// scattered across every per-emitter listener-block-insertion site).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -15983,8 +15983,8 @@ pub const GATEWAY_API_PROTOCOL_HTTP: &str = "HTTP";
 /// one const rather than scattered across every per-emitter per-match
 /// path-block-insertion site).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -16072,8 +16072,8 @@ pub const GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX: &str = "PathPrefix";
 /// cycle — would land at this one const rather than scattered across
 /// every per-emitter L4-port-block-insertion site).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -16393,8 +16393,8 @@ const _CILIUM_AUTH_MODE_FALSE_CONST_EVAL_WITNESS: &str = cilium_auth_mode(false)
 /// API implementation's per-Gateway HTTP-listener fan-in with no field
 /// naming the parent-Gateway-binding-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -16503,8 +16503,8 @@ pub const GATEWAY_API_KEY_PARENT_REFS: &str = "parentRefs";
 /// request access logs (never in `kubectl describe httproute` — the
 /// implicit fan-out reads as intended per the Gateway API v1 spec).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -16597,8 +16597,8 @@ pub const GATEWAY_API_KEY_SECTION_NAME: &str = "sectionName";
 /// `.and_then(|s| s.first())` chain short-circuits vacuously because
 /// the outer per-rule backend-destination lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -16703,8 +16703,8 @@ pub const GATEWAY_API_KEY_BACKEND_REFS: &str = "backendRefs";
 /// (`contains_key("matches")` returns `false` under both the
 /// drifted-key emitter and the drifted-key probe).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -16810,8 +16810,8 @@ pub const GATEWAY_API_KEY_MATCHES: &str = "matches";
 /// `.and_then(|s| s.first())` chain short-circuits vacuously because
 /// the outer per-Gateway L7-listener-set lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -16922,8 +16922,8 @@ pub const GATEWAY_API_KEY_LISTENERS: &str = "listeners";
 /// chain short-circuits vacuously because the outer per-listener DNS-
 /// host discriminator lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -17033,8 +17033,8 @@ pub const GATEWAY_API_KEY_HOSTNAME: &str = "hostname";
 /// picked up the second occurrence, and the same lift-before-the-second-
 /// site discipline applies here.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -17151,8 +17151,8 @@ pub const GATEWAY_API_KEY_HOSTNAMES: &str = "hostnames";
 /// occurrence count of any un-lifted Gateway-API-CRD-body-axis in the
 /// crate.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -17271,8 +17271,8 @@ pub const GATEWAY_API_KEY_TIMEOUTS: &str = "timeouts";
 /// [`GATEWAY_API_KEY_TIMEOUTS`] lift closed on the coexisting per-rule
 /// request-timeout-policy axis.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -17393,8 +17393,8 @@ pub const GATEWAY_API_KEY_RETRY: &str = "retry";
 /// :paths`, and independent-axis coexistence with the sibling
 /// `timeouts` per-rule request-timeout-policy axis).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -17501,8 +17501,8 @@ pub const GATEWAY_API_KEY_ATTEMPTS: &str = "attempts";
 /// multi-`:entrada :paths`, and independent-axis coexistence with the
 /// sibling `retry` per-rule retry-policy axis).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -18107,8 +18107,8 @@ pub const FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT: u32 = 3;
 /// load-bearing Flux-v2-per-CR-retry-cap-leaf-scalar-key convention,
 /// drift-prone by construction.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -18198,8 +18198,8 @@ pub const FLUX_HELMRELEASE_KEY_RETRIES: &str = "retries";
 /// four occurrences of the same load-bearing Flux-v2-per-CR-remediation-
 /// sub-container-axis-key convention, drift-prone by construction.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -18733,8 +18733,8 @@ pub const FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE: &str = "createNamespace";
 ///
 /// The `true` seed opts every emitted per-caixa `HelmRelease` into the
 /// substrate's canonical "no per-caixa Servico apply is blocked on
-/// manual namespace preprovisioning" semantic (
-/// install-path-fluency guarantee): on every first-time per-caixa chart
+/// manual namespace preprovisioning" semantic
+/// (install-path-fluency guarantee): on every first-time per-caixa chart
 /// apply the helm-controller first materializes the target namespace
 /// itself if the emitted `HelmRelease.metadata.namespace` (or its
 /// `spec.targetNamespace` override) does not already exist, rather than
@@ -18897,8 +18897,8 @@ pub const FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT: bool = true;
 /// `&'static` allocation) would let the two renderers silently disagree
 /// on the substrate's canonical sweep-what-you-removed semantic.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` in advance of the
@@ -19748,8 +19748,8 @@ pub const DEFAULT_GATEWAY_CLASS_NAME: &str = "cilium";
 /// `.and_then(|c| c.as_str())` chain short-circuits vacuously because
 /// the outer per-Gateway controller-binding lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -19842,8 +19842,8 @@ pub const GATEWAY_API_KEY_GATEWAY_CLASS_NAME: &str = "gatewayClassName";
 /// class-controller's per-rule reconcile with no field naming the
 /// path-matcher-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -19951,8 +19951,8 @@ pub const GATEWAY_API_KEY_PATH: &str = "path";
 /// controller's per-rule reconcile with no field naming the
 /// `HTTPPathMatch`-scalar-payload-drift root cause.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -20076,8 +20076,8 @@ pub const GATEWAY_API_KEY_VALUE: &str = "value";
 /// `.and_then(|n| n.as_str())` chain short-circuits vacuously because
 /// the outer per-backendRef name-reference lookup is itself `None`).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -20227,8 +20227,8 @@ pub const HELM_CHART_API_VERSION: &str = "v2";
 ///     install" far from the drift site, and troubleshooting has no
 ///     canonical anchor to compare the rendered value against).
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// constant to a typed substrate-side `&'static str` on the same
@@ -20814,8 +20814,8 @@ pub const HELM_CHART_DEPENDENCY_KEY_ALIAS: &str = "alias";
 ///     resolver returning `None` for the metadata file at cluster-side
 ///     `feira app deploy` time.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// filename to a typed substrate-side `&'static str` on the same
@@ -20892,8 +20892,8 @@ pub const HELM_CHART_YAML_FILENAME: &str = "Chart.yaml";
 ///     `feira app deploy` time, and every per-cluster overlay the
 ///     bundle path threads through silently drops.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// filename to a typed substrate-side `&'static str` on the same
@@ -20964,8 +20964,8 @@ pub const HELM_VALUES_YAML_FILENAME: &str = "values.yaml";
 ///     `None` for the readme file at cluster-side `feira app deploy`
 ///     time, and every downstream README-consuming path silently drops.
 ///
-/// The PRIME DIRECTIVE duplication-budget rule (
-/// "every recurring shape becomes a generator before it becomes a
+/// The PRIME DIRECTIVE duplication-budget rule
+/// ("every recurring shape becomes a generator before it becomes a
 /// pattern; every pattern becomes a library before it becomes
 /// duplicated code. The duplication budget is zero.") promotes the
 /// filename to a typed substrate-side `&'static str` on the same
@@ -21433,7 +21433,7 @@ where
 /// the next renderer to land — the per-`:politicas`
 /// `CiliumClusterwideEnvoyConfig` emitter,
 /// the `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
-/// materializer (§III.2 #5), the M4 cross-cluster fan-out's per-cluster
+/// materializer, the M4 cross-cluster fan-out's per-cluster
 /// `Service`/`HTTPRoute backendRefs` selectors, the future `caixa-otel`
 /// OpenTelemetry-Collector resource-selector pipeline — gets the
 /// canonical K8s label-selector shape for free with one function call,
@@ -21643,11 +21643,11 @@ where
 /// (<mapping>)` — "wrap this single mapping as the CRD-required list-
 /// shape") rather than three hand-spelled positional artifacts. The
 /// next renderer to land — the per-`:politicas`
-/// `CiliumClusterwideEnvoyConfig` emitter (
-/// which drops singleton `resources:[]` / `listeners:[]` /
+/// `CiliumClusterwideEnvoyConfig` emitter
+/// (which drops singleton `resources:[]` / `listeners:[]` /
 /// `virtualHosts:[]` blocks under its per-policy CR spec), the
 /// `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
-/// materializer (§III.2 #5, whose `spec.selectors:[]` / `spec.gates:[]`
+/// materializer (#5, whose `spec.selectors:[]` / `spec.gates:[]`
 /// blocks list-shape a single per-Aplicacao entry), the M4 cross-
 /// cluster fan-out's per-cluster `Service.spec.ports[]` /
 /// `HTTPRoute.spec.rules[].backendRefs[]` emission, the future
@@ -22072,7 +22072,7 @@ pub fn sequence_str_values(sequence: &serde_yaml::Sequence) -> Vec<&str> {
 /// [`DEFAULT_NAMESPACE`] contract), the
 /// `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
 /// materializer's per-CR readback (per-Aplicacao `metadata.name` /
-/// `metadata.namespace` pins on the emitted `Aplicacao` CR, §III.2 #5),
+/// `metadata.namespace` pins on the emitted `Aplicacao` CR, #5),
 /// the M4 cross-cluster fan-out's per-cluster `HelmRelease.metadata.
 /// namespace` readback, the future `caixa-otel` per-Servico
 /// OpenTelemetry-Collector CR's `metadata.name` pin — gets the
@@ -22254,7 +22254,7 @@ pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
 /// `CiliumClusterwideEnvoyConfig` emitter's per-CR filter,
 /// the `app-operator`'s
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-status
-/// discriminator predicate, §III.2 #5; the M4 cross-cluster fan-out's
+/// discriminator predicate, #5; the M4 cross-cluster fan-out's
 /// per-cluster `HelmRelease` vs `Kustomization` split by kind) reaches
 /// the same helper by construction, with no `== Some(...)` inline
 /// composition and no drift surface on the `kind` scalar-key axis.
@@ -22312,7 +22312,7 @@ pub fn kube_kind_is(value: &serde_yaml::Value, kind: &str) -> bool {
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's post-
 /// emit test harness; the
 /// `app-operator`'s `mesh.pleme.io/v1alpha1/Aplicacao` CR
-/// materializer's per-status doc-navigator, §III.2 #5; the M4
+/// materializer's per-status doc-navigator, #5; the M4
 /// cross-cluster fan-out's per-cluster multi-doc split by kind)
 /// reaches the same helper by construction, with no inline
 /// `.iter().find(closure)` combinator chain and no drift surface
@@ -22424,7 +22424,7 @@ pub fn find_by_kind<'a>(
 /// `CiliumClusterwideEnvoyConfig` emitter's per-CR discriminator pin,
 /// the future `app-operator`'s
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-status
-/// discriminator readback, §III.2 #5; the future M4 cross-cluster
+/// discriminator readback, #5; the future M4 cross-cluster
 /// fan-out's per-cluster `HelmRelease` vs `Kustomization` split by
 /// `kind:`) reaches the same pinned accessor by construction, with no
 /// axis-key argument drift and no re-inlined
@@ -22554,7 +22554,7 @@ pub fn kube_kind(value: &serde_yaml::Value) -> Option<&str> {
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-CR
 /// CRD-group/version pin; the future
 /// `app-operator`'s `mesh.pleme.io/v1alpha1/Aplicacao` CR
-/// materializer's per-status CRD-group/version readback, §III.2 #5;
+/// materializer's per-status CRD-group/version readback, #5;
 /// the future M4 cross-cluster fan-out's per-cluster Flux-triplet
 /// CRD-group/version pin across the `.toolkit.fluxcd.io` root)
 /// reaches the same pinned accessor by construction, with no
@@ -22654,7 +22654,7 @@ pub fn kube_api_version(value: &serde_yaml::Value) -> Option<&str> {
 /// version equality gate; the future
 /// `app-operator`'s per-Aplicacao
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR CRD-group/version
-/// equality join over emitted status docs, §III.2 #5; the future
+/// equality join over emitted status docs, #5; the future
 /// M4 cross-cluster fan-out's per-cluster Flux-triplet CRD-group/
 /// version equality gate across the `.toolkit.fluxcd.io` root)
 /// reaches this same predicate by construction, with no inline
@@ -22717,7 +22717,7 @@ pub fn kube_api_version_is(value: &serde_yaml::Value, api_version: &str) -> bool
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR CRD-group/version join
 /// over emitted status docs; the M4
 /// cross-cluster fan-out's per-cluster Flux-triplet split by
-/// `apiVersion:` across the `.toolkit.fluxcd.io` root, §III.2 #3;
+/// `apiVersion:` across the `.toolkit.fluxcd.io` root, #3;
 /// the future per-`:politicas` `CiliumClusterwideEnvoyConfig`
 /// per-CRD-group/version audit surface that locates the first
 /// emitted L7 policy inside a given CRD-group/version slice)
@@ -22995,7 +22995,7 @@ pub fn kube_name(value: &serde_yaml::Value) -> Option<&str> {
 /// per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
 /// per-CR namespace-scoping join; the future
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-CR
-/// namespace-scoping pin, §III.2 #3; the future `caixa-otel`
+/// namespace-scoping pin, #3; the future `caixa-otel`
 /// per-Servico OpenTelemetry-Collector CR's namespace-scoping pin; the
 /// future M4 cross-cluster fan-out's per-cluster `HelmRelease.metadata.
 /// namespace` readback) reaches the same pinned accessor by
@@ -23057,7 +23057,7 @@ pub fn kube_namespace(value: &serde_yaml::Value) -> Option<&str> {
 /// `:politicas` `CiliumClusterwideEnvoyConfig` per-namespace
 /// introspection filter; the future `app-operator`'s per-Aplicacao
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR namespace-scoping equality
-/// join, §III.2 #5; the future per-tenant CNP audit surface that
+/// join, #5; the future per-tenant CNP audit surface that
 /// filters emitted CNPs by their per-tenant namespace-scoping
 /// coordinate) reaches this same predicate by construction, with no
 /// inline `kube_namespace(v) == Some(...)` equality wrap and no
@@ -23169,7 +23169,7 @@ pub fn find_by_name<'a>(
 /// cross-cluster fan-out's per-tenant `HelmRelease` split by
 /// `metadata.namespace`; the future
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
-/// CR namespace-scoping join over emitted status docs, §III.2 #5; the
+/// CR namespace-scoping join over emitted status docs, #5; the
 /// future per-tenant CNP audit surface that locates the first emitted
 /// CNP inside a given tenant's namespace-scoping slice) reaches this
 /// same helper by construction, with no inline `.iter().find(closure)`
@@ -23300,7 +23300,7 @@ pub fn find_by_namespace<'a>(
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-CR
 /// label surface; the `app-operator`'s
 /// per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR label-based
-/// selector join, §III.2 #5; the future `caixa-otel` per-Servico
+/// selector join, #5; the future `caixa-otel` per-Servico
 /// OpenTelemetry-Collector CR's per-Servico label surface; the M4
 /// per-tenant fan-out's per-tenant label-prefix filter) reaches the
 /// same pinned accessor by construction, with no axis-key argument
@@ -23403,7 +23403,7 @@ pub fn kube_metadata_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Ma
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-
 /// policy `LABEL_POLITICA` readback; the
 /// `app-operator`'s per-Aplicacao label-based `spec.selector`
-/// materialization, §III.2 #5; the future `caixa-otel` per-Servico
+/// materialization, #5; the future `caixa-otel` per-Servico
 /// OpenTelemetry-Collector label-based routing filter; the M4 per-
 /// tenant fan-out's per-tenant label-prefix probe) reaches the same
 /// pinned accessor by construction, with no axis-key argument drift
@@ -23500,7 +23500,7 @@ pub fn kube_metadata_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Opt
 /// Aplicacao `spec.selector.matchLabels` reconciler `label_selector`
 /// pin; the future per-`:politicas`
 /// `CiliumClusterwideEnvoyConfig`-per-policy `LABEL_POLITICA` audit
-/// surface, §III.2 #3; the future per-tenant CNP filter that gates
+/// surface, #3; the future per-tenant CNP filter that gates
 /// per-tenant slice CRs by the tenant-scoping label) reaches this
 /// helper by construction, with no `== Some(...)` inline composition
 /// and no drift surface on the `metadata.labels.<label>` sub-mapping
@@ -23566,7 +23566,7 @@ pub fn kube_metadata_label_is(value: &serde_yaml::Value, label: &str, expected: 
 /// cluster fan-out's per-tenant `HelmRelease` split by tenant-scoping
 /// label; the future `app-operator`'s
 /// per-Aplicacao CR selector-based join over emitted status docs,
-/// §III.2 #5; the future per-`:politicas`
+/// #5; the future per-`:politicas`
 /// `CiliumClusterwideEnvoyConfig`-per-policy `LABEL_POLITICA` locator
 /// over the sibling L7-policy emission) reaches this same helper by
 /// construction, with no inline `.iter().find(closure)` combinator
@@ -23889,7 +23889,7 @@ where
 /// policy `spec.rules[]` readback; the
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
 /// CR materializer's `spec.membros`/`spec.contratos` navigation,
-/// §III.2 #5; the future `caixa-otel` per-Servico OTel-Collector CR's
+/// #5; the future `caixa-otel` per-Servico OTel-Collector CR's
 /// `spec.receivers` readback; every future test-side `spec.*` probe
 /// the M3.x + M4 renderer set adds) reaches through this one accessor
 /// by construction — no per-consumer two-hop chain re-inline, no
@@ -23991,7 +23991,7 @@ pub fn kube_spec(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
 /// `spec.rules[]` readback; the
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
-/// materializer's `spec.membros`/`spec.contratos` navigation, §III.2 #5;
+/// materializer's `spec.membros`/`spec.contratos` navigation, #5;
 /// the future `caixa-otel` per-Servico OTel-Collector CR's
 /// `spec.receivers` readback; every future test-side `spec.<field>`
 /// probe the M3.x + M4 renderer set adds) reaches this same helper by
@@ -24093,7 +24093,7 @@ pub fn kube_spec_field<'a>(
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
 /// `spec.rules[].name` navigation; the
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
-/// materializer's `spec.*` scalar readbacks, §III.2 #5; the future
+/// materializer's `spec.*` scalar readbacks, #5; the future
 /// `caixa-otel` per-Servico OpenTelemetry-Collector CR's `spec.*`
 /// scalar navigation; every future test-side `spec.<field>` string-
 /// scalar probe the M3.x + M4 renderer set adds) reaches this same
@@ -24181,7 +24181,7 @@ pub fn kube_spec_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-policy
 /// `spec.rules[]` navigation; the
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
-/// materializer's `spec.membros[]` / `spec.contratos[]` readback, §III.2
+/// materializer's `spec.membros[]` / `spec.contratos[]` readback,
 /// #5; the future `caixa-otel` per-Servico OpenTelemetry-Collector CR's
 /// `spec.receivers[]` navigation; every future test-side
 /// `spec.<field>[]` sequence probe the M3.x + M4 renderer set adds)
@@ -24277,7 +24277,7 @@ pub fn kube_spec_seq_field<'a>(
 /// `spec.endpointSelector` navigation; the
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
 /// materializer's `spec.entrada` / `spec.placement` nested-object
-/// readback, §III.2 #5; the future `caixa-otel` per-Servico
+/// readback, #5; the future `caixa-otel` per-Servico
 /// OpenTelemetry-Collector CR's `spec.exporters.<name>` nested-object
 /// navigation; every future test-side `spec.<field>` sub-mapping probe
 /// the M3.x + M4 renderer set adds) reaches this same helper by
@@ -24383,7 +24383,7 @@ pub fn kube_spec_map_field<'a>(
 /// `CiliumClusterwideEnvoyConfig` emitter's per-policy scalar-boolean
 /// gate readbacks the design admits, the
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
-/// CR materializer's `spec.<toggle>` scalar-boolean readbacks §III.2
+/// CR materializer's `spec.<toggle>` scalar-boolean readbacks
 /// #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
 /// Collector CR's `spec.<toggle>` scalar-boolean navigation; every
 /// future test-side `spec.<field>` scalar-boolean probe the M3.x + M4
@@ -24420,7 +24420,7 @@ pub fn kube_spec_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
 /// `spec.maxRequests` circuit-breaker count
 /// admits, the `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/
 /// Aplicacao` CR materializer's `spec.<count>` integer-scalar readbacks
-/// §III.2 #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
+/// #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
 /// Collector CR's `spec.grpc.max_recv_msg_size_mib` byte-count scalar).
 /// Structural mirror of the sibling [`kube_spec_str_field`] (c4fe21d),
 /// [`kube_spec_seq_field`] (fc64ed7), [`kube_spec_map_field`] (27fc2ee),
@@ -24475,7 +24475,7 @@ pub fn kube_spec_bool_field(value: &serde_yaml::Value, field: &str) -> Option<bo
 /// per-policy integer-count gate readbacks
 /// admits, the `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/
 /// Aplicacao` CR materializer's `spec.<count>` scalar-integer readbacks
-/// §III.2 #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
+/// #5 admits, the future `caixa-otel` per-Servico OpenTelemetry-
 /// Collector CR's `spec.<count>` scalar-integer navigation; every
 /// future test-side `spec.<field>` scalar-integer probe the M3.x + M4
 /// renderer set adds) reaches this same helper by construction — no
@@ -25172,7 +25172,7 @@ pub fn kube_spec_spec_u64_field(
 /// per-policy metadata pins; the
 /// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
 /// CR materializer's `metadata.annotations` navigation for
-/// per-tenant scoping, §III.2 #5; the future `caixa-otel` per-
+/// per-tenant scoping, #5; the future `caixa-otel` per-
 /// Servico OpenTelemetry-Collector CR's `metadata.ownerReferences`
 /// readback for controller-owned GC-cascade wiring; every future
 /// test-side `metadata.*` probe the M3.x + M4 renderer set adds)
@@ -25297,7 +25297,7 @@ pub fn kube_metadata(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> 
 /// the `app-operator`'s per-Aplicacao
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
 /// `metadata.ownerReferences` readback for controller-owned GC-cascade
-/// wiring, §III.2 #5; the future `caixa-otel` per-Servico
+/// wiring, #5; the future `caixa-otel` per-Servico
 /// OpenTelemetry-Collector CR's `metadata.annotations` navigation for
 /// per-tenant scoping; every future test-side `metadata.<field>` probe
 /// the M3.x + M4 renderer set adds) reaches this same helper by
@@ -25400,7 +25400,7 @@ pub fn kube_metadata_field<'a>(
 /// #3; the `app-operator`'s per-Aplicacao
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
 /// `metadata.annotations` readback for controller-owned admission-
-/// hint wiring, §III.2 #5; the future `caixa-otel` per-Servico
+/// hint wiring, #5; the future `caixa-otel` per-Servico
 /// OpenTelemetry-Collector CR's `metadata.annotations` navigation for
 /// per-tenant scoping; every future test-side `metadata.<field>` sub-
 /// mapping probe the M3.x + M4 renderer set adds) reaches this same
@@ -26240,7 +26240,7 @@ pub fn kube_root_u64_field(value: &serde_yaml::Value, field: &str) -> Option<u64
 /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-
 /// policy `spec.selector` readback; the
 /// future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
-/// per-Aplicacao `spec.selector.matchLabels` reconciler, §III.2 #5;
+/// per-Aplicacao `spec.selector.matchLabels` reconciler, #5;
 /// the future per-tenant CNP filter's per-endpoint selector probe;
 /// the M4 cross-cluster fan-out's per-cluster peer-selector readback)
 /// reaches the same pinned accessor by construction, with no axis-
@@ -26346,7 +26346,7 @@ pub fn kube_match_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Mappi
 /// `spec.selector.matchLabels.<LABEL>` readback
 /// #3; the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
 /// per-Aplicacao `spec.selector.matchLabels.<LABEL>` reconciler,
-/// §III.2 #5; the future per-tenant CNP filter's per-endpoint per-
+/// #5; the future per-tenant CNP filter's per-endpoint per-
 /// tenant-label probe; the M4 cross-cluster fan-out's per-cluster
 /// peer-selector per-label readback) reaches the same pinned accessor
 /// by construction, with no axis-key argument drift and no re-inlined
@@ -26498,7 +26498,7 @@ pub fn kube_match_label_is(value: &serde_yaml::Value, label: &str, expected: &st
 /// `CiliumClusterwideEnvoyConfig` emitter's per-policy first-rule pin,
 /// the `app-operator`'s per-Aplicacao
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's first-`membros`
-/// / first-`contratos` pin, §III.2 #5; the future `caixa-otel` per-
+/// / first-`contratos` pin, #5; the future `caixa-otel` per-
 /// Servico OpenTelemetry-Collector CR's first-`receivers` pin; every
 /// future test-side `spec.<field>[0]` first-entry probe the M3.x + M4
 /// renderer set adds) reaches this same helper by construction — no
@@ -26531,8 +26531,7 @@ pub fn kube_spec_seq_first<'a>(
 /// tuple bracket chain, the per-CNP `spec.ingress[0].fromEndpoints[0]`
 /// source-endpoint selector bracket, the per-`HTTPRoute` `spec.rules
 /// [0].backendRefs[0]` first-backend bracket, the per-`HTTPRoute`
-/// `spec.rules[0].matches[0]` first-match bracket, MESH-COMPOSITION
-/// §III.2). Where the sibling [`kube_spec_seq_first`] closes the outer
+/// `spec.rules[0].matches[0]` first-match bracket). Where the sibling [`kube_spec_seq_first`] closes the outer
 /// spec-anchored first-entry-arity axis and [`kube_seq_first`] closes
 /// the value-level nested-first-entry axis one altitude below, this
 /// accessor folds the two-hop `_seq_first` composition at the outer
@@ -26734,8 +26733,7 @@ pub fn kube_spec_seq_first_seq_first_seq_first<'a>(
 /// entry-scalar readback (the per-Gateway `spec.listeners[0].hostname` /
 /// `spec.listeners[0].name` / `spec.listeners[0].protocol` scalar
 /// readbacks, the per-`HTTPRoute` `spec.parentRefs[0].name` /
-/// `spec.parentRefs[0].sectionName` scalar readbacks, MESH-COMPOSITION
-/// §III.2) walks through — the raw-value hop via the sibling head-
+/// `spec.parentRefs[0].sectionName` scalar readbacks) walks through — the raw-value hop via the sibling head-
 /// selector, the trailing string-scalar hop via this accessor.
 ///
 /// Returns `None` on any of the six short-circuit arms folded through
@@ -26785,7 +26783,7 @@ pub fn kube_spec_seq_first_seq_first_seq_first<'a>(
 /// `spec.rules[0].name` navigation the design admits,
 /// the `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
 /// CR materializer's per-`spec.<axis>[0].<sub>` first-entry-scalar
-/// navigation §III.2 #5, every future test-side `spec.<seq>[0].<scalar>`
+/// navigation #5, every future test-side `spec.<seq>[0].<scalar>`
 /// string-scalar probe the M3.x + M4 renderer set adds) reaches this
 /// same helper by construction — no per-consumer two-line composition
 /// re-inline, no coordinated rewrite across every nested-first-entry
@@ -28399,8 +28397,8 @@ pub fn kube_field_has<R: KubeReceiver + ?Sized>(recv: &R, field: &str, inner_fie
 /// rebrand commit's source. Peer of the sibling render-side lifts
 /// ([`single_field_overlay`], [`servico_m2_overlay`],
 /// [`insert_first_seen`]) on the same "the same shape written
-/// verbatim ≥ 2 times becomes a typed helper" trajectory THEORY.md
-/// §I.3.5 promotes to a build-time concern.
+/// verbatim ≥ 2 times becomes a typed helper" trajectory
+/// promotes to a build-time concern.
 ///
 /// The `name_key` axis stays parametric (rather than pinned to
 /// [`crate::FLEET_PROGRAMS_KEY_NAME`] inside the helper) so a
@@ -29484,8 +29482,7 @@ pub trait MappingExt {
     /// than five hand-spelled positional artifacts. The next renderer
     /// to land — the per-`:politicas` `CiliumClusterwideEnvoyConfig`
     /// emitter, the `app-operator`'s
-    /// typed `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (§III.2
-    /// #5), the M4 cross-cluster fan-out's per-cluster `Service` /
+    /// typed `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer, the M4 cross-cluster fan-out's per-cluster `Service` /
     /// `HTTPRoute backendRefs` emission, the future `caixa-otel`
     /// OpenTelemetry-Collector pipeline emitter — gets the canonical
     /// key-scalar-promotion for free with one method call, instead of
@@ -29601,7 +29598,7 @@ pub trait MappingExt {
     /// fields and the Cilium ratelimit `requestPerUnit` field),
     /// the `app-operator`'s typed
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (per-`spec.
-    /// selectors[]` integer-scored `weight` fields, §III.2 #5), the
+    /// selectors[]` integer-scored `weight` fields, #5), the
     /// M4 cross-cluster fan-out's per-cluster
     /// `Service.spec.ports[].{port, targetPort, nodePort}` /
     /// `HTTPRoute.spec.rules[].backendRefs[].{port, weight}`
@@ -29627,8 +29624,7 @@ pub trait MappingExt {
     /// the sibling nested-Mapping / list-shape axes — the five together
     /// with [`Self::insert_str_key`] form the "one method call per
     /// emission axis" primitive quintuple the K8s-artifact-emit
-    /// surface's "same shape, written N times" duplication (THEORY.md
-    /// §I.3.5) collapses onto: `insert_str_key` for any-Value inserts,
+    /// surface's "same shape, written N times" duplication collapses onto: `insert_str_key` for any-Value inserts,
     /// `insert_string` for the string-scalar-valued-field shape,
     /// `insert_number` for the integer-scalar-valued-field shape,
     /// `insert_mapping` for the nested-Mapping-valued-field shape,
@@ -29746,7 +29742,7 @@ pub trait MappingExt {
     /// / `spec.virtualHosts[]`), the
     /// `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
     /// materializer (per-`spec.selectors[]` and per-`spec.gates[]`
-    /// list-shape sub-blocks, §III.2 #5), the M4 cross-cluster fan-out's
+    /// list-shape sub-blocks, #5), the M4 cross-cluster fan-out's
     /// per-cluster `Service.spec.ports[]` /
     /// `HTTPRoute.spec.rules[].backendRefs[]` list emission, the future
     /// `caixa-otel` OpenTelemetry-Collector per-pipeline `receivers[]`
@@ -29846,7 +29842,7 @@ pub trait MappingExt {
     /// Mapping-element blocks, are exactly the
     /// singleton-Mapping-list shape), the `app-operator`'s typed
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (per-single-
-    /// selector / per-single-gate emission, §III.2 #5), the M4 cross-
+    /// selector / per-single-gate emission, #5), the M4 cross-
     /// cluster fan-out's per-cluster singleton `Service.spec.ports[]` /
     /// `HTTPRoute.spec.rules[].backendRefs[]` sole-element emission, the
     /// future `caixa-otel` OpenTelemetry-Collector `pipelines.traces.
@@ -29909,9 +29905,9 @@ pub trait MappingExt {
     /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter (which
     /// upserts singleton `spec.resources:[]` / `spec.listeners:[]`
     /// blocks under an existing per-cluster overlay CR, MESH-COMPOSITION
-    /// §III.2 #3), the `app-operator`'s typed
+    /// #3), the `app-operator`'s typed
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (which
-    /// upserts `status.` sub-fields on partial reconciles, §III.2 #5),
+    /// upserts `status.` sub-fields on partial reconciles, #5),
     /// the M4 cross-cluster fan-out's per-cluster idempotent
     /// HelmRelease upsert — gets the canonical entry-API key-promotion
     /// for free with one method call, instead of re-inlining the
@@ -29984,7 +29980,7 @@ pub trait MappingExt {
     /// sites here already reach), the `app-operator`'s typed
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (whose per-
     /// selector `status.` sub-field overlays are the same arity-0-or-1
-    /// shape, §III.2 #5), the M4 cross-cluster fan-out's per-cluster
+    /// shape, #5), the M4 cross-cluster fan-out's per-cluster
     /// `HTTPRoute.spec.rules[].filters[]` per-filter Option overlays
     /// (the same shape at the per-cluster axis) — gets the canonical
     /// arity-0-or-1 conditional-insert for free with one method call,
@@ -30070,7 +30066,7 @@ pub trait MappingExt {
     /// axis), the `app-operator`'s typed
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (which
     /// upserts `status.<axis>` nested-Mapping sub-blocks on partial
-    /// reconciles, §III.2 #5), the M4 cross-cluster fan-out's
+    /// reconciles, #5), the M4 cross-cluster fan-out's
     /// per-cluster idempotent `HelmRelease.spec.values.<library>`
     /// container-upsert — gets the canonical entry-API-with-
     /// container-type-check for free with one method call, instead
@@ -30139,10 +30135,10 @@ pub trait MappingExt {
     /// (whose per-cluster upsert walks nested list-shape sub-blocks
     /// `spec.resources[]` / `spec.listeners[]` / `spec.virtualHosts[]`
     /// under existing operator-pinned overlay CRs, MESH-COMPOSITION
-    /// §III.2 #3), the `app-operator`'s typed
+    /// #3), the `app-operator`'s typed
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (which
     /// upserts `status.selectors[]` / `status.gates[]` list-shape
-    /// sub-blocks on partial reconciles, §III.2 #5), the M4 cross-
+    /// sub-blocks on partial reconciles, #5), the M4 cross-
     /// cluster fan-out's per-cluster idempotent
     /// `HelmRelease.spec.values.programs` list-upsert — gets the
     /// canonical entry-API-with-container-type-check for free with
@@ -30324,7 +30320,7 @@ pub trait SequenceExt {
     /// the `app-operator`'s typed
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (per-
     /// `spec.selectors[]` / per-`spec.gates[]` multi-element append,
-    /// §III.2 #5), the M4 cross-cluster fan-out's per-cluster
+    /// #5), the M4 cross-cluster fan-out's per-cluster
     /// multi-entry `Service.spec.ports[]` /
     /// `HTTPRoute.spec.rules[].backendRefs[]` list append, the future
     /// `caixa-otel` OpenTelemetry-Collector per-pipeline
@@ -31767,7 +31763,7 @@ mod tests {
         // parked at `Ready: False` without rolling back to the prior last-
         // known-good release the substrate's "no chart apply leaves a
         // per-caixa CR in a stalled, unremediated state" MESH-COMPOSITION
-        // .md §V guarantee mandates, with no diagnostic naming the
+        // .md guarantee mandates, with no diagnostic naming the
         // remediation-toggle-drift root cause. Changing it is a substrate-
         // side policy migration (candidates: `true` → `false` on a per-
         // cluster class where terminally-failed upgrades must escalate to
@@ -47779,8 +47775,7 @@ mod tests {
         // leading `+` (`"+500"` → 500), so `"+30"`, `"+500"`, `"+100"`
         // survive the parser and round-trip through `render_*` to the
         // sign-stripped form (`"30"`, `"500"`, `"100"`) — a *different*
-        // canonical string on the next emit, breaking the THEORY.md
-        // Part V render-determinism contract. The digit-only gate is
+        // canonical string on the next emit, breaking the render-determinism contract. The digit-only gate is
         // what closes the leading-sign class at each codec site.
         assert!(!is_digit_only_magnitude("+30"));
         assert!(!is_digit_only_magnitude("+500"));
@@ -47796,7 +47791,7 @@ mod tests {
         // duration codec the parser accepts `f64`-shaped magnitudes
         // (`"1.5s"` → 1500ms → `"1500ms"`, `"1.0s"` → 1s → `"1s"`,
         // `"0.5m"` → 30s → `"30s"`) — a *different* canonical string
-        // on the next emit, breaking the THEORY.md Part V render-
+        // on the next emit, breaking the render-
         // determinism contract. The digit-only gate closes the
         // decimal-point / fractional / exponent class at each codec
         // site.
@@ -61631,8 +61626,7 @@ spec:
         // into the input `Value` — the actual per-first-entry scalar
         // (`spec.listeners[0].hostname` on the per-`Gateway` Aplicacao-
         // host determinism pin, `spec.parentRefs[0].name` on the per-
-        // `HTTPRoute` parent-Gateway resolution pin, MESH-COMPOSITION
-        // §III.2). Structural mirror of the sibling
+        // `HTTPRoute` parent-Gateway resolution pin). Structural mirror of the sibling
         // `kube_spec_str_field_reads_sub_spec_field_str_scalar` positive-
         // path pin one altitude up on the direct sub-`spec.<field>` axis
         // and the value-level

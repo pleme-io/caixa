@@ -141,7 +141,7 @@ pub(crate) fn programs_for_aplicacao_from_spec(
     //
     // Wiring it through turns ("the
     // application graph is a compile-time typed value … rendered
-    // through to whatever runtime layer makes sense") + §V
+    // through to whatever runtime layer makes sense") +
     // ("cross-cluster federation: `:placement :replicated
     // :clusters (\"rio\" \"mar\")` deploys the Aplicacao to every
     // named cluster") from a typed-author-side promise into a
@@ -4680,7 +4680,7 @@ mod tests {
         // implementation's per-rule request-dispatch loop parses the
         // retry sub-shape as an empty `HTTPRouteRetry`, the "no
         // infinite retrying without bound" guarantee
-        // §V mandates for every rendered per-`:politicas` mesh-
+        // mandates for every rendered per-`:politicas` mesh-
         // composition edge silently regresses to the pre-overlay
         // unbounded-retry semantic). Bridge-arm peer to
         // [`gateway_api_key_retry_re_export_points_at_caixa_core_canonical`]
@@ -9403,8 +9403,7 @@ mod tests {
         // Pinning this at the renderer's exit so a future
         // pretty-printer / round-trip / diff-friendly format depends
         // on the determinism property (mirrors the M2 overlay helper's
-        // alphabetical-iteration determinism property — THEORY.md
-        // §V.2.7).
+        // alphabetical-iteration determinism property).
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             // Route the per-CNP `metadata:` sub-mapping readback

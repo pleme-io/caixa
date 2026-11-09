@@ -4915,7 +4915,7 @@ const fn default_max_restarts() -> u32 {
 /// `Supervisor.max_restarts: 3`, a widening to a per-cluster overlay
 /// the operator pins through a future
 /// `:supervisor :max-restarts-overrides` slot the MESH-COMPOSITION
-/// §III.2 supervision-canary roadmap acknowledges, a promotion of the
+/// supervision-canary roadmap acknowledges, a promotion of the
 /// plain `u32` count to a richer `{MaxR, MaxT}` per-child-cohort
 /// restart-budget-partition once the Erlang/OTP
 /// per-child-cohort roadmap lands) would have had to be threaded
@@ -5143,7 +5143,7 @@ pub const SUPERVISOR_RESTART_WINDOW_MAX: Duration = Duration::from_secs(3600);
 /// Elixir's `{max_restarts: 3, max_seconds: 5}`, a widening to a
 /// per-cluster overlay the operator pins through a future
 /// `:supervisor :restart-window-overrides` slot the MESH-COMPOSITION
-/// §III.2 supervision-canary roadmap acknowledges, a promotion of the
+/// supervision-canary roadmap acknowledges, a promotion of the
 /// paired constants to a per-child-cohort `{MaxR, MaxT}` restart-budget-
 /// partition once the Erlang/OTP per-child-cohort
 /// roadmap lands) would have had to migrate the `MaxIntensity` half
@@ -5220,7 +5220,7 @@ pub const SUPERVISOR_RESTART_WINDOW_DEFAULT: Duration = Duration::from_secs(60);
 /// discovers startup-order-coupled child cohorts as the more common
 /// worker-supervisor default; a per-cluster overlay the operator pins
 /// through a future `:estrategia-overrides` slot the MESH-COMPOSITION
-/// §III.2 supervision-canary roadmap acknowledges) would have had to
+/// supervision-canary roadmap acknowledges) would have had to
 /// migrate the `MaxIntensity` + `Period` halves through the lifted
 /// constants and the `one_for_one` half through an open-coded arm in
 /// lockstep or the three halves of the same OTP-canonical default would
@@ -5283,7 +5283,7 @@ pub const SUPERVISOR_ESTRATEGIA_DEFAULT: RestartStrategy = RestartStrategy::OneF
 /// rebrand of the OTP-shape default set (an Elixir-shaped
 /// `{:one_for_one, max_restarts: 3, max_seconds: 5}` tightening, a
 /// per-cluster overlay the operator pins through the MESH-COMPOSITION
-/// §III.2 supervision-canary roadmap slots, an OTP-`transient` widening
+/// supervision-canary roadmap slots, an OTP-`transient` widening
 /// once the substrate discovers clean-completion-aware children as the
 /// more common child shape) would have had to migrate three halves
 /// through typed constants and the fourth through a raw enum arm in
@@ -6642,7 +6642,7 @@ pub mod duration_codec {
         // codepoints) that `str::trim` at parse entry silently strips.
         // Either drift class would round-trip through `render` to a
         // *different* canonical form on next emit — breaking the
-        // THEORY.md Part V render-determinism contract on three typed-
+        // render-determinism contract on three typed-
         // duration slots at once (`:supervisor :restart-window`,
         // `:politicas :timeout`, `:politicas :circuit-breaker :window`)
         // via the shared codec.
@@ -6661,8 +6661,7 @@ pub mod duration_codec {
                  `\"30s\"`, `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no whitespace bytes \
                  anywhere. A whitespace-carrying shape (`\" 30s\"`, `\"30s \"`, `\"30 s\"`, \
                  `\"\\t30s\"`, `\"30s\\n\"`) round-trips through `render` to a *different* \
-                 canonical form (`\"30s\"`) on first serialize — breaking the THEORY.md \
-                 Part V render-determinism contract every typed slot carries. Strip every \
+                 canonical form (`\"30s\"`) on first serialize — breaking the render-determinism contract every typed slot carries. Strip every \
                  whitespace byte (write `\"30s\"` verbatim)"
                 )
             },
@@ -6680,7 +6679,7 @@ pub mod duration_codec {
                  `White_Space` property, strictly wider than the ASCII byte set) silently \
                  strips it at parse entry, and the value round-trips through `render` to \
                  a *different* canonical form (`\"30s\"`) on first serialize — breaking \
-                 the THEORY.md Part V render-determinism contract every typed slot \
+                 the render-determinism contract every typed slot \
                  carries. Strip every non-ASCII whitespace character (write `\"30s\"` \
                  verbatim with only ASCII bytes)",
                     cp = ch as u32
@@ -6710,7 +6709,7 @@ pub mod duration_codec {
         // tripped the value to a *different* canonical string on the
         // next emit (`"1.5s"` → 1500ms → `"1500ms"`, `"1.0s"` → 1s →
         // `"1s"`, `"0.5m"` → 30s → `"30s"`, `"+30s"` → 30s → `"30s"`)
-        // — breaking the THEORY.md Part V render-determinism contract
+        // — breaking the render-determinism contract
         // on three typed slots at once. Same canonical-form discipline
         // `crate::limits::parse_duration` (818dd38, the immediate
         // predecessor on the peer `:limits :wall-clock` codec) applies;
@@ -6752,7 +6751,7 @@ pub mod duration_codec {
                      (`\"1.5s\"`, `\"1.0s\"`, `\"0.5m\"`, `\"+30s\"`, `\"-30s\"`) round-trips \
                      through `render` to a *different* canonical form (`\"1500ms\"`, `\"1s\"`, \
                      `\"30s\"`, `\"30s\"`, `\"30s\"`) on first serialize — breaking the \
-                     THEORY.md Part V render-determinism contract every typed slot carries. \
+                     render-determinism contract every typed slot carries. \
                      Pick an integer magnitude in the unit that divides cleanly (write \
                      `\"1500ms\"` instead of `\"1.5s\"`; `\"30s\"` instead of `\"0.5m\"`)"
                 ));
@@ -6766,7 +6765,7 @@ pub mod duration_codec {
         // losslessly (= 30, 0, 1, 500), but `render` emits the leading-
         // zero-stripped form (`"30s"`, `"0s"`, `"1h"`, `"500ms"`) — a
         // *different* canonical string on the next emit, breaking the
-        // THEORY.md Part V render-determinism contract the same way
+        // render-determinism contract the same way
         // `"+30s"` did before the leading-`+` arm landed. The single-
         // byte magnitude `"0"` (or `"0s"` / `"0ms"`) round-trips
         // losslessly through `render` (`render(Duration::ZERO)` emits
@@ -6804,7 +6803,7 @@ pub mod duration_codec {
                  on the magnitude. A leading-zero magnitude (`\"030s\"`, `\"00s\"`, \
                  `\"01h\"`, `\"0500ms\"`) round-trips through `render` to a *different* \
                  canonical form (`\"30s\"`, `\"0s\"`, `\"1h\"`, `\"500ms\"`) on first \
-                 serialize — breaking the THEORY.md Part V render-determinism contract \
+                 serialize — breaking the render-determinism contract \
                  every typed slot carries. Strip the leading zeros (write \
                  `\"30s\"` instead of `\"030s\"`)"
             ));
@@ -6889,8 +6888,8 @@ pub mod duration_codec {
     ///
     /// [`render`] truncates a `Duration` to `as_millis()` before picking the
     /// largest divisor unit, so any sub-millisecond residue
-    /// (`d.subsec_nanos() % 1_000_000 != 0`) silently breaks the THEORY.md
-    /// §V.2.7 render-determinism contract:
+    /// (`d.subsec_nanos() % 1_000_000 != 0`) silently breaks the
+    /// render-determinism contract:
     ///
     ///   - `Duration::from_micros(1500)` (= `1_500_000` ns) → `as_millis() == 1`
     ///     → renders `"1ms"` → parses back to `Duration::from_millis(1)` =
@@ -9244,7 +9243,7 @@ mod tests {
         // returns `Ok(30)`, so before this gate `"030s"` parsed to
         // `Duration::from_secs(30)` and round-tripped through `render`
         // to `"30s"` — a *different* canonical string on the next emit,
-        // breaking the THEORY.md Part V render-determinism contract
+        // breaking the render-determinism contract
         // exactly the way `"+30s"` did before the leading-`+` arm
         // landed. Peer with the `rate_limit_codec` leading-zero arm
         // (4f46830) on the same canonical-form-drift axis.
@@ -9259,7 +9258,7 @@ mod tests {
             "missing canonical-form remediation in {err:?}"
         );
         assert!(
-            err.contains("THEORY.md"),
+            err.contains("render-determinism contract"),
             "missing render-determinism citation in {err:?}"
         );
     }
@@ -9399,7 +9398,7 @@ mod tests {
         );
         assert!(err.contains("0x20"), "missing offending byte in {err:?}");
         assert!(
-            err.contains("THEORY.md"),
+            err.contains("render-determinism contract"),
             "missing render-determinism contract citation in {err:?}"
         );
     }

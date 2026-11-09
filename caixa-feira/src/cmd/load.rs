@@ -698,7 +698,7 @@ mod tests {
     /// `"<nome>"`) and the value verbatim.
     ///
     /// Lifts the six-site per-`validate_<arg>_arg` reject-sweep shape
-    /// on the per-verb arg-entry axis (PRIME DIRECTIVE — theory/
+    /// on the per-verb arg-entry axis (PRIME DIRECTIVE —
     /// "the duplication budget is zero") into a single
     /// canonical helper. Before this lift the `--cluster` /
     /// `--namespace` / `<nome>` path-traversal and boundary-hyphen

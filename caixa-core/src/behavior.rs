@@ -611,8 +611,8 @@ impl BehaviorSpec {
     /// carries a reply payload) through the callback; the callback runs
     /// to completion, computes the reply, and the runtime hands the
     /// reply back to the awaiting caller before flipping the process
-    /// back to the mailbox-drain state (
-    /// OTP `gen_server` behavior's six-callback lifecycle, translated
+    /// back to the mailbox-drain state
+    /// (OTP `gen_server` behavior's six-callback lifecycle, translated
     /// onto pleme-io's typed `:behavior` slot family;
     /// the author-surface pins `:on-call` as
     /// the second arm of the `:behavior` overlay every Servico may

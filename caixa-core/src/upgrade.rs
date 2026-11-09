@@ -166,8 +166,7 @@ impl UpgradeFromEntry {
     /// UpgradeInstructions, DowngradeInstructions}` entry's
     /// `UpgradeInstructions` list (`code:load_module/1` /
     /// `gen_server:code_change/3` / `code:soft_purge/1` /
-    /// `code:purge/1` / `restart_new_emulator` — see INSPIRATIONS
-    /// §II.4), projected through the tatara-lisp
+    /// `code:purge/1` / `restart_new_emulator`), projected through the tatara-lisp
     /// `:upgrade-from ((:from … :instructions …))` author surface
     /// onto a typed `Vec<UpgradeInstruction>` whose per-element
     /// variant is [`UpgradeInstruction::LoadModule`] /
@@ -986,8 +985,7 @@ impl UpgradeFromEntry {
     /// as the target of more than one `(:load-module …)` instruction —
     /// set-not-multiset on the `LoadModule` axis.
     ///
-    /// `LoadModule` is the `code:load_module/1` analog (INSPIRATIONS
-    /// §II.4 verbatim: "1. `code:load_module/1` — load v2 alongside v1;
+    /// `LoadModule` is the `code:load_module/1` analog (verbatim: "1. `code:load_module/1` — load v2 alongside v1;
     /// new code is 'current', old code is 'old'."). The instruction
     /// brings the new wasm component up resident alongside the old
     /// one so the operator can route new traffic to the new code
@@ -6212,8 +6210,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_duplicate_load_module_for_same_module() {
-        // `LoadModule` is the `code:load_module/1` analog (INSPIRATIONS
-        // §II.4): each module is loaded exactly once per upgrade entry,
+        // `LoadModule` is the `code:load_module/1` analog: each module is loaded exactly once per upgrade entry,
         // the operator's dispatch table reads the module name to bind
         // the wasm component, and a second `(:load-module "x")` re-reads
         // the same module name and re-binds the same component — a

@@ -404,7 +404,7 @@ pub struct LimitsSpec {
 /// declaration overlay the operator pins through a future `ComputeUnit`
 /// CR-side `spec.limits.<axis>` slot the M4 CR materializer resolves,
 /// a fifth `:limits` sub-slot the roadmap
-/// grows once the Lunatic-shape §III.1 axis set stops covering the
+/// grows once the Lunatic-shape axis set stops covering the
 /// substrate's discovered sandboxing shape) reaches this impl's return
 /// value through exactly one edit on [`LimitsSpec::empty`] — the
 /// derived path could silently disagree with the constructor's shape
@@ -480,7 +480,7 @@ impl LimitsSpec {
     /// overlay the operator pins through a future `ComputeUnit` CR-side
     /// `spec.limits.<axis>` slot the M4 CR materializer resolves, a
     /// fifth `:limits` sub-slot the roadmap
-    /// grows once the Lunatic-shape §III.1 axis set stops covering the
+    /// grows once the Lunatic-shape axis set stops covering the
     /// substrate's discovered sandboxing shape) reaches this
     /// constructor at one edit (one added struct field on the type +
     /// one added `<axis>: None` line here) rather than a coordinated
@@ -1036,7 +1036,7 @@ pub enum LimitsError {
          `\"1GiB\"`, `\"512KiB\"`, `\"1024\"`) with no leading-zero padding on the magnitude. \
          A leading-zero magnitude (`\"064MiB\"`, `\"01024\"`, `\"00KiB\"`, `\"0500MB\"`) round-trips \
          through `render_byte_size` to a *different* canonical form (`\"64MiB\"`, `\"1KiB\"`, \
-         `\"0\"`, `\"500MB\"`) on first serialize — breaking the THEORY.md Part V \
+         `\"0\"`, `\"500MB\"`) on first serialize — breaking the \
          render-determinism contract every typed slot carries. Strip the leading zeros \
          (write `\"64MiB\"` instead of `\"064MiB\"`)"
     )]
@@ -1047,7 +1047,7 @@ pub enum LimitsError {
          `\"1GiB\"`, `\"512KiB\"`, `\"1024\"`) with no whitespace bytes anywhere. A \
          whitespace-carrying shape (`\" 64MiB\"`, `\"64MiB \"`, `\"64 MiB\"`, `\"\\t64MiB\"`, \
          `\"64MiB\\n\"`) round-trips through `render_byte_size` to a *different* canonical \
-         form (`\"64MiB\"`) on first serialize — breaking the THEORY.md Part V \
+         form (`\"64MiB\"`) on first serialize — breaking the \
          render-determinism contract every typed slot carries. Strip every whitespace byte \
          (write `\"64MiB\"` verbatim)"
     )]
@@ -1065,7 +1065,7 @@ pub enum LimitsError {
          `char::is_whitespace` — the Unicode `White_Space` property, strictly wider than \
          the ASCII byte set) silently strips it at parse entry, and the value round-trips \
          through `render_byte_size` to a *different* canonical form (`\"64MiB\"`) on \
-         first serialize — breaking the THEORY.md Part V render-determinism contract \
+         first serialize — breaking the render-determinism contract \
          every typed slot carries. Strip every non-ASCII whitespace character (write \
          `\"64MiB\"` verbatim with only ASCII bytes)"
     )]
@@ -1087,7 +1087,7 @@ pub enum LimitsError {
          fractional / decimal-shaped magnitude (`\"1.5s\"`, `\"1.0s\"`, `\"0.5m\"`, \
          `\"+30s\"`, `\"-30s\"`) round-trips through `render_duration` to a *different* \
          canonical form (`\"1500ms\"`, `\"1s\"`, `\"30s\"`, `\"30s\"`) on first serialize \
-         — breaking the THEORY.md Part V render-determinism contract every typed slot \
+         — breaking the render-determinism contract every typed slot \
          carries. Pick an integer magnitude in the unit that divides cleanly (write \
          `\"1500ms\"` instead of `\"1.5s\"`; `\"30s\"` instead of `\"0.5m\"`)"
     )]
@@ -1098,7 +1098,7 @@ pub enum LimitsError {
          `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no leading-zero padding on the magnitude. \
          A leading-zero magnitude (`\"030s\"`, `\"00s\"`, `\"01h\"`, `\"0500ms\"`) round-trips \
          through `render_duration` to a *different* canonical form (`\"30s\"`, `\"0s\"`, \
-         `\"1h\"`, `\"500ms\"`) on first serialize — breaking the THEORY.md Part V \
+         `\"1h\"`, `\"500ms\"`) on first serialize — breaking the \
          render-determinism contract every typed slot carries. Strip the leading zeros \
          (write `\"30s\"` instead of `\"030s\"`)"
     )]
@@ -1109,7 +1109,7 @@ pub enum LimitsError {
          `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no whitespace bytes anywhere. A \
          whitespace-carrying shape (`\" 30s\"`, `\"30s \"`, `\"30 s\"`, `\"\\t30s\"`, \
          `\"30s\\n\"`) round-trips through `render_duration` to a *different* canonical form \
-         (`\"30s\"`) on first serialize — breaking the THEORY.md Part V render-determinism \
+         (`\"30s\"`) on first serialize — breaking the render-determinism \
          contract every typed slot carries. Strip every whitespace byte (write `\"30s\"` \
          verbatim)"
     )]
@@ -1127,7 +1127,7 @@ pub enum LimitsError {
          `char::is_whitespace` — the Unicode `White_Space` property, strictly wider than \
          the ASCII byte set) silently strips it at parse entry, and the value round-trips \
          through `render_duration` to a *different* canonical form (`\"30s\"`) on first \
-         serialize — breaking the THEORY.md Part V render-determinism contract every \
+         serialize — breaking the render-determinism contract every \
          typed slot carries. Strip every non-ASCII whitespace character (write `\"30s\"` \
          verbatim with only ASCII bytes)"
     )]
@@ -1146,7 +1146,7 @@ pub enum LimitsError {
          no leading `+` sign. A fractional / decimal-shaped magnitude (`\"1.5\"`, \
          `\"500.0m\"`, `\"+500m\"`, `\"-100m\"`) round-trips through `render_millicores` \
          to a *different* canonical form (`\"1500m\"`, `\"500m\"`, `\"500m\"`, \
-         parse-rejection) on first serialize — breaking the THEORY.md Part V \
+         parse-rejection) on first serialize — breaking the \
          render-determinism contract every typed slot carries. Pick an integer magnitude \
          in millicores (write `\"1500m\"` instead of `\"1.5\"`; `\"500m\"` instead of \
          `\"500.0m\"`)"
@@ -1159,8 +1159,7 @@ pub enum LimitsError {
          `<integer>` (e.g. `\"2\"` = `\"2000m\"`) with no leading-zero padding on the \
          magnitude. A leading-zero magnitude (`\"0500m\"`, `\"00m\"`, `\"02\"`, `\"01500m\"`) \
          round-trips through `render_millicores` to a *different* canonical form (`\"500m\"`, \
-         `\"0m\"`, `\"2000m\"`, `\"1500m\"`) on first serialize — breaking the THEORY.md Part \
-         V render-determinism contract every typed slot carries. Strip the leading zeros \
+         `\"0m\"`, `\"2000m\"`, `\"1500m\"`) on first serialize — breaking the render-determinism contract every typed slot carries. Strip the leading zeros \
          (write `\"500m\"` instead of `\"0500m\"`; `\"2\"` instead of `\"02\"`)"
     )]
     LeadingZeroMillicoreMagnitude { value: String },
@@ -1171,7 +1170,7 @@ pub enum LimitsError {
          with no whitespace bytes anywhere. A whitespace-carrying shape (`\" 500m\"`, \
          `\"500m \"`, `\"500 m\"`, `\"\\t500m\"`, `\"500m\\n\"`) round-trips through \
          `render_millicores` to a *different* canonical form (`\"500m\"`) on first \
-         serialize — breaking the THEORY.md Part V render-determinism contract every \
+         serialize — breaking the render-determinism contract every \
          typed slot carries. Strip every whitespace byte (write `\"500m\"` verbatim)"
     )]
     WhitespaceInMillicores { value: String, byte: u8 },
@@ -1189,7 +1188,7 @@ pub enum LimitsError {
          `char::is_whitespace` — the Unicode `White_Space` property, strictly wider than \
          the ASCII byte set) silently strips it at parse entry, and the value round-trips \
          through `render_millicores` to a *different* canonical form (`\"500m\"`) on \
-         first serialize — breaking the THEORY.md Part V render-determinism contract \
+         first serialize — breaking the render-determinism contract \
          every typed slot carries. Strip every non-ASCII whitespace character (write \
          `\"500m\"` verbatim with only ASCII bytes)"
     )]
@@ -1322,7 +1321,7 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // typography codepoints) that `str::trim` at parse entry silently
     // strips. Either drift class would round-trip through
     // `render_byte_size` to a *different* canonical form on next emit
-    // — breaking the THEORY.md Part V render-determinism contract every
+    // — breaking the render-determinism contract every
     // typed slot carries. Diagnostics stay typed at
     // `WhitespaceInByteSize` / `NonAsciiWhitespaceInByteSize` so the
     // failing byte / char + U+XXXX codepoint reaches the author verbatim
@@ -1435,7 +1434,7 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // `"0500MB"` as `u64::from_str` parses them losslessly (= 64, 1024,
     // 0, 500), but `render_byte_size` emits the leading-zero-stripped
     // form (`"64MiB"`, `"1KiB"`, `"0"`, `"500MB"`) — a *different*
-    // canonical string on the next emit, breaking the THEORY.md Part V
+    // canonical string on the next emit, breaking the
     // render-determinism contract the same way `"+1024"` did before the
     // leading-`+` arm landed. The single-byte magnitude `"0"` (or
     // `"0B"` / `"0KiB"`) round-trips losslessly through
@@ -1553,7 +1552,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // codepoints) that `str::trim` at parse entry silently strips.
     // Either drift class would round-trip through `render_duration` to
     // a *different* canonical form on next emit — breaking the
-    // THEORY.md Part V render-determinism contract. Diagnostics stay
+    // render-determinism contract. Diagnostics stay
     // typed at `WhitespaceInDuration` / `NonAsciiWhitespaceInDuration`.
     //
     // Routed through the lifted [`crate::render::reject_whitespace`]
@@ -1585,7 +1584,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // 30s) and serde silently round-tripped the value to a *different*
     // canonical string on the next emit (`"1.5s"` → 1500ms →
     // `"1500ms"`, `"1.0s"` → 1s → `"1s"`, `"0.5m"` → 30s → `"30s"`,
-    // `"+30s"` → 30s → `"30s"`) — breaking the THEORY.md Part V
+    // `"+30s"` → 30s → `"30s"`) — breaking the
     // render-determinism contract every typed slot carries. The same
     // canonical-form discipline `parse_byte_size`'s integer-magnitude
     // gate (the immediate predecessor on the peer `:limits :memory`
@@ -1624,7 +1623,7 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // losslessly (= 30, 0, 1, 500), but `render_duration` emits the
     // leading-zero-stripped form (`"30s"`, `"0s"`, `"1h"`, `"500ms"`)
     // — a *different* canonical string on the next emit, breaking the
-    // THEORY.md Part V render-determinism contract the same way
+    // render-determinism contract the same way
     // `"+30s"` did before the leading-`+` arm landed. The single-byte
     // magnitude `"0"` (or `"0s"` / `"0ms"`) round-trips losslessly
     // through `render_duration` (`render_duration(Duration::ZERO)`
@@ -1727,7 +1726,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // the peer typography codepoints) that `str::trim` at parse entry
     // silently strips. Either drift class would round-trip through
     // `render_millicores` to a *different* canonical form on next emit
-    // — breaking the THEORY.md Part V render-determinism contract.
+    // — breaking the render-determinism contract.
     // Diagnostics stay typed at `WhitespaceInMillicores` /
     // `NonAsciiWhitespaceInMillicores` — peer with every prior
     // canonical-form-drift arm on this codec
@@ -1767,7 +1766,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // `u32::from_str`-shaped magnitude (`"+500m"` → 500, `"+2"` →
     // 2000) and serde silently round-tripped the value to a *different*
     // canonical string on the next emit (`"+500m"` → `"500m"`, `"+2"`
-    // → `"2000m"`) — breaking the THEORY.md Part V render-determinism
+    // → `"2000m"`) — breaking the render-determinism
     // contract every typed slot carries. Closes the sixth (and last)
     // typed-codec surface in caixa-core on the integer-magnitude
     // canonical-form axis, peer with the five duration / byte-size /
@@ -1816,7 +1815,7 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // parses them losslessly (= 500, 0, 2, 1500), but `render_millicores`
     // emits the leading-zero-stripped form (`"500m"`, `"0m"`, `"2000m"`,
     // `"1500m"`) — a *different* canonical string on the next emit,
-    // breaking the THEORY.md Part V render-determinism contract the
+    // breaking the render-determinism contract the
     // same way `"+500m"` did before the leading-`+` arm landed. The
     // single-byte magnitude `"0"` (or `"0m"`) round-trips losslessly
     // through `render_millicores` (`render_millicores(0)` emits `"0m"`)
@@ -4092,7 +4091,7 @@ mod tests {
             "diagnostic must surface the offending byte verbatim (got {msg:?})"
         );
         assert!(
-            msg.contains("THEORY.md"),
+            msg.contains("render-determinism contract"),
             "diagnostic must cite the render-determinism contract (got {msg:?})"
         );
     }
@@ -4248,7 +4247,7 @@ mod tests {
             "diagnostic must surface the codepoint verbatim (got {msg:?})"
         );
         assert!(
-            msg.contains("THEORY.md"),
+            msg.contains("render-determinism contract"),
             "diagnostic must cite the render-determinism contract (got {msg:?})"
         );
     }
@@ -4626,7 +4625,7 @@ mod tests {
             "diagnostic must surface the offending byte verbatim (got {msg:?})"
         );
         assert!(
-            msg.contains("THEORY.md"),
+            msg.contains("render-determinism contract"),
             "diagnostic must cite the render-determinism contract (got {msg:?})"
         );
     }
@@ -5324,7 +5323,7 @@ mod tests {
             "diagnostic must surface the offending byte verbatim (got {msg:?})"
         );
         assert!(
-            msg.contains("THEORY.md"),
+            msg.contains("render-determinism contract"),
             "diagnostic must cite the render-determinism contract (got {msg:?})"
         );
     }
@@ -5452,7 +5451,7 @@ mod tests {
             "diagnostic must surface the codepoint verbatim (got {msg:?})"
         );
         assert!(
-            msg.contains("THEORY.md"),
+            msg.contains("render-determinism contract"),
             "diagnostic must cite the render-determinism contract (got {msg:?})"
         );
     }

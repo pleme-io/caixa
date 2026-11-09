@@ -2950,8 +2950,7 @@ impl Dep {
     /// the *target's* `:nome` rather than the dep entry that referenced
     /// it. Mirroring the 3f9d7a0 / 31bfa43 / 6c992f8 trajectory through
     /// the lifted [`crate::render::is_dns_1123_label`] predicate (the
-    /// "before its third occurrence" PRIME DIRECTIVE boundary, THEORY.md
-    /// §I.3.5): every `Dep::nome` past validate is DNS-1123-label-shaped,
+    /// "before its third occurrence" PRIME DIRECTIVE boundary): every `Dep::nome` past validate is DNS-1123-label-shaped,
     /// so every downstream consumer (caixa-resolver's lacre fetch,
     /// caixa-helm's `lareira-<nome>` chart name, the future M4 per-dep
     /// fan-out emitter) reaches for the name knowing the value is
@@ -8845,8 +8844,8 @@ mod tests {
         // URL-parser layer — two authors whose values differ only
         // in their background-launch tail (`& sleep 1` vs nothing)
         // resolve to the byte-identical upstream `git clone` but
-        // lock to two distinct lacres, defeating the THEORY.md
-        // §V.2 render-determinism contract. Peer with the
+        // lock to two distinct lacres, defeating the
+        // render-determinism contract. Peer with the
         // `:caminho` axis's `FonteCaminhoShellBackground` arm
         // (e12e4f3) on the sibling path-fonte axis, and
         // `is_gateway_api_http_path`'s eleven-byte RFC-3986-

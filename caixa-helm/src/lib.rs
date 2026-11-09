@@ -2807,7 +2807,7 @@ spec:
         // `String`-carry sites of `Caixa::versao` on this fn's
         // emit path — and a future extension of the accessor
         // (a build-metadata canonicalization pass the CAIXA-SDLC
-        // §I SemVer-2 pin acknowledges, an OCI-tag normalization
+        // SemVer-2 pin acknowledges, an OCI-tag normalization
         // the M4 registry-alignment slot lands, a per-edition
         // pre-release-tag overlay the sibling `Caixa::edicao`
         // universal-axis 4-digit-ASCII-decimal-year scalar

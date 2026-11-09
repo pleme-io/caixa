@@ -368,7 +368,7 @@ fn check_aplicacao_timeout(node: &Node, diags: &mut Vec<Diagnostic>) {
     }
     // The mesh-policy minimums are Aplicacao-specific: only a
     // `:kind Aplicacao` composes Servicos behind `:politicas`, so the
-    // §V "no infinite blocking" invariant has no meaning on the other
+    // "no infinite blocking" invariant has no meaning on the other
     // four kinds. `:kind` is a bare PascalCase symbol (enforced by the
     // `enum-variant-pascal-case` rule), so match on the Symbol arm.
     //
@@ -385,7 +385,7 @@ fn check_aplicacao_timeout(node: &Node, diags: &mut Vec<Diagnostic>) {
     }
     // `:politicas` is authored either flat (`(:timeout "30s" :retries 3)`)
     // or nested (`((:timeout "30s") (:retries 3))`) — MESH-COMPOSITION
-    // §III.1 shows the nested form, the canonical example the flat one.
+    // shows the nested form, the canonical example the flat one.
     // Search the whole `:politicas` subtree for a `:timeout` keyword so
     // the rule is shape-agnostic. A missing `:politicas` slot fails the
     // same way an empty one does: no declared per-call deadline.
@@ -761,7 +761,7 @@ mod tests {
     fn flags_aplicacao_without_timeout() {
         // An Aplicacao whose :politicas omits :timeout leaves the mesh
         // with no per-call deadline — "no infinite
-        // blocking". The rule fires at Error severity (the §IV
+        // blocking". The rule fires at Error severity (the
         // aplicacao-completeness check that rejects partial Aplicacaos).
         let src = r#"(defcaixa :nome "checkout" :versao "0.1.0" :kind Aplicacao
   :politicas (:retries 3))"#;
@@ -811,7 +811,7 @@ mod tests {
 
     #[test]
     fn non_aplicacao_without_timeout_is_not_flagged() {
-        // The §V mesh-policy minimums are Aplicacao-specific — a Servico
+        // The mesh-policy minimums are Aplicacao-specific — a Servico
         // (or any non-Aplicacao kind) carries no :politicas, so the rule
         // must not over-fire on it.
         let src = r#"(defcaixa :nome "hello" :versao "0.1.0" :kind Servico)"#;

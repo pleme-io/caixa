@@ -19,7 +19,7 @@
 //!   file bodies. Read by `pleme-doc-gen`, never by `feira`.
 //!
 //! `:package`, `:ecosystem`, `:supports` and `:profile` have no counterpart in
-//! [`crate::Caixa`] at all — the theory doc's own D4 note records the same
+//! [`crate::Caixa`] at all — a note on that design records the same
 //! thing: those manifests "are authored against a schema that does not exist in
 //! Rust". They are not two spellings of one declaration. They are two domains
 //! that collided on one word, because *caixa* names a box and both are boxes.
