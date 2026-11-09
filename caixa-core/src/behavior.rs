@@ -1,7 +1,7 @@
 //! OTP-shaped behavior callbacks — the typed slot of `caixa.lisp`
 //! that points at the `.lisp` files implementing the lifecycle.
 //!
-//! See `theory/INSPIRATIONS.md` §II.3 for the prior-art frame
+//! The prior-art frame is the Erlang/OTP behaviours
 //! (`gen_server`, `gen_statem`, `gen_event`). Authors implement the
 //! callbacks; the runtime owns init / message dispatch / terminate.
 //!
@@ -128,7 +128,6 @@ pub struct BehaviorSpec {
 /// per-tenant callback alias table the operator pins through a future
 /// `:placement`-scoped slot, a seventh OTP-shape `gen_server` callback
 /// the roadmap
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// grows once the six canonical arms stop covering the substrate's
 /// discovered callback shape) reaches this impl's return value through
 /// exactly one edit on [`BehaviorSpec::empty`] — the derived path
@@ -199,7 +198,7 @@ impl BehaviorSpec {
     /// composes with every future accessor-side extension (a
     /// per-prior-`:versao` state-migration callback the operator pins
     /// through a future `:behavior :on-state-change-overrides` slot the
-    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine callback-dispatch
+    /// M2.5 wasm-engine callback-dispatch
     /// wire acknowledges, a per-tenant callback alias table the M4 CR
     /// materializer resolves per-CR, a per-cluster callback overlay the
     /// operator pins through a future placement-scoped slot) as a unit:
@@ -304,7 +303,6 @@ impl BehaviorSpec {
     /// per-tenant callback alias the operator pins through a future
     /// `:placement`-scoped slot, a seventh OTP-shape `gen_server`
     /// callback the roadmap
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
     /// grows once the six canonical arms stop covering the substrate's
     /// discovered callback shape) reaches this constructor at one edit
     /// (one added struct field on the type + one added `<axis>: None`
@@ -366,7 +364,6 @@ impl BehaviorSpec {
     /// M4 CR materializer resolves per-CR, a per-tenant callback alias
     /// the operator pins through a future `:placement`-scoped slot, a
     /// seventh OTP-shape `gen_server` callback the roadmap
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
     /// grows once the six canonical arms stop covering the substrate's
     /// discovered callback shape) reaches this predicate at one edit
     /// (one added struct field + one added `&& self.<axis>.is_none()`
@@ -449,7 +446,7 @@ impl BehaviorSpec {
     /// callback, the callback folds the prior-version state shape into
     /// the current-version shape, and the operator advances to the next
     /// instruction only after the callback returns successfully
-    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` +
+    /// (OTP `gen_server` +
     /// `release_handler` state-migration wire, translated onto pleme-io's
     /// typed `:behavior` + `:upgrade-from` slot pair). caixa decomposes
     /// the same composition into two typed slots: the per-version
@@ -477,7 +474,7 @@ impl BehaviorSpec {
     /// the `:behavior :on-state-change` axis to a richer author surface —
     /// a per-prior-`:versao` state-migration callback the operator pins
     /// through a future `:behavior :on-state-change-overrides` slot the
-    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine callback-dispatch
+    /// M2.5 wasm-engine callback-dispatch
     /// wire acknowledges, a per-tenant migration alias table the M4 CR
     /// materializer resolves per-CR, a per-Aplicacao dynamic
     /// state-change derivation the future adaptive hot-upgrade engine
@@ -507,7 +504,7 @@ impl BehaviorSpec {
     /// / `:on-terminate` future lifts fold on). Named
     /// `on_state_change()` to match the storage field's name; the
     /// accessor's identity name maps onto the canonical
-    /// `theory/INSPIRATIONS.md` §II.3 vocabulary the slot's docstring
+    /// OTP vocabulary the slot's docstring
     /// already carries.
     #[must_use]
     pub fn on_state_change(&self) -> Option<&Path> {
@@ -535,9 +532,9 @@ impl BehaviorSpec {
     /// runtime instantiates the wasm process, dispatches the init
     /// callback, and only then flips the instance's readiness state so
     /// downstream traffic (`:on-call` / `:on-cast`) is accepted
-    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// (OTP `gen_server` behavior's
     /// six-callback lifecycle, translated onto pleme-io's typed
-    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// `:behavior` slot family; the
     /// author-surface pins `:on-init` as the first arm of the
     /// `:behavior` overlay every Servico may declare).
     ///
@@ -551,7 +548,7 @@ impl BehaviorSpec {
     /// extension of the `:behavior :on-init` axis to a richer author
     /// surface — a per-tenant init-callback override the M4 CR
     /// materializer resolves per-CR, a per-cluster instance-start
-    /// callback overlay the `theory/ABSORPTION-ROADMAP.md` M2.5
+    /// callback overlay the M2.5
     /// wasm-engine callback-dispatch wire acknowledges, a per-Aplicacao
     /// dynamic init-callback derivation the future adaptive
     /// hot-instantiation engine computes from the sibling `:limits`
@@ -576,7 +573,7 @@ impl BehaviorSpec {
     /// per-`:behavior` `:on-call` / `:on-cast` / `:on-info` /
     /// `:on-terminate` future lifts fold on). Named `on_init()` to match
     /// the storage field's name; the accessor's identity name maps onto
-    /// the canonical `theory/INSPIRATIONS.md` §II.3 vocabulary the
+    /// the canonical OTP vocabulary the
     /// slot's docstring already carries.
     #[must_use]
     pub fn on_init(&self) -> Option<&Path> {
@@ -614,13 +611,13 @@ impl BehaviorSpec {
     /// carries a reply payload) through the callback; the callback runs
     /// to completion, computes the reply, and the runtime hands the
     /// reply back to the awaiting caller before flipping the process
-    /// back to the mailbox-drain state (`theory/INSPIRATIONS.md` §II.3 —
+    /// back to the mailbox-drain state (
     /// OTP `gen_server` behavior's six-callback lifecycle, translated
     /// onto pleme-io's typed `:behavior` slot family;
-    /// `theory/CAIXA-SDLC.md` §I — the author-surface pins `:on-call` as
+    /// the author-surface pins `:on-call` as
     /// the second arm of the `:behavior` overlay every Servico may
     /// declare, sibling to `:on-cast` / `:on-info` on the peer
-    /// asynchronous-dispatch axes; `theory/RUNTIME-PATTERNS.md` §II —
+    /// asynchronous-dispatch axes;
     /// the synchronous-request-response pattern the runtime realizes
     /// through this callback).
     ///
@@ -634,7 +631,7 @@ impl BehaviorSpec {
     /// extension of the `:behavior :on-call` axis to a richer author
     /// surface — a per-tenant call-callback override the M4 CR
     /// materializer resolves per-CR, a per-cluster synchronous-dispatch
-    /// callback overlay the `theory/ABSORPTION-ROADMAP.md` M2.5
+    /// callback overlay the M2.5
     /// wasm-engine callback-dispatch wire acknowledges, a per-contrato
     /// per-`:wit`-world call-callback derivation the future adaptive
     /// dispatch engine computes from the sibling `:contratos` M3
@@ -661,7 +658,7 @@ impl BehaviorSpec {
     /// `:on-info` / `:on-terminate` future lifts fold on). Named
     /// `on_call()` to match the storage field's name; the accessor's
     /// identity name maps onto the canonical
-    /// `theory/INSPIRATIONS.md` §II.3 vocabulary the slot's docstring
+    /// OTP vocabulary the slot's docstring
     /// already carries.
     #[must_use]
     pub fn on_call(&self) -> Option<&Path> {
@@ -706,14 +703,14 @@ impl BehaviorSpec {
     /// runs to completion on the actor's own mailbox turn without any
     /// reply-shape awaiting caller, and the runtime returns to the
     /// mailbox-drain state as soon as the callback returns
-    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// (OTP `gen_server` behavior's
     /// six-callback lifecycle, translated onto pleme-io's typed
-    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// `:behavior` slot family; the
     /// author-surface pins `:on-cast` as the third arm of the
     /// `:behavior` overlay every Servico may declare, sibling to
     /// `:on-call` on the peer synchronous-dispatch axis and `:on-info`
-    /// on the peer out-of-band-dispatch axis; `theory/RUNTIME-PATTERNS.md`
-    /// §II — the asynchronous-fire-and-forget pattern the runtime
+    /// on the peer out-of-band-dispatch axis;
+    /// the asynchronous-fire-and-forget pattern the runtime
     /// realizes through this callback).
     ///
     /// Prior to this lift the `.on_cast` field was accessed inline at
@@ -726,7 +723,7 @@ impl BehaviorSpec {
     /// extension of the `:behavior :on-cast` axis to a richer author
     /// surface — a per-tenant cast-callback override the M4 CR
     /// materializer resolves per-CR, a per-cluster asynchronous-dispatch
-    /// callback overlay the `theory/ABSORPTION-ROADMAP.md` M2.5
+    /// callback overlay the M2.5
     /// wasm-engine callback-dispatch wire acknowledges, a
     /// per-`nats:pub-sub`-subject cast-callback derivation the future
     /// M3 mesh-slot NATS bridge computes from the sibling `:contratos`
@@ -753,7 +750,7 @@ impl BehaviorSpec {
     /// projection pattern the sibling per-`:behavior` `:on-info` /
     /// `:on-terminate` future lifts fold on). Named `on_cast()` to match
     /// the storage field's name; the accessor's identity name maps onto
-    /// the canonical `theory/INSPIRATIONS.md` §II.3 vocabulary the
+    /// the canonical OTP vocabulary the
     /// slot's docstring already carries.
     #[must_use]
     pub fn on_cast(&self) -> Option<&Path> {
@@ -800,14 +797,14 @@ impl BehaviorSpec {
     /// the actor's own mailbox turn with no reply-shape awaiting caller
     /// and no peer-Servico dispatch semantics, and the runtime returns
     /// to the mailbox-drain state as soon as the callback returns
-    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// (OTP `gen_server` behavior's
     /// six-callback lifecycle, translated onto pleme-io's typed
-    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// `:behavior` slot family; the
     /// author-surface pins `:on-info` as the fourth arm of the
     /// `:behavior` overlay every Servico may declare, sibling to
     /// `:on-cast` on the peer asynchronous-dispatch axis and
     /// `:on-terminate` on the peer lifecycle-tail axis;
-    /// `theory/RUNTIME-PATTERNS.md` §II — the out-of-band-info pattern
+    /// the out-of-band-info pattern
     /// the runtime realizes through this callback).
     ///
     /// Prior to this lift the `.on_info` field was accessed inline at
@@ -821,7 +818,7 @@ impl BehaviorSpec {
     /// surface — a per-tenant info-callback override the M4 CR
     /// materializer resolves per-CR, a per-cluster
     /// out-of-band-dispatch callback overlay the
-    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+    /// M2.5 wasm-engine
     /// callback-dispatch wire acknowledges, a per-monitor-signal
     /// callback derivation the future adaptive-dispatch engine
     /// computes from the sibling `:politicas :circuit-breaker` axis
@@ -851,7 +848,7 @@ impl BehaviorSpec {
     /// projection pattern the last-remaining sibling per-`:behavior`
     /// `:on-terminate` future lift folds on). Named `on_info()` to
     /// match the storage field's name; the accessor's identity name
-    /// maps onto the canonical `theory/INSPIRATIONS.md` §II.3
+    /// maps onto the canonical OTP
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub fn on_info(&self) -> Option<&Path> {
@@ -899,14 +896,14 @@ impl BehaviorSpec {
     /// as a Kubernetes deletion event, a per-tenant per-`:placement`
     /// evict the future adaptive-placement engine computes on
     /// per-cluster capacity pressure) dispatches the terminate callback
-    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// (OTP `gen_server` behavior's
     /// six-callback lifecycle, translated onto pleme-io's typed
-    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// `:behavior` slot family; the
     /// author-surface pins `:on-terminate` as the sixth and final arm
     /// of the `:behavior` overlay every Servico may declare, sibling to
     /// `:on-init` on the peer lifecycle-head axis and `:on-state-change`
     /// on the peer hot-upgrade-composition axis;
-    /// `theory/RUNTIME-PATTERNS.md` §II — the graceful-tear-down cleanup
+    /// the graceful-tear-down cleanup
     /// pattern the runtime realizes through this callback). The
     /// callback runs to completion on the actor's own mailbox turn
     /// before the runtime returns the wasm process's resources to the
@@ -934,7 +931,7 @@ impl BehaviorSpec {
     /// author surface — a per-tenant terminate-callback override the
     /// M4 CR materializer resolves per-CR, a per-cluster
     /// graceful-tear-down callback overlay the
-    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+    /// M2.5 wasm-engine
     /// callback-dispatch wire acknowledges, a per-supervisor
     /// terminate-callback derivation the future adaptive-supervision
     /// engine computes from the sibling `:estrategia` restart-strategy
@@ -972,7 +969,7 @@ impl BehaviorSpec {
     /// slot family models now routes through one typed dispatch on the
     /// substrate primitive). Named `on_terminate()` to match the
     /// storage field's name; the accessor's identity name maps onto the
-    /// canonical `theory/INSPIRATIONS.md` §II.3 vocabulary the slot's
+    /// canonical OTP vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub fn on_terminate(&self) -> Option<&Path> {
@@ -1928,7 +1925,7 @@ mod tests {
         // `:on-*` slot (a per-prior-`:versao` state-migration callback
         // the operator pins through a future `:behavior
         // :on-state-change-overrides` slot the
-        // `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // M2.5 wasm-engine
         // callback-dispatch wire acknowledges, a per-tenant callback
         // alias table the M4 CR materializer resolves per-CR, a
         // per-cluster callback overlay the operator pins through a
@@ -2031,7 +2028,7 @@ mod tests {
         // no hot-upgrade state-fold path), `Some("lib/migrations.lisp")`
         // (the canonical single-file shape the module-doc example uses),
         // `Some("lib/migrations/v01-to-v02.lisp")` (the per-version
-        // sub-directory shape the `theory/ABSORPTION-ROADMAP.md` M2.5
+        // sub-directory shape the M2.5
         // wasm-engine callback-dispatch wire acknowledges).
         //
         // Peer of the sibling per-`:placement` [`crate::Placement::shard_key`]
@@ -2194,7 +2191,7 @@ mod tests {
         // wasm-engine's no-op instance-start default), `Some("lib/init.lisp")`
         // (the canonical single-file shape the module-doc example
         // uses), `Some("lib/lifecycle/init.lisp")` (the per-lifecycle
-        // sub-directory shape the `theory/ABSORPTION-ROADMAP.md` M2.5
+        // sub-directory shape the M2.5
         // wasm-engine callback-dispatch wire acknowledges).
         //
         // Peer of the sibling per-`:behavior` [`BehaviorSpec::on_state_change`]
@@ -2292,7 +2289,7 @@ mod tests {
         // `wasi:http/incoming-handler` default), `Some("lib/handlers.lisp")`
         // (the canonical single-file shape the module-doc example
         // uses), `Some("lib/rpc/call.lisp")` (the per-dispatch
-        // sub-directory shape the `theory/ABSORPTION-ROADMAP.md` M2.5
+        // sub-directory shape the M2.5
         // wasm-engine callback-dispatch wire acknowledges).
         //
         // Peer of the sibling per-`:behavior`
@@ -2403,7 +2400,7 @@ mod tests {
         // tatara-lisp dispatch inside the file discriminates on the
         // callback-kind atom), `Some("lib/rpc/cast.lisp")` (the
         // per-dispatch sub-directory shape the
-        // `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // M2.5 wasm-engine
         // callback-dispatch wire acknowledges).
         //
         // Peer of the sibling per-`:behavior`
@@ -2517,7 +2514,7 @@ mod tests {
         // `:on-cast` on the pattern that the tatara-lisp dispatch
         // inside the file discriminates on the callback-kind atom),
         // `Some("lib/rpc/info.lisp")` (the per-dispatch sub-directory
-        // shape the `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // shape the M2.5 wasm-engine
         // callback-dispatch wire acknowledges).
         //
         // Peer of the sibling per-`:behavior`
@@ -2634,7 +2631,7 @@ mod tests {
         // author-surface pins `lib/cleanup.lisp` as the reference
         // `:on-terminate` value), `Some("lib/lifecycle/terminate.lisp")`
         // (the per-lifecycle-arm sub-directory shape the
-        // `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // M2.5 wasm-engine
         // callback-dispatch wire acknowledges).
         //
         // Peer of the sibling per-`:behavior`
@@ -3235,8 +3232,8 @@ mod tests {
         // the validate surface that adds a non-`declared_slots`-routed
         // gate (a hypothetical cross-slot coherence gate a future
         // per-slot fold on the M2 `:behavior` slot establishes on top
-        // of the current per-slot value-shape composition per
-        // `theory/CAIXA-SDLC.md` §I, a per-arm behavioral-envelope
+        // of the current per-slot value-shape composition,
+        // a per-arm behavioral-envelope
         // admission overlay a future admission webhook lands) that
         // fires on the all-`None` input trips here at caixa-core test
         // time rather than at a downstream consumer that composed

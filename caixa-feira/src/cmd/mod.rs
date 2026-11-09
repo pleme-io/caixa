@@ -92,7 +92,7 @@ pub enum Command {
     /// k8s/clusters/<cluster>/programs.yaml; FluxCD picks it up).
     Deploy(deploy::Deploy),
     /// `feira app …` — composition verbs for `:kind Aplicacao` caixas
-    /// (graph, deploy). See `theory/MESH-COMPOSITION.md`.
+    /// (graph, deploy).
     App(app::App),
     /// `feira ephemeral …` — verbs for `(defephemeral …)` Lisp forms:
     /// compile + lower to a Process CR YAML for review or apply.

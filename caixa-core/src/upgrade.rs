@@ -2,7 +2,7 @@
 //! prior caixa version. Composes with the `:behavior :on-state-change`
 //! callback to deliver state migration during hot upgrades.
 //!
-//! See `theory/INSPIRATIONS.md` §II.4 for the prior-art frame.
+//! The prior-art frame is the OTP appup.
 //!
 //! ```lisp
 //! (defcaixa
@@ -77,8 +77,7 @@ pub enum UpgradeInstruction {
 // the OTP-style hot-upgrade primitive (load_module/code_change/
 // soft_purge/purge/restart) — the first NON-ADAPTER consumer of
 // gen-platform's typed-dispatcher catamorphism, satisfying the ★★
-// "two classes of consumer" promotion criterion from
-// theory/QUIRK-APPLIER.md §V.1.
+// "two classes of consumer" promotion criterion.
 //
 // Operators query via:
 //   gen dispatchers --from-catalog | jq '.[] | select(.label=="caixa.upgrade-instruction")'

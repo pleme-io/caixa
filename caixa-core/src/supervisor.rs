@@ -1,8 +1,8 @@
 //! OTP-shaped supervisor trees, encoded as a typed `:kind Supervisor`
 //! caixa with a strategy + restart-policy children list.
 //!
-//! See `theory/INSPIRATIONS.md` §II.2 + §III.2 for the prior-art frame
-//! (Erlang OTP supervisor + Lunatic supervisor strategies as Rust types).
+//! The prior-art frame is the Erlang OTP supervisor and the Lunatic
+//! supervisor strategies, as Rust types.
 //!
 //! ```lisp
 //! (defcaixa
@@ -85,8 +85,7 @@ impl RestartStrategy {
     /// "did you mean" hint via a [`Self::from_wire`]-scan over the slice,
     /// the future `feira app graph` per-supervisor `:estrategia` column,
     /// any future round-trip fuzz harness that sweeps every arm). A
-    /// future arm addition (an OTP-`rest_for_all` arm the theory
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// future arm addition (an OTP-`rest_for_all` arm the roadmap
     /// might reach for once the four canonical OTP strategies stop
     /// covering the substrate's discovered load-shape) extends this
     /// slice as one edit and every consumer picks up the new entry by
@@ -161,8 +160,7 @@ impl RestartStrategy {
     /// (`["OneForOne", "OneForAll", "RestForOne", "SimpleOneForOne"]`)
     /// whose arm-set has no compile-time link back to the typed
     /// [`RestartStrategy`] enum. A future arm addition (an OTP-`rest_for_all`
-    /// arm the theory
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// arm the roadmap
     /// might reach for once the four canonical OTP strategies stop
     /// covering the substrate's discovered load-shape) extends this
     /// roster as a single edit — paired with the [`Self::as_str`]
@@ -481,8 +479,7 @@ impl AsRef<str> for RestartStrategy {
 ///
 /// The paired [`TryFrom<&str>`] impl reaches the same four-arm accept-set
 /// the [`RestartStrategy::from_wire`] resolver dispatches through, so any
-/// future arm addition (an OTP-`rest_for_all` fifth arm the theory
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// future arm addition (an OTP-`rest_for_all` fifth arm the roadmap
 /// might reach for once the four canonical OTP strategies stop covering
 /// the substrate's discovered load-shape) grows the trait-idiomatic axis
 /// by construction — one caixa-core edit on
@@ -563,8 +560,7 @@ impl TryFrom<&str> for RestartStrategy {
 ///
 /// The paired impl reaches the same four-arm emit-set the
 /// [`RestartStrategy::as_str`] accessor dispatches through, so any future
-/// arm addition (an OTP-`rest_for_all` fifth arm the theory
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// arm addition (an OTP-`rest_for_all` fifth arm the roadmap
 /// might reach for once the four canonical OTP strategies stop covering
 /// the substrate's discovered load-shape) grows the trait-idiomatic
 /// forward axis by construction — one caixa-core edit on
@@ -1453,8 +1449,7 @@ impl From<&RestartStrategy> for std::rc::Rc<str> {
 /// byte-view axis so every future `<T: AsRef<[u8]>>`-bound consumer
 /// reaches the substrate primitive through one trait dispatch, and
 /// every future arm addition (an OTP-`rest_for_all` fifth arm the
-/// theory
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// roadmap
 /// might reach for once the four canonical OTP strategies stop covering
 /// the substrate's discovered load-shape) grows the byte-view axis
 /// through one edit on the substrate-primitive `as_str` accessor, not a
@@ -1555,8 +1550,7 @@ impl AsRef<[u8]> for RestartStrategy {
 /// (b245fd6), the second-mover [`crate::dialeto::CaixaDialeto`] lift
 /// (4cceaf5), and the third-mover [`crate::dep::DepList`] lift
 /// (e974ca2) established across the caixa-core-internal tier. Every
-/// future arm addition (an OTP-`rest_for_all` fifth arm the theory
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// future arm addition (an OTP-`rest_for_all` fifth arm the roadmap
 /// might reach for once the four canonical OTP strategies stop
 /// covering the substrate's discovered load-shape) grows the byte-
 /// owned axis through one edit on the substrate-primitive
@@ -2414,8 +2408,7 @@ impl RestartPolicy {
     /// over the slice, the future `feira app graph` per-child restart
     /// column, any future round-trip fuzz harness that sweeps every
     /// arm). A future arm addition (an OTP-`intrinsic` fourth arm the
-    /// theory
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// roadmap
     /// might reach for once the three canonical OTP restart policies
     /// stop covering the substrate's discovered load-shape) extends
     /// this slice as one edit and every consumer picks up the new entry
@@ -2493,8 +2486,7 @@ impl RestartPolicy {
     /// roster rather than open-coding a three-string array-literal
     /// (`["Permanent", "Temporary", "Transient"]`) whose arm-set has no
     /// compile-time link back to the typed [`RestartPolicy`] enum. A
-    /// future arm addition (an OTP-`intrinsic` fourth arm the theory
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// future arm addition (an OTP-`intrinsic` fourth arm the roadmap
     /// might reach for once the three canonical OTP restart policies
     /// stop covering the substrate's discovered load-shape) extends
     /// this roster as a single edit — paired with the [`Self::as_str`]
@@ -2828,8 +2820,7 @@ impl AsRef<str> for RestartPolicy {
 ///
 /// The paired [`TryFrom<&str>`] impl reaches the same three-arm accept-
 /// set the [`RestartPolicy::from_wire`] resolver dispatches through, so
-/// any future arm addition (an OTP-`intrinsic` fourth arm the theory
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// any future arm addition (an OTP-`intrinsic` fourth arm the roadmap
 /// might reach for once the three canonical OTP restart policies stop
 /// covering the substrate's discovered load-shape) grows the trait-
 /// idiomatic axis by construction — one caixa-core edit on
@@ -2901,8 +2892,7 @@ impl TryFrom<&str> for RestartPolicy {
 /// (`From<Self> for &'static str` + `TryFrom<&str>`) and the method-named
 /// (`as_str` + `from_wire`) axis pairs — mirrors the sibling
 /// [`RestartStrategy`] surface arm-for-arm, so every future arm addition
-/// (an OTP-`intrinsic` fourth arm the theory
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// (an OTP-`intrinsic` fourth arm the roadmap
 /// might reach for once the three canonical OTP restart policies stop
 /// covering the substrate's discovered load-shape) grows the trait-
 /// idiomatic forward axis by construction: one caixa-core edit on
@@ -3864,8 +3854,7 @@ impl AsRef<[u8]> for RestartPolicy {
 /// matching the discipline the paired [`AsRef<[u8]>`] borrowed byte-
 /// view axis campaign already carried across the same slot pair
 /// (cd4c4e0 → 98b08fa). Every future arm addition (an OTP-
-/// `intrinsic` fourth arm the theory
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+/// `intrinsic` fourth arm the roadmap
 /// might reach for once the three canonical OTP restart policies
 /// stop covering the substrate's discovered load-shape) grows the
 /// byte-owned axis through one edit on the substrate-primitive
@@ -4563,9 +4552,7 @@ impl TryFrom<String> for RestartPolicy {
 
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
-// primitives the substrate now mechanically tracks (see
-// theory/UNIFIED-COMPUTING-MODEL.md §VI for the roadmap +
-// theory/TYPED-ABSORPTION.md for the absorption arc).
+// primitives the substrate now mechanically tracks.
 gen_platform::register_dispatcher!("caixa.restart-strategy", RestartStrategy);
 gen_platform::register_dispatcher!("caixa.restart-policy", RestartPolicy);
 
@@ -5576,7 +5563,7 @@ impl SupervisorSpec {
     /// `MaxIntensity` restart-budget count that pairs with the sibling
     /// `:restart-window` `Period` to form the `MaxIntensity / Period`
     /// restart-intensity ratio the supervisor trips its own escalation on
-    /// (`theory/RUNTIME-PATTERNS.md` §II.2, Learn You Some Erlang's
+    /// (Learn You Some Erlang's
     /// `{intensity, 5, 60}` worker-supervisor default). Every downstream
     /// consumer of the Supervisor's per-`:supervisor` restart-budget count
     /// keys off this scalar (the [`SupervisorSpec::validate`] zero-floor +
@@ -5667,8 +5654,8 @@ impl SupervisorSpec {
     /// `Period` sliding-observation-interval that pairs with the sibling
     /// `:max-restarts` `MaxIntensity` restart-budget count to form the
     /// `MaxIntensity / Period` restart-intensity ratio the supervisor
-    /// trips its own escalation on (`theory/RUNTIME-PATTERNS.md` §II.2,
-    /// Learn You Some Erlang's `{intensity, 5, 60}` worker-supervisor
+    /// trips its own escalation on
+    /// (Learn You Some Erlang's `{intensity, 5, 60}` worker-supervisor
     /// default). The typed slot's `Option<Duration>` accept-set —
     /// zero-floor rejected through [`SupervisorError::RestartWindowZero`]
     /// (Erlang/OTP's `MaxIntensity / Period` invariant requires
@@ -10177,8 +10164,7 @@ mod tests {
         // --estrategia …` "did you mean" hint drift / a future
         // wasm-operator per-reconcile-step diagnostic log line's
         // accepted-wire-form enumeration miss. A future arm addition
-        // (an OTP-`rest_for_all` arm the theory
-        // [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+        // (an OTP-`rest_for_all` arm the roadmap
         // might reach for once the four canonical OTP strategies stop
         // covering the substrate's discovered load-shape) extends
         // [`RestartStrategy::ALL`] as a single edit and this pin
@@ -16074,8 +16060,7 @@ mod tests {
         // mean" hint drift / a future wasm-operator per-reconcile-step
         // diagnostic log line's accepted-wire-form enumeration miss.
         // A future arm addition (an OTP-`intrinsic` fourth arm the
-        // theory
-        // [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+        // roadmap
         // might reach for once the three canonical OTP restart policies
         // stop covering the substrate's discovered load-shape) extends
         // [`RestartPolicy::ALL`] as a single edit and this pin sweeps

@@ -31,7 +31,7 @@ pub enum CaixaKind {
     /// Typed application — composes multiple Servicos into a single
     /// declarative mesh with WIT-typed `:contratos`, mesh-level
     /// `:politicas`, and explicit `:placement`. See `aplicacao.rs`
-    /// (`AplicacaoSpec`) and `theory/MESH-COMPOSITION.md` for the
+    /// (`AplicacaoSpec`) for the
     /// design frame.
     Aplicacao,
     /// Typed CI run — carries a `:ci` slot of
@@ -56,7 +56,6 @@ impl CaixaKind {
     /// `feira app graph` per-Aplicacao `:kind`-histogram column, any
     /// future round-trip fuzz harness that sweeps every arm). A future
     /// variant addition (an `Actor` virtual-actor arm the
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
     /// M5 Orleans-inspired kind reaches through — a candidate future
     /// arm named in the sibling [`Self::from_wire`] doc block —
     /// extends this slice as a single edit and every consumer picks up
@@ -180,7 +179,6 @@ impl CaixaKind {
     /// "Supervisor", "Aplicacao", "Acao"]` array-literal whose arm-set
     /// has no compile-time link back to the typed [`CaixaKind`] enum.
     /// A future variant addition (an `Actor` virtual-actor arm the
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
     /// M5 Orleans-inspired kind reaches through) extends this roster as
     /// a single edit — paired with the [`Self::wire_name`] match's
     /// compiler-checked exhaustiveness on the new arm — and every
@@ -261,7 +259,6 @@ impl CaixaKind {
     /// [`Self::WIRE_NAMES`] roster carries — the two rosters serve two
     /// audiences by design). A future variant addition (an `Actor`
     /// virtual-actor arm the
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
     /// M5 Orleans-inspired kind reaches through) extends this roster as
     /// a single edit — paired with the [`Self::as_str`] match's
     /// compiler-checked exhaustiveness on the new arm — and every
@@ -344,7 +341,7 @@ impl CaixaKind {
     /// `:kind` wire surface reaches for exactly one typed dispatch —
     /// the resolver's accept-set migrates as a unit on any future arm
     /// addition (a future virtual-actor `Actor` arm the
-    /// `theory/ABSORPTION-ROADMAP.md` M5 Orleans-inspired kind reaches
+    /// M5 Orleans-inspired kind reaches
     /// through, a per-cluster kind-alias table the M4 CR materializer
     /// resolves per-CR).
     #[must_use]
@@ -661,7 +658,6 @@ impl AsRef<str> for CaixaKind {
 /// The paired [`TryFrom<&str>`] impl reaches the same six-arm accept-
 /// set the [`CaixaKind::from_wire`] resolver dispatches through, so
 /// any future arm addition (a virtual-actor `Actor` arm the
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// M5 Orleans-inspired kind reaches through) grows the trait-
 /// idiomatic axis by construction — one caixa-core edit on
 /// [`CaixaKind::from_wire`] extends both the method-named reverse
@@ -754,7 +750,6 @@ impl TryFrom<&str> for CaixaKind {
 /// The paired impl reaches the same six-arm emit-set the
 /// [`CaixaKind::as_str`] accessor dispatches through, so any future
 /// arm addition (a virtual-actor `Actor` arm the
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// M5 Orleans-inspired kind reaches through — a candidate future arm
 /// named in the sibling [`CaixaKind::from_wire`] doc block) grows
 /// the trait-idiomatic forward axis by construction — one caixa-core
@@ -1282,7 +1277,6 @@ impl From<&CaixaKind> for std::borrow::Cow<'static, str> {
 /// on `InvariantKind` / `ArchVerdict` / `Severity` / `FixSafety` /
 /// `Semantic` / `FerriteRuntime`. A future variant addition (a virtual-
 /// actor `Actor` arm the
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// M5 Orleans-inspired kind reaches through) grows the [`Box<str>`]
 /// forward-projection axis by construction — one caixa-core edit on
 /// [`CaixaKind::as_str`] extends every one of the sibling forward-
@@ -1396,7 +1390,6 @@ impl From<&CaixaKind> for Box<str> {
 /// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`] pin
 /// makes load-bearing is preserved here by construction. A future variant
 /// addition (a virtual-actor `Actor` arm the
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// M5 Orleans-inspired kind reaches through) grows the
 /// [`std::sync::Arc<str>`] forward-projection axis by construction — one
 /// caixa-core edit on [`CaixaKind::as_str`] extends every one of the sibling
@@ -1715,7 +1708,6 @@ impl From<&CaixaKind> for std::rc::Rc<str> {
 /// `<T: AsRef<[u8]>>`-bound consumer reaches the substrate primitive
 /// through one trait dispatch, and every future arm addition (a
 /// virtual-actor `Actor` arm the
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// M5 Orleans-inspired kind reaches through) grows the byte-view axis
 /// through one edit on the substrate-primitive `as_str` accessor, not
 /// a coordinated rewrite across every future
@@ -2700,8 +2692,7 @@ mod tests {
         // Pre-lift this sweep the sibling `kind_requirements` test hand-
         // picked 8 asserts across the 6 predicates × 6 variants = 36 cells
         // — leaving 28 (variant, predicate) cells uncovered. A future arm
-        // addition (the `Actor` virtual-actor arm the theory
-        // [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+        // addition (the `Actor` virtual-actor arm the roadmap's
         // M5 Orleans-inspired kind names as a trajectory item, the same
         // future seventh arm the sibling
         // [`caixa_kind_is_variant_predicates_partition_the_arm_set`]

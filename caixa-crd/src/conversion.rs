@@ -125,7 +125,7 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
         // now walk the same substrate-lifted six-arm accept-set the
         // [`caixa_core::render::CAIXA_KIND_WIRE_*`] const family pins.
         // A future arm addition to [`CaixaKind`] (a virtual-actor `Actor`
-        // arm the `theory/ABSORPTION-ROADMAP.md` M5 Orleans-inspired
+        // arm the M5 Orleans-inspired
         // kind reaches through, a per-cluster kind-alias table the M4
         // CR materializer resolves per-CR) reaches both halves through
         // exactly one caixa-core edit rather than a coordinated rewrite

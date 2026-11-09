@@ -68,11 +68,9 @@ The result: you can change one without disturbing the others. Hot
 upgrades become typed migrations (`:upgrade-from`), cross-cluster
 migration becomes a placement strategy change (`:placement
 :replicated → :sharded`), credential rotation requires no restart
-(`:capabilities` updated, downward API propagates). The pattern
-catalog in [`theory/RUNTIME-PATTERNS.md`](https://github.com/pleme-io/theory/blob/main/RUNTIME-PATTERNS.md)
-lists ~30 concrete patterns the substrate enables; the prior-art
-catalog in [`theory/INSPIRATIONS.md`](https://github.com/pleme-io/theory/blob/main/INSPIRATIONS.md)
-maps each one to the tradition (Erlang/OTP, Lunatic, Common Lisp,
+(`:capabilities` updated, downward API propagates). The substrate
+enables about 30 concrete patterns, and each one comes from a
+tradition (Erlang/OTP, Lunatic, Common Lisp,
 Smalltalk, Unison, Pony, Akka, Orleans, CRIU, eBPF) it absorbs.
 
 ## Quickstart
@@ -141,17 +139,6 @@ for the canonical demonstration.
 | [`operator-chart/`](operator-chart/) | Helm chart deploying caixa-operator (CRDs + RBAC) |
 | [`operator-flux/`](operator-flux/) | FluxCD manifests for in-cluster caixa-operator reconciliation |
 | [`examples/`](examples/) | canonical example caixas (checkout-aplicacao, pangea-tatara-akeyless) |
-
-## Documentation
-
-| path | what's in it |
-|---|---|
-| [`theory/CAIXA-SDLC.md`](https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md) | full author-to-live SDLC playbook (8 sections) |
-| [`theory/META-FRAMEWORK.md`](https://github.com/pleme-io/theory/blob/main/META-FRAMEWORK.md) | the four-layer compute hierarchy + decision tree |
-| [`theory/MESH-COMPOSITION.md`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md) | typed Aplicacao + Cilium-style identity-based mesh |
-| [`theory/INSPIRATIONS.md`](https://github.com/pleme-io/theory/blob/main/INSPIRATIONS.md) | Erlang/OTP, Lunatic, Unison, Common Lisp, Smalltalk, Pony, Akka, Orleans, CRIU, eBPF — what to absorb verbatim, adapt, deliberately reject |
-| [`theory/RUNTIME-PATTERNS.md`](https://github.com/pleme-io/theory/blob/main/RUNTIME-PATTERNS.md) | ~30 patterns (live deploy, migration, edge update, multi-tenant, observability, …) with status flags |
-| [`theory/ABSORPTION-ROADMAP.md`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md) | concrete M2-M5 deliverables: files, LoC, tests, dependencies |
 
 ## Skills
 

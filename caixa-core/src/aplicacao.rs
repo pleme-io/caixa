@@ -1,7 +1,7 @@
 //! Typed Aplicacao — the fourth caixa kind that turns a graph of
 //! Servicos into a single declarative application (mesh).
 //!
-//! See `theory/MESH-COMPOSITION.md` for the design frame: an
+//! The design frame: an
 //! Aplicacao composes [`crate::CaixaKind::Servico`] caixas via WIT-typed
 //! `:contratos` (inter-Servico edges), declares mesh-level
 //! `:politicas` (timeouts, retries, breakers, mTLS), pins
@@ -2001,9 +2001,8 @@ impl AsRef<[u8]> for WitShape {
 /// future arm addition (a fifth `Stream`-shape arm once WASI
 /// `wasi:io/streams` grows a first-class `:contratos :wit` census
 /// row, a per-cluster `LocalPort`-shape arm the caixa-mesh renderer
-/// pins once mesh-local point-to-point contratos come into scope per
-/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
-/// §III.2 #3) grows the byte-owned axis through one edit on the
+/// pins once mesh-local point-to-point contratos come into scope
+/// later) grows the byte-owned axis through one edit on the
 /// substrate-primitive [`WitShape::as_str`] accessor, mirroring the
 /// discipline the paired [`AsRef<[u8]>`] borrowed byte-view axis
 /// campaign already tracked across every closed-set fieldless typed
@@ -5022,7 +5021,6 @@ pub struct MeshPolicy {
 /// A future extension of the `:politicas` axis set (a per-edge
 /// `:politicas` overlay the M4 roadmap grows once per-`:contratos`-
 /// edge overrides land, a sixth `:politicas` sub-slot the roadmap
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// grows past the five-arm Envoy/Cilium-shape §III.2 axis set)
 /// reaches this impl's return value through exactly one edit on
 /// [`MeshPolicy::empty`] — the derived path could silently disagree
@@ -5114,7 +5112,6 @@ impl MeshPolicy {
     /// of the axis (a per-edge `:politicas` overlay the M4 roadmap
     /// grows once per-`:contratos`-edge overrides land, a sixth
     /// `:politicas` sub-slot the roadmap
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
     /// grows past the five-arm Envoy/Cilium-shape §III.2 axis set)
     /// reaches this constructor at one edit (one added struct field
     /// on the type + one added `<axis>: None` line here) rather than
@@ -9183,9 +9180,8 @@ impl From<&RateLimitUnit> for std::rc::Rc<str> {
 /// consumer reaches the substrate primitive through one trait dispatch,
 /// and every future arm addition (a `"d"` day suffix once Envoy's
 /// `rate_limit_action` grows daily-bucket support, a `"ms"` sub-second
-/// window once high-throughput per-edge policies come into scope per
-/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
-/// §III.2 #3 — both trajectory items the sibling
+/// window once high-throughput per-edge policies come into scope
+/// later — both trajectory items the sibling
 /// [`RateLimitUnit::window_from_suffix`] doc block already names) grows
 /// the byte-view axis through one edit on the substrate-primitive
 /// `as_suffix` accessor, not a coordinated rewrite across every future
@@ -9280,9 +9276,8 @@ impl AsRef<[u8]> for RateLimitUnit {
 /// M3 mesh tiers. Every future arm addition (a `"d"` day suffix once
 /// Envoy's `rate_limit_action` grows daily-bucket support, a `"ms"`
 /// sub-second window once high-throughput per-edge policies come into
-/// scope per
-/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
-/// §III.2 #3 — both trajectory items the sibling
+/// scope
+/// later — both trajectory items the sibling
 /// [`RateLimitUnit::window_from_suffix`] doc block already names)
 /// grows the byte-owned axis through one edit on the substrate-
 /// primitive [`RateLimitUnit::as_suffix`] accessor, mirroring the
@@ -11416,9 +11411,8 @@ impl PlacementStrategy {
     /// roster rather than open-coding a three-string array-literal
     /// (`["SingleNode", "Replicated", "Sharded"]`) whose arm-set has no
     /// compile-time link back to the typed [`PlacementStrategy`] enum.
-    /// A future arm addition (an `Anycast` mesh-anycast arm the theory
-    /// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
-    /// §II.5 hint names as a trajectory item) extends this roster as a
+    /// A future arm addition (an `Anycast` mesh-anycast arm the mesh
+    /// design hint names as a trajectory item) extends this roster as a
     /// single edit — paired with the [`Self::as_str`] match's
     /// compiler-checked exhaustiveness on the new arm — and every
     /// consumer picks up the new wire form by construction rather than a
@@ -12999,9 +12993,8 @@ impl From<&PlacementStrategy> for std::rc::Rc<str> {
 /// formatter and `String` allocates). The lifted single-hop impl closes
 /// the byte-view axis so every future `<T: AsRef<[u8]>>`-bound consumer
 /// reaches the substrate primitive through one trait dispatch, and
-/// every future arm addition (an `Anycast` mesh-anycast arm the
-/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
-/// §II.5 hint names as a trajectory item) grows the byte-view axis
+/// every future arm addition (an `Anycast` mesh-anycast arm the mesh
+/// design hint names as a trajectory item) grows the byte-view axis
 /// through one edit on the substrate-primitive `as_str` accessor, not
 /// a coordinated rewrite across every future `<T: AsRef<[u8]>>`-bound
 /// consumer's arm-set.
@@ -13089,9 +13082,8 @@ impl AsRef<[u8]> for PlacementStrategy {
 /// ([`crate::supervisor::RestartStrategy`] — 63e5dd0 —
 /// and [`crate::supervisor::RestartPolicy`] — 96a522a) established
 /// across the caixa-core-internal + M2 supervisor tiers. Every
-/// future arm addition (an `Anycast` mesh-anycast arm the
-/// [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
-/// §II.5 hint names as a trajectory item) grows the byte-owned axis
+/// future arm addition (an `Anycast` mesh-anycast arm the mesh
+/// design hint names as a trajectory item) grows the byte-owned axis
 /// through one edit on the substrate-primitive
 /// [`PlacementStrategy::as_str`] accessor, mirroring the discipline
 /// the paired [`AsRef<[u8]>`] borrowed byte-view axis campaign
@@ -31839,9 +31831,8 @@ mod tests {
         // …` "did you mean" hint drift / a future `app-operator`
         // per-reconcile-step diagnostic log line's accepted-wire-form
         // enumeration miss. A future arm addition (an `Anycast`
-        // mesh-anycast arm the theory
-        // [`MESH-COMPOSITION`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md)
-        // §II.5 hint names as a trajectory item) extends
+        // mesh-anycast arm the mesh
+        // design hint names as a trajectory item) extends
         // [`PlacementStrategy::ALL`] as a single edit and this pin
         // sweeps the new arm by iteration; the paired
         // [`PlacementStrategy::WIRE_NAMES`] roster must grow in lockstep
@@ -46669,8 +46660,8 @@ mod tests {
         // non-`Option`-guarded gate (a hypothetical cross-slot
         // coherence gate a future per-axis / per-slot fold on the M3
         // `:politicas` slot establishes on top of the current
-        // pairwise-cross-axis composition per
-        // `theory/MESH-COMPOSITION.md` §III.2, a per-arm
+        // pairwise-cross-axis composition,
+        // a per-arm
         // `mtls_required`-defaults-to-`true` admission overlay a
         // future admission webhook lands) that fires on the all-`None`
         // input trips here at caixa-core test time rather than at a

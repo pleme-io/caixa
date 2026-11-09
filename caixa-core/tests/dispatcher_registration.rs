@@ -2,7 +2,7 @@
 //! gen-platform's fleet-wide DispatcherCatalog. caixa is the
 //! first NON-ADAPTER consumer of the dispatcher catamorphism —
 //! demonstrates the substrate's ★★ "second class of consumer"
-//! adoption criterion (theory/QUIRK-APPLIER.md §V.1).
+//! adoption criterion.
 //!
 //! The variants directly mirror Erlang/OTP's appup low-level
 //! instructions (load_module / code_change / soft_purge /

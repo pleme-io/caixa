@@ -127,7 +127,7 @@ enum LogosKind {
     RParen,
 
     // The brace/vector dialect. `{ :k v }` and `[ a b ]` are REAL
-    // SYNTAX, not sugar — theory/TATARA-LISP-CONSOLIDATION.md D4, on the
+    // SYNTAX, not sugar, on the
     // evidence of 62 live caixa.lisp manifests that author nested maps
     // (`:package { :name "…" :version "…" }`) and are consumed today.
     //

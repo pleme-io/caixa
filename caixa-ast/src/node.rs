@@ -59,8 +59,8 @@ pub enum NodeKind {
     Float(f64),
     Bool(bool),
     List(Vec<Node>),
-    /// `{ :k v … }` — the brace dialect. REAL SYNTAX per
-    /// theory/TATARA-LISP-CONSOLIDATION.md D4; 62 live caixa.lisp
+    /// `{ :k v … }` — the brace dialect. REAL SYNTAX:
+    /// 62 live caixa.lisp
     /// manifests author nested maps and are consumed today.
     Map(Vec<Node>),
     /// `[ a b … ]` — the vector dialect, D4's sibling.
@@ -91,7 +91,7 @@ impl NodeKind {
     /// `TaggedKeyword(String, KeywordTag)` shape once the tatara-lisp
     /// reader grows a per-keyword scope tag, a `NamespacedKeyword(String,
     /// String)` shape once the sexp→JSON bridge stabilizes the
-    /// `::ns/key` sugar theory/TATARA-LISP-CONSOLIDATION.md D6 sketches)
+    /// `::ns/key` sugar)
     /// reaches every downstream per-`Keyword`-arm consumer through this
     /// one dispatch by construction — no coordinated six-way rewrite
     /// across every per-rule projection site.
@@ -840,7 +840,7 @@ impl Node {
     ///
     /// `tatara_lisp::Sexp` has no Map/Vector variant yet — adding them is
     /// a LANGUAGE change, sequenced as Phase 2 of
-    /// theory/TATARA-LISP-CONSOLIDATION.md D4 and gated on its own
+    /// the brace-dialect decision and gated on its own
     /// differential run over the 1,123-file corpus (correction C4). Until
     /// that lands, all three compound arms lower to a plain list: the
     /// elements survive in order, only the brace-ness is dropped. That is
@@ -2904,8 +2904,7 @@ mod is_variant_tests {
                 ),
                 other => panic!(
                     "NodeKind::{name}.to_tatara_sexp() must lower to \
-                     Sexp::List (Sexp has no Map/Vector variant yet — see \
-                     theory/TATARA-LISP-CONSOLIDATION.md D4 Phase 2); \
+                     Sexp::List (Sexp has no Map/Vector variant yet); \
                      got {other:?}"
                 ),
             }

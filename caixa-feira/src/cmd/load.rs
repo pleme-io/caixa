@@ -513,8 +513,8 @@ pub(crate) const CAIXA_ROOT_LISP_SUBDIRS: &[&str] =
 /// blocks that either both drift on the same day or, more
 /// commonly, silently drift onto different subdir enumerations.
 ///
-/// Closes the PRIME DIRECTIVE duplication (theory/THEORY.md §I.5
-/// — "the duplication budget is zero") on the per-verb
+/// Closes the PRIME DIRECTIVE duplication
+/// ("the duplication budget is zero") on the per-verb
 /// `<PATH>…` help-text axis. Before this lift the same
 /// "Defaults to `./caixa.lisp` + every `.lisp` under `lib/`"
 /// docstring appeared verbatim above both [`super::fmt::Fmt`]'s
@@ -542,7 +542,7 @@ pub(crate) const RESOLVE_LISP_TARGETS_HELP: &str = "Paths to walk. Defaults to \
 /// `:kind Biblioteca` caixa has `lib/` but no `exe/`, a `:kind Binario`
 /// caixa is the peer arm on the sibling axis).
 ///
-/// Closes the PRIME DIRECTIVE duplication (theory/THEORY.md §I.5 — "the
+/// Closes the PRIME DIRECTIVE duplication ("the
 /// duplication budget is zero") on the per-subdir sort-lisp-entries axis.
 /// Before this lift the `read_dir → flatten → filter `.lisp` → sort`
 /// four-step shape appeared inlined at [`expand_caixa_root`]'s `lib/`
@@ -582,7 +582,7 @@ fn sorted_lisp_entries(dir: &Path) -> Vec<PathBuf> {
 /// sandbox dirs in (`caixa-core/src/layout.rs:1086` for `:bibliotecas`
 /// / `:1091` for `:exe` / `:1100` for `:servicos`).
 ///
-/// Closes the PRIME DIRECTIVE duplication (theory/THEORY.md §I.5 — "the
+/// Closes the PRIME DIRECTIVE duplication ("the
 /// duplication budget is zero") on the per-verb caixa-root walk axis.
 /// Before the 32242c8/dcfd350 lifts the same manifest-plus-`lib/*.lisp`
 /// shape appeared at two per-verb sites — `feira lint`'s

@@ -1,7 +1,7 @@
 //! Lunatic-style per-process resource limits — the typed slot of
 //! `caixa.lisp` that wasm-engine consumes at component instantiation.
 //!
-//! See `theory/INSPIRATIONS.md` §III.1 for the prior-art frame: every
+//! The prior-art frame is Lunatic per-process sandboxing: every
 //! caixa Servico runs sandboxed by default; no "trust the author".
 //!
 //! ```lisp
@@ -31,8 +31,7 @@ use thiserror::Error;
 
 /// Hard upper bound for `:limits :memory`, in bytes — the
 /// `wasm32-wasip2` linear-memory ceiling. The canonical caixa Servico
-/// compilation target ([`theory/CAIXA-SDLC.md` §V — *Substrate /
-/// Nix*][sdlc-v]) is `wasm32-wasip2`, whose linear memory is 32-bit-
+/// compilation target is `wasm32-wasip2`, whose linear memory is 32-bit-
 /// addressed at a 64 KiB page size; the in-spec maximum is
 /// `2^16 pages × 2^16 bytes/page = 2^32` bytes = 4 GiB exactly.
 /// A `:limits :memory` value above this bound is structurally
@@ -61,8 +60,6 @@ use thiserror::Error;
 /// crate carries ([`crate::render::DNS_1123_LABEL_MAX_LEN`],
 /// [`crate::render::GATEWAY_API_HTTP_PATH_MAX_LEN`],
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
-///
-/// [sdlc-v]: https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md
 pub const LIMITS_MEMORY_WASM32_MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 /// Structural floor for `:limits :memory`, in bytes — the
@@ -220,10 +217,10 @@ pub const LIMITS_WALL_CLOCK_MAX: Duration = Duration::from_secs(3600);
 /// any node the operator can provision through the standard
 /// cloud-provider control plane. The wasm32-wasip2 single-threaded
 /// execution model the canonical caixa Servico targets
-/// ([`theory/CAIXA-SDLC.md` §V][sdlc-v]) reinforces the structural
+/// reinforces the structural
 /// argument: a single wasm component cannot saturate more than one
 /// core, so even the Lunatic-style supervised-multi-process host
-/// (`theory/INSPIRATIONS.md` §III.1) — which fans wasm processes across
+/// — which fans wasm processes across
 /// the host runtime's Tokio thread pool — bounds its useful CPU request
 /// to the host node's vCPU count, never higher.
 ///
@@ -239,8 +236,6 @@ pub const LIMITS_WALL_CLOCK_MAX: Duration = Duration::from_secs(3600);
 /// [`crate::POLICY_TIMEOUT_MAX`], [`crate::POLICY_BREAKER_WINDOW_MAX`],
 /// [`crate::POLICY_RATE_LIMIT_MAX`],
 /// [`crate::render::DNS_1123_LABEL_MAX_LEN`]).
-///
-/// [sdlc-v]: https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md
 pub const LIMITS_CPU_MILLICORES_MAX: u32 = 128_000;
 
 /// Upper-bound ceiling on the `:limits :fuel` axis, in wasm
@@ -304,11 +299,11 @@ pub const LIMITS_CPU_MILLICORES_MAX: u32 = 128_000;
 /// so the typed `:fuel` slot becomes a no-op budget far from
 /// the source caixa.lisp. The wasm32-wasip2 single-threaded
 /// execution model the canonical caixa Servico targets
-/// ([`theory/CAIXA-SDLC.md` §V][sdlc-v]) reinforces the
+/// reinforces the
 /// structural argument: a single wasm component cannot
 /// out-execute its host's CPU clock, so even the Lunatic-style
-/// supervised-multi-process host (`theory/INSPIRATIONS.md`
-/// §III.1) bounds its useful fuel-per-call budget to a
+/// supervised-multi-process host
+/// bounds its useful fuel-per-call budget to a
 /// per-clock-tick magnitude, never higher.
 ///
 /// Lifted as a typed `pub const` (rather than an inline literal
@@ -326,8 +321,6 @@ pub const LIMITS_CPU_MILLICORES_MAX: u32 = 128_000;
 /// [`crate::POLICY_RATE_LIMIT_MAX`],
 /// [`crate::SUPERVISOR_MAX_RESTARTS_MAX`],
 /// [`crate::render::DNS_1123_LABEL_MAX_LEN`]).
-///
-/// [sdlc-v]: https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md
 pub const LIMITS_FUEL_MAX: u64 = 1_000_000_000_000;
 
 /// Per-process limits. All fields optional — `None` = unbounded for that axis.
@@ -411,7 +404,6 @@ pub struct LimitsSpec {
 /// declaration overlay the operator pins through a future `ComputeUnit`
 /// CR-side `spec.limits.<axis>` slot the M4 CR materializer resolves,
 /// a fifth `:limits` sub-slot the roadmap
-/// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
 /// grows once the Lunatic-shape §III.1 axis set stops covering the
 /// substrate's discovered sandboxing shape) reaches this impl's return
 /// value through exactly one edit on [`LimitsSpec::empty`] — the
@@ -488,7 +480,6 @@ impl LimitsSpec {
     /// overlay the operator pins through a future `ComputeUnit` CR-side
     /// `spec.limits.<axis>` slot the M4 CR materializer resolves, a
     /// fifth `:limits` sub-slot the roadmap
-    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
     /// grows once the Lunatic-shape §III.1 axis set stops covering the
     /// substrate's discovered sandboxing shape) reaches this
     /// constructor at one edit (one added struct field on the type +
@@ -554,7 +545,7 @@ impl LimitsSpec {
     ///
     /// The `:limits :memory` slot carries the "per-process wasm32
     /// linear-memory byte-cap" Lunatic-shaped sandboxing contract
-    /// (`theory/INSPIRATIONS.md` §III.1) — the typed slot's
+    /// — the typed slot's
     /// `Option<u64>` accept-set (zero-floor rejected through
     /// [`LimitsError::MemoryZero`], wasm32-page-floor rejected through
     /// [`LimitsError::MemoryBelowWasm32Page`], upper-bounded by
@@ -605,7 +596,7 @@ impl LimitsSpec {
     /// (Option<Duration>) / `:cpu` (Option<u32>) future lifts fold
     /// on). Named `memory()` to match the storage field's name; the
     /// accessor's identity maps onto the canonical Lunatic-shaped
-    /// `theory/INSPIRATIONS.md` §III.1 vocabulary the slot's docstring
+    /// vocabulary the slot's docstring
     /// already carries.
     #[must_use]
     pub const fn memory(&self) -> Option<u64> {
@@ -630,7 +621,7 @@ impl LimitsSpec {
     ///
     /// The `:limits :fuel` slot carries the "per-call wasm-instruction
     /// budget" wasmtime-shaped sandboxing contract
-    /// (`theory/INSPIRATIONS.md` §III.1 — Lunatic's supervised
+    /// (Lunatic's supervised
     /// wasm-`Store`-per-process fuel accounting, translated onto
     /// pleme-io's typed `:limits` slot) — the typed slot's
     /// `Option<u64>` accept-set (zero-floor rejected through
@@ -711,7 +702,7 @@ impl LimitsSpec {
     ///
     /// The `:limits :wall-clock` slot carries the "per-outermost-call
     /// wall-clock deadline" wasmtime-shaped sandboxing contract
-    /// (`theory/INSPIRATIONS.md` §III.1 — Lunatic's supervised
+    /// (Lunatic's supervised
     /// wasm-`Store`-per-process epoch-deadline accounting, translated
     /// onto pleme-io's typed `:limits` slot) — the typed slot's
     /// `Option<Duration>` accept-set (zero-floor rejected through
@@ -797,7 +788,7 @@ impl LimitsSpec {
     ///
     /// The `:limits :cpu` slot carries the "per-process soft cgroup-v2
     /// CPU share" Kubernetes-scheduler-shaped sandboxing hint
-    /// (`theory/INSPIRATIONS.md` §III.1 — Lunatic's supervised
+    /// (Lunatic's supervised
     /// wasm-`Store`-per-process host-runtime CPU accounting, translated
     /// onto pleme-io's typed `:limits` slot as a scheduler-facing
     /// millicore request the pod's kubelet propagates to the container's
@@ -8133,8 +8124,8 @@ mod tests {
         // establishes on the M3 `:politicas` slot's typed pair — a
         // future analog on the M2 `:limits` slot's `:fuel` /
         // `:wall-clock` typed pair once wasmtime's per-call fuel
-        // accounting integrates with wall-clock deadline propagation,
-        // per `theory/INSPIRATIONS.md` §III.1) that fires on the
+        // accounting integrates with wall-clock deadline propagation)
+        // that fires on the
         // all-`None` input trips here at caixa-core test time rather
         // than at a downstream consumer that composed
         // [`LimitsSpec::default`] (which now routes through

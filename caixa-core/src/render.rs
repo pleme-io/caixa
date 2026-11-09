@@ -3443,7 +3443,7 @@ pub const GIT_REF_NAME_MAX_LEN: usize = 255;
 ///   - no trailing `.` on the whole ref (Git rejects `<name>.`);
 ///   - no `refs/heads/` or `refs/tags/` prefix — the canonical "I
 ///     copied the fully-qualified ref name out of `git show-ref`
-///     instead of the leaf" footgun (per [`theory/FLAKE-DEDUP.md`][fd]
+///     instead of the leaf" footgun (per the
 ///     `BranchName` constructor rules); the caixa-resolver prepends
 ///     the category prefix at clone time, so an author-side
 ///     `:branch "refs/heads/main"` resolves to a literal ref named
@@ -3494,7 +3494,6 @@ pub const GIT_REF_NAME_MAX_LEN: usize = 255;
 /// K8s apiserver / NATS server / WASI kv backend for the prior five).
 ///
 /// [gcr]: https://git-scm.com/docs/git-check-ref-format
-/// [fd]: pleme-io/theory/FLAKE-DEDUP.md §1 `BranchName`
 ///
 /// # Errors
 ///
@@ -7251,10 +7250,8 @@ pub enum PathShapeViolation {
     /// with an absolute right-hand side, so `root.join("/etc/passwd")`
     /// resolves to `"/etc/passwd"` and escapes the project sandbox
     /// entirely. The Lunatic-style sandbox discipline
-    /// ([`theory/INSPIRATIONS.md` §III.1][i31]) requires every
+    /// requires every
     /// author-supplied path to live under the caixa root.
-    ///
-    /// [i31]: https://github.com/pleme-io/theory/blob/main/INSPIRATIONS.md
     Absolute,
     /// The path contains a [`Component::ParentDir`] component anywhere
     /// — `root.join("../sibling/x")` traverses above the caixa root,
@@ -9617,8 +9614,8 @@ pub const M2_LIMITS_KEY_CPU: &str = "cpu";
 /// [`crate::BehaviorSpec`] struct's OTP-shaped callback fields
 /// (`on_init` / `on_call` / `on_cast` / `on_info` / `on_state_change` /
 /// `on_terminate`, analogs of `gen_server:init/1` / `handle_call/3` /
-/// `handle_cast/2` / `handle_info/2` / `code_change/3` / `terminate/2`
-/// per `theory/INSPIRATIONS.md` §II.3) serialize as under the
+/// `handle_cast/2` / `handle_info/2` / `code_change/3` / `terminate/2`)
+/// serialize as under the
 /// `#[serde(rename_all = "camelCase")]` derive attribute
 /// (`"onInit"` / `"onCall"` / `"onCast"` / `"onInfo"` / `"onStateChange"`
 /// / `"onTerminate"`). Emitted by [`servico_m2_overlay`] as sub-keys of
@@ -9777,8 +9774,8 @@ pub const M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE: &str = ":on-terminate";
 /// two typed sub-keys the M2 [`crate::UpgradeFromEntry`] struct's
 /// OTP-appup-shaped per-entry fields (`from` semver-of-the-prior-`:versao`
 /// / `instructions` typed [`crate::UpgradeInstruction`] list, analogs of
-/// the OTP `.appup` file's `{FromVsn, [Instruction, …]}` per-entry tuple
-/// per `theory/INSPIRATIONS.md` §II.4) serialize as under the
+/// the OTP `.appup` file's `{FromVsn, [Instruction, …]}` per-entry tuple)
+/// serialize as under the
 /// `#[serde(rename_all = "camelCase")]` derive attribute (`"from"` /
 /// `"instructions"`). Emitted by [`servico_m2_overlay`] as sub-keys of
 /// each element of the [`M2_KEY_UPGRADE_FROM`] overlay sequence and
@@ -11853,7 +11850,7 @@ pub const M3_PLACEMENT_ESTRATEGIA_SHARDED: &str = "Sharded";
 /// [`SUPERVISOR_KEY_ESTRATEGIA`] whenever the typed `:supervisor
 /// :estrategia` slot's strategy is the restart-only-the-failed-child arm
 /// (the enum's `default()` and the canonical happy-path per
-/// theory/INSPIRATIONS.md §II.2 — Erlang/OTP `one_for_one`).
+/// Erlang/OTP `one_for_one`).
 ///
 /// The scalar is the un-`rename`d Rust variant name verbatim; a future
 /// `#[serde(rename_all = "kebab-case")]` attribute on the enum, or a
@@ -11942,7 +11939,7 @@ pub const SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE: &str = "SimpleOneForOne";
 /// [`SUPERVISOR_CHILD_KEY_RESTART`] whenever the typed `:children :restart`
 /// per-child restart-policy slot is the always-restart-regardless-of-exit
 /// arm (the enum's `default()` and the canonical happy-path per
-/// theory/INSPIRATIONS.md §II.2 — Erlang/OTP `permanent`, the
+/// Erlang/OTP `permanent`, the
 /// long-running-service posture where the supervisor must bring the
 /// child back on every failure mode).
 ///
@@ -15841,7 +15838,7 @@ pub const GATEWAY_API_KIND_GATEWAY: &str = "Gateway";
 /// group/version axes — completes the per-Gateway-API-CRD `kind`-axis
 /// lift trajectory across the `(Gateway, HTTPRoute)` pair that the
 /// renderer's `gateway_routes` external `:entrada` ingress contract
-/// emits together. Every guarantee in [MESH-COMPOSITION.md §V][mc] —
+/// emits together. The mesh guarantee —
 /// "every Aplicacao with `:entrada` emits one `Gateway` + one
 /// `HTTPRoute` per `:paths` entry pointing at the same
 /// `gateway.networking.k8s.io/v1` group/version — now threads through
@@ -15858,7 +15855,6 @@ pub const GATEWAY_API_KIND_GATEWAY: &str = "Gateway";
 /// discriminator by construction with no opportunity for per-renderer
 /// drift.
 ///
-/// [mc]: https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
 

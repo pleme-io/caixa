@@ -112,11 +112,10 @@ pub struct Caixa {
     #[serde(default)]
     pub caixotes: Vec<String>,
 
-    // ── M2 typed-substrate extensions per theory/ABSORPTION-ROADMAP.md ──
+    // ── M2 typed-substrate extensions ──
     //
     // All four are optional + default to "absent"; existing caixas
-    // round-trip unchanged. Each maps onto a prior-art primitive named
-    // in theory/INSPIRATIONS.md:
+    // round-trip unchanged. Each maps onto a prior-art primitive:
     //
     //   :limits        — Lunatic per-process limits (§III.1)
     //   :behavior      — OTP gen_server callbacks  (§II.3)
@@ -163,7 +162,7 @@ pub struct Caixa {
     #[serde(default)]
     pub children: Vec<crate::supervisor::ChildSpec>,
 
-    // ── M3 Aplicacao slots (theory/MESH-COMPOSITION.md) ─────────────────
+    // ── M3 Aplicacao slots ─────────────────
     //
     // Required when :kind Aplicacao; ignored otherwise.
     // Composed into a typed AplicacaoSpec via Caixa::aplicacao_view().

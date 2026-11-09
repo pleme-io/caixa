@@ -1,7 +1,7 @@
 //! caixa-mesh — typed renderer that emits cluster mesh primitives
 //! from an `:kind Aplicacao` caixa.
 //!
-//! See `theory/MESH-COMPOSITION.md` for the design frame: a typed
+//! The design frame: a typed
 //! Aplicacao composes Servicos into a graph with WIT-typed contracts,
 //! mesh policies, and explicit placement. caixa-mesh is the renderer
 //! that turns that typed graph into the cluster-side primitives:

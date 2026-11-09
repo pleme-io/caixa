@@ -1,6 +1,6 @@
 # Caixa
 
-> **★★★ CSE / Knowable Construction.** This repo operates under **Constructive Substrate Engineering** — canonical specification at [`pleme-io/theory/CONSTRUCTIVE-SUBSTRATE-ENGINEERING.md`](https://github.com/pleme-io/theory/blob/main/CONSTRUCTIVE-SUBSTRATE-ENGINEERING.md). The Compounding Directive is in the org-level pleme-io/CLAUDE.md ★★★ section. Companion theory: [`CAIXA-SDLC.md`](https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md) (the author-to-live playbook), [`MESH-COMPOSITION.md`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md) (typed Aplicacao), [`INSPIRATIONS.md`](https://github.com/pleme-io/theory/blob/main/INSPIRATIONS.md) (Erlang/OTP, Lunatic, Unison, Pony, Akka — what to absorb), [`RUNTIME-PATTERNS.md`](https://github.com/pleme-io/theory/blob/main/RUNTIME-PATTERNS.md) (~30 runtime patterns + status), [`ABSORPTION-ROADMAP.md`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md) (M2-M5 deliverables).
+> **★★★ CSE / Knowable Construction.** This repo operates under **Constructive Substrate Engineering**. The Compounding Directive is in the org-level pleme-io/CLAUDE.md ★★★ section.
 
 caixa — the typed package + lifecycle primitive for the pleme-io
 substrate. Author surface is `(defcaixa …)`; substrate-side renderers
@@ -51,8 +51,8 @@ mesh primitives respectively.
 
 The build refuses Aplicacaos whose `:contratos` reference unknown
 members, whose `:placement Sharded` lacks `:shard-key`, or whose
-`:placement Replicated/SingleNode` lacks `:clusters`. Every guarantee
-in [`theory/MESH-COMPOSITION.md`](https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md) §III.3 is type-system-enforced.
+`:placement Replicated/SingleNode` lacks `:clusters`. Every one of these
+guarantees is type-system-enforced.
 
 ## ★ The feira CLI
 

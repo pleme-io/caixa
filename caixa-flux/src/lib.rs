@@ -8,7 +8,7 @@
 //!
 //! ## Two paths, two surfaces
 //!
-//! Per `theory/META-FRAMEWORK.md` §I, two equally-canonical ways exist
+//! Two equally-canonical ways exist
 //! to deploy a caixa Servico:
 //!
 //! 1. **Aggregator path** ([`programs_yaml_entry`]) — the cluster has

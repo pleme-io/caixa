@@ -11,8 +11,8 @@
 //!   README.md       ; one-line elevator pitch for the chart
 //!
 //! There are no `templates/` — the rendering is delegated to the
-//! `pleme-computeunit` library chart in helmworks (per `theory/META-FRAMEWORK.md`
-//! §I, Layer 3 → Layer 2 transformation). caixa-helm's job is to derive the
+//! `pleme-computeunit` library chart in helmworks (a
+//! Layer 3 → Layer 2 transformation). caixa-helm's job is to derive the
 //! values block from a Caixa, not to render Kubernetes objects directly.
 //!
 //! ## Why a separate crate

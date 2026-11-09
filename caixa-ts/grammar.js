@@ -58,8 +58,8 @@ module.exports = grammar({
       ')',
     ),
 
-    // The brace/vector dialect is REAL SYNTAX, per decision D4 in
-    // theory/TATARA-LISP-CONSOLIDATION.md. 62 live caixa.lisp manifests
+    // The brace/vector dialect is REAL SYNTAX:
+    // 62 live caixa.lisp manifests
     // author nested maps (`:package { :name "…" }`); they are consumed by
     // pleme-doc-gen. Without these rules a third of the corpus fails to
     // parse.
