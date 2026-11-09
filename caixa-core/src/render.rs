@@ -11810,7 +11810,6 @@ pub const M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE: &str = "SingleNode";
 /// distribution strategy is the every-cluster-active-active arm (the
 /// enum's `default()` and the canonical happy-path).
 ///
-///
 /// Peer of the sibling [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
 /// [`M3_PLACEMENT_ESTRATEGIA_SHARDED`] scalars on the same closed
 /// enum surface — see the sibling doc for the full drift-mode
