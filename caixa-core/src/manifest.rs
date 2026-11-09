@@ -5826,7 +5826,7 @@ impl Caixa {
     /// Passes trivially on every non-owner kind and on every owner
     /// kind with its required slot present.
     pub fn validate_required_kind_slot(&self) -> Result<(), crate::LayoutError> {
-        if self.kind().requires_exe() && self.exe().is_empty() {
+        if self.kind().requires_exe() && self.exe().is_empty() && self.caixotes().is_empty() {
             return Err(crate::LayoutError::binario_without_exe(self));
         }
         if self.kind().requires_servicos() && self.servicos().is_empty() {
@@ -10522,6 +10522,16 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn a_rust_binario_is_satisfied_by_its_crates() {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = crate::CaixaKind::Binario;
+        c.exe = vec![];
+        assert!(c.validate_required_kind_slot().is_err());
+        c.caixotes = vec![".".into()];
+        c.validate_required_kind_slot().unwrap();
     }
 
     #[test]
