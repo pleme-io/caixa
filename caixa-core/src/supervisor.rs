@@ -4620,7 +4620,7 @@ impl ChildSpec {
     /// pins through a future `:placement`-scoped slot on the supervisor
     /// tree, a namespace-qualified rewrite the M4 CR materializer
     /// applies per-CR, a per-child overlay from the future `:children
-    /// :nome-suffix` slot the MESH-COMPOSITION §III.2 roadmap
+    /// :nome-suffix` slot the roadmap
     /// acknowledges) would have had to be threaded through every
     /// open-coded copy in lockstep or one consumer would silently
     /// disagree with the peers on which caixa a given child resolves to
@@ -4694,7 +4694,7 @@ impl ChildSpec {
     /// `versao: child.versao.clone()` — two open-coded field-accesses that
     /// expressed no compile-time link back to the typed slot. A future
     /// extension of the `:children :versao` axis to a richer author surface
-    /// (a per-cluster version-pin overlay per MESH-COMPOSITION §III.2 canary
+    /// (a per-cluster version-pin overlay canary
     /// flow, a lacre-projected concrete-version rewrite the operator
     /// materializes at CR-admission time, a future `:children :versao-lock`
     /// per-cluster override slot the wasm-operator's hierarchical
@@ -4917,7 +4917,7 @@ const fn default_max_restarts() -> u32 {
 /// `:supervisor :max-restarts-overrides` slot the MESH-COMPOSITION
 /// §III.2 supervision-canary roadmap acknowledges, a promotion of the
 /// plain `u32` count to a richer `{MaxR, MaxT}` per-child-cohort
-/// restart-budget-partition once the INSPIRATIONS §II.2 Erlang/OTP
+/// restart-budget-partition once the Erlang/OTP
 /// per-child-cohort roadmap lands) would have had to be threaded
 /// through both open-coded copies in lockstep or the wire-format
 /// author-omitted arm and the view-construction author-omitted arm
@@ -5145,7 +5145,7 @@ pub const SUPERVISOR_RESTART_WINDOW_MAX: Duration = Duration::from_secs(3600);
 /// `:supervisor :restart-window-overrides` slot the MESH-COMPOSITION
 /// §III.2 supervision-canary roadmap acknowledges, a promotion of the
 /// paired constants to a per-child-cohort `{MaxR, MaxT}` restart-budget-
-/// partition once the INSPIRATIONS §II.2 Erlang/OTP per-child-cohort
+/// partition once the Erlang/OTP per-child-cohort
 /// roadmap lands) would have had to migrate the `MaxIntensity` half
 /// through the lifted constant and the `Period` half through a raw
 /// literal in lockstep or the two halves of the same OTP-canonical
@@ -5383,7 +5383,7 @@ impl SupervisorSpec {
     /// already assert, so a future coherent rebrand of the OTP-canonical
     /// triple (Elixir's `{max_restarts: 3, max_seconds: 5}`, a per-
     /// cluster overlay via a future `:restart-window-overrides` slot, a
-    /// per-child-cohort promotion the INSPIRATIONS.md §II.2 Erlang/OTP
+    /// per-child-cohort promotion the Erlang/OTP
     /// absorption roadmap acknowledges) migrates through three typed
     /// constants in lockstep, and the paired [`Default`] impl inherits
     /// every future extension by construction.
@@ -5469,13 +5469,13 @@ impl SupervisorSpec {
     /// typed slot. A future extension of the `:supervisor :estrategia`
     /// axis to a richer author surface (a per-cluster strategy override
     /// the operator pins through a future `:supervisor :estrategia-overrides`
-    /// slot the MESH-COMPOSITION §III.2 supervision-canary roadmap
+    /// slot the supervision-canary roadmap
     /// acknowledges, a per-tenant strategy-alias table the M4 CR
     /// materializer resolves per-CR, a per-Supervisor dynamic strategy
     /// derivation the future adaptive-supervision engine computes from
     /// child-failure-history topology, a per-child-cohort strategy split
     /// the future `RestForCohort` extension acknowledged by the
-    /// INSPIRATIONS.md §II.2 Erlang/OTP absorption roadmap acknowledges)
+    /// Erlang/OTP absorption roadmap acknowledges)
     /// would have had to be threaded through every open-coded copy in
     /// lockstep — one consumer reading the raw variant while a peer read
     /// the operator-resolved variant would silently split the
@@ -5585,7 +5585,7 @@ impl SupervisorSpec {
     /// future extension of the `:max-restarts` axis to a richer author
     /// surface (a per-cluster restart-budget override the operator pins
     /// through a future `:supervisor :max-restarts-overrides` slot the
-    /// MESH-COMPOSITION §III.2 supervision-canary roadmap acknowledges,
+    /// supervision-canary roadmap acknowledges,
     /// a per-tenant restart-budget-alias table the M4 CR materializer
     /// resolves per-CR, a per-supervisor dynamic restart-budget derivation
     /// the future adaptive-supervision engine computes from child-failure-
@@ -5688,7 +5688,7 @@ impl SupervisorSpec {
     /// the typed slot. A future extension of the `:restart-window` axis to
     /// a richer author surface (a per-cluster restart-window override the
     /// operator pins through a future `:supervisor :restart-window-overrides`
-    /// slot the MESH-COMPOSITION §III.2 supervision-canary roadmap
+    /// slot the supervision-canary roadmap
     /// acknowledges, a per-tenant restart-window-alias table the M4 CR
     /// materializer resolves per-CR, a per-supervisor dynamic
     /// restart-window derivation the future adaptive-supervision engine
@@ -5793,7 +5793,7 @@ impl SupervisorSpec {
     /// link back to the typed slot. A future extension of the
     /// `:supervisor :children` axis to a richer author surface (a
     /// per-cluster child-set overlay the operator pins through a future
-    /// `:supervisor :children-overrides` slot the MESH-COMPOSITION §III.2
+    /// `:supervisor :children-overrides` slot the
     /// supervision-canary roadmap acknowledges, a per-tenant
     /// child-set-alias table the M4 CR materializer resolves per-CR,
     /// a per-supervisor dynamic-child derivation the future adaptive-
@@ -7407,7 +7407,7 @@ mod tests {
         // `rest_for_one` widening once the substrate discovers startup-
         // order-coupled child cohorts as the more common worker-supervisor
         // shape, a per-cluster overlay the operator pins through a future
-        // `:estrategia-overrides` slot the MESH-COMPOSITION §III.2
+        // `:estrategia-overrides` slot the
         // supervision-canary roadmap acknowledges) as a deliberate test
         // edit, not a silent contract migration. Peer of the sibling
         // [`supervisor_max_restarts_default_pins_otp_canonical_value`] +
@@ -7570,7 +7570,7 @@ mod tests {
         // OTP-`transient` widening once the substrate discovers clean-
         // completion-aware children as the more common child shape, a
         // per-cluster overlay the operator pins through a future
-        // `:restart-overrides` slot the MESH-COMPOSITION §III.2
+        // `:restart-overrides` slot the
         // supervision-canary roadmap acknowledges) as a deliberate test
         // edit, not a silent contract migration. Peer of the sibling
         // [`supervisor_estrategia_default_pins_otp_canonical_value`] /

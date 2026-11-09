@@ -181,7 +181,7 @@ pub enum Error {
     /// duplicating a cluster entry, `:entrada :para` naming an unknown
     /// member, `:politicas` carrying an operationally-meaningless value
     /// (zero timeout, zero retries, zero breaker thresholds, zero rate
-    /// limit — MESH-COMPOSITION §V), or a self-referential Aplicacao
+    /// limit), or a self-referential Aplicacao
     /// that lists its own `:nome` as a `:membros` entry
     /// ([`caixa_core::AplicacaoError::MembroIsSelfAplicacao`], the
     /// one-node lacre-closure recursion the layout pipeline's
@@ -982,7 +982,7 @@ mod tests {
         //
         // Byte-equal today (both accessors are `&self.<field>`); the
         // pin catches any future accessor extension (SemVer-2 build-
-        // metadata canonicalization the CAIXA-SDLC §I SemVer-2 pin
+        // metadata canonicalization the SemVer-2 pin
         // acknowledges, an OCI-tag normalization the M4 registry-
         // alignment slot lands, a DNS-1123 normalization pass on
         // `:nome` the layout-invariant gate already accepts under

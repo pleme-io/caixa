@@ -884,7 +884,7 @@ impl LayoutInvariants for StandardLayout {
 
         // Kind ↔ `:ci` coherence (mirror of the three arms above on
         // the M3 mesh / supervisor-tree / M2 Servico-runtime slot
-        // families, CANTEIRO §7.1-C, folded onto one substrate
+        // families, folded onto one substrate
         // primitive at [`crate::Caixa::validate_ci_kind_coherence`]):
         // `:ci` carries a typed CI run — a
         // [`canteiro_types::CiRun`] — that only the caixa-actions
@@ -1623,7 +1623,7 @@ pub enum LayoutError {
     #[error(
         "caixa '{caixa}' is :kind {kind:?} but declares Aplicacao-only mesh slot(s): {slots} — \
          :membros / :contratos / :politicas / :placement / :entrada compose a :kind Aplicacao's \
-         typed graph (MESH-COMPOSITION §III.1) and are silently ignored on every other kind \
+         typed graph and are silently ignored on every other kind \
          (never validated, never rendered); move them to a :kind Aplicacao caixa or remove them"
     )]
     MeshSlotsOnNonAplicacao {
@@ -1634,7 +1634,7 @@ pub enum LayoutError {
     #[error(
         "caixa '{caixa}' is :kind {kind:?} but declares Supervisor-only slot(s): {slots} — \
          :estrategia / :max-restarts / :restart-window / :children compose a :kind Supervisor's \
-         typed OTP supervisor (INSPIRATIONS §II.2) and are silently ignored on every other kind \
+         typed OTP supervisor and are silently ignored on every other kind \
          (never validated, never reconciled); move them to a :kind Supervisor caixa or remove them"
     )]
     SupervisorSlotsOnNonSupervisor {
@@ -1645,7 +1645,7 @@ pub enum LayoutError {
     #[error(
         "caixa '{caixa}' is :kind {kind:?} but declares Servico-only slot(s): {slots} — \
          :limits / :behavior / :upgrade-from configure the runtime of a long-running :kind Servico \
-         wasm component (INSPIRATIONS §III.1 / §II.3 / §II.4) and are silently ignored on every \
+         wasm component and are silently ignored on every \
          other kind (never rendered into a chart or programs.yaml entry); move them to a :kind \
          Servico caixa or remove them"
     )]
@@ -1673,7 +1673,7 @@ pub enum LayoutError {
     MissingCi(String),
     #[error(
         "caixa '{caixa}' is :kind {kind:?} but declares the Acao-only :ci slot — \
-         :ci carries a typed CI run (canteiro_types::CiRun, CANTEIRO §7.1-C) that only the \
+         :ci carries a typed CI run (canteiro_types::CiRun) that only the \
          caixa-actions renderer validates for :kind Acao, and is silently ignored on every \
          other kind (never decomposed, never rendered); move it to a :kind Acao caixa or \
          remove it"
@@ -6784,7 +6784,7 @@ mod tests {
         // accessor rebrand (a per-cluster alias table pinned through a
         // future `:placement`-scoped slot, the M4 CR materializer's
         // per-CR namespace-qualified rewrite, a `:nome-suffix` overlay
-        // the MESH-COMPOSITION §III.2 roadmap acknowledges) would land
+        // the roadmap acknowledges) would land
         // through the accessor by construction; a raw-borrow bypass
         // would silently disagree with every peer consumer that already
         // routes through `caixa.nome()` (the caixa-mesh 980c059,
@@ -7024,7 +7024,7 @@ mod tests {
         // verbatim — a per-cluster alias table pinned through a
         // future `:placement`-scoped slot, the M4 CR materializer's
         // per-CR namespace-qualified rewrite, a `:nome-suffix`
-        // overlay the MESH-COMPOSITION §III.2 roadmap acknowledges)
+        // overlay the roadmap acknowledges)
         // that would silently split the substrate's own layout
         // invariant verifier's diagnostic surface from every peer
         // caixa-crate consumer that already routes `:nome` reads
@@ -7205,7 +7205,7 @@ mod tests {
         // `"1.5s"` is the canonical fractional-seconds drift footgun the
         // shared integer-magnitude codec (1c55a2a) rejects: round-trips
         // through `render` as `"1500ms"` on first serialize, breaking
-        // THEORY.md §V.2.7 render-determinism. Before this wire-up
+        // render-determinism. Before this wire-up
         // `supervisor_view` soft-swallowed the parse error as
         // `restart_window: None`, masking the drift as a never-reset
         // supervisor.
@@ -8868,7 +8868,7 @@ mod tests {
         //       at :860, `requires_ci()` at :874) already key off.
         //       All four gates in the block now share one convention;
         //       a future kind that gains its own required-slot gate
-        //       (an M4/M5 typed arm the CAIXA-SDLC §I six-kind roster
+        //       (an M4/M5 typed arm the six-kind roster
         //       may grow) reaches for the same predicate family and
         //       inherits the accessor discipline for free.
         //   (b) raw `caixa.nome` → `caixa.nome()` — routes the

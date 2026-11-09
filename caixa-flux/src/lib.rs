@@ -398,7 +398,7 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_UPGRADE;
 /// leave every terminally-failed upgrade in the failed state without
 /// rolling back to the prior last-known-good release the substrate's
 /// "no chart apply leaves a per-caixa CR in a stalled, unremediated
-/// state" MESH-COMPOSITION.md §V guarantee mandates, with no diagnostic
+/// state" guarantee mandates, with no diagnostic
 /// naming the remediation-toggle-drift root cause far from the source
 /// caixa.lisp / the renderer's format-string template. Same shape as
 /// the sibling [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-
@@ -430,7 +430,7 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE;
 /// interpolation, so a future substrate-side toggle migration (`true` →
 /// `false` on a per-cluster class where terminally-failed upgrades must
 /// escalate to operator-attention rather than mask under an auto-rollback
-/// pipeline; a per-caixa opt-out slot the ABSORPTION-ROADMAP.md M4 typed-
+/// pipeline; a per-caixa opt-out slot the typed-
 /// slot trajectory adds once the substrate grows a `:upgrade
 /// :remediate-last-failure` author-side toggle) is a one-line edit on the
 /// canonical [`caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`]
@@ -502,7 +502,7 @@ pub use caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT;
 /// apply against a fresh cluster whose target namespace has not been
 /// pre-provisioned by an out-of-band pipeline the substrate's "no per-
 /// caixa Servico apply is blocked on manual namespace preprovisioning"
-/// MESH-COMPOSITION.md §V install-path-fluency guarantee mandates, with no
+/// install-path-fluency guarantee mandates, with no
 /// diagnostic naming the seeder-toggle-drift root cause far from the
 /// source caixa.lisp / the renderer's format-string template. Same shape
 /// as the sibling [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] (96581b7)
@@ -535,7 +535,7 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE;
 /// named-arg interpolation, so a future substrate-side toggle migration
 /// (`true` → `false` on hardened per-cluster classes where namespace
 /// provisioning is an out-of-band operator gate; a per-caixa opt-out
-/// slot the ABSORPTION-ROADMAP.md M4 typed-slot trajectory adds once the
+/// slot the typed-slot trajectory adds once the
 /// substrate grows a `:install :create-namespace` author-side toggle) is
 /// a one-line edit on the canonical
 /// [`caixa_core::FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT`] declaration,
@@ -611,7 +611,7 @@ pub use caixa_core::FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT;
 /// dangling in the cluster the substrate's "the cluster's per-caixa live
 /// state converges to the caixa's tatara-lisp source-of-truth on every
 /// reconcile — resources the source no longer carries are swept by the
-/// kustomize-controller, not left dangling" CAIXA-SDLC.md §V author-to-
+/// kustomize-controller, not left dangling" author-to-
 /// live-convergence guarantee mandates, with no diagnostic naming the
 /// toggle-drift root cause far from the source caixa.lisp / the
 /// renderer's format-string template. Same shape as the sibling
@@ -646,7 +646,7 @@ pub use caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE;
 /// substrate-side toggle migration (`true` → `false` on a cluster class
 /// where a human is expected to prune orphaned resources by hand once
 /// per-cluster policy grows an "operator-driven cleanup" mode; a per-
-/// caixa opt-out slot the ABSORPTION-ROADMAP.md M4 typed-slot
+/// caixa opt-out slot the typed-slot
 /// trajectory adds once the substrate grows a `:kustomization :prune`
 /// author-side toggle) is a one-line edit on the canonical
 /// [`caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] declaration, not a
@@ -1842,7 +1842,7 @@ pub fn programs_yaml_entry(
     // (an M4 namespace-qualified rewrite the CR materializer applies
     // per-CR, a per-cluster alias table pinned through a future
     // `:placement`-scoped slot, the `:nome-suffix` overlay
-    // MESH-COMPOSITION §III.2 acknowledges) reaches this emit site
+    // the design acknowledges) reaches this emit site
     // through the accessor by construction. Pinned by the drift-
     // detection test
     // [`programs_yaml_entry_name_field_routes_through_caixa_nome_accessor`]
@@ -1861,7 +1861,7 @@ pub fn programs_yaml_entry(
     // (and the peer [`caixa_helm::build_values_yaml`] site) each
     // re-derived collapse onto one canonical composition, so a future
     // change to the per-Servico splice / overlay shape (the M4 typed
-    // per-edge policy overlay slot addition MESH-COMPOSITION §III.2
+    // per-edge policy overlay slot addition
     // #3 acknowledges, a change to the precedence rule once per-
     // Aplicacao operator overrides land, a canonicalization pass on
     // the merged key set) reaches both renderers by construction
@@ -2816,7 +2816,7 @@ spec:
         // table the operator pins through a future `:placement`-
         // scoped slot, an M4 namespace-qualified rewrite the CR
         // materializer applies per-CR, the future `:nome-suffix`
-        // overlay MESH-COMPOSITION §III.2 acknowledges) would land
+        // overlay the design acknowledges) would land
         // on the accessor but never reach this emit site, silently
         // splitting the parent-Caixa identity between the
         // FluxCD `GitRepository` `spec.url` `<org>/<nome>` clone
@@ -3372,7 +3372,7 @@ spec:
         // failed upgrade in the failed state without rolling back to the
         // prior last-known-good release the substrate's "no chart apply
         // leaves a per-caixa CR in a stalled, unremediated state"
-        // MESH-COMPOSITION.md §V guarantee mandates. Pin the identity
+        // guarantee mandates. Pin the identity
         // here so a regression that re-introduces an inline literal at
         // the emit site — or a rebrand on the canonical const that fails
         // to reach the emit site — surfaces at build time on this test's
@@ -3518,7 +3518,7 @@ spec:
         // per-caixa chart apply against a fresh cluster whose target
         // namespace has not been pre-provisioned by an out-of-band
         // pipeline the substrate's "no per-caixa Servico apply is blocked
-        // on manual namespace preprovisioning" MESH-COMPOSITION.md §V
+        // on manual namespace preprovisioning"
         // install-path-fluency guarantee mandates. Pin the identity here
         // so a regression that re-introduces an inline literal at the
         // emit site — or a rebrand on the canonical const that fails to
@@ -3717,7 +3717,7 @@ spec:
         // cluster's per-caixa live state converges to the caixa's
         // tatara-lisp source-of-truth on every reconcile — resources
         // the source no longer carries are swept by the kustomize-
-        // controller, not left dangling" CAIXA-SDLC.md §V author-to-
+        // controller, not left dangling" author-to-
         // live-convergence guarantee mandates. Pin the identity here so
         // a regression that re-introduces an inline literal at the emit
         // site — or a rebrand on the canonical const that fails to
@@ -7884,7 +7884,7 @@ spec:
         // accessor (an M4 namespace-qualified rewrite the CR
         // materializer applies per-CR, a per-cluster alias table
         // pinned through a future `:placement`-scoped slot, the
-        // `:nome-suffix` overlay MESH-COMPOSITION §III.2 acknowledges)
+        // `:nome-suffix` overlay the design acknowledges)
         // that landed on the accessor but not on this emit site would
         // silently split the substrate-operator-side aggregator's
         // per-entry `name:` axis (the discriminator

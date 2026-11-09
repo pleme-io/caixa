@@ -58,7 +58,7 @@ pub(crate) fn caixa_manifest_path(root: &Path) -> PathBuf {
 /// root, defaulting to the current working directory when the flag
 /// is absent.
 ///
-/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.5 — "the
+/// Closes the PRIME DIRECTIVE duplication ("the
 /// duplication budget is zero") on the per-verb `--path` fallback
 /// axis. Before this lift the same one-line shape —
 /// `self.path.clone().unwrap_or_else(|| PathBuf::from("."))` —
@@ -157,7 +157,7 @@ pub(crate) fn load_yaml(path: &Path) -> Result<serde_yaml::Value> {
 /// per-CR `metadata.name` axis, the `:placement :clusters` typed slot,
 /// the `<k8s-repo>/clusters/<cluster>/…` GitOps path join) demands.
 ///
-/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5 — "the
+/// Closes the PRIME DIRECTIVE duplication ("the
 /// duplication budget is zero") on the per-verb `--cluster` axis. Before
 /// this lift the same `--cluster` value passed through both
 /// [`super::deploy::Deploy::run`] (the per-Servico `feira deploy`
@@ -248,7 +248,7 @@ pub(crate) fn validate_cluster_arg(cluster: &str) -> Result<()> {
 /// per-verb entry-point against the canonical DNS-1123 label shape every
 /// K8s Namespace `metadata.name` consumer demands.
 ///
-/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5 — "the
+/// Closes the PRIME DIRECTIVE duplication ("the
 /// duplication budget is zero") on the per-verb `--namespace` axis,
 /// peer with the [`validate_cluster_arg`] lift (feb3103) on the
 /// sibling per-verb `--cluster` axis. Before this lift the same
@@ -355,7 +355,7 @@ pub(crate) fn validate_namespace_arg(namespace: &str) -> Result<()> {
 /// `lareira-<nome>` Helm chart name, every K8s `metadata.name` materializer
 /// the substrate emits) demands.
 ///
-/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5 — "the
+/// Closes the PRIME DIRECTIVE duplication ("the
 /// duplication budget is zero") on the per-verb `<nome>` positional axis,
 /// peer with the [`validate_cluster_arg`] / [`validate_namespace_arg`]
 /// lifts on the sibling `--cluster` / `--namespace` flag axes. Before
@@ -699,7 +699,7 @@ mod tests {
     ///
     /// Lifts the six-site per-`validate_<arg>_arg` reject-sweep shape
     /// on the per-verb arg-entry axis (PRIME DIRECTIVE — theory/
-    /// THEORY.md §I.5, "the duplication budget is zero") into a single
+    /// "the duplication budget is zero") into a single
     /// canonical helper. Before this lift the `--cluster` /
     /// `--namespace` / `<nome>` path-traversal and boundary-hyphen
     /// arms each open-coded the same for-loop + `match … { Err(e) =>

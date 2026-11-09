@@ -55,7 +55,7 @@ impl Chart {
 /// Read + parse the single `:servicos` computeunit YAML for a
 /// per-Servico `feira` verb (`feira chart` + `feira deploy`).
 ///
-/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5) on the
+/// Closes the PRIME DIRECTIVE duplication on the
 /// per-Servico computeunit IO axis. Before this lift both verbs
 /// open-coded the same four-line shape — [`first_servico_path`] →
 /// [`std::fs::read_to_string`] → [`serde_yaml::from_str`], all with

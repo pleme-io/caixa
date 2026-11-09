@@ -192,7 +192,7 @@ pub struct Caixa {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entrada: Option<crate::aplicacao::Entrada>,
 
-    // ── Acao slot (CANTEIRO §7.1-C) ──────────────────────────────────────
+    // ── Acao slot ──────────────────────────────────────
     //
     // Required when :kind Acao; ignored otherwise (mirrors the M2/
     // supervisor-tree/M3 slot triads above — a declared-but-foreign `:ci`
@@ -365,7 +365,7 @@ impl LeituraError {
 /// annotations["artifacthub.io/license"]` axis every registry-facing chart
 /// carries as the second consumer) will surface.
 ///
-/// The `"MIT"` value pins the canonical CAIXA-SDLC §I license scaffold
+/// The `"MIT"` value pins the canonical license scaffold
 /// every `feira init`-emitted [`Self::template`] carries verbatim
 /// (`:licenca "MIT"`) and every substrate-side renderer fixture
 /// ([`caixa-helm`]'s `sample_caixa`, [`caixa-flux`]'s renderer fixtures,
@@ -512,7 +512,7 @@ impl Caixa {
     /// routes through `self.licenca.as_deref()`, the caixa-helm
     /// `build_readme` `unwrap_or_else(|| "MIT".into())` fold that keys
     /// the fallback off the `Option::is_none()` arm, every future
-    /// per-`Caixa` registry-facing renderer the CAIXA-SDLC §I roadmap
+    /// per-`Caixa` registry-facing renderer the roadmap
     /// acknowledges).
     ///
     /// Prior to this lift the `.licenca` field was accessed inline at
@@ -555,7 +555,7 @@ impl Caixa {
     /// typed-slot atom axes, extended here to the outer top-level
     /// `Caixa` universal-axis surface. Named `licenca()` to match the
     /// storage field's name; the accessor's identity maps onto the
-    /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
+    /// canonical vocabulary the slot's docstring already
     /// carries.
     #[must_use]
     pub const fn licenca(&self) -> Option<&str> {
@@ -657,7 +657,7 @@ impl Caixa {
     /// typed-slot atom axes, extended here to the second outer top-level
     /// `Caixa` universal-axis surface. Named `repositorio()` to match
     /// the storage field's name; the accessor's identity maps onto the
-    /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
+    /// canonical vocabulary the slot's docstring already
     /// carries.
     #[must_use]
     pub const fn repositorio(&self) -> Option<&str> {
@@ -845,7 +845,7 @@ impl Caixa {
     /// caixa-flux/src/lib.rs:2219, and
     /// [`caixa-tatara::process_for_aplicacao`]'s `release_name`
     /// composer at caixa-tatara/src/lib.rs:227, plus every future
-    /// per-Servico OCI publish emitter the CAIXA-SDLC §II
+    /// per-Servico OCI publish emitter the
     /// `caixa-publish.yml` reusable workflow's `skopeo push` step keys
     /// off, the future per-cluster snapshot bundle emitter, the future
     /// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
@@ -938,7 +938,7 @@ impl Caixa {
     /// at caixa-tatara/src/lib.rs:333 that composes the emitted
     /// `AplicacaoIntent.chart_ref` scalar the tatara-reconciler feeds into
     /// `helm install`, plus every future per-Servico OCI publish emitter
-    /// the CAIXA-SDLC §II `caixa-publish.yml` reusable workflow's
+    /// the `caixa-publish.yml` reusable workflow's
     /// `skopeo push` step keys off, the future per-cluster snapshot bundle
     /// emitter's per-CR `oci://…` field-fill on the M4 registry-alignment
     /// slot, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
@@ -1000,7 +1000,7 @@ impl Caixa {
     ///
     /// The `:descricao` slot carries the universal-axis free-form-prose
     /// chart-description identifier every kind of caixa emits under
-    /// (CAIXA-SDLC §I — the author-facing surface every `defcaixa` form
+    /// (the author-facing surface every `defcaixa` form
     /// supplies) — the typed slot's `Option<String>` accept-set
     /// (empty-string rejected through [`ManifestError::DescricaoEmpty`],
     /// chart-description-shape-invalid rejected through
@@ -1080,7 +1080,7 @@ impl Caixa {
     /// typed-slot atom axes, extended here to the third outer top-level
     /// `Caixa` universal-axis surface. Named `descricao()` to match the
     /// storage field's name; the accessor's identity maps onto the
-    /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
+    /// canonical vocabulary the slot's docstring already
     /// carries. The one remaining universal `Option<String>` slot
     /// (`:edicao`) folds on this pattern next.
     #[must_use]
@@ -1106,7 +1106,7 @@ impl Caixa {
     ///
     /// The `:edicao` slot carries the universal-axis 4-digit-ASCII-
     /// decimal-year language-edition identifier every kind of caixa
-    /// emits under (CAIXA-SDLC §I — the author-facing surface every
+    /// emits under (the author-facing surface every
     /// `defcaixa` form supplies) — the typed slot's `Option<String>`
     /// accept-set (empty-string rejected through
     /// [`ManifestError::EdicaoEmpty`], year-shape-invalid rejected
@@ -1115,7 +1115,7 @@ impl Caixa {
     /// onto one load-bearing downstream consumer today
     /// ([`Self::validate_edicao`]'s empty-arm + year-shape-predicate
     /// gate binding at caixa-core/src/manifest.rs:1959) plus every
-    /// future edition-aware substrate consumer the CAIXA-SDLC §I
+    /// future edition-aware substrate consumer the
     /// roadmap anticipates (the tatara-lisp compiler's macro-surface
     /// selector every edition-aware build step keys off, the future
     /// per-edition compatibility-flag overlay the M4 CR materializer
@@ -1171,7 +1171,7 @@ impl Caixa {
     /// typed-slot atom axes, extended here to close the outer top-level
     /// `Caixa` universal-axis surface's last unlifted `Option<String>`
     /// slot. Named `edicao()` to match the storage field's name; the
-    /// accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// accessor's identity maps onto the canonical
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub const fn edicao(&self) -> Option<&str> {
@@ -1192,7 +1192,7 @@ impl Caixa {
     /// carries a non-`None` `:nome`).
     ///
     /// The `:nome` slot carries the universal-axis DNS-1123-label
-    /// caixa-identity every kind of caixa emits under (CAIXA-SDLC §I —
+    /// caixa-identity every kind of caixa emits under (
     /// the primary identity axis every `defcaixa` form supplies
     /// alongside `:versao` / `:kind`; the substrate-wide identity every
     /// other typed surface that names a caixa reaches through — `:deps`
@@ -1269,7 +1269,7 @@ impl Caixa {
     /// mesh-slot-atom scalar-value axes, extended here to open the
     /// outer top-level [`Caixa`] `&str`-return required-scalar surface.
     /// Named `nome()` to match the storage field's name; the accessor's
-    /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
+    /// identity maps onto the canonical vocabulary the
     /// slot's docstring already carries.
     #[must_use]
     pub const fn nome(&self) -> &str {
@@ -1288,7 +1288,7 @@ impl Caixa {
     ///
     /// The `:versao` slot carries the universal-axis SemVer-2
     /// concrete-version body every kind of caixa emits under
-    /// (CAIXA-SDLC §I — the required-scalar every `defcaixa` form
+    /// (the required-scalar every `defcaixa` form
     /// supplies alongside `:nome` / `:kind`; the substrate-wide
     /// pinned-version every downstream artifact-emitting consumer
     /// composes under — the `lareira-<nome>` Helm chart's `Chart.yaml`
@@ -1361,7 +1361,7 @@ impl Caixa {
     /// scalars every `defcaixa` form supplies (`:nome` + `:versao`)
     /// share the same "one typed dispatch per axis" discipline. Named
     /// `versao()` to match the storage field's name; the accessor's
-    /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
+    /// identity maps onto the canonical vocabulary the
     /// slot's docstring already carries.
     #[must_use]
     pub const fn versao(&self) -> &str {
@@ -1456,7 +1456,7 @@ impl Caixa {
     /// on the sibling nested-spec typed-slot discriminator axes,
     /// extended here to the outer top-level [`Caixa`] universal-axis
     /// surface. Named `kind()` to match the storage field's name;
-    /// the accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// the accessor's identity maps onto the canonical
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub const fn kind(&self) -> CaixaKind {
@@ -1477,7 +1477,7 @@ impl Caixa {
     /// slice on that arm without any silent `None` collapse).
     ///
     /// The `:autores` slot carries the universal-axis maintainer-name
-    /// list every kind of caixa emits under (CAIXA-SDLC §I — the author-
+    /// list every kind of caixa emits under (the author-
     /// facing surface every `defcaixa` form supplies alongside `:nome` /
     /// `:versao` / `:kind`; the substrate-wide contact-carrying axis
     /// every downstream registry-facing artifact emits under) — the
@@ -1491,7 +1491,7 @@ impl Caixa {
     /// caixa-helm `build_chart_yaml` `maintainers:` fold at
     /// caixa-helm/src/lib.rs that walks each entry into a `Maintainer {
     /// name, email: None }` record, every future per-`Caixa` registry-
-    /// facing renderer the CAIXA-SDLC §I roadmap acknowledges (the
+    /// facing renderer the roadmap acknowledges (the
     /// future `artifacthub.io/maintainers` `Chart.yaml` annotation the
     /// caixa-helm docstring alludes to at [`Self::validate_licenca`],
     /// the future per-cluster author-notification overlay the M4 CR
@@ -1549,7 +1549,7 @@ impl Caixa {
     /// `pub autores` field for the mutation-carrying serde round-trip and
     /// per-test fixture-mutation paths). Named `autores()` to match the
     /// storage field's name; the accessor's identity maps onto the
-    /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
+    /// canonical vocabulary the slot's docstring already
     /// carries.
     #[must_use]
     pub const fn autores(&self) -> &[String] {
@@ -1571,7 +1571,7 @@ impl Caixa {
     /// that arm without any silent `None` collapse).
     ///
     /// The `:etiquetas` slot carries the universal-axis topical-tag
-    /// list every kind of caixa emits under (CAIXA-SDLC §I — the
+    /// list every kind of caixa emits under (the
     /// author-facing surface every `defcaixa` form supplies alongside
     /// `:nome` / `:versao` / `:kind`; the substrate-wide registry-
     /// search-facing axis every downstream registry-facing artifact
@@ -1588,7 +1588,7 @@ impl Caixa {
     /// `Chart.yaml` `keywords:` array (chained with the
     /// [`crate::LAREIRA_CHART_KEYWORDS`] substrate-wide floor set and
     /// dedup'd through a `BTreeSet` at emit time), every future per-
-    /// `Caixa` registry-facing renderer the CAIXA-SDLC §I roadmap
+    /// `Caixa` registry-facing renderer the roadmap
     /// acknowledges (the future `artifacthub.io/keywords` `Chart.yaml`
     /// annotation, the future per-cluster tag-notification overlay the
     /// M4 CR materializer resolves per-CR).
@@ -1650,7 +1650,7 @@ impl Caixa {
     /// reachable through the `pub etiquetas` field for the mutation-
     /// carrying serde round-trip and per-test fixture-mutation paths).
     /// Named `etiquetas()` to match the storage field's name; the
-    /// accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// accessor's identity maps onto the canonical
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub const fn etiquetas(&self) -> &[String] {
@@ -1673,7 +1673,7 @@ impl Caixa {
     ///
     /// The `:bibliotecas` slot carries the universal-axis lisp-library
     /// entry-path list every `:kind Biblioteca` caixa emits under
-    /// (CAIXA-SDLC §I — the author-facing surface every `defcaixa`
+    /// (the author-facing surface every `defcaixa`
     /// form supplies alongside `:nome` / `:versao` / `:kind`; the
     /// substrate-wide library-carrier axis every downstream
     /// authoring-facing consumer keys off) — the typed slot's
@@ -1695,7 +1695,7 @@ impl Caixa {
     /// walk at caixa-feira/src/cmd/build.rs that phase-1-checks each
     /// declared library file for lexical / structural errors before
     /// downstream `importar` resolution, every future per-`Caixa`
-    /// library-facing renderer the CAIXA-SDLC §I roadmap acknowledges
+    /// library-facing renderer the roadmap acknowledges
     /// (the future `tatara-lispc` compilation entry the docstring at
     /// caixa-feira/src/cmd/build.rs alludes to, the future per-cluster
     /// bytecode-caching overlay the M4 CR materializer resolves per-CR,
@@ -1769,7 +1769,7 @@ impl Caixa {
     /// the `pub bibliotecas` field for the mutation-carrying serde
     /// round-trip and per-test fixture-mutation paths). Named
     /// `bibliotecas()` to match the storage field's name; the
-    /// accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// accessor's identity maps onto the canonical
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub const fn bibliotecas(&self) -> &[String] {
@@ -1792,7 +1792,7 @@ impl Caixa {
     ///
     /// The `:exe` slot carries the universal-axis nix-built executable
     /// entry-path list every `:kind Binario` caixa emits under
-    /// (CAIXA-SDLC §I — the author-facing surface every `defcaixa`
+    /// (the author-facing surface every `defcaixa`
     /// form supplies alongside `:nome` / `:versao` / `:kind`; the
     /// substrate-wide `exe/`-directory-fenced entry-carrier axis every
     /// downstream flake-build-facing consumer keys off) — the typed
@@ -1818,7 +1818,7 @@ impl Caixa {
     /// running kind, [`Self::validate_code_paths`]'s per-slot shape gate
     /// that walks each entry through the sandbox-relative / cross-entry
     /// duplicate gates, every future per-`Caixa` executable-facing
-    /// renderer the CAIXA-SDLC §I roadmap acknowledges (the future
+    /// renderer the roadmap acknowledges (the future
     /// `caixa-flake` per-Binario `packages.<system>.<nome>` derivation
     /// entry the caixa-flake docstring roadmaps, the future per-cluster
     /// `nix-store` overlay the M4 CR materializer resolves per-CR, the
@@ -1840,7 +1840,7 @@ impl Caixa {
     /// to a richer executable surface — a per-`:exe` structured
     /// `BinarioEntry { path, wrapper, capabilities }` at the storage
     /// layer once the substrate absorbs the per-executable
-    /// nix-wrapper + linux-capabilities tuple the CAIXA-SDLC §I
+    /// nix-wrapper + linux-capabilities tuple the
     /// executable roadmap acknowledges, a per-registry `:exe` allowlist
     /// the M4 CR materializer enforces per-CR (the "cluster policy
     /// demands every Binario declare an explicit `:wrapper`" arm), a
@@ -1891,7 +1891,7 @@ impl Caixa {
     /// the `pub exe` field for the mutation-carrying serde
     /// round-trip and per-test fixture-mutation paths). Named `exe()`
     /// to match the storage field's name; the accessor's identity
-    /// maps onto the canonical CAIXA-SDLC §I vocabulary the slot's
+    /// maps onto the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn exe(&self) -> &[String] {
@@ -1914,7 +1914,7 @@ impl Caixa {
     ///
     /// The `:servicos` slot carries the universal-axis
     /// `.computeunit.yaml` ComputeUnit-CR entry-path list every
-    /// `:kind Servico` caixa emits under (CAIXA-SDLC §I — the
+    /// `:kind Servico` caixa emits under (the
     /// author-facing surface every `defcaixa` form supplies alongside
     /// `:nome` / `:versao` / `:kind`; the substrate-wide
     /// `servicos/`-directory-fenced entry-carrier axis every downstream
@@ -1952,7 +1952,7 @@ impl Caixa {
     /// `feira deploy` per-verb `first_servico_path` walk at
     /// caixa-feira/src/cmd/chart.rs that resolves the singleton
     /// ComputeUnit-CR file, every future per-`Caixa` Servico-facing
-    /// renderer the CAIXA-SDLC §I roadmap acknowledges (the future
+    /// renderer the roadmap acknowledges (the future
     /// per-Servico OCI packager, the future M4
     /// `wasm.pleme.io/v1alpha1/ComputeUnit` CR materializer, the future
     /// per-Servico OTel collector-config emit).
@@ -1979,7 +1979,7 @@ impl Caixa {
     /// component surface — a per-`:servicos` structured
     /// `ServicoEntry { path, world, capabilities }` at the storage
     /// layer once the substrate absorbs the per-component WIT-world +
-    /// capability-set tuple the CAIXA-SDLC §I Servico roadmap
+    /// capability-set tuple the Servico roadmap
     /// acknowledges, a per-registry `:servicos` allowlist the M4 CR
     /// materializer enforces per-CR (the "cluster policy demands every
     /// Servico declare an explicit `:world`" arm), a promotion of the
@@ -2046,7 +2046,7 @@ impl Caixa {
     /// homogeneous-element-type shape carries the raw field access
     /// until the trio-closure lift promotes the tuple as a unit).
     /// Named `servicos()` to match the storage field's name; the
-    /// accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// accessor's identity maps onto the canonical
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub const fn servicos(&self) -> &[String] {
@@ -2073,7 +2073,7 @@ impl Caixa {
     /// `None` collapse).
     ///
     /// The `:deps` slot carries the universal-axis runtime dependency
-    /// list every kind of caixa emits under (CAIXA-SDLC §I — the author-
+    /// list every kind of caixa emits under (the author-
     /// facing surface every `defcaixa` form supplies alongside `:nome` /
     /// `:versao` / `:kind`; the substrate-wide runtime-closure-input axis
     /// every downstream resolver-facing artifact emits under) — the
@@ -2095,7 +2095,7 @@ impl Caixa {
     /// caixa-crd `caixa.deps.iter().map(dep_into_ref).collect()` fold at
     /// caixa-crd/src/conversion.rs that materializes each entry into the
     /// K8s `Caixa` CR's `spec.deps` field, every future per-`Caixa`
-    /// resolver-facing renderer the CAIXA-SDLC §I roadmap acknowledges
+    /// resolver-facing renderer the roadmap acknowledges
     /// (the future per-cluster runtime-closure-audit overlay the M4 CR
     /// materializer resolves per-CR, the future `lacre.lisp` BLAKE3-
     /// closure emit walk the caixa-resolver docstring roadmaps).
@@ -2130,7 +2130,7 @@ impl Caixa {
     /// reachable through the `pub deps` field for the mutation-carrying
     /// serde round-trip and per-test fixture-mutation paths). Named
     /// `deps()` to match the storage field's name; the accessor's
-    /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
+    /// identity maps onto the canonical vocabulary the
     /// slot's docstring already carries.
     #[must_use]
     pub const fn deps(&self) -> &[Dep] {
@@ -2152,7 +2152,7 @@ impl Caixa {
     /// without any silent `None` collapse).
     ///
     /// The `:deps-dev` slot carries the universal-axis dev-only
-    /// dependency list every kind of caixa emits under (CAIXA-SDLC §I —
+    /// dependency list every kind of caixa emits under (
     /// the author-facing sibling of `:deps` that every `defcaixa` form
     /// supplies to declare tests / lint / bench closures the runtime
     /// `:deps` axis does not carry; the substrate-wide dev-closure-input
@@ -2217,7 +2217,7 @@ impl Caixa {
     /// Named `deps_dev()` to match the storage field's `snake_case` name;
     /// the kebab-case author-surface tag `:deps-dev` is the same axis
     /// after tatara-lisp's kebab↔snake fold and the accessor's identity
-    /// maps onto the canonical CAIXA-SDLC §I vocabulary the slot's
+    /// maps onto the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn deps_dev(&self) -> &[Dep] {
@@ -2251,7 +2251,7 @@ impl Caixa {
     /// per-list read-site regresses to a bare-`bool`-flag inline dispatch
     /// that a future third dep-list axis (a `:deps-build` build-only
     /// closure once the substrate grows cross-artifact heterogeneous
-    /// dep-graphs, per CAIXA-SDLC §I) would silently split at every
+    /// dep-graphs,) would silently split at every
     /// consumer. Prior to this the read side carried two per-slot
     /// accessors ([`Self::deps`] ad34b4e, [`Self::deps_dev`]) and no
     /// typed dispatch that a per-axis walker could parametrise on, so
@@ -2329,8 +2329,8 @@ impl Caixa {
     /// per-list mutation-site regresses to a bare-`bool`-flag
     /// (`is_dev: bool`) inline dispatch that a future third
     /// dep-list axis (a `:deps-build` build-only closure once the
-    /// substrate grows cross-artifact heterogeneous dep-graphs, per
-    /// CAIXA-SDLC §I) would silently split at every consumer.
+    /// substrate grows cross-artifact heterogeneous dep-graphs,)
+    /// would silently split at every consumer.
     ///
     /// Same "one typed dispatch on the substrate primitive, thin
     /// projections at each consumer" discipline the sibling per-slot
@@ -2343,7 +2343,7 @@ impl Caixa {
     /// diagnostic path routed no through-line back to the typed slot,
     /// so a future extension of either dep-list axis to a richer author
     /// surface (a per-cluster override the operator pins through a
-    /// future `:placement`-scoped dep-list slot the CAIXA-SDLC §I
+    /// future `:placement`-scoped dep-list slot the
     /// roadmap acknowledges, an M4
     /// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-CR
     /// admission-webhook that normalized the list at admission time)
@@ -2398,11 +2398,11 @@ impl Caixa {
     /// The outer `:limits` slot carries the M2 Servico-runtime typed
     /// composite — the load-bearing container of every Lunatic-shaped
     /// per-process wasm32-sandbox cap axis every long-running wasm
-    /// component's runtime dispatches on (INSPIRATIONS §III.1 —
+    /// component's runtime dispatches on (
     /// Lunatic per-process linear-memory / fuel / wall-clock /
     /// millicore cap primitives translated onto pleme-io's typed
     /// `:limits :memory` / `:limits :fuel` / `:limits :wall-clock` /
-    /// `:limits :cpu` sub-slot axes; CAIXA-SDLC §II — the typed-M2
+    /// `:limits :cpu` sub-slot axes — the typed-M2
     /// slot algebra the wasm-engine + `pleme-computeunit` Helm-library
     /// chart both fan on). Every per-`:limits` axis threads through a
     /// lifted per-slot accessor on the [`LimitsSpec`] type: the
@@ -2527,12 +2527,12 @@ impl Caixa {
     /// The outer `:behavior` slot carries the M2 Servico-runtime typed
     /// composite — the load-bearing container of every OTP-shaped
     /// per-Servico lifecycle-callback path axis every long-running wasm
-    /// component's runtime dispatches on (INSPIRATIONS §II.3 — Erlang/
+    /// component's runtime dispatches on (Erlang/
     /// OTP `gen_server:init/1` / `handle_call/3` / `handle_cast/2` /
     /// `handle_info/2` / `code_change/3` / `terminate/2` primitives
     /// translated onto pleme-io's typed `:behavior :on-init` /
     /// `:on-call` / `:on-cast` / `:on-info` / `:on-state-change` /
-    /// `:on-terminate` sub-slot axes; CAIXA-SDLC §II — the typed-M2
+    /// `:on-terminate` sub-slot axes — the typed-M2
     /// slot algebra the wasm-engine + `pleme-computeunit` Helm-library
     /// chart both fan on). Every per-`:behavior` axis threads through a
     /// lifted per-callback accessor on the [`BehaviorSpec`] type
@@ -2668,7 +2668,7 @@ impl Caixa {
     /// Aplicacao typed composite — the load-bearing container of every
     /// mesh-level policy axis every Cilium NetworkPolicy / Gateway API
     /// v1.x HTTPRoute / future M4 per-edge policy overlay emitter fans
-    /// on (MESH-COMPOSITION §III.2 — the Aplicacao's typed mesh-policy
+    /// on (the Aplicacao's typed mesh-policy
     /// composite; §V — the "no infinite blocking" per-call deadline +
     /// "sandboxing-by-default" mTLS-enforcement CSE invariants; §III.3
     /// — the typed inter-Servico contrato-edge overlay the per-`(:de,
@@ -2804,7 +2804,7 @@ impl Caixa {
     /// caixa-mesh programs.yaml per-cluster distribution overlay /
     /// caixa-flux per-Aplicacao GitRepository/HelmRelease fan-out /
     /// future M4 per-Aplicacao Akka-style cluster-sharding entity-id
-    /// resolver emitter fans on (MESH-COMPOSITION §II.4 — the
+    /// resolver emitter fans on (the
     /// Aplicacao's typed distribution composite; §V CSE invariants —
     /// "distribution is a first-class typed composite, not a runtime
     /// scheduler hint" the per-axis scalars enforce; §III.3 — the
@@ -2947,7 +2947,7 @@ impl Caixa {
     /// Aplicacao typed external-gateway composite — the load-bearing
     /// container of every how-does-the-outside-world-reach-this-
     /// Aplicacao axis every caixa-mesh `Gateway`/`HTTPRoute` fan-out
-    /// emitter fans on (MESH-COMPOSITION §II.5 — the Aplicacao's typed
+    /// emitter fans on (the Aplicacao's typed
     /// external-entry composite; §V CSE invariants — "the external
     /// gateway is a first-class typed composite, not a per-Servico
     /// ingress annotation" the per-axis scalars enforce; §III.4 — the
@@ -3102,10 +3102,10 @@ impl Caixa {
     ///
     /// The `:estrategia` slot carries the M2 typed OTP-shaped sibling-
     /// restart-strategy discriminant every substrate-side per-Supervisor
-    /// dispatch fans on (INSPIRATIONS §II.2 — OTP `supervisor:strategy`
+    /// dispatch fans on (OTP `supervisor:strategy`
     /// closed-set `one_for_one | one_for_all | rest_for_one |
     /// simple_one_for_one` algebra translated onto pleme-io's typed
-    /// [`RestartStrategy`] enum; CAIXA-SDLC §II — the M2 supervisor-tree
+    /// [`RestartStrategy`] enum — the M2 supervisor-tree
     /// slot algebra the operator's hierarchical reconciliation scheduler
     /// fans on). The slot is *flat-spread* on the outer top-level `Caixa`
     /// (per the field-shape docstring at caixa-core/src/manifest.rs — "The
@@ -3147,12 +3147,12 @@ impl Caixa {
     /// the typed slot. A future extension of the outer `:estrategia` axis
     /// to a richer author surface (a per-cluster strategy override the
     /// operator pins through a future `:estrategia-overrides` overlay the
-    /// MESH-COMPOSITION §III.2 supervision-canary roadmap acknowledges,
+    /// supervision-canary roadmap acknowledges,
     /// a per-tenant strategy-alias table the M4 CR materializer resolves
     /// per-CR, a per-Supervisor dynamic strategy derivation the future
     /// adaptive-supervision engine computes from child-failure-history
     /// topology, a per-child-cohort strategy split the future
-    /// `RestForCohort` extension the INSPIRATIONS.md §II.2 Erlang/OTP
+    /// `RestForCohort` extension the Erlang/OTP
     /// absorption roadmap acknowledges, a promotion of the plain
     /// `Option<RestartStrategy>` to a richer
     /// `AuthorDeclaredStrategy { declared, overlay }` newtype once the
@@ -3222,8 +3222,8 @@ impl Caixa {
     /// `MaxIntensity` restart-budget count that pairs with the sibling
     /// `:restart-window` `Period` to form the `MaxIntensity / Period`
     /// restart-intensity ratio the supervisor trips its own escalation on
-    /// (INSPIRATIONS §II.2 — Erlang/OTP `supervisor` `{intensity, 5, 60}`
-    /// worker-supervisor default; RUNTIME-PATTERNS §II.2; CAIXA-SDLC §II
+    /// (Erlang/OTP `supervisor` `{intensity, 5, 60}`
+    /// worker-supervisor default
     /// — the M2 supervisor-tree slot algebra the operator's hierarchical
     /// reconciliation scheduler fans on). The slot is *flat-spread* on
     /// the outer top-level `Caixa` (per the field-shape docstring at
@@ -3256,13 +3256,13 @@ impl Caixa {
     /// the typed slot. A future extension of the outer `:max-restarts`
     /// axis to a richer author surface (a per-cluster restart-budget
     /// override the operator pins through a future `:max-restarts-overrides`
-    /// overlay the MESH-COMPOSITION §III.2 supervision-canary roadmap
+    /// overlay the supervision-canary roadmap
     /// acknowledges, a per-tenant restart-budget-alias table the M4 CR
     /// materializer resolves per-CR, a per-Supervisor dynamic restart-
     /// budget derivation the future adaptive-supervision engine computes
     /// from child-failure-history topology, a promotion of the plain
     /// `Option<u32>` count to a richer `{MaxR, MaxT}` per-child-cohort
-    /// restart-budget-partition once the INSPIRATIONS §II.2 Erlang/OTP
+    /// restart-budget-partition once the Erlang/OTP
     /// per-child-cohort roadmap lands) would have had to be threaded
     /// through both open-coded copies in lockstep or the enumerator's
     /// presence probe and the composition site's `unwrap_or(5)` fold
@@ -3321,7 +3321,7 @@ impl Caixa {
     /// budget count to form the `MaxIntensity / Period` restart-intensity
     /// ratio the supervisor trips its own escalation on (INSPIRATIONS
     /// §II.2 — Erlang/OTP `supervisor` `{intensity, 5, 60}` worker-
-    /// supervisor default; RUNTIME-PATTERNS §II.2). The outer-`Caixa`
+    /// supervisor default). The outer-`Caixa`
     /// slot stores the raw duration string (`"60s"`, `"5m"`, `"500ms"`)
     /// authored under `:restart-window` — the typed [`SupervisorSpec`]
     /// holds an `Option<Duration>` routed through the shared
@@ -3421,11 +3421,11 @@ impl Caixa {
     /// The outer `:upgrade-from` slot carries the M2 typed OTP-appup
     /// migration block — the load-bearing container of every per-
     /// prior-`:versao` migration-instruction list the wasm-operator
-    /// dispatches on at hot-upgrade time (INSPIRATIONS §II.4 — OTP
+    /// dispatches on at hot-upgrade time (OTP
     /// `.appup` per-prior-version `LoadModule | StateChange |
     /// SoftPurge | Purge | Restart` instruction algebra translated
     /// onto pleme-io's typed `:upgrade-from :from` + `:instructions`
-    /// entry list; CAIXA-SDLC §II — the typed-M2 slot algebra the
+    /// entry list — the typed-M2 slot algebra the
     /// operator's hot-upgrade dispatch fans on). Every per-entry axis
     /// threads through a lifted per-entry accessor on the
     /// [`UpgradeFromEntry`] type: the
@@ -3532,7 +3532,7 @@ impl Caixa {
     /// field's `snake_case` name; the kebab-case author-surface tag
     /// `:upgrade-from` is the same axis after tatara-lisp's
     /// kebab↔snake fold and the accessor's identity maps onto the
-    /// canonical CAIXA-SDLC §II vocabulary the slot's docstring
+    /// canonical vocabulary the slot's docstring
     /// already carries.
     #[must_use]
     pub const fn upgrade_from(&self) -> &[UpgradeFromEntry] {
@@ -3557,9 +3557,9 @@ impl Caixa {
     /// static-child list — the load-bearing container of every per-
     /// child `{caixa, versao, restart}` triple the wasm-operator's
     /// hierarchical reconciler dispatches on at supervisor-tree
-    /// materialization time (INSPIRATIONS §II.2 — OTP `supervisor:init/1`
+    /// materialization time (OTP `supervisor:init/1`
     /// static-child list translated onto pleme-io's typed
-    /// [`crate::supervisor::ChildSpec`] entry list; CAIXA-SDLC §II —
+    /// [`crate::supervisor::ChildSpec`] entry list —
     /// the typed-M2 slot algebra the operator's per-supervisor fan-out
     /// dispatch fans on). Every per-child axis threads through a lifted
     /// per-entry accessor on the [`crate::supervisor::ChildSpec`] type:
@@ -3682,10 +3682,10 @@ impl Caixa {
     /// per-Aplicacao member list — the load-bearing container of every
     /// per-member `{caixa, versao}` pair the caixa-mesh renderer's
     /// per-Aplicacao program-emission dispatch fans on at mesh-artifact
-    /// materialization time (MESH-COMPOSITION §III.1 — the typed graph's
+    /// materialization time (the typed graph's
     /// vertex set the `:contratos` `:de`/`:para` edges resolve against and
     /// the `:entrada :para` external-gateway destination validates
-    /// against; CAIXA-SDLC §II — the typed-M3 slot algebra the operator's
+    /// against — the typed-M3 slot algebra the operator's
     /// per-Aplicacao fan-out dispatch fans on). Every per-member axis
     /// threads through a lifted per-entry accessor on the
     /// [`crate::aplicacao::Membro`] type: the
@@ -3806,12 +3806,12 @@ impl Caixa {
     /// container of every per-edge `{de, para, wit, endpoint | subject |
     /// slot}` quadruple the caixa-mesh renderer's per-Aplicacao
     /// `CiliumNetworkPolicy` fan-out (one L7 policy per edge —
-    /// MESH-COMPOSITION §III.2 point 2) and per-`(:de, :para)`
+    /// point 2) and per-`(:de, :para)`
     /// adjacency-list seed dispatch on at mesh-artifact materialization
-    /// time (MESH-COMPOSITION §III.1 — the typed graph's edge set the
+    /// time (the typed graph's edge set the
     /// `:membros` vertex set resolves against, closed by the
     /// [`crate::AplicacaoError::ContractoUnknownMember`] / cycle-refusal
-    /// gates in §III.3; CAIXA-SDLC §II — the typed-M3 slot algebra the
+    /// gates in §III.3 — the typed-M3 slot algebra the
     /// operator's per-Aplicacao fan-out dispatch fans on). Every
     /// per-edge axis threads through a lifted per-entry accessor on the
     /// [`crate::aplicacao::WitContract`] type: the peer `de` / `para`
@@ -3933,8 +3933,8 @@ impl Caixa {
     /// `:entrada`). A slot counts as declared when its backing field
     /// carries a value — a non-empty `Vec`, or a `Some(...)`.
     ///
-    /// The M3 mesh slots compose the typed graph of a `:kind Aplicacao`
-    /// (MESH-COMPOSITION §III.1). [`Self::aplicacao_view`] only folds
+    /// The M3 mesh slots compose the typed graph of a `:kind Aplicacao`.
+    /// [`Self::aplicacao_view`] only folds
     /// them into a validatable [`crate::aplicacao::AplicacaoSpec`] when
     /// the kind matches (returns `None` otherwise), and the caixa-mesh /
     /// caixa-flux / caixa-helm renderers only emit them for an
@@ -4002,7 +4002,7 @@ impl Caixa {
     /// carries a value — a `Some(...)`, or a non-empty `Vec`.
     ///
     /// The supervisor-tree slots compose the typed OTP supervisor of a
-    /// `:kind Supervisor` (INSPIRATIONS §II.2; the `:estrategia` +
+    /// `:kind Supervisor` (the `:estrategia` +
     /// `:children` field docs above). [`Self::supervisor_view`] only
     /// folds them into a validatable [`SupervisorSpec`] when the kind
     /// matches (returns `None` otherwise), and the wasm-operator's
@@ -4044,7 +4044,7 @@ impl Caixa {
     ///
     /// The M2 slots configure the runtime of a long-running wasm
     /// component, i.e. a `:kind Servico`: `:limits` is Lunatic
-    /// per-process sandboxing (INSPIRATIONS §III.1), `:behavior` is the
+    /// per-process sandboxing, `:behavior` is the
     /// OTP `gen_server` callback set (§II.3), `:upgrade-from` is the OTP
     /// appup hot-code-reload table (§II.4). The caixa-helm / caixa-flux
     /// renderers gate on [`crate::require_kind`]`(_, Servico)` and only
@@ -4987,7 +4987,7 @@ impl Caixa {
     /// Caixa-level validator mirrors the trajectory of the peer
     /// per-axis identity gates ([`Self::validate_nome`] 6c992f8,
     /// [`Self::validate_versao`] 1fdaa02, [`Self::validate_deps`]
-    /// a7f0d8c) and the ABSORPTION-ROADMAP.md M2.2 test pin
+    /// a7f0d8c) and the test pin
     /// (line 196: "reject invalid `:restart-window` (non-duration)").
     ///
     /// Thin wrapper around [`crate::supervisor::duration_codec::parse`]
@@ -5249,12 +5249,12 @@ impl Caixa {
     /// Compound per-`Caixa` kind ↔ typed-slot coherence gate on the
     /// three "declared but ignored" typed-slot families — M3 mesh
     /// (`:membros` / `:contratos` / `:politicas` / `:placement` /
-    /// `:entrada`, owned by `:kind Aplicacao`, MESH-COMPOSITION §III.1),
+    /// `:entrada`, owned by `:kind Aplicacao`),
     /// supervisor-tree (`:estrategia` / `:max-restarts` /
-    /// `:restart-window` / `:children`, owned by `:kind Supervisor`,
-    /// INSPIRATIONS §II.2), and M2 Servico-runtime (`:limits` /
-    /// `:behavior` / `:upgrade-from`, owned by `:kind Servico`,
-    /// INSPIRATIONS §III.1 / §II.3 / §II.4). Folds the three sibling
+    /// `:restart-window` / `:children`, owned by `:kind Supervisor`),
+    /// and M2 Servico-runtime (`:limits` /
+    /// `:behavior` / `:upgrade-from`, owned by `:kind Servico`).
+    /// Folds the three sibling
     /// [`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
     /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
     /// [`crate::LayoutError::ServicoSlotsOnNonServico`] kind-coherence
@@ -5396,9 +5396,9 @@ impl Caixa {
 
     /// Compound per-`Caixa` kind ↔ code-surface coherence gate on
     /// the three no-code kinds — `Supervisor` (supervises other
-    /// caixas, INSPIRATIONS §II.2), `Aplicacao` (composes Servicos,
-    /// MESH-COMPOSITION §III.1), and `Acao` (owns a typed CI run,
-    /// CANTEIRO §7.1-C). Each carries no code of its own, so
+    /// caixas), `Aplicacao` (composes Servicos),
+    /// and `Acao` (owns a typed CI run).
+    /// Each carries no code of its own, so
     /// declaring any of `:bibliotecas` / `:exe` / `:servicos`
     /// silently passes the layout's path-existence loops (the paths
     /// still resolve on disk) and then vanishes downstream — the
@@ -5517,7 +5517,7 @@ impl Caixa {
     /// [`Self::validate_kind_slot_coherence`] fold (f0d286e) on the
     /// M3 mesh / supervisor-tree / M2 Servico-runtime typed-slot
     /// families. `:ci` carries a typed CI run
-    /// ([`canteiro_types::CiRun`], CANTEIRO §7.1-C) that only the
+    /// ([`canteiro_types::CiRun`]) that only the
     /// `caixa-actions` renderer decomposes + validates and only for a
     /// `:kind Acao`. On any *other* kind a declared `:ci` is the
     /// manifest field's documented "ignored otherwise" — it silently
@@ -6745,7 +6745,7 @@ impl Caixa {
             // (a widening to `rest_for_one` once the substrate
             // discovers startup-order-coupled child cohorts as the more
             // common shape, a per-cluster overlay the operator pins
-            // through the MESH-COMPOSITION §III.2 supervision-canary
+            // through the supervision-canary
             // `:estrategia-overrides` roadmap slot) would have had to
             // migrate the paired `MaxIntensity` + `Period` halves
             // through the lifted constants and the `one_for_one` half
@@ -6772,7 +6772,7 @@ impl Caixa {
             // serde-side default, so a future rebrand of the OTP-
             // canonical default (a tightening to Elixir's `3`, a
             // widening to a per-cluster overlay the operator pins
-            // through the MESH-COMPOSITION §III.2 supervision-canary
+            // through the supervision-canary
             // `:supervisor :max-restarts-overrides` roadmap slot)
             // would have had to be threaded through both open-coded
             // copies in lockstep or the wire-format author-omitted arm
@@ -8959,7 +8959,7 @@ mod tests {
         // camelCase overlay-container wire key) route through one
         // canonical per-arm declaration. A future rebrand
         // (`:limits` → `:sandbox` matching Lunatic per-process
-        // terminology INSPIRATIONS §III.1, `:behavior` → `:gen-server`
+        // terminology `:behavior` → `:gen-server`
         // matching Erlang's verbatim name, `:upgrade-from` → `:appup`
         // matching Erlang's verbatim appup name) lands as an edit to
         // exactly one const, and every consumer that reaches for the
@@ -10960,7 +10960,7 @@ mod tests {
         // contract. An uppercase `.LISP` shape that the layout's existence
         // check would (case-insensitively, on case-insensitive volumes)
         // match the on-disk file still mismatches the canonical form the
-        // codec emits, breaking the THEORY.md §V.2.7 render-determinism
+        // codec emits, breaking the render-determinism
         // contract. Mirrors the peer
         // `behavior::validate_rejects_case_folded_extension` (c97815a) and
         // `upgrade::tests::state_change_rejects_case_folded_extension_script`
@@ -11183,7 +11183,7 @@ mod tests {
         // layout's existence check would (case-insensitively, on
         // case-insensitive volumes) match the on-disk file still
         // mismatches the canonical form the codec emits, breaking the
-        // THEORY.md §V.2.7 render-determinism contract. Mirrors the peer
+        // render-determinism contract. Mirrors the peer
         // `validate_code_paths_rejects_case_folded_extension_bibliotecas_entry`
         // (64772a9) sweep on the sibling tatara-lisp-source axis.
         for relpath in [
@@ -12183,7 +12183,7 @@ mod tests {
         // is silently masked at the wire — two manifest variants
         // whose values differ only in their query tail lock to
         // two distinct rendered artifacts for the byte-identical
-        // clone, defeating the THEORY.md §V.2 render-determinism
+        // clone, defeating the render-determinism
         // contract on the `:repositorio` axis the peer `:fonte
         // :repo` axis already closes).
         let c = caixa_with_repositorio(Some(
@@ -12225,7 +12225,7 @@ mod tests {
         // — two manifest variants whose values differ only in
         // backslash-vs-forward-slash lock to two distinct rendered
         // artifacts for the byte-identical clone, defeating the
-        // THEORY.md §V.2 render-determinism contract on the
+        // render-determinism contract on the
         // `:repositorio` axis the peer `:fonte :repo` axis already
         // closes).
         let c = caixa_with_repositorio(Some("file:///C:\\Users\\me\\hello-rio"));
@@ -12260,7 +12260,7 @@ mod tests {
         // `%7B` / `%7D` on the wire, so the byte round-trips
         // inconsistently between the rendered `Chart.yaml home:` /
         // FluxCD `GitRepository url:` and the resolver's `git clone`
-        // invocation, defeating the THEORY.md §V.2 render-
+        // invocation, defeating the render-
         // determinism contract on the `:repositorio` axis the peer
         // `:fonte :repo` axis already closes; every git porcelain
         // entry-point additionally fetches a nonexistent literal-
@@ -13532,7 +13532,7 @@ mod tests {
         // `registry` + [`crate::lareira_chart_name`]-of-[`Caixa::nome`]
         // across the full paired `(registry, :nome)` accept-set — every
         // representative registry the substrate-side emitters carry
-        // (`ghcr.io/pleme-io/charts`, the canonical CAIXA-SDLC §II
+        // (`ghcr.io/pleme-io/charts`, the canonical
         // ArtifactHub-tier registry; `ghcr.io/pleme-io`, the bare-org
         // arm the sibling `oci_chart_ref_pins_byte_shape_against_prior_
         // inline_format` render-side pin exercises; `registry.example.
@@ -18472,7 +18472,7 @@ mod tests {
         // `rest_for_one` widening once the substrate discovers startup-
         // order-coupled child cohorts as the more common worker-
         // supervisor shape, a per-cluster overlay the operator pins
-        // through the MESH-COMPOSITION §III.2 supervision-canary
+        // through the supervision-canary
         // `:estrategia-overrides` roadmap slot) would have had to migrate
         // the paired `MaxIntensity` + `Period` halves through the lifted
         // constants and the `one_for_one` half through a
@@ -18529,7 +18529,7 @@ mod tests {
         // struct-literal default arm both key off — so a future rebrand
         // of the OTP-canonical default (Elixir's `Supervisor` `3`
         // default, a per-cluster overlay the operator pins through the
-        // MESH-COMPOSITION §III.2 supervision-canary
+        // supervision-canary
         // `:supervisor :max-restarts-overrides` roadmap slot) would
         // have had to be threaded through both the serde-side helper
         // and this view-construction arm in lockstep or a `:kind
@@ -20882,7 +20882,7 @@ mod tests {
         // pinning test already pins the equality at the renderer-emit
         // axis; this pin closes the second coordinate of the pair by
         // anchoring the lifted constant's current byte to the canonical
-        // CAIXA-SDLC §I license scaffold's documented shape.
+        // license scaffold's documented shape.
         assert_eq!(CAIXA_LICENCA_DEFAULT, "MIT");
     }
 
@@ -21604,8 +21604,8 @@ mod tests {
         // `:placement` defaults to `Replicated` with an empty
         // `:clusters` list which
         // [`crate::AplicacaoSpec::validate_placement`] refuses; every
-        // per-strategy variant needs at least one named cluster (per
-        // MESH-COMPOSITION §II.1). Pin a single-cluster `SingleNode`
+        // per-strategy variant needs at least one named cluster.
+        // Pin a single-cluster `SingleNode`
         // placement so the typed-shape cascade passes cleanly and the
         // per-arm fixtures below can each patch exactly one axis.
         c.placement = Some(Placement {

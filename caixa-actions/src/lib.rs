@@ -1,7 +1,7 @@
 //! caixa-actions — typed renderer for `:kind Acao` caixas.
 //!
 //! An `Acao` caixa's sole payload is its `:ci` slot — a
-//! [`canteiro_types::CiRun`] (CANTEIRO §7.1-C, `pleme-io/sui`'s
+//! [`canteiro_types::CiRun`] (`pleme-io/sui`'s
 //! `canteiro-types` crate): a repo's CI run as a flat list of typed
 //! [`canteiro_types::CiNode`]s plus their `deps` edges.
 //!

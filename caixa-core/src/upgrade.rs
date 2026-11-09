@@ -389,7 +389,7 @@ impl UpgradeFromEntry {
     /// boundary — those instructions are terminal in the upgrade
     /// script (`systools(3)` rejects sequences that continue past
     /// them); pleme-io lifts the same shape to a build-time gate,
-    /// matching the CAIXA-SDLC §III "build errors, not runtime
+    /// matching the "build errors, not runtime
     /// surprises" frame.
     ///
     /// Same within-entry cross-instruction discipline the
@@ -453,7 +453,7 @@ impl UpgradeFromEntry {
     /// `(:load-module …)` in the same `:instructions` list.
     ///
     /// `StateChange` is the `gen_server:code_change/3` analog
-    /// ([`UpgradeInstruction::StateChange`] doc; INSPIRATIONS §II.4):
+    /// ([`UpgradeInstruction::StateChange`] doc):
     /// it runs the migration script that folds the *old* state into the
     /// shape the *new* code expects. In OTP, `code_change/3` is invoked
     /// in the context of the newly-loaded code — `release_handler`
@@ -526,7 +526,7 @@ impl UpgradeFromEntry {
         // on [`UpgradeInstruction`] (an `AwaitReadiness` gate, a
         // `Downgrade` reverse-axis variant OTP's `relup` acknowledges, a
         // `CanaryTraffic` split-traffic variant the M4 CR materializer
-        // could resolve per-CR — INSPIRATIONS §II.4) migrates as one
+        // could resolve per-CR) migrates as one
         // enum-declaration edit through the derive rather than a
         // coordinated rewrite of every ordering / singularity gate's
         // per-arm hand-rolled pattern-match. Byte-identity of this
@@ -550,7 +550,7 @@ impl UpgradeFromEntry {
     /// preceded by a `(:load-module …)` in the same `:instructions` list.
     ///
     /// `SoftPurge` and `Purge` are the `code:soft_purge/1` /
-    /// `code:purge/1` analogs (INSPIRATIONS §II.4): they remove the
+    /// `code:purge/1` analogs: they remove the
     /// *old* module from memory after the new one is resident. OTP's
     /// two-phase code load is `code:load_module/1` *then*
     /// `code:soft_purge/1` — load the new version alongside the old
@@ -647,7 +647,7 @@ impl UpgradeFromEntry {
             // [`UpgradeInstruction`] (an `AwaitReadiness` gate, a
             // `Downgrade` reverse-axis variant OTP's `relup` acknowledges,
             // a `CanaryTraffic` split-traffic variant the M4 CR
-            // materializer could resolve per-CR — INSPIRATIONS §II.4)
+            // materializer could resolve per-CR)
             // migrates as a single enum-declaration edit through the
             // derive rather than a scattered per-consumer rewrite. The
             // partition invariant is pinned by
@@ -677,7 +677,7 @@ impl UpgradeFromEntry {
     /// chain on the typed `:upgrade-from` slot.
     ///
     /// `StateChange` is the `gen_server:code_change/3` analog
-    /// ([`UpgradeInstruction::StateChange`] doc; INSPIRATIONS §II.4
+    /// ([`UpgradeInstruction::StateChange`] doc
     /// verbatim: "State migration uses `gen_server:code_change/3` …
     /// migrate state from v0.1.0 shape to current shape"). The
     /// callback's input is the *prior* version's state shape, which
@@ -853,7 +853,7 @@ impl UpgradeFromEntry {
     /// module) axis, narrowed to the cleanup class.
     ///
     /// `SoftPurge` and `Purge` are the `code:soft_purge/1` /
-    /// `code:purge/1` analogs (INSPIRATIONS §II.4 verbatim: "1.
+    /// `code:purge/1` analogs (verbatim: "1.
     /// `code:load_module/1` — load v2 alongside v1 … 2.
     /// `code:soft_purge/1` — wait until no process is running v1, then
     /// discard. (`code:purge/1` kills v1 immediately if you don't
@@ -1105,7 +1105,7 @@ impl UpgradeFromEntry {
             // `AwaitReadiness` gate, a `Downgrade` reverse-axis
             // variant OTP's `relup` acknowledges, a `CanaryTraffic`
             // split-traffic variant the M4 CR materializer could
-            // resolve per-CR — INSPIRATIONS §II.4) migrates as a
+            // resolve per-CR) migrates as a
             // single enum-declaration edit through the derive rather
             // than a scattered per-consumer rewrite. Byte-identity of
             // this dispatch against the pre-lift match-pattern is
@@ -1133,7 +1133,7 @@ impl UpgradeFromEntry {
     /// set-not-multiset on the `StateChange` axis.
     ///
     /// `StateChange` is the `gen_server:code_change/3` analog
-    /// (INSPIRATIONS §II.4: "State migration uses
+    /// ("State migration uses
     /// `gen_server:code_change/3`"). The instruction folds the *old*
     /// state into the shape the *new* code expects — a one-shot
     /// transition from one declared state representation to another.
@@ -2178,7 +2178,7 @@ impl UpgradeInstruction {
     /// cleanup-family axis.
     ///
     /// The name `is_cleanup` maps directly onto the canonical
-    /// OTP-appup vocabulary (INSPIRATIONS §II.4 verbatim: "2.
+    /// OTP-appup vocabulary (verbatim: "2.
     /// `code:soft_purge/1` — wait until no process is running v1,
     /// then discard. (`code:purge/1` kills v1 immediately if you
     /// don't care.)" — the two `code:*_purge/1` operations are
@@ -2492,7 +2492,7 @@ pub enum UpgradeError {
     #[error(
         ":upgrade-from `(:from {from:?})` :instructions list targets module {module:?} with \
          more than one cleanup instruction ({kinds:?}) — `:soft-purge` and `:purge` are the \
-         code:soft_purge/1 / code:purge/1 analogs (INSPIRATIONS §II.4: \"`code:soft_purge/1` — \
+         code:soft_purge/1 / code:purge/1 analogs (\"`code:soft_purge/1` — \
          wait until no process is running v1, then discard. (`code:purge/1` kills v1 immediately \
          if you don't care.)\"), and each module's old version is cleaned up by exactly one of \
          them: either drain-then-discard (`:soft-purge`) or immediate-discard (`:purge`), never \
@@ -2515,7 +2515,7 @@ pub enum UpgradeError {
     },
     #[error(
         ":upgrade-from `(:from {from:?})` :instructions list loads module {module:?} more than \
-         once — `:load-module` is the code:load_module/1 analog (INSPIRATIONS §II.4: \"1. \
+         once — `:load-module` is the code:load_module/1 analog (\"1. \
          `code:load_module/1` — load v2 alongside v1; new code is 'current', old code is \
          'old'.\"), and the instruction binds the named wasm component once: the operator's \
          dispatch table reads the module name and brings up the corresponding component \
@@ -2532,7 +2532,7 @@ pub enum UpgradeError {
     DuplicateLoadModule { from: String, module: String },
     #[error(
         ":upgrade-from `(:from {from:?})` :instructions list runs state migration {} more than \
-         once — `:state-change` is the gen_server:code_change/3 analog (INSPIRATIONS §II.4: \
+         once — `:state-change` is the gen_server:code_change/3 analog (\
          \"State migration uses gen_server:code_change/3\"), and the script folds the prior-version \
          state shape into the current-version shape: a one-shot transition, not a step that \
          composes with itself. systools-generated `.relup` files emit at most one `code_change` \
@@ -4050,7 +4050,7 @@ mod tests {
         // check would match the on-disk file — but the
         // canonical-form codec emits lowercase `.lisp` verbatim, so
         // a case-folded shape mismatches the round-trip-stable
-        // canonical form (THEORY.md §V.2.7 render-determinism).
+        // canonical form (render-determinism).
         // Same case-sensitive discipline the byte-size / duration
         // codecs use on unit suffixes (`MiB`, `ms`, `s`, `m`, `h`)
         // and every other shape-gate predicate in `render.rs` (label
@@ -4815,7 +4815,7 @@ mod tests {
     #[test]
     fn validate_upgrade_from_accepts_disjoint_versions() {
         // Positive control: the canonical "chain v0.1.0 → 0.1.5 →
-        // 0.2.0-rc.1" authoring shape from ABSORPTION-ROADMAP §M2.3
+        // 0.2.0-rc.1" authoring shape from the design
         // (and `entry_with_chain_of_versions` above) passes the cross-
         // entry gate. Different `:from` per entry is the intended
         // shape; the gate must not regress this baseline. Middle entry
@@ -5015,7 +5015,7 @@ mod tests {
     #[test]
     fn versao_gate_accepts_strict_upgrade() {
         // Positive control: the canonical "chain prior versions →
-        // current" authoring shape from ABSORPTION-ROADMAP §M2.3 — each
+        // current" authoring shape from the design — each
         // `:from` strictly less than the current `:versao` under
         // SemVer-2 precedence. The gate must not regress this baseline.
         let entries = vec![
@@ -5299,7 +5299,7 @@ mod tests {
     #[test]
     fn validate_accepts_typed_sequence_without_restart() {
         // Positive control: the canonical typed hot-upgrade authoring
-        // shape from ABSORPTION-ROADMAP §M2.3 — `:load-module` →
+        // shape from the design — `:load-module` →
         // `:state-change` → `:soft-purge`. Absent `:restart` is the
         // only shape that lets the sequence run to completion under
         // the wasm-operator's `:from`-match dispatch. Drift here =
@@ -5331,7 +5331,7 @@ mod tests {
         // so an entry that runs it with no preceding `:load-module`
         // migrates state into code that was never loaded. The operator
         // runs instructions in declared order, so this is a build error,
-        // not a runtime surprise (CAIXA-SDLC §III).
+        // not a runtime surprise.
         let e = entry(
             "0.1.0",
             vec![UpgradeInstruction::StateChange {
@@ -5622,7 +5622,7 @@ mod tests {
         // entry that runs it with no preceding `:load-module` drains
         // the live module with no replacement. The operator runs
         // instructions in declared order, so this is a build error,
-        // not a runtime surprise (CAIXA-SDLC §III).
+        // not a runtime surprise.
         let e = entry(
             "0.1.0",
             vec![UpgradeInstruction::SoftPurge {
@@ -6492,8 +6492,8 @@ mod tests {
 
     #[test]
     fn validate_rejects_duplicate_state_change_for_same_script() {
-        // `StateChange` is the `gen_server:code_change/3` analog
-        // (INSPIRATIONS §II.4): the script folds the prior-version
+        // `StateChange` is the `gen_server:code_change/3` analog:
+        // the script folds the prior-version
         // state shape into the current-version shape — a one-shot
         // transition, not a step that composes with itself. OTP's
         // release_handler invokes `code_change/3` exactly once per

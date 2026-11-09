@@ -367,7 +367,7 @@ mod tests {
         // upstream. Pin a non-default prefix + CLI-override versao
         // composition so a future refactor that folds the prefix into
         // the composer (e.g. promoting `prefix` from a `&str` arg to a
-        // typed `TagShape` newtype once the CAIXA-SDLC §I SemVer-2 pin
+        // typed `TagShape` newtype once the SemVer-2 pin
         // grows a `release/<versao>` slash-namespaced peer) reaches
         // this site through one canonical form.
         let caixa = fixture_caixa("payment", "0.1.0");

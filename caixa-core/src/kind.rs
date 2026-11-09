@@ -39,7 +39,7 @@ pub enum CaixaKind {
     /// nodes + their dependency edges). Runs no code of its own and
     /// owns no `lib`/`exe`/`servicos`/`children`/`membros` code
     /// surface — its sole payload is the `ci` field on [`crate::Caixa`].
-    /// See CANTEIRO §7.1-C (`pleme-io/sui`'s `canteiro-types` crate)
+    /// (`pleme-io/sui`'s `canteiro-types` crate)
     /// for the DAG algebra (`decompose`/`affected_set`/`affected_waves`)
     /// this slot feeds, and the `caixa-actions` renderer (currently
     /// validate-only — see its crate docs) for the M0 consumer.

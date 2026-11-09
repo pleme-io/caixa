@@ -388,7 +388,7 @@ impl DepSource {
     /// `0x00..=0x1F` plus `0x7F` anywhere in the value; and the
     /// embedded-`\` Windows-path-separator arm closing the
     /// cross-host-OS-separator divergence vector on the same
-    /// THEORY.md §V.2 render-determinism axis.
+    /// render-determinism axis.
     ///
     /// Extracted from [`Self::validate`]'s `Self::Path` arm because the
     /// per-arm cascade now spans nine diagnostic shapes — every new
@@ -423,7 +423,7 @@ impl DepSource {
         // caixa-resolver/src/resolve.rs:189) and that string
         // folds into the BLAKE3 closure the lacre keys every
         // downstream consumer (the substrate's reproducibility
-        // contract, CAIXA-SDLC §III.2 — the lacre is the
+        // contract, — the lacre is the
         // build's content-addressed identity, peer of the Nix
         // store path) against. Until this gate landed an
         // absolute `:caminho` (`/home/me/work/caixa-teia` — the
@@ -443,7 +443,7 @@ impl DepSource {
         // caixa.lisp — the most insidious failure mode the
         // typed slot can carry (no error surfaces; the
         // divergence is invisible until two machines compare
-        // lacres). The same THEORY.md §V.2 render-determinism
+        // lacres). The same render-determinism
         // discipline `is_sandboxed_relative_path` already
         // applies on the M2 typed path-slots
         // (`:behavior :on-*`, `:upgrade-from :state-change
@@ -643,7 +643,7 @@ impl DepSource {
         // (`conteudo: format!("path:{caminho}")`,
         // caixa-resolver/src/resolve.rs:189) for the byte-divergent /
         // semantic-identical caixa, and the substrate's "the lacre is
-        // the build's identity" contract (CAIXA-SDLC §III.2) silently
+        // the build's identity" contract silently
         // breaks across two workstations whose authors differ only in
         // paste-from-aligned-doc whitespace habits — the most insidious
         // failure mode the typed slot can carry (no error surfaces; the
@@ -856,7 +856,7 @@ impl DepSource {
         // address (`conteudo: format!("path:{caminho}")`, caixa-
         // resolver/src/resolve.rs:189), so byte-identical caixa.lisp
         // values resolve to two distinct directories across runner
-        // OSes — the same THEORY.md §V.2 render-determinism contract
+        // OSes — the same render-determinism contract
         // the absolute / tilde / var arms protect, here against the
         // cross-host-OS-separator divergence vector. Even on POSIX-
         // only resolvers (the canonical pleme-io substrate posture),
@@ -1782,8 +1782,8 @@ impl DepSource {
         // content-address (`conteudo: format!("path:{caminho}")`,
         // caixa-resolver/src/resolve.rs:189), so the divergence rides
         // downstream into the BLAKE3 closure and locks the substrate's
-        // "the lacre is the build's identity" contract (CAIXA-SDLC §III.2)
-        // to the wrong encoding — the same THEORY.md §V.2 render-
+        // "the lacre is the build's identity" contract
+        // to the wrong encoding — the same render-
         // determinism vector every prior `:caminho` arm protects.
         //
         // Second, the printf-format-specifier lead footgun: `%` is the C /
@@ -2002,7 +2002,7 @@ impl DepSource {
         // so `path:../foo$HOME/bar` locks a BLAKE3 closure distinct
         // from the byte-identical-semantic `path:../foo/home/alice/bar`
         // one author would have produced by substituting the literal
-        // value at author time, defeating the THEORY.md §V.2 render-
+        // value at author time, defeating the render-
         // determinism contract on the same axis every prior `:caminho`
         // arm protects.
         //
@@ -2326,9 +2326,9 @@ impl DepSource {
         // workstations whose authors differ only in tab-completion habits
         // emit byte-divergent lacres for the byte-identical-semantic caixa,
         // and the substrate's "the lacre is the build's identity" contract
-        // (CAIXA-SDLC §III.2) silently breaks far from the source caixa.lisp.
+        // silently breaks far from the source caixa.lisp.
         //
-        // Same THEORY.md §V.2 render-determinism axis every prior `:caminho`
+        // Same render-determinism axis every prior `:caminho`
         // arm protects, here against the trailing-separator divergence
         // vector: every typed slot's accepted set excludes byte-divergent
         // values that round-trip to the same downstream semantic. The peer
@@ -2474,7 +2474,7 @@ impl Dep {
     /// version-lock overlay the resolver folds through the
     /// `~/.config/caixa/config.yaml` entry the [`crate::dep::Dep`]
     /// docstring already acknowledges, a per-cluster canary-version
-    /// overlay per MESH-COMPOSITION §III.2, a promotion of the plain
+    /// overlay, a promotion of the plain
     /// [`String`] requirement to a richer parsed-`VersionReq` newtype
     /// once cross-registry federation lands) would have had to be
     /// threaded through every open-coded copy in lockstep or two
@@ -2683,7 +2683,7 @@ impl Dep {
     /// / [`DepError::CaracteristicaDuplicate`] carrier family naming the
     /// offending `Dep::nome`), and every future
     /// per-`Caixa`-manifest / caixa-resolver / caixa-crd feature-toggle-
-    /// facing consumer the CAIXA-SDLC §I roadmap acknowledges (the
+    /// facing consumer the roadmap acknowledges (the
     /// future caixa-resolver per-dep feature-projection walk that folds
     /// the toggle set into the resolved [`crate::Caixa`]'s activated
     /// [`crate::render::CARGO_FEATURE_NAME_MAX_LEN`]-bounded feature
@@ -2816,7 +2816,7 @@ impl Dep {
     /// docstring already acknowledges, a per-cluster opcional-override
     /// the future M4 lacre-federation layer applies per-CR, a promotion
     /// of the plain `bool` to a richer `OpcionalPolicy { drop, warn,
-    /// error }` tri-state once the CAIXA-SDLC §II opcional-policy
+    /// error }` tri-state once the opcional-policy
     /// roadmap lands) would have had to be threaded through every open-
     /// coded copy in lockstep or two consumers would silently disagree
     /// on which missing-source arm a given dep resolves to — the
@@ -3171,8 +3171,8 @@ pub fn validate_no_self_dep(
 /// caller reaches for) reads through this enum rather than through a
 /// bare `&'static str` — the closed-set is expressed at the type layer,
 /// so a future third dep-list axis (a `:deps-build` build-only closure
-/// once the substrate grows cross-artifact heterogeneous dep-graphs,
-/// per CAIXA-SDLC §I) is one variant plus one arm per method and the
+/// once the substrate grows cross-artifact heterogeneous dep-graphs)
+/// is one variant plus one arm per method and the
 /// compiler enforces exhaustiveness on every consumer's `match` arms.
 ///
 /// The wire byte-string [`Self::as_str`] returns is the same author-
@@ -3204,7 +3204,7 @@ pub enum DepList {
     /// [`crate::render::DEP_AUTHOR_KEY_DEPS`].
     Prod,
     /// Dev-only-closure `:deps-dev` axis — Cargo's `[dev-dependencies]`
-    /// table's dev-time-only visibility contract per CAIXA-SDLC §I.
+    /// table's dev-time-only visibility contract.
     /// Wire-format [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`].
     Dev,
 }
@@ -5616,7 +5616,7 @@ pub enum DepError {
          re-open the host-layout-leak the b94fd83 absolute gate closes — \
          Alice's `~` resolves to `/home/alice`, Bob's to `/home/bob`, two CI \
          runners with different `$HOME` layouts resolve to two distinct paths \
-         for the byte-identical caixa, defeating the THEORY.md §V.2 render-\
+         for the byte-identical caixa, defeating the render-\
          determinism contract; express the path relative to the caixa.lisp \
          location, e.g. \"../caixa-teia\" for a sibling workspace dep, or \
          spell out the full relative path explicitly if a workstation-rooted \
@@ -5639,7 +5639,7 @@ pub enum DepError {
          absolute gate closes — Alice's `$HOME` resolves to `/home/alice`, \
          Bob's to `/home/bob`, two CI runners with different `${{WORKSPACE}}` \
          layouts resolve to two distinct paths for the byte-identical caixa, \
-         defeating the THEORY.md §V.2 render-determinism contract; express \
+         defeating the render-determinism contract; express \
          the path relative to the caixa.lisp location, e.g. \"../caixa-teia\" \
          for a sibling workspace dep, or spell out the full relative path \
          explicitly if a workstation-rooted dep is genuinely intended)"
@@ -5662,7 +5662,7 @@ pub enum DepError {
          caixa.lisp-doc whitespace habits — the most insidious failure \
          mode the typed slot can carry (no error surfaces; the divergence \
          is invisible until two machines compare lacres), defeating the \
-         THEORY.md §V.2 render-determinism contract. The canonical \
+         render-determinism contract. The canonical \
          paste-from-aligned-`:deps`-block footgun (every `:fonte` form in \
          a multi-entry `:deps` block sits at the same column — an author \
          selecting `\"<sp><sp><sp>../caixa-teia\"` and pasting it from \
@@ -5724,7 +5724,7 @@ pub enum DepError {
          fails with `NulError` at resolve time; the lacre pipeline embeds the \
          value verbatim in its per-dep content-address `path:{caminho}` at \
          caixa-resolver/src/resolve.rs:189 so a control byte anywhere in the \
-         value lands in the BLAKE3 closure and breaks the THEORY.md §V.2 render-\
+         value lands in the BLAKE3 closure and breaks the render-\
          determinism contract — the canonical paste-from-multiline-doc \
          (`\\n`/`\\r`), paste-from-aligned-table (`\\t`), or paste-from-binary-\
          blob (`0x00`-DEL) footgun every peer single-token-shaped axis \
@@ -5748,7 +5748,7 @@ pub enum DepError {
          primary path separator equal to `/`, so byte-identical caixa.lisp values \
          resolve to two distinct directories across runner OSes — the lacre pipeline \
          embeds the value verbatim in its per-dep content-address `path:{caminho}` at \
-         caixa-resolver/src/resolve.rs:189, defeating the THEORY.md §V.2 render-\
+         caixa-resolver/src/resolve.rs:189, defeating the render-\
          determinism contract via the cross-host-OS-separator divergence vector. The \
          canonical Windows-Explorer `Copy as path` / PowerShell `Get-Location` \
          paste-idiom footgun; peer `:fonte :tag` / `:fonte :branch` axis already \
@@ -6209,7 +6209,7 @@ pub enum DepError {
          only in whether the author substituted `$HOME` / `${{WORKSPACE}}` at author \
          time lock to two distinct BLAKE3 closures across two workstations whose \
          downstream envsubst / Nix / Make / K8s-template layers differ in `$VAR` \
-         recognition — defeating the THEORY.md §V.2 render-determinism contract on the \
+         recognition — defeating the render-determinism contract on the \
          same axis every prior `:caminho` arm protects. Beyond the determinism vector, \
          `$` at any position in a value flowing verbatim into a shell-spawned subprocess \
          is the canonical CWE-78 shell-command-injection surface every peer single-\
@@ -6344,7 +6344,7 @@ pub enum DepError {
          value verbatim in its per-dep content-address `path:{caminho}` at \
          caixa-resolver/src/resolve.rs:189, so two authors whose only difference is \
          shell tab-completion emit byte-divergent BLAKE3 closures for the same caixa — \
-         defeating the THEORY.md §V.2 render-determinism contract via the trailing-\
+         defeating the render-determinism contract via the trailing-\
          separator vector (the canonical paste-from-shell-tab-completion + paste-from-\
          `pwd`-with-`/`-suffix footgun, and the canonical Cargo-style `path = \
          \"../caixa-teia/\"` paste-from-Cargo-manifest cross-idiom leak). Drop the \
@@ -7982,7 +7982,7 @@ mod tests {
         // authors whose values differ only in their fragment anchor
         // (`#readme` vs `#L42`) resolve to the byte-identical upstream
         // `git clone` but lock to two distinct lacres, defeating the
-        // THEORY.md §V.2 render-determinism contract. Same value-shape
+        // render-determinism contract. Same value-shape
         // axis-floor every peer typed surface enforces; peer `:fonte
         // :tag` / `:fonte :branch` already reject the byte-class through
         // `is_git_ref_name`'s alphabet (refs are leaf identifiers, no
@@ -8059,7 +8059,7 @@ mod tests {
         // their query tail (`?tab=readme-ov-file` vs `?ref=main` vs
         // `?utm_source=twitter`) resolve to the byte-identical
         // upstream `git clone` but lock to two distinct lacres,
-        // defeating the THEORY.md §V.2 render-determinism contract
+        // defeating the render-determinism contract
         // on the same axis the `#` fragment arm closes. Same value-
         // shape axis-floor every peer typed surface enforces; peer
         // `:fonte :tag` / `:fonte :branch` already reject the byte-
@@ -8196,7 +8196,7 @@ mod tests {
         // two authors whose `:repo` values differ only in backslash-
         // vs-forward-slash (`file:///C:\path` vs `file:///C:/path`)
         // resolve to the byte-identical local clone but lock to two
-        // distinct BLAKE3 closures, defeating the THEORY.md §V.2
+        // distinct BLAKE3 closures, defeating the
         // render-determinism contract on the same axis the `#`
         // fragment and `?` query arms close. Same value-shape axis-
         // floor every peer typed surface enforces; the `:caminho`
@@ -8296,7 +8296,7 @@ mod tests {
         // lacre's per-dep content-address but round-trips inconsistently
         // between the lacre's per-dep content-address and the
         // resolver's `git clone <repo>` invocation, defeating the
-        // THEORY.md §V.2 render-determinism contract on the same axis
+        // render-determinism contract on the same axis
         // the `#` fragment, `?` query, and `\` backslash arms close;
         // every git porcelain entry-point additionally fetches a
         // nonexistent literal-`{placeholder}`-named path far from the
@@ -8420,7 +8420,7 @@ mod tests {
         // parser layer — two authors whose values differ only in
         // their redirect tail (`>build.log` vs nothing) resolve to
         // the byte-identical upstream `git clone` but lock to two
-        // distinct lacres, defeating the THEORY.md §V.2 render-
+        // distinct lacres, defeating the render-
         // determinism contract. Peer with the `:caminho` axis's
         // `FonteCaminhoShellRedirection` arm (e457141) on the sibling
         // path-fonte axis, and `is_gateway_api_http_path`'s eleven-
@@ -8497,7 +8497,7 @@ mod tests {
         // layer — two authors whose values differ only in their
         // backtick wrapper (`` `whoami` `` vs nothing) resolve to the
         // byte-identical upstream `git clone` but lock to two distinct
-        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // lacres, defeating the render-determinism
         // contract. Peer with the `:caminho` axis's
         // `FonteCaminhoShellCommandSubstitution` arm (c4d62b3) on the
         // sibling path-fonte axis, and `is_gateway_api_http_path`'s
@@ -8634,7 +8634,7 @@ mod tests {
         // layer — two authors whose values differ only in their pipe
         // tail (`|tee build.log` vs nothing) resolve to the byte-
         // identical upstream `git clone` but lock to two distinct
-        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // lacres, defeating the render-determinism
         // contract. Peer with the `:caminho` axis's
         // `FonteCaminhoShellPipe` arm (124106f) on the sibling path-
         // fonte axis, and `is_gateway_api_http_path`'s eleven-byte
@@ -8739,7 +8739,7 @@ mod tests {
         // authors whose values differ only in their sequential-command
         // tail (`; rm -rf build` vs nothing) resolve to the byte-
         // identical upstream `git clone` but lock to two distinct
-        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // lacres, defeating the render-determinism
         // contract. Peer with the `:caminho` axis's
         // `FonteCaminhoShellSemicolon` arm (05c358e) on the sibling
         // path-fonte axis, and `is_gateway_api_http_path`'s eleven-
@@ -8983,7 +8983,7 @@ mod tests {
         // authors whose values differ only in their `$VAR` /
         // `${VAR}` / `$(cmd)` expansion tail resolve to the byte-
         // identical upstream `git clone` but lock to two distinct
-        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // lacres, defeating the render-determinism
         // contract. Beyond determinism, the value is a structural
         // host-layout leak: two authors with the same `:repo` slot
         // but different `$ORG` / `$HOME` / `$WORKSPACE` resolve
@@ -9126,7 +9126,7 @@ mod tests {
         // rewritten at libcurl's URL-parser layer — two authors
         // whose values differ only in their asterisk presence
         // resolve to the byte-identical upstream `git clone` but
-        // lock to two distinct lacres, defeating the THEORY.md §V.2
+        // lock to two distinct lacres, defeating the
         // render-determinism contract. Peer with the `:caminho`
         // axis's `FonteCaminhoShellGlob` arm (cf9034b) on the
         // sibling path-fonte axis, and the `is_git_ref_name`
@@ -9263,7 +9263,7 @@ mod tests {
         // `%28` and `)` → `%29` on the wire, so the byte rides
         // verbatim into the lacre's per-dep BLAKE3 closure but is
         // silently rewritten at libcurl's URL-parser layer —
-        // defeating the THEORY.md §V.2 render-determinism contract on
+        // defeating the render-determinism contract on
         // the same axis the prior twelve byte-class arms close.
         let d = dep_with_fonte(DepSource::Git {
             repo: "https://github.com/(foo|bar)/caixa-teia".into(),
@@ -9402,7 +9402,7 @@ mod tests {
         // set' maps `"` → `%22` on the wire, so the byte rides verbatim
         // into the lacre's per-dep BLAKE3 closure but is silently
         // rewritten at libcurl's URL-parser layer, defeating the
-        // THEORY.md §V.2 render-determinism contract.
+        // render-determinism contract.
         let d = dep_with_fonte(DepSource::Git {
             repo: "\"https://github.com/pleme-io/caixa-teia\"".into(),
             tag: Some("v0.1.0".into()),
@@ -10650,7 +10650,7 @@ mod tests {
         // differed per machine — the build succeeded but two CI
         // runners with different `${HOME}` layouts emitted two
         // distinct lacres for the byte-identical caixa, silently
-        // breaking the THEORY.md §V.2 render-determinism contract
+        // breaking the render-determinism contract
         // far from the source caixa.lisp. The new gate moves the
         // check to validate time and names the offending dep +
         // caminho verbatim.

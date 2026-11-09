@@ -75,7 +75,7 @@ pub fn all_rules() -> Vec<Rule> {
         ),
         Rule::new(
             "aplicacao-completeness",
-            "a :kind Aplicacao must declare :politicas :timeout — no infinite blocking (MESH-COMPOSITION §V)",
+            "a :kind Aplicacao must declare :politicas :timeout — no infinite blocking",
             Severity::Error,
             check_aplicacao_timeout,
         ),
@@ -400,7 +400,7 @@ fn check_aplicacao_timeout(node: &Node, diags: &mut Vec<Diagnostic>) {
                 node.span,
                 ":kind Aplicacao must declare :politicas :timeout (no infinite blocking)",
             )
-            .with_hint("add :politicas (:timeout \"30s\" …) — MESH-COMPOSITION §V"),
+            .with_hint("add :politicas (:timeout \"30s\" …)"),
         );
     }
 }
@@ -760,7 +760,7 @@ mod tests {
     #[test]
     fn flags_aplicacao_without_timeout() {
         // An Aplicacao whose :politicas omits :timeout leaves the mesh
-        // with no per-call deadline — MESH-COMPOSITION §V "no infinite
+        // with no per-call deadline — "no infinite
         // blocking". The rule fires at Error severity (the §IV
         // aplicacao-completeness check that rejects partial Aplicacaos).
         let src = r#"(defcaixa :nome "checkout" :versao "0.1.0" :kind Aplicacao
@@ -798,7 +798,7 @@ mod tests {
 
     #[test]
     fn aplicacao_with_nested_timeout_is_clean() {
-        // The MESH-COMPOSITION §III.1 nested authoring shape must pass
+        // The nested authoring shape must pass
         // the same as the flat form — the rule searches the subtree.
         let src = r#"(defcaixa :nome "checkout" :versao "0.1.0" :kind Aplicacao
   :politicas ((:timeout "30s") (:retries 3)))"#;

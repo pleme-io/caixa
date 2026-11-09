@@ -371,7 +371,7 @@ pub const fn wit_shape_is_capability(wit: &str) -> bool {
 // Compile-time pins on the 4-arm WIT-shape classifier family — the
 // module-scope const-eval assertions below trip at caixa-core build
 // time (not test time) if a future edit rewires any of the four
-// classifier's arm-set away from the accept-set MESH-COMPOSITION §II.3
+// classifier's arm-set away from the accept-set
 // pins. Anchor the `const`-eval-surface posture of the four peer
 // classifiers on canonical accept-set samples (one per WIT_*_SHAPE_PREFIXES
 // prefix) plus pairwise-exclusion samples asserting the trio partitions
@@ -2734,7 +2734,7 @@ impl WitContract {
     /// — five open-coded `.de.as_str()` field-accesses that expressed
     /// no compile-time link back to the typed slot. A future extension
     /// of the `:contratos :de` axis to a richer author surface (a
-    /// multi-caller weighted-fan-in overlay per MESH-COMPOSITION §III.2
+    /// multi-caller weighted-fan-in overlay
     /// canary flow, a per-cluster caller-alias table the operator pins
     /// through a future `:placement`-scoped slot, the M4
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
@@ -2998,7 +2998,7 @@ impl WitContract {
     /// scalar `String` axes. Named `endpoint()` to match the storage
     /// field's name and the paired [`WitTarget::HTTP_FIELD_NAME`]
     /// author-facing label const; the accessor's identity name maps
-    /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
+    /// onto the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn endpoint(&self) -> Option<&str> {
@@ -3079,7 +3079,7 @@ impl WitContract {
     /// `Option<String>` axis. Named `subject()` to match the storage
     /// field's name and the paired [`WitTarget::PUBSUB_FIELD_NAME`]
     /// author-facing label const; the accessor's identity name maps
-    /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
+    /// onto the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn subject(&self) -> Option<&str> {
@@ -3162,7 +3162,7 @@ impl WitContract {
     /// dispatch arms. Named `slot()` to match the storage field's
     /// name and the paired [`WitTarget::STORE_FIELD_NAME`]
     /// author-facing label const; the accessor's identity name maps
-    /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
+    /// onto the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn slot(&self) -> Option<&str> {
@@ -3184,7 +3184,7 @@ impl WitContract {
     /// operator pins through a future `:placement`-scoped slot, a
     /// namespace-qualified rewrite the M4 CR materializer applies per-CR,
     /// a per-`:membros` alias overlay from the future `:membros
-    /// :nome-suffix` slot the MESH-COMPOSITION §III.2 roadmap
+    /// :nome-suffix` slot the roadmap
     /// acknowledges) reaches every diagnostic-construction site by
     /// construction.
     ///
@@ -3526,7 +3526,7 @@ impl WitContract {
 
     /// True when this contract's caller equals its callee — a
     /// structurally degenerate typed edge that no `:contratos` entry can
-    /// legitimately carry (MESH-COMPOSITION §III.1 — "Servico A calls
+    /// legitimately carry ("Servico A calls
     /// Servico B" is an *inter*-Servico contract between two distinct
     /// graph nodes). A Servico contracting with itself resolves to an
     /// in-process call the wasm-engine never routes through the mesh at
@@ -3656,7 +3656,7 @@ impl WitContract {
     /// through one dispatch.
     ///
     /// A `:contratos` entry is a typed directed edge between two
-    /// declared members (MESH-COMPOSITION §III.1 — "the typed edges
+    /// declared members ("the typed edges
     /// address graph nodes, so a reference to a node the graph does
     /// not contain is a build error"). Both endpoints must resolve
     /// against the same [`AplicacaoSpec::membro_names`] oracle: the
@@ -3697,7 +3697,7 @@ impl WitContract {
     /// admission-webhook re-checking `:contratos` after a
     /// per-`(:de, :para)` edge patch without re-walking the whole
     /// `:contratos` list, the per-`:contratos`-edge `:politicas`
-    /// override MESH-COMPOSITION §III.2 #3 acknowledges — which
+    /// override the design acknowledges — which
     /// resolves an effective per-edge [`MeshPolicy`] and must
     /// re-check the edge's endpoints against the same membership
     /// oracle before it can key a per-edge override off the endpoint
@@ -3748,8 +3748,8 @@ impl WitContract {
     ///     typed capability edge with no payload selector.
     ///
     /// Translates the Apollo Federation discipline ("conflicts are
-    /// errors at compile time, not warnings at runtime";
-    /// MESH-COMPOSITION §II.3) onto pleme-io's typed Aplicacao surface:
+    /// errors at compile time, not warnings at runtime")
+    /// onto pleme-io's typed Aplicacao surface:
     /// a contract whose WIT shape disagrees with its target field, or
     /// whose target field carries a value-shape-invalid string, is a
     /// build error — not a silent renderer drop. The returned
@@ -4323,7 +4323,7 @@ impl<'a> WitTarget<'a> {
     /// invocations (one per variant, each hand-quoting the paired
     /// [`Self::HTTP_FIELD_NAME`] / [`Self::PUBSUB_FIELD_NAME`] /
     /// [`Self::STORE_FIELD_NAME`] const) — the canonical
-    /// "same shape, written N times" duplication THEORY.md §I.3.5
+    /// "same shape, written N times" duplication
     /// ("Generation first, composition second, hand-authoring last;
     /// the duplication budget is zero") promotes to a build-time
     /// concern, with each per-arm site paired to its own const with no
@@ -4832,7 +4832,7 @@ impl Membro {
     /// operator pins through a future `:placement`-scoped slot, a
     /// namespace-qualified rewrite the M4 CR materializer applies
     /// per-CR, a per-member overlay from the future `:membros
-    /// :nome-suffix` slot the MESH-COMPOSITION §III.2 roadmap
+    /// :nome-suffix` slot the roadmap
     /// acknowledges — would have had to be threaded through every
     /// open-coded copy in lockstep or one consumer would silently
     /// disagree with the peers on which caixa a given member resolves
@@ -4898,7 +4898,7 @@ impl Membro {
     /// prior to this lift) — two open-coded field-accesses that expressed
     /// no compile-time link back to the typed slot. A future extension of
     /// the `:membros :versao` axis to a richer author surface (a
-    /// per-cluster version-pin overlay per MESH-COMPOSITION §III.2 canary
+    /// per-cluster version-pin overlay canary
     /// flow, a lacre-projected concrete-version rewrite the operator
     /// materializes at CR-admission time, a future `:membros :versao-lock`
     /// per-cluster override slot) would have had to be threaded through
@@ -5214,7 +5214,7 @@ impl MeshPolicy {
     /// consumer of the pair reaches the invariant through one dispatch:
     /// the [`AplicacaoSpec::validate_politicas`] gate below, the future
     /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-    /// (MESH-COMPOSITION §III.2 #3) that must emit
+    /// that must emit
     /// `outlier_detection.interval` and the per-route `timeout` as one
     /// coherent Envoy block, the future M4
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
@@ -5296,7 +5296,7 @@ impl MeshPolicy {
     /// consumer of the pair reaches the invariant through one
     /// dispatch: the [`AplicacaoSpec::validate_politicas`] gate
     /// below, the future `CiliumClusterwideEnvoyConfig`
-    /// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) that
+    /// per-`:politicas` overlay that
     /// must emit `local_rate_limit.token_bucket.{max_tokens,
     /// fill_interval}` alongside `outlier_detection.consecutive_5xx`
     /// / `outlier_detection.interval` as one coherent Envoy block,
@@ -5386,7 +5386,7 @@ impl MeshPolicy {
     /// consumer of the pair reaches the invariant through one
     /// dispatch: the [`AplicacaoSpec::validate_politicas`] gate
     /// below, the future `CiliumClusterwideEnvoyConfig`
-    /// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) that
+    /// per-`:politicas` overlay that
     /// must emit `retry_policy.num_retries` alongside
     /// `outlier_detection.consecutive_5xx` as one coherent Envoy
     /// block, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
@@ -5492,7 +5492,7 @@ impl MeshPolicy {
     /// consumer of the pair reaches the invariant through one dispatch:
     /// the [`AplicacaoSpec::validate_politicas`] gate below, the future
     /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-    /// (MESH-COMPOSITION §III.2 #3) that must emit
+    /// that must emit
     /// `local_rate_limit.token_bucket.max_tokens` alongside
     /// `retry_policy.num_retries` as one coherent Envoy block, the
     /// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
@@ -5652,7 +5652,7 @@ impl MeshPolicy {
     /// body collapses to `self.politicas().validate()`), the future
     /// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
     /// admission webhook, the future per-`:contratos`-edge `:politicas`
-    /// override MESH-COMPOSITION §III.2 #3 acknowledges — the last of
+    /// override the design acknowledges — the last of
     /// which resolves an *effective* per-edge [`MeshPolicy`] and must
     /// emit *the same* diagnostic on the same input as `feira build`.
     /// Naming the compound gate once on the substrate primitive means
@@ -5738,7 +5738,7 @@ impl MeshPolicy {
     /// one that omits the slot).
     ///
     /// The `:politicas :timeout` slot carries the "no infinite blocking"
-    /// per-call deadline contract (MESH-COMPOSITION §V CSE invariant) —
+    /// per-call deadline contract (CSE invariant) —
     /// the typed slot's `Option<Duration>` accept-set (zero-floor
     /// rejected through [`AplicacaoError::PolicyTimeoutZero`], canonical-
     /// form rejected through [`AplicacaoError::PolicyTimeoutNotCanonical`],
@@ -5754,7 +5754,7 @@ impl MeshPolicy {
     /// [`crate::render::single_field_overlay`], the future M4 per-
     /// Aplicacao Gateway API reconciler materialization pass, the
     /// future per-`:contratos`-edge timeout-override overlay the
-    /// MESH-COMPOSITION §III.2 roadmap acknowledges).
+    /// roadmap acknowledges).
     ///
     /// Prior to this lift the `.timeout` field was accessed inline at
     /// two sites — [`MeshPolicy::is_empty`]'s `self.timeout.is_none()`
@@ -5763,7 +5763,7 @@ impl MeshPolicy {
     /// compile-time link back to the typed slot. A future extension of
     /// the `:politicas :timeout` axis to a richer author surface — a
     /// per-`:contratos`-edge timeout override the operator pins through
-    /// a future `:contratos :timeout` slot the MESH-COMPOSITION §III.2
+    /// a future `:contratos :timeout` slot the
     /// roadmap acknowledges, a per-cluster timeout-default overlay the
     /// M4 CR materializer resolves per-CR, a split of the single
     /// per-call `Duration` into a richer `{request, backendRequest}`
@@ -5823,7 +5823,7 @@ impl MeshPolicy {
     /// identical to one that omits the slot).
     ///
     /// The `:politicas :retries` slot carries the "transient failure
-    /// retry cap" contract (MESH-COMPOSITION §III.2 #2) — the typed
+    /// retry cap" contract — the typed
     /// slot's `Option<u32>` accept-set (lower-bounded by 1 through
     /// [`AplicacaoSpec::validate_politicas`], upper-bounded by
     /// [`POLICY_RETRIES_MAX`]) maps onto the Gateway API v1.x
@@ -5837,7 +5837,7 @@ impl MeshPolicy {
     /// the value into every rule via [`crate::render::single_field_overlay`],
     /// the future M4 per-Aplicacao Gateway API reconciler
     /// materialization pass, the future per-`:contratos`-edge retry-
-    /// override overlay the MESH-COMPOSITION §III.2 #2 roadmap
+    /// override overlay the roadmap
     /// acknowledges).
     ///
     /// Prior to this lift the `.retries` field was accessed inline at
@@ -5901,7 +5901,7 @@ impl MeshPolicy {
     ///
     /// The `:politicas :mtls-required` slot carries the "explicit opt-
     /// out only, sandboxing-by-default" mTLS-enforcement toggle
-    /// (MESH-COMPOSITION §III.2 #3) — the typed slot's three-way
+    /// — the typed slot's three-way
     /// `{None, Some(true), Some(false)}` accept-set maps onto the
     /// Cilium `authentication.mode` bijection through
     /// [`crate::cilium_auth_mode`]: `Some(true) → "required"` (mTLS
@@ -5916,7 +5916,7 @@ impl MeshPolicy {
     /// ingress rule via [`crate::render::single_field_overlay`], the
     /// future M4 per-Aplicacao Cilium `authentication.mode` reconciler
     /// materialization pass, the future per-`:contratos`-edge mTLS
-    /// override MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    /// override roadmap acknowledges).
     ///
     /// Prior to this lift the `.mtls_required` field was accessed
     /// inline at two sites — [`MeshPolicy::is_empty`]'s
@@ -5926,7 +5926,7 @@ impl MeshPolicy {
     /// link back to the typed slot. A future extension of the
     /// `:politicas :mtls-required` axis to a richer author surface —
     /// a per-`:contratos`-edge mTLS override the operator pins through
-    /// a future `:contratos :mtls` slot the MESH-COMPOSITION §III.2
+    /// a future `:contratos :mtls` slot the
     /// #3 roadmap acknowledges, a per-cluster mTLS-default overlay the
     /// M4 CR materializer resolves per-CR, a three-valued
     /// `{None, Some(true), Some(false), Some(Optional)}` promotion
@@ -5998,7 +5998,7 @@ impl MeshPolicy {
     /// `rl.window` against [`is_canonical_rate_limit_window`], the
     /// future M4 per-Aplicacao Envoy reconciler materialization pass,
     /// the future per-`:contratos`-edge rate-limit override the
-    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    /// roadmap acknowledges).
     ///
     /// Prior to this lift the `.rate_limit` field was accessed inline
     /// at two sites — [`MeshPolicy::is_empty`]'s
@@ -6008,7 +6008,7 @@ impl MeshPolicy {
     /// typed slot. A future extension of the `:politicas :rate-limit`
     /// axis to a richer author surface — a per-`:contratos`-edge
     /// rate-limit override the operator pins through a future
-    /// `:contratos :rate-limit` slot the MESH-COMPOSITION §III.2 #3
+    /// `:contratos :rate-limit` slot the
     /// roadmap acknowledges, a per-cluster rate-limit-default overlay
     /// the M4 CR materializer resolves per-CR, a promotion of the
     /// plain `(rate, window)` scalar pair to a richer
@@ -6062,7 +6062,7 @@ impl MeshPolicy {
     /// slot is absent (the "cluster default applies — typically 'no
     /// per-Aplicacao breaker declaration, gateway-class per-listener
     /// default applies'" arm the future caixa-mesh
-    /// `outlier_detection_overlay` emitter MESH-COMPOSITION §III.2 #3
+    /// `outlier_detection_overlay` emitter
     /// names — [`MeshPolicy::is_empty`]'s `circuit_breaker().is_none()`
     /// arm reads this predicate too, so an authored-but-unset
     /// `:politicas (:circuit-breaker ())` round-trips to a rendered
@@ -6071,7 +6071,7 @@ impl MeshPolicy {
     ///
     /// The `:politicas :circuit-breaker` slot carries the
     /// "per-Aplicacao consecutive-transient-failure trip declaration"
-    /// contract (MESH-COMPOSITION §III.2 #3) — the typed slot's
+    /// contract — the typed slot's
     /// `Option<CircuitBreaker>` accept-set (per-`:max-failures`
     /// zero-floor rejected through
     /// [`AplicacaoError::PolicyBreakerZeroFailures`], upper-bounded by
@@ -6093,7 +6093,7 @@ impl MeshPolicy {
     /// [`crate::render::require_positive_canonical_bounded_duration`],
     /// the future M4 per-Aplicacao Envoy reconciler materialization
     /// pass, the future per-`:contratos`-edge breaker override the
-    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    /// roadmap acknowledges).
     ///
     /// Prior to this lift the `.circuit_breaker` field was accessed
     /// inline at two sites — [`MeshPolicy::is_empty`]'s
@@ -6104,7 +6104,7 @@ impl MeshPolicy {
     /// the `:politicas :circuit-breaker` axis to a richer author
     /// surface — a per-`:contratos`-edge breaker override the operator
     /// pins through a future `:contratos :circuit-breaker` slot the
-    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges, a per-cluster
+    /// roadmap acknowledges, a per-cluster
     /// breaker-default overlay the M4 CR materializer resolves per-CR,
     /// a promotion of the plain `(max_failures, window)` scalar pair to
     /// a richer `{max_failures, window, base_ejection_time, max_ejection_percent}`
@@ -6138,7 +6138,7 @@ impl MeshPolicy {
     /// unlifted per-`:politicas` scalar-value axis (the composite-Copy
     /// `Option<CircuitBreaker>` arm). Named `circuit_breaker()` to
     /// match the storage field's name; the accessor's identity maps
-    /// onto the canonical MESH-COMPOSITION §III.2 vocabulary the slot's
+    /// onto the canonical vocabulary the slot's
     /// docstring already carries. Closes the last unlifted
     /// [`MeshPolicy`] accessor axis so every downstream per-`:politicas`
     /// reader now routes through a typed dispatch on the substrate
@@ -6173,20 +6173,20 @@ impl CircuitBreaker {
     ///
     /// The `:politicas :circuit-breaker :max-failures` axis carries the
     /// "consecutive-transient-failure trip threshold" contract
-    /// (MESH-COMPOSITION §III.2 #3) — the typed slot's `u32` accept-set
+    /// — the typed slot's `u32` accept-set
     /// (zero-floor rejected through
     /// [`AplicacaoError::PolicyBreakerZeroFailures`], upper-bounded by
     /// [`POLICY_BREAKER_MAX_FAILURES_MAX`]) maps onto the Envoy
     /// `outlier_detection.consecutive_5xx` per-cluster ejection-threshold
     /// scalar (equivalently the future `CiliumClusterwideEnvoyConfig`
-    /// per-`:politicas` overlay MESH-COMPOSITION §III.2 #3 acknowledges).
+    /// per-`:politicas` overlay the design acknowledges).
     /// Every downstream consumer that reads the trip threshold keys off
     /// this scalar (the [`AplicacaoSpec::validate_politicas`] zero-floor +
     /// cap bracket at caixa-core/src/aplicacao.rs:4022 that gates on the
     /// canonical `require_positive_bounded_u32` helper, the future M4
     /// per-Aplicacao Envoy config reconciler materialization pass, the
     /// future per-`:contratos`-edge breaker-override overlay the
-    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    /// roadmap acknowledges).
     ///
     /// Prior to this lift the `.max_failures` field was accessed inline
     /// at one production site — [`AplicacaoSpec::validate_politicas`]'s
@@ -6195,7 +6195,7 @@ impl CircuitBreaker {
     /// to the typed sub-struct axis. A future extension of the
     /// `:max-failures` axis to a richer author surface — a
     /// per-`:contratos`-edge breaker override the operator pins through a
-    /// future `:contratos :max-failures` slot the MESH-COMPOSITION §III.2
+    /// future `:contratos :max-failures` slot the
     /// #3 roadmap acknowledges, a per-cluster max-failures-default
     /// overlay the M4 CR materializer resolves per-CR, a promotion of the
     /// plain `u32` trip count to a richer
@@ -6232,7 +6232,7 @@ impl CircuitBreaker {
     /// respective per-mesh-slot-atom scalar-value axes, extended onto the
     /// per-sub-struct required-`u32` axis. Named `max_failures()` to
     /// match the storage field's name; the accessor's identity maps onto
-    /// the canonical MESH-COMPOSITION §III.2 vocabulary the slot's
+    /// the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn max_failures(&self) -> u32 {
@@ -6255,7 +6255,7 @@ impl CircuitBreaker {
     ///
     /// The `:politicas :circuit-breaker :window` axis carries the
     /// "consecutive-transient-failure rolling-observation interval"
-    /// contract (MESH-COMPOSITION §III.2 #3) — the typed slot's
+    /// contract — the typed slot's
     /// `Duration` accept-set (zero-floor rejected through
     /// [`AplicacaoError::PolicyBreakerZeroWindow`], sub-millisecond
     /// residue rejected through
@@ -6264,7 +6264,7 @@ impl CircuitBreaker {
     /// Envoy `outlier_detection.interval` per-cluster
     /// ejection-observation-interval scalar (equivalently the future
     /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-    /// MESH-COMPOSITION §III.2 #3 acknowledges). Every downstream
+    /// the design acknowledges). Every downstream
     /// consumer that reads the rolling-observation interval keys off
     /// this scalar (the [`AplicacaoSpec::validate_politicas`] zero-floor +
     /// integer-millisecond canonical-form + cap bracket at
@@ -6272,7 +6272,7 @@ impl CircuitBreaker {
     /// [`crate::render::require_positive_canonical_bounded_duration`]
     /// helper, the future M4 per-Aplicacao Envoy config reconciler
     /// materialization pass, the future per-`:contratos`-edge
-    /// breaker-override overlay the MESH-COMPOSITION §III.2 #3 roadmap
+    /// breaker-override overlay the roadmap
     /// acknowledges).
     ///
     /// Prior to this lift the `.window` field was accessed inline at
@@ -6282,7 +6282,7 @@ impl CircuitBreaker {
     /// time link back to the typed sub-struct axis. A future extension
     /// of the `:window` axis to a richer author surface — a
     /// per-`:contratos`-edge window override the operator pins through
-    /// a future `:contratos :window` slot the MESH-COMPOSITION §III.2
+    /// a future `:contratos :window` slot the
     /// #3 roadmap acknowledges, a per-cluster window-default overlay
     /// the M4 CR materializer resolves per-CR, a promotion of the plain
     /// `Duration` observation interval to a richer
@@ -6318,7 +6318,7 @@ impl CircuitBreaker {
     /// respective per-mesh-slot-atom scalar-value axes, extended onto
     /// the per-sub-struct required-`Duration` axis. Named `window()` to
     /// match the storage field's name; the accessor's identity maps onto
-    /// the canonical MESH-COMPOSITION §III.2 vocabulary the slot's
+    /// the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn window(&self) -> Duration {
@@ -6349,14 +6349,14 @@ impl RateLimit {
     /// scalar).
     ///
     /// The `:politicas :rate-limit` `:rate` axis carries the
-    /// "token-bucket capacity" contract (MESH-COMPOSITION §III.2 #3) —
+    /// "token-bucket capacity" contract —
     /// the typed slot's `u32` accept-set (zero-floor rejected through
     /// [`AplicacaoError::PolicyRateLimitZero`], upper-bounded by
     /// [`POLICY_RATE_LIMIT_MAX`]) maps onto the Envoy
     /// `local_rate_limit.token_bucket.max_tokens` per-cluster
     /// token-bucket-capacity scalar (equivalently the future
     /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-    /// MESH-COMPOSITION §III.2 #3 acknowledges). Every downstream
+    /// the design acknowledges). Every downstream
     /// consumer that reads the token-bucket capacity keys off this
     /// scalar (the [`AplicacaoSpec::validate_politicas`] zero-floor +
     /// cap bracket that gates on the canonical
@@ -6365,7 +6365,7 @@ impl RateLimit {
     /// emits the `<n>/<s|m|h>` author surface, the future M4
     /// per-Aplicacao Envoy config reconciler materialization pass, the
     /// future per-`:contratos`-edge rate-limit-override overlay the
-    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    /// roadmap acknowledges).
     ///
     /// Prior to this lift the `.rate` field was accessed inline at three
     /// production sites — [`AplicacaoSpec::validate_politicas`]'s
@@ -6377,7 +6377,7 @@ impl RateLimit {
     /// typed sub-struct axis. A future extension of the `:rate` axis
     /// to a richer author surface — a per-`:contratos`-edge rate
     /// override the operator pins through a future `:contratos :rate`
-    /// slot the MESH-COMPOSITION §III.2 #3 roadmap acknowledges, a
+    /// slot the roadmap acknowledges, a
     /// per-cluster rate-default overlay the M4 CR materializer resolves
     /// per-CR, a promotion of the plain `u32` token capacity to a
     /// richer `{max_tokens, tokens_per_fill}` tuple once Envoy's
@@ -6415,7 +6415,7 @@ impl RateLimit {
     /// [`CircuitBreaker::window`] (373957f) accessors carry on their
     /// respective per-mesh-slot-atom scalar-value axes. Named `rate()`
     /// to match the storage field's name; the accessor's identity maps
-    /// onto the canonical MESH-COMPOSITION §III.2 vocabulary the slot's
+    /// onto the canonical vocabulary the slot's
     /// docstring already carries.
     #[must_use]
     pub const fn rate(&self) -> u32 {
@@ -6437,7 +6437,7 @@ impl RateLimit {
     /// scalar).
     ///
     /// The `:politicas :rate-limit` `:window` axis carries the
-    /// "token-bucket refill period" contract (MESH-COMPOSITION §III.2 #3)
+    /// "token-bucket refill period" contract
     /// — the typed slot's `Duration` accept-set (constrained to the
     /// three canonical windows `{1s, 60s, 3600s}` the
     /// [`RATE_LIMIT_UNIT_TABLE`] lifts, rejected off-set through
@@ -6445,7 +6445,7 @@ impl RateLimit {
     /// onto the Envoy `local_rate_limit.token_bucket.fill_interval`
     /// per-cluster token-bucket-refill-period scalar (equivalently the
     /// future `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-    /// MESH-COMPOSITION §III.2 #3 acknowledges). Every downstream
+    /// the design acknowledges). Every downstream
     /// consumer that reads the token-bucket refill period keys off
     /// this scalar (the [`AplicacaoSpec::validate_politicas`]
     /// canonical-window gate that keys off
@@ -6455,7 +6455,7 @@ impl RateLimit {
     /// [`rate_limit_window_unit`] and non-canonical fallback via
     /// `.as_secs()`, the future M4 per-Aplicacao Envoy config
     /// reconciler materialization pass, the future per-`:contratos`-
-    /// edge rate-limit-override overlay the MESH-COMPOSITION §III.2 #3
+    /// edge rate-limit-override overlay the
     /// roadmap acknowledges).
     ///
     /// Prior to this lift the `.window` field was accessed inline at
@@ -6470,7 +6470,7 @@ impl RateLimit {
     /// back to the typed sub-struct axis. A future extension of the
     /// `:window` axis to a richer author surface — a per-`:contratos`-
     /// edge window override the operator pins through a future
-    /// `:contratos :window` slot the MESH-COMPOSITION §III.2 #3 roadmap
+    /// `:contratos :window` slot the roadmap
     /// acknowledges, a per-cluster window-default overlay the M4 CR
     /// materializer resolves per-CR, a promotion of the plain
     /// `Duration` refill period to a richer
@@ -6511,7 +6511,7 @@ impl RateLimit {
     /// [`Entrada::destination`] (6db982c) accessors carry on their
     /// respective per-mesh-slot-atom scalar-value axes. Named
     /// `window()` to match the storage field's name; the accessor's
-    /// identity maps onto the canonical MESH-COMPOSITION §III.2
+    /// identity maps onto the canonical
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub const fn window(&self) -> Duration {
@@ -6533,7 +6533,7 @@ impl RateLimit {
     /// consumers past validate (the codec's [`rate_limit_codec::render`]
     /// path, the future M4 per-Aplicacao Envoy config reconciler's
     /// materialization pass, the future per-`:contratos`-edge rate-limit-
-    /// override overlay the MESH-COMPOSITION §III.2 #3 roadmap
+    /// override overlay the roadmap
     /// acknowledges) that read the typed unit off a validated slot can
     /// pattern-match on the returned `Some` without re-checking
     /// canonicality at the consumer layer — the typed enum surface is
@@ -6601,7 +6601,7 @@ impl RateLimit {
     /// can now materialize a [`RateLimit`] on the M3 mesh-slot
     /// rate-limit primitive without ever touching the `Duration` axis
     /// directly. The canonical-window invariant
-    /// (MESH-COMPOSITION §III.2 #3, the three-arm
+    /// (the three-arm
     /// `{Second, Minute, Hour}` typed enum's `.window()` accept-set) is
     /// carried through the closed-set typed enum, not restated at the
     /// call site.
@@ -6673,7 +6673,7 @@ impl RateLimit {
 /// would silently split from the canonical-unit bijection on any future
 /// axis change (a `"d"` day suffix once Envoy's `rate_limit_action` grows
 /// daily-bucket support, a `"ms"` sub-second window once high-throughput
-/// per-edge policies come into scope per MESH-COMPOSITION §III.2 #3).
+/// per-edge policies come into scope).
 ///
 /// Peer of the sibling [`std::fmt::Display`] impl on [`RateLimitUnit`]
 /// (which routes through [`RateLimitUnit::as_suffix`]) on the same
@@ -7508,8 +7508,8 @@ impl TryFrom<String> for RateLimit {
 /// source of truth every consumer that emits or parses the `Second` arm's
 /// canonical author-surface suffix reads, closing the prior open-coded
 /// `"s"` inline string literal against a future rebrand (a hypothetical
-/// `"sec"` disambiguator once a peer `"ms"` sub-second arm lands per
-/// MESH-COMPOSITION §III.2 #3) that would otherwise silently split the
+/// `"sec"` disambiguator once a peer `"ms"` sub-second arm lands)
+/// that would otherwise silently split the
 /// emitter's byte-string from any peer consumer that hard-coded the
 /// pre-rebrand form. Same "one canonical lifted const per arm, every
 /// consumer routes through it" discipline the peer
@@ -7664,7 +7664,7 @@ impl RateLimitUnit {
     /// future arm addition (a `"d"` day suffix once Envoy's
     /// `rate_limit_action` grows daily-bucket support, a `"ms"`
     /// sub-second window once high-throughput per-edge policies come into
-    /// scope per MESH-COMPOSITION §III.2 #3 — both trajectory items the
+    /// scope — both trajectory items the
     /// sibling [`Self::window_from_suffix`] doc block already names)
     /// extends this roster as a single edit — paired with the
     /// [`Self::as_suffix`] match's compiler-checked exhaustiveness on the
@@ -7843,7 +7843,7 @@ impl RateLimitUnit {
     /// through. A future rate-limit-unit addition (a `"d"` day suffix
     /// once Envoy's `rate_limit_action` grows daily-bucket support, a
     /// `"ms"` sub-second window once high-throughput per-edge policies
-    /// come into scope per MESH-COMPOSITION §III.2 #3) is one new
+    /// come into scope) is one new
     /// variant plus one arm per method — the compiler enforces
     /// exhaustiveness on every consumer's `match self` arms and picks
     /// the new unit up by construction across all five projections.
@@ -7878,7 +7878,7 @@ impl std::fmt::Display for RateLimitUnit {
 /// bound (a [`std::process::Command::arg`] shell-out that composes the
 /// canonical suffix into an Envoy sidecar config-CLI's per-`:politicas`
 /// `--rate-limit-unit <s|m|h>` arg on the future
-/// `CiliumClusterwideEnvoyConfig` overlay MESH-COMPOSITION §III.2 #3
+/// `CiliumClusterwideEnvoyConfig` overlay
 /// names, a `tracing::field::Value::Str`-arm structured-log recorder
 /// on the future `app-operator`'s per-`:politicas :rate-limit`
 /// reconcile step, a [`std::collections::HashMap`] lookup keyed on
@@ -7986,7 +7986,7 @@ impl AsRef<str> for RateLimitUnit {
 /// so any future arm addition (a `"d"` day suffix once Envoy's
 /// `rate_limit_action` grows daily-bucket support, a `"ms"` sub-second
 /// window once high-throughput per-edge policies come into scope per
-/// MESH-COMPOSITION §III.2 #3 — both trajectory items the sibling
+/// both trajectory items the sibling
 /// [`RateLimitUnit::window_from_suffix`] doc block already names) grows
 /// the trait-idiomatic axis by construction — one caixa-core edit on
 /// [`RateLimitUnit::from_suffix`] extends both the method-named reverse
@@ -8068,7 +8068,7 @@ impl TryFrom<&str> for RateLimitUnit {
 /// is the single source of truth — every future arm addition (a `"d"`
 /// day suffix once Envoy's `rate_limit_action` grows daily-bucket
 /// support, a `"ms"` sub-second window once high-throughput per-edge
-/// policies come into scope per MESH-COMPOSITION §III.2 #3 — both
+/// policies come into scope — both
 /// trajectory items the sibling [`RateLimitUnit::window_from_suffix`]
 /// doc block already names) grows the trait-idiomatic forward axis by
 /// construction: one caixa-core edit on [`RateLimitUnit::as_suffix`]
@@ -9016,7 +9016,7 @@ impl From<&RateLimitUnit> for std::sync::Arc<str> {
 /// accept-set widening (a `"d"` day suffix once Envoy's
 /// `rate_limit_action` grows daily-bucket support, a `"ms"` sub-
 /// second window once high-throughput per-edge policies come into
-/// scope per MESH-COMPOSITION §III.2 #3 — both trajectory items the
+/// scope — both trajectory items the
 /// sibling [`RateLimitUnit::window_from_suffix`] doc block already
 /// names) reaches every parse path through one edit on the substrate-
 /// primitive [`RateLimitUnit::from_suffix`] accessor, not a
@@ -10145,7 +10145,7 @@ impl TryFrom<String> for RateLimitUnit {
 /// per-call deadline is structurally so long that no realistic
 /// synchronous-`:contratos` traversal can reach it, so the typed slot
 /// becomes a no-op carried on every emitted Envoy / Cilium L7 timeout
-/// overlay — the MESH-COMPOSITION §V CSE invariant "no infinite
+/// overlay — the CSE invariant "no infinite
 /// blocking" degenerates to a nominal-only contract on the
 /// synchronous-call path. Pairs with the [`POLICY_RETRIES_MAX`] cap on
 /// the sibling `:politicas :retries` axis and the
@@ -10172,7 +10172,7 @@ impl TryFrom<String> for RateLimitUnit {
 /// of truth — the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
 /// materializer's admission webhook and the caixa-mesh-side
 /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-/// (MESH-COMPOSITION §III.2 #3) read from one place. Same shape every
+/// read from one place. Same shape every
 /// other typed upper bound in this crate carries
 /// ([`POLICY_RETRIES_MAX`], [`POLICY_BREAKER_MAX_FAILURES_MAX`],
 /// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
@@ -10193,13 +10193,13 @@ pub const POLICY_TIMEOUT_MAX: Duration = Duration::from_secs(3600);
 /// serde / the codec — a structurally unbounded `u32` ceiling. The
 /// runtime substrate that consumes the value (Envoy's
 /// `retry_policy.num_retries`, the `CiliumClusterwideEnvoyConfig`
-/// per-`:politicas` overlay MESH-COMPOSITION §III.2 #3 names, AWS
+/// per-`:politicas` overlay the design names, AWS
 /// App Mesh's `gRPCRouteRetryPolicy.maxRetries` whose schema-side
 /// admission cap is 10) translates a four-billion-retry policy into a
 /// thundering-herd amplification vector on transient failure — the
 /// caller's one request fans out to `retries` server-side calls per
 /// edge per traversal, multiplying load by `(retries+1)^depth` across
-/// the synchronous-`:contratos` subgraph. The MESH-COMPOSITION §V CSE
+/// the synchronous-`:contratos` subgraph. The CSE
 /// invariant "no infinite blocking" pairs with a no-runaway-amplification
 /// invariant on the retry axis; both belong at the typed-slot layer.
 ///
@@ -10257,7 +10257,7 @@ pub const POLICY_RETRIES_MAX: u32 = 10;
 /// the bound has exactly one source of truth — the future M4
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
 /// webhook and the caixa-mesh-side `CiliumClusterwideEnvoyConfig`
-/// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) read from
+/// per-`:politicas` overlay read from
 /// one place. Same shape every other typed upper bound in this crate
 /// carries ([`POLICY_RETRIES_MAX`],
 /// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
@@ -10319,7 +10319,7 @@ pub const POLICY_BREAKER_MAX_FAILURES_MAX: u32 = 1000;
 /// of truth — the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
 /// materializer's admission webhook and the caixa-mesh-side
 /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-/// (MESH-COMPOSITION §III.2 #3) read from one place. Same shape every
+/// read from one place. Same shape every
 /// other typed upper bound in this crate carries
 /// ([`POLICY_TIMEOUT_MAX`], [`POLICY_RETRIES_MAX`],
 /// [`POLICY_BREAKER_MAX_FAILURES_MAX`],
@@ -10344,7 +10344,7 @@ pub const POLICY_BREAKER_WINDOW_MAX: Duration = Duration::from_secs(3600);
 /// ceiling. The runtime substrate consuming the value (Envoy's
 /// `local_rate_limit.token_bucket.max_tokens`, the future
 /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-/// MESH-COMPOSITION §III.2 #3 names) translates a four-billion-token
+/// the design names) translates a four-billion-token
 /// rate-limit into a no-op rate-limiter: the bucket capacity is
 /// structurally so high no realistic per-edge traffic shape can
 /// drain it, the limiter never trips, and the typed slot becomes a
@@ -10373,7 +10373,7 @@ pub const POLICY_BREAKER_WINDOW_MAX: Duration = Duration::from_secs(3600);
 /// has exactly one source of truth — the future M4
 /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
 /// webhook and the caixa-mesh-side `CiliumClusterwideEnvoyConfig`
-/// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) read from
+/// per-`:politicas` overlay read from
 /// one place. Same shape every other typed upper bound in this crate
 /// carries ([`POLICY_TIMEOUT_MAX`], [`POLICY_RETRIES_MAX`],
 /// [`POLICY_BREAKER_MAX_FAILURES_MAX`], [`POLICY_BREAKER_WINDOW_MAX`],
@@ -10554,7 +10554,7 @@ fn validate_placement_affinity(affinity: &str) -> Result<(), AplicacaoError> {
 /// edit.
 ///
 /// The `:shard-key` slot is the Akka-cluster-sharding `ExtractEntityId`
-/// axis (MESH-COMPOSITION §II.4) — a single-token entity-id extractor
+/// axis — a single-token entity-id extractor
 /// expression naming the message property to hash on. The realistic
 /// shapes in the wild (`tenantId` / `customerId` / `userId` — bare
 /// property name; `$tenantId` — Akka entity-id placeholder;
@@ -11265,7 +11265,7 @@ pub enum PlacementStrategy {
 /// Substrate-canonical M3-mesh-shaped per-`:placement :estrategia`
 /// distribution-strategy default for the `:placement :estrategia` axis —
 /// the [`PlacementStrategy::Replicated`] active-active-across-every-named-
-/// cluster arm (MESH-COMPOSITION §II.2), extracted as a typed `pub const`
+/// cluster arm, extracted as a typed `pub const`
 /// so every substrate-side consumer that resolves "what
 /// [`PlacementStrategy`] variant does an author-omitted `:placement
 /// :estrategia` slot degrade onto?" reaches for exactly one substrate-
@@ -11290,7 +11290,7 @@ pub enum PlacementStrategy {
 /// `:placement :estrategia` default (a widening to `Sharded` once the
 /// substrate discovers hash-keyed distribution as the more common
 /// production shape, a tightening to `SingleNode` for stateful Erlang/OTP
-/// distributed-app-takeover semantics MESH-COMPOSITION §II.1 already
+/// distributed-app-takeover semantics already
 /// names, a per-cluster overlay the operator pins through a future
 /// `:placement-overrides` slot) would have had to migrate a lifted
 /// discriminator on one path and open-coded discriminators on the peers
@@ -11309,9 +11309,9 @@ pub enum PlacementStrategy {
 /// `:placement :estrategia` override). The two alternatives the closed
 /// [`PlacementStrategy::ALL`] accept-set carries
 /// ([`PlacementStrategy::SingleNode`] — Erlang/OTP distributed-app
-/// takeover, MESH-COMPOSITION §II.1; [`PlacementStrategy::Sharded`] —
-/// Akka-style hash-keyed distribution across clusters,
-/// MESH-COMPOSITION §II.4) express deliberate takeover / hash-keyed
+/// takeover; [`PlacementStrategy::Sharded`] —
+/// Akka-style hash-keyed distribution across clusters)
+/// express deliberate takeover / hash-keyed
 /// postures an author declares explicitly, never a posture an omitted
 /// slot should silently assume.
 ///
@@ -11338,8 +11338,8 @@ impl Default for PlacementStrategy {
         // substrate-canonical [`PLACEMENT_ESTRATEGIA_DEFAULT`] typed
         // `pub const` rather than a raw `Self::Replicated` arm — one
         // source of truth for the M3-mesh-canonical active-active-
-        // across-every-named-cluster `:placement :estrategia` default
-        // (MESH-COMPOSITION §II.2), on the same substrate-primitive
+        // across-every-named-cluster `:placement :estrategia` default,
+        // on the same substrate-primitive
         // lift discipline the sibling M2 per-supervisor default set
         // ([`crate::supervisor::SUPERVISOR_ESTRATEGIA_DEFAULT`] +
         // paired halves) carries end-to-end. Pinned by
@@ -11354,7 +11354,7 @@ impl PlacementStrategy {
     /// strategy listing in its rejection body, a future `feira app
     /// placement --list` CLI-side surfacing of the accepted arm-set,
     /// any future round-trip fuzz harness). A future variant addition
-    /// (an `Anycast` mesh-anycast arm the MESH-COMPOSITION §II.5 hint
+    /// (an `Anycast` mesh-anycast arm the hint
     /// names as a trajectory item) extends this slice as a single edit
     /// and every consumer picks up the new entry by construction — the
     /// compiler-checked exhaustiveness on the sibling method `match`
@@ -11522,7 +11522,7 @@ impl PlacementStrategy {
     /// requires — and is the only strategy that permits — a non-empty
     /// `:shard-key` on the paired slot). Today the accept-set is the
     /// singleton `{Sharded}` — `Sharded` is the sole Akka-style
-    /// hash-keyed distribution arm (MESH-COMPOSITION §II.4) that keys off a
+    /// hash-keyed distribution arm that keys off a
     /// per-entity extractor expression; `SingleNode` (Erlang/OTP
     /// distributed-app takeover — §II.1) and `Replicated` (active-active
     /// across every named cluster) have no hash-keyed routing axis to
@@ -11623,7 +11623,7 @@ impl PlacementStrategy {
 // cross-slot-invariant per-arm predicate: the module-scope const-eval
 // assertions below trip at caixa-core build time (not test time) if a
 // future edit rewires the predicate's arm-set away from the singleton
-// `{Sharded}` accept-set MESH-COMPOSITION §II.4 pins. The
+// `{Sharded}` accept-set the design pins. The
 // [`tests::placement_strategy_requires_shard_key_partitions_the_arm_set`]
 // runtime pin covers the same truth-table with a more descriptive
 // diagnostic on failure; these const-eval items add a build-time failure
@@ -11810,7 +11810,7 @@ impl AsRef<str> for PlacementStrategy {
 /// The paired [`TryFrom<&str>`] impl reaches the same three-arm accept-
 /// set the [`PlacementStrategy::from_wire`] resolver dispatches through,
 /// so any future arm addition (an `Anycast` mesh-anycast arm the
-/// MESH-COMPOSITION §II.5 hint names as a trajectory item) grows the
+/// hint names as a trajectory item) grows the
 /// trait-idiomatic axis by construction — one caixa-core edit on
 /// [`PlacementStrategy::from_wire`] extends both the method-named reverse
 /// projection every existing consumer keys off and the trait-idiomatic
@@ -11956,7 +11956,7 @@ impl std::str::FromStr for PlacementStrategy {
 ///
 /// The paired [`PlacementStrategy::as_str`] accessor's three-arm emit-
 /// set is the single source of truth — every future arm addition (an
-/// `Anycast` mesh-anycast arm the MESH-COMPOSITION §II.5 hint names as
+/// `Anycast` mesh-anycast arm the hint names as
 /// a trajectory item, a hypothetical `WeightedShard` variant that
 /// carries a shard-key + per-cluster weight table under a promoted M5
 /// adaptive-placement engine) grows the trait-idiomatic forward axis
@@ -13960,7 +13960,7 @@ impl Placement {
     ///
     /// The `:placement :shard-key` slot carries the Akka-style
     /// cluster-sharding entity-id extractor expression
-    /// (MESH-COMPOSITION §II.4) — validated by
+    /// — validated by
     /// [`validate_placement_shard_key`] to be a non-empty printable-
     /// ASCII single-token reference (`tenantId`, `$tenantId`,
     /// `metadata.tenantId`, `${tenant}` — the canonical shapes the
@@ -14014,7 +14014,7 @@ impl Placement {
     /// sibling per-`:placement` `:affinity`, per-`:politicas`
     /// `:rate-limit` future lifts fold on. Named `shard_key()` to
     /// match the storage field's name; the accessor's identity name
-    /// maps onto the canonical MESH-COMPOSITION §II.4 vocabulary the
+    /// maps onto the canonical vocabulary the
     /// slot's docstring already carries.
     #[must_use]
     pub const fn shard_key(&self) -> Option<&str> {
@@ -14036,7 +14036,7 @@ impl Placement {
     /// biases the routing).
     ///
     /// The `:placement :affinity` slot carries the M3 Adaptive-
-    /// compression-weight bias hint (MESH-COMPOSITION §II.4) — validated
+    /// compression-weight bias hint — validated
     /// by [`validate_placement_affinity`] to be a DNS-1123 label
     /// (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`, 1..=63 bytes — the
     /// K8s-conformant label-selector shape every apiserver-side pod-
@@ -14058,7 +14058,7 @@ impl Placement {
     /// typed slot. A future extension of the `:placement :affinity`
     /// axis to a richer author surface — a per-cluster override the
     /// operator pins through a future `:placement :affinity-overrides`
-    /// slot the MESH-COMPOSITION §II.4 roadmap acknowledges, a per-
+    /// slot the roadmap acknowledges, a per-
     /// tenant hint alias table the M4 CR materializer resolves per-CR,
     /// a per-Aplicacao dynamic `:affinity` derivation the future
     /// adaptive placement engine computes from `:clusters` topology —
@@ -14082,7 +14082,7 @@ impl Placement {
     /// return accessor on the M3 mesh-slot family; closes the last
     /// un-lifted per-`:placement` `Option<String>` axis. Named
     /// `affinity()` to match the storage field's name; the accessor's
-    /// identity name maps onto the canonical MESH-COMPOSITION §II.4
+    /// identity name maps onto the canonical
     /// vocabulary the slot's docstring already carries.
     #[must_use]
     pub const fn affinity(&self) -> Option<&str> {
@@ -14101,7 +14101,7 @@ impl Placement {
     ///
     /// The `:placement :estrategia` slot carries the closed-set
     /// distribution-strategy discriminator (`SingleNode` — Erlang/OTP
-    /// distributed-app takeover semantics per MESH-COMPOSITION §II.1;
+    /// distributed-app takeover semantics;
     /// `Replicated` — active-active across every named cluster; `Sharded`
     /// — Akka-style hash-keyed entity distribution across the cluster pool
     /// per §II.4) that every downstream consumer of the Aplicacao's
@@ -14138,7 +14138,7 @@ impl Placement {
     /// expressed no compile-time link back to the typed slot. A future
     /// extension of the `:placement :estrategia` axis to a richer author
     /// surface (a per-cluster override the operator pins through a future
-    /// `:placement :estrategia-overrides` slot the MESH-COMPOSITION §II.4
+    /// `:placement :estrategia-overrides` slot the
     /// roadmap acknowledges, a per-tenant strategy-alias table the M4 CR
     /// materializer resolves per-CR, a per-Aplicacao dynamic strategy
     /// derivation the future adaptive placement engine computes from
@@ -14171,7 +14171,7 @@ impl Placement {
     /// per-`:placement` reader now routes through a typed dispatch on
     /// the substrate primitive. Named `estrategia()` to match the storage
     /// field's name; the accessor's identity name maps onto the
-    /// canonical MESH-COMPOSITION §II.4 vocabulary the slot's docstring
+    /// canonical vocabulary the slot's docstring
     /// already carries. Declared `pub const fn` (matching the peer M3
     /// mesh-slot `Copy`-return accessor family — [`MeshPolicy::timeout`]
     /// / [`MeshPolicy::retries`] / [`MeshPolicy::mtls_required`] /
@@ -14210,7 +14210,7 @@ impl Placement {
     /// [`PlacementStrategy::{SingleNode, Replicated, Sharded}`] accept-set
     /// requires a non-empty list (`SingleNode` / `Replicated` use the
     /// list as hosting / takeover candidates per Erlang/OTP distributed-
-    /// app convention, MESH-COMPOSITION §II.1; `Sharded` uses it as the
+    /// app convention; `Sharded` uses it as the
     /// shard pool per Akka cluster-sharding convention, §II.4), so the
     /// `.is_empty()` probe is the shared pre-condition every
     /// [`AplicacaoSpec::validate_placement`] arm heads on.
@@ -14247,7 +14247,7 @@ impl Placement {
     /// future extension of the `:placement :clusters` axis to a richer
     /// author surface (a per-tenant cluster-pool overlay the operator
     /// pins through a future `:placement :clusters-overrides` slot the
-    /// MESH-COMPOSITION §V cross-cluster-federation roadmap
+    /// cross-cluster-federation roadmap
     /// acknowledges, a per-Aplicacao dynamic cluster-pool derivation
     /// the future M5 adaptive-placement engine computes from
     /// `:affinity` weights + live cluster-topology probes, a promotion
@@ -14322,7 +14322,7 @@ impl Default for Placement {
             // [`PlacementStrategy::default`] route — one source of truth
             // for the M3-mesh-canonical [`PlacementStrategy::Replicated`]
             // active-active-across-every-named-cluster arm
-            // (MESH-COMPOSITION §II.2) that both this struct-literal
+            // that both this struct-literal
             // altitude and the sibling [`Default for PlacementStrategy`]
             // impl already key off through the same substrate primitive.
             // Pinned by
@@ -14636,7 +14636,7 @@ impl Entrada {
     /// [`MeshPolicy::timeout`] (c0110f1, bdfb399, 7073d0f) on the peer
     /// M3 mesh-slot Copy-scalar axis. Named `port()` to match the
     /// storage field's name; the accessor's identity name maps onto the
-    /// canonical MESH-COMPOSITION §II.5 vocabulary the slot's docstring
+    /// canonical vocabulary the slot's docstring
     /// already carries. Declared `pub const fn` (matching the peer M3
     /// mesh-slot `Copy`-return accessor family — [`MeshPolicy::timeout`]
     /// / [`MeshPolicy::retries`] / [`MeshPolicy::mtls_required`] /
@@ -14894,7 +14894,7 @@ impl AplicacaoSpec {
     ///
     /// The `:membros` slot carries the M3 mesh-slot per-Aplicacao
     /// member list — the load-bearing identity of the application graph
-    /// (MESH-COMPOSITION §III.1: the graph nodes are a set, not a
+    /// (the graph nodes are a set, not a
     /// multiset). Every per-`:membros` entry pairs a `:caixa` member-
     /// caixa name (through the lifted [`Membro::nome`] (4a32abf)
     /// accessor) with a `:versao` semver-requirement string (through
@@ -14933,7 +14933,7 @@ impl AplicacaoSpec {
     /// back to the typed slot. A future extension of the `:membros`
     /// axis to a richer author surface (a per-cluster member-set
     /// overlay the operator pins through a future
-    /// `:membros-overrides` slot the MESH-COMPOSITION §V federation
+    /// `:membros-overrides` slot the federation
     /// roadmap acknowledges, a per-tenant member-alias table the M4
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer resolves per-
     /// CR at admission time, a per-Aplicacao dynamic member-set
@@ -14979,7 +14979,7 @@ impl AplicacaoSpec {
     /// storage field's name verbatim and the tatara-lisp author-
     /// surface term (`:membros`) the field's own docstring already
     /// carries; the accessor's identity maps onto the canonical
-    /// MESH-COMPOSITION §III.1 vocabulary the slot's docstring already
+    /// vocabulary the slot's docstring already
     /// reaches for. Returns `&[Membro]` (not `&Vec<Membro>`) because
     /// every downstream consumer of the member list treats it as a
     /// read-only sequence — the slice-view is the narrowest borrow
@@ -15004,7 +15004,7 @@ impl AplicacaoSpec {
     /// The `:contratos` slot carries the M3 mesh-slot per-Aplicacao
     /// WIT-typed edge list — the load-bearing set of directed edges
     /// on the application graph whose nodes are the `:membros` entries
-    /// (MESH-COMPOSITION §III.1: the graph edges are a set, not a
+    /// (the graph edges are a set, not a
     /// multiset; the `(:de, :para, :wit, :endpoint, :subject, :slot)`
     /// six-tuple is the edge identity every downstream duplicate gate
     /// keys off). Every per-`:contratos` entry pairs a `:de` source-
@@ -15049,7 +15049,7 @@ impl AplicacaoSpec {
     /// compile-time link back to the typed slot. A future extension
     /// of the `:contratos` axis to a richer author surface (a
     /// per-cluster contract overlay the operator pins through a
-    /// future `:contratos-overrides` slot the MESH-COMPOSITION §V
+    /// future `:contratos-overrides` slot the
     /// federation roadmap acknowledges, a per-tenant edge-policy
     /// table the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
     /// materializer resolves per-CR at admission time, a per-edge
@@ -15127,7 +15127,7 @@ impl AplicacaoSpec {
     /// The `:politicas` slot carries the M3 mesh-slot per-Aplicacao
     /// mesh-policy composite — the load-bearing container of every
     /// mesh-level operational-policy axis every downstream mesh-artifact
-    /// emitter fans on (MESH-COMPOSITION §III.2 #3: the per-Aplicacao
+    /// emitter fans on (the per-Aplicacao
     /// mesh-policy overlay is the single typed surface a
     /// `CiliumClusterwideEnvoyConfig` per-`:politicas` fan-out reads
     /// from). Every per-`:politicas` axis threads through a lifted
@@ -15217,7 +15217,7 @@ impl AplicacaoSpec {
     /// Named `politicas()` to match the storage field's name verbatim
     /// and the tatara-lisp author-surface term (`:politicas`) the
     /// field's own docstring already carries; the accessor's identity
-    /// maps onto the canonical MESH-COMPOSITION §III.2 vocabulary the
+    /// maps onto the canonical vocabulary the
     /// slot's docstring already reaches for. Returns `&MeshPolicy`
     /// (not the owning composite by copy or clone) because every
     /// downstream consumer of the mesh-policy composite treats it as a
@@ -15241,7 +15241,7 @@ impl AplicacaoSpec {
     /// The `:placement` slot carries the M3 mesh-slot per-Aplicacao
     /// distribution composite — the load-bearing container of every
     /// where-does-this-Aplicacao-run axis every downstream cluster-artifact
-    /// emitter fans on (MESH-COMPOSITION §II.1 for the `SingleNode` /
+    /// emitter fans on (for the `SingleNode` /
     /// `Replicated` Erlang/OTP distributed-app takeover axes, §II.4 for the
     /// `Sharded` Akka-cluster-sharding axis, §III.1 for the `:clusters`
     /// hosting-pool identity, §V for the `M3-Adaptive`-compression
@@ -15283,7 +15283,7 @@ impl AplicacaoSpec {
     /// back to the typed slot at the [`AplicacaoSpec`] altitude. A future
     /// extension of the `:placement` outer axis to a richer author surface
     /// (a per-cluster placement overlay the operator pins through a
-    /// future `:placement-overrides` slot the MESH-COMPOSITION §V
+    /// future `:placement-overrides` slot the
     /// federation roadmap acknowledges, a per-tenant placement-alias
     /// table the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer
     /// resolves per-CR at admission time, a per-Aplicacao dynamic
@@ -15333,7 +15333,7 @@ impl AplicacaoSpec {
     /// every M3 mesh-slot axis. Named `placement()` to match the storage
     /// field's name verbatim and the tatara-lisp author-surface term
     /// (`:placement`) the field's own docstring already carries; the
-    /// accessor's identity maps onto the canonical MESH-COMPOSITION §II
+    /// accessor's identity maps onto the canonical
     /// vocabulary the slot's docstring already reaches for. Returns
     /// `&Placement` (not the owning composite by copy or clone) because
     /// every downstream consumer of the placement composite treats it as
@@ -15412,7 +15412,7 @@ impl AplicacaoSpec {
     /// multi-`:entrada` list the M4 CR materializer resolves per-CR
     /// at admission time so an Aplicacao can expose a public-web +
     /// admin-web pair, a per-cluster `:entrada-overrides` slot the
-    /// MESH-COMPOSITION §V federation roadmap acknowledges so an
+    /// federation roadmap acknowledges so an
     /// operator can pin a per-cluster hostname override without
     /// re-authoring the `caixa.lisp`, a promotion of the plain
     /// `Option<Entrada>` to a richer `{single, multi}` partition once
@@ -15459,7 +15459,7 @@ impl AplicacaoSpec {
     /// Named `entrada()` to match the storage field's name verbatim
     /// and the tatara-lisp author-surface term (`:entrada`) the
     /// field's own docstring already carries; the accessor's
-    /// identity maps onto the canonical MESH-COMPOSITION §III.4
+    /// identity maps onto the canonical
     /// vocabulary the slot's docstring already reaches for. Returns
     /// `Option<&Entrada>` (not the owning composite by copy or
     /// clone) because every downstream consumer of the entrada
@@ -15483,13 +15483,13 @@ impl AplicacaoSpec {
     /// Validate the typed shape:
     ///   - `:membros` is non-empty; every entry has a non-empty `:caixa`
     ///     and a non-empty `:versao`; no two entries share the same
-    ///     `:caixa` (MESH-COMPOSITION §III.1 — the graph nodes are a set,
+    ///     `:caixa` (the graph nodes are a set,
     ///     not a multiset)
     ///   - every `:contratos` :de + :para must be in `:membros`
     ///   - no `:contratos` edge is a self-edge (`:de == :para`) — a
     ///     contract is an inter-Servico edge, so a Servico contracting
     ///     with itself is a build error under every WIT shape
-    ///     (MESH-COMPOSITION §III.1)
+    ///     
     ///   - no two `:contratos` entries agree on
     ///     `(de, para, wit, endpoint, subject, slot)` — the typed-graph
     ///     edges are a set, not a multiset (peer of the `:membros` /
@@ -15498,20 +15498,20 @@ impl AplicacaoSpec {
     ///   - `:placement Sharded` must declare `:shard-key` (non-empty);
     ///     `:placement Replicated`/`SingleNode` must NOT declare
     ///     `:shard-key` — only the hash-keyed Akka-cluster-sharding axis
-    ///     consumes it (MESH-COMPOSITION §II.4), and the typed partition
+    ///     consumes it, and the typed partition
     ///     between strategy and shard-key is symmetric: every validated
     ///     `Placement` has `shard_key.is_some()` iff `estrategia ==
     ///     Sharded`
     ///   - every `:placement` strategy must declare ≥1 `:clusters` entry —
     ///     `Replicated`/`SingleNode` need hosting clusters, `Sharded` needs
-    ///     the shard pool (MESH-COMPOSITION §III.1)
+    ///     the shard pool
     ///   - every `:clusters` entry is non-empty and unique
     ///   - `:placement :affinity`, when set, is non-empty
     ///   - the synchronous-`:contratos` subgraph is acyclic
-    ///     (MESH-COMPOSITION §III.3)
+    ///     
     ///   - every declared `:politicas` value is operationally meaningful
     ///     (zero timeout, zero retries, zero breaker thresholds, zero rate
-    ///     limit are all build errors — MESH-COMPOSITION §V CSE invariants;
+    ///     limit are all build errors — CSE invariants;
     ///     omit the field instead to express "no policy on this axis")
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         self.validate_membros()?;
@@ -15520,14 +15520,14 @@ impl AplicacaoSpec {
         // slot into one substrate primitive: the per-entry cascade (shape
         // + membership + self-loop + `:wit` emptiness + WIT-shape ↔
         // target + whole-edge dedup) and the cross-edge sync-cycle axis
-        // ([`AplicacaoSpec::detect_sync_cycles`], MESH-COMPOSITION §III.3
+        // ([`AplicacaoSpec::detect_sync_cycles`]
         // — pub-sub edges excluded, "acyclic by construction"). Same
         // fold-per-axis-plus-cross-axis discipline the sibling
         // [`AplicacaoSpec::validate_politicas`] per-slot gate carries via
         // [`MeshPolicy::validate`] (f03a154 / 90a6f87), extended here
         // onto `:contratos` so every future consumer of the slot (the M4
         // admission webhook re-checking `:contratos` after a per-edge
-        // patch, the per-edge policy resolver MESH-COMPOSITION §III.2 #3
+        // patch, the per-edge policy resolver
         // acknowledges) reaches *both* structural axes through one call.
         self.validate_contratos()?;
 
@@ -15546,7 +15546,7 @@ impl AplicacaoSpec {
     /// Three per-Aplicacao axes carry a Servico-name *reference* rather
     /// than a Servico-name *declaration*: `:contratos :de`, `:contratos
     /// :para`, and `:entrada :para`. Each must resolve to a declared
-    /// `:membros :caixa` (MESH-COMPOSITION §III.1 — the typed edges and
+    /// `:membros :caixa` (the typed edges and
     /// the external gateway both address graph nodes, so a reference to
     /// a node the graph does not contain is a build error). All three
     /// resolve against *this* set, so the set's construction is the one
@@ -15562,7 +15562,7 @@ impl AplicacaoSpec {
     /// projection. Every future consumer on the same axis (the M4
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
     /// reference resolver, the per-`:contratos`-edge `:politicas`
-    /// override MESH-COMPOSITION §III.2 #3 acknowledges — which
+    /// override the design acknowledges — which
     /// resolves an edge's endpoints against the same membership set
     /// before it can key a per-edge policy off them) inherits the
     /// projection through the same call, so a future rebrand of the
@@ -15583,8 +15583,8 @@ impl AplicacaoSpec {
     /// identity key, or close a synchronous-edge cycle in the
     /// resulting typed graph.
     ///
-    /// The `:contratos` slot is the typed inter-Servico edge set
-    /// (MESH-COMPOSITION §III.1): each entry is a WIT-typed directed
+    /// The `:contratos` slot is the typed inter-Servico edge set:
+    /// each entry is a WIT-typed directed
     /// edge whose `:de` / `:para` reference two distinct members and
     /// whose `:wit` picks the payload shape the paired L4/L7 renderer
     /// (caixa-mesh's per-`(:de, :para)` `CiliumNetworkPolicy` +
@@ -15592,7 +15592,7 @@ impl AplicacaoSpec {
     ///
     /// Two structural axes on the slot are folded into this per-slot
     /// gate: the per-entry axis (six per-edge arms, listed below) and
-    /// the cross-edge synchronous-cycle axis (MESH-COMPOSITION §III.3,
+    /// the cross-edge synchronous-cycle axis (
     /// dispatched to [`AplicacaoSpec::detect_sync_cycles`] after the
     /// per-entry cascade). Same
     /// per-axis-plus-cross-axis-fold-into-one-per-slot-gate discipline
@@ -15630,7 +15630,7 @@ impl AplicacaoSpec {
     ///   - synchronous-edge cycle detection via
     ///     [`AplicacaoSpec::detect_sync_cycles`] (iterative DFS with
     ///     three-coloring over the sync-only subgraph, pub-sub edges
-    ///     skipped per MESH-COMPOSITION §III.3 —
+    ///     skipped —
     ///     [`AplicacaoError::ContratoCycle`]). Runs *after* the
     ///     per-entry cascade so a per-entry defect surfaces through its
     ///     narrower shape/membership/dedup arm before the cross-edge
@@ -15656,7 +15656,7 @@ impl AplicacaoSpec {
     /// re-checking `:contratos` after a per-`(:de, :para)` edge patch
     /// without re-walking `:membros` / `:entrada` / `:placement` /
     /// `:politicas`, or the M4 per-edge policy resolver
-    /// MESH-COMPOSITION §III.2 #3 acknowledges — which resolves an
+    /// the design acknowledges — which resolves an
     /// effective per-edge [`MeshPolicy`] and must re-check the edge's
     /// own identity closure *and* the sync-cycle invariant before it
     /// can key a per-edge override off the endpoint tuple) reaches
@@ -15706,7 +15706,7 @@ impl AplicacaoSpec {
             // consumer of the endpoint-resolution axis (this per-slot
             // gate at build time, the M4 admission webhook re-checking
             // one edge after a per-`(:de, :para)` patch, the per-edge
-            // `:politicas` override MESH-COMPOSITION §III.2 #3
+            // `:politicas` override
             // acknowledges) reaches the axis through one call rather
             // than re-inlining the twin `if !names.contains(...)`
             // cascade. `:de` fires before `:para` inside the primitive,
@@ -15714,7 +15714,7 @@ impl AplicacaoSpec {
             // pre-lift inline cascade.
             c.require_endpoints_in(&names)?;
             // A `:contratos` entry is an *inter*-Servico contract
-            // (MESH-COMPOSITION §III.1 — "Servico A calls Servico B"): a
+            // ("Servico A calls Servico B"): a
             // typed edge between two distinct graph nodes. An edge whose
             // `:de` equals its `:para` is a Servico contracting with
             // itself — a degenerate edge under every WIT shape. Firing
@@ -15787,8 +15787,8 @@ impl AplicacaoSpec {
     /// structurally malformed, or reference a Servico outside the
     /// graph.
     ///
-    /// The `:entrada` slot is the Aplicacao's single external ingress
-    /// (MESH-COMPOSITION §III.1): `:host` + `:port` become a K8s
+    /// The `:entrada` slot is the Aplicacao's single external ingress:
+    /// `:host` + `:port` become a K8s
     /// Gateway API v1 `Listener`, `:paths` become the paired
     /// `HTTPRoute`'s `matches[].path.value` entries, and `:para` names
     /// the member the route forwards to. Omitting the slot entirely is
@@ -15938,7 +15938,7 @@ impl AplicacaoSpec {
             // HTTPRoute `matches[].path.value`. The Gateway API rejects
             // values that don't start with `/` for `type: PathPrefix`,
             // and an empty value is meaningless. Surface those as build
-            // errors (MESH-COMPOSITION §III.3) rather than apply-time
+            // errors rather than apply-time
             // failures. Empty `:paths` itself is fine — caixa-mesh
             // falls back to a single `/` catch-all.
             let mut seen = std::collections::HashSet::new();
@@ -15994,7 +15994,7 @@ impl AplicacaoSpec {
     }
 
     /// Reject `:membros` values that are operationally meaningless. The
-    /// `:membros` slot is the graph node set (MESH-COMPOSITION §III.1):
+    /// `:membros` slot is the graph node set:
     /// every entry names a Servico that participates in the Aplicacao,
     /// and the rendered programs.yaml fan-out emits one entry per
     /// `:membros`. Three authoring footguns are closed here:
@@ -16088,7 +16088,7 @@ impl AplicacaoSpec {
     /// carries no meaning, so downstream renderers either skip it
     /// silently (cluster-fanout drops the empty entry, no diagnostic)
     /// or apply it literally and fail at admission time. Lifting both
-    /// to build errors mirrors MESH-COMPOSITION §III.3's "placement
+    /// to build errors mirrors "placement
     /// violation is a build error" promise.
     ///
     /// `:shard-key` and `:estrategia` are typed-partitioned: the slot
@@ -16246,7 +16246,7 @@ impl AplicacaoSpec {
                 Some(k) => validate_placement_shard_key(k)?,
             },
             // `:shard-key` is the Akka-cluster-sharding axis
-            // (MESH-COMPOSITION §II.4) — hash-keyed entity distribution
+            // — hash-keyed entity distribution
             // across the cluster pool. `Replicated` (active-active across
             // every named cluster) and `SingleNode` (Erlang/OTP
             // distributed-app takeover/failover, §II.1) have no hash-keyed
@@ -16301,7 +16301,7 @@ impl AplicacaoSpec {
     ///
     ///   - re-interpreted as "infinite" by downstream proxies (Envoy's
     ///     `RouteAction.timeout = 0s` disables the timeout entirely),
-    ///     directly contradicting MESH-COMPOSITION §V CSE invariant
+    ///     directly contradicting CSE invariant
     ///     "every Aplicacao declares :politicas :timeout (no infinite
     ///     blocking)", or
     ///   - a renderer footgun (a 0-failure circuit breaker trips on the
@@ -16324,7 +16324,7 @@ impl AplicacaoSpec {
         // every future [`MeshPolicy`] consumer (the future M4
         // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
         // admission webhook, the per-`:contratos`-edge `:politicas`
-        // override MESH-COMPOSITION §III.2 #3 acknowledges — the last
+        // override the design acknowledges — the last
         // of which resolves an *effective* per-edge [`MeshPolicy`] and
         // must emit *the same* diagnostic on the same input as `feira
         // build`) reaches through the same substrate-primitive dispatch
@@ -16363,7 +16363,7 @@ impl AplicacaoSpec {
     /// sync-cycle) reach every consumer through one call. Kept
     /// standalone (rather than inlined) so consumers that want only the
     /// cross-edge axis (the M4 per-edge policy resolver
-    /// MESH-COMPOSITION §III.2 #3 acknowledges, whose per-edge patch
+    /// the design acknowledges, whose per-edge patch
     /// mutates one `:contratos` entry and needs to re-probe *just* the
     /// cycle invariant against the post-patch adjacency without
     /// re-running the per-entry shape/membership/dedup cascade the
@@ -16592,7 +16592,7 @@ impl AplicacaoSpec {
 ///
 /// An Aplicacao that lists itself as a member is a degenerate self-edge in
 /// the typed graph — the application graph is a DAG rooted at the Aplicacao
-/// (MESH-COMPOSITION §III.1 names `:membros` as the set of *constituent*
+/// (the design names `:membros` as the set of *constituent*
 /// Servicos that compose the app; an Aplicacao is never its own constituent),
 /// and the lacre pipeline's closure-resolution would otherwise be handed a
 /// node that is its own parent: a one-node cycle it either rejects far from
@@ -16807,7 +16807,7 @@ pub enum AplicacaoError {
     #[error(
         ":placement Sharded :shard-key {shard_key:?} is not a valid Akka-style \
          entity-id extractor expression: {reason} (the future M4 Akka-style \
-         cluster-sharding reconciler — MESH-COMPOSITION §II.4 — reads `:shard-key` \
+         cluster-sharding reconciler — reads `:shard-key` \
          as a single-token property reference and hashes the extracted entity ID \
          to compute shard placement; use a printable-ASCII extractor expression \
          like `\"tenantId\"`, `\"$tenantId\"`, `\"metadata.tenantId\"`, or \
@@ -16919,7 +16919,7 @@ pub enum AplicacaoError {
     },
     #[error(
         "synchronous :contratos form a cycle ({}); break with a NATS pub-sub edge \
-         or an event-sourced indirection (MESH-COMPOSITION §III.3)",
+         or an event-sourced indirection",
         cycle.join(" → ")
     )]
     ContratoCycle { cycle: Vec<String> },
@@ -16937,7 +16937,7 @@ pub enum AplicacaoError {
     },
     #[error(
         ":politicas :timeout must be > 0 (Envoy interprets a zero timeout as `infinite`, \
-         contradicting MESH-COMPOSITION §V `no infinite blocking`); omit :timeout to \
+         contradicting `no infinite blocking`); omit :timeout to \
          express `no per-call deadline on this axis`"
     )]
     PolicyTimeoutZero,
@@ -17024,7 +17024,7 @@ pub enum AplicacaoError {
          (POLICY_TIMEOUT_MAX = 1h = 3600s) — a value above this cap turns the typed \
          per-call deadline into a nominal-only contract (Envoy / Cilium L7 timeout \
          overlays carry a deadline so long no realistic synchronous-:contratos \
-         traversal can reach it), and the MESH-COMPOSITION §V \"no infinite blocking\" \
+         traversal can reach it), and the \"no infinite blocking\" \
          CSE invariant degenerates to enforcement only at the per-Servico \
          `:limits :wall-clock` layer — far above the per-edge granularity the typed \
          `:politicas :timeout` slot is meant to express. Pin a value in 1ms..=1h \
@@ -17841,7 +17841,7 @@ impl AplicacaoError {
     /// sync-cycle invariant after a fleet-local overlay adds or removes
     /// a synchronous edge, a future `feira validate --contratos`
     /// per-caixa admission verb re-running the cross-edge cycle detector
-    /// on demand, the M4 per-edge policy resolver MESH-COMPOSITION §III.2
+    /// on demand, the M4 per-edge policy resolver
     /// #3 acknowledges (whose per-edge patch mutates one `:contratos`
     /// entry and needs to re-probe *just* the cycle invariant against
     /// the post-patch adjacency), a future authoring-surface widening
@@ -17884,7 +17884,7 @@ impl AplicacaoError {
     /// (not spelled out as a bare `Duration` parameter) so a future
     /// widening of the `:circuit-breaker :window` axis — a
     /// per-`:contratos`-edge `:circuit-breaker :window` override the
-    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges, a promotion of
+    /// roadmap acknowledges, a promotion of
     /// the plain [`Duration`] window to a richer per-status-class
     /// window tuple once Envoy's `outlier_detection.interval` peers
     /// come into scope — reaches the diagnostic through one accessor
@@ -17926,7 +17926,7 @@ impl AplicacaoError {
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
     /// webhook re-checking a per-tenant `:politicas` overlay's
     /// window-vs-timeout cross-axis invariant after a cluster-local
-    /// `:politicas` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// `:politicas` override the roadmap
     /// acknowledges resolves an *effective* per-edge [`MeshPolicy`], a
     /// future per-`:contratos`-edge `:politicas` override the M4 CR
     /// resolver projects, an M4 per-cluster `:politicas`-cap resolver
@@ -17970,7 +17970,7 @@ impl AplicacaoError {
     /// [`CircuitBreaker::max_failures`], [`CircuitBreaker::window`]) rather
     /// than spelled out as bare `u32` / [`Duration`] parameters so a future
     /// widening of either axis — a per-`:contratos`-edge `:rate-limit` or
-    /// `:circuit-breaker` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// `:circuit-breaker` override the roadmap
     /// acknowledges, a promotion of the plain scalar rate to a richer
     /// per-status-class token bucket once Envoy's per-descriptor
     /// `local_rate_limit` peers come into scope — reaches the diagnostic
@@ -18000,7 +18000,7 @@ impl AplicacaoError {
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
     /// webhook re-checking a per-tenant `:politicas` overlay's
     /// starve-under-rate-limit cross-axis invariant after a cluster-local
-    /// `:politicas` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// `:politicas` override the roadmap
     /// acknowledges resolves an *effective* per-edge [`MeshPolicy`], a
     /// future per-`:contratos`-edge `:politicas` override the M4 CR
     /// resolver projects, an M4 per-cluster `:politicas`-cap resolver
@@ -18051,7 +18051,7 @@ impl AplicacaoError {
     /// `u32` parameter) so a future widening of the
     /// `:circuit-breaker :max-failures` axis — a
     /// per-`:contratos`-edge `:circuit-breaker :max-failures` override
-    /// the MESH-COMPOSITION §III.2 #3 roadmap acknowledges, a per-tenant
+    /// the roadmap acknowledges, a per-tenant
     /// `:max-failures` ceiling the M4 per-cluster `:politicas`-cap
     /// resolver projects, a promotion of the plain `u32` count to a
     /// richer per-status-class trip counter once Envoy's
@@ -18095,7 +18095,7 @@ impl AplicacaoError {
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
     /// webhook re-checking a per-tenant `:politicas` overlay's
     /// retries-vs-max-failures cross-axis invariant after a
-    /// cluster-local `:politicas` override the MESH-COMPOSITION §III.2
+    /// cluster-local `:politicas` override the
     /// #3 roadmap acknowledges resolves an *effective* per-edge
     /// [`MeshPolicy`], a future per-`:contratos`-edge `:politicas`
     /// override the M4 CR resolver projects, an M4 per-cluster
@@ -18142,7 +18142,7 @@ impl AplicacaoError {
     /// The `rate` slot is projected through [`RateLimit::rate`] (not
     /// spelled out as a bare `u32` parameter) so a future widening of
     /// the `:rate-limit` `:rate` axis — a per-`:contratos`-edge
-    /// `:rate-limit` `:rate` override the MESH-COMPOSITION §III.2 #3
+    /// `:rate-limit` `:rate` override the
     /// roadmap acknowledges, a per-tenant `:rate` ceiling the M4
     /// per-cluster `:politicas`-cap resolver projects, a promotion of
     /// the plain `u32` token capacity to a richer
@@ -18186,7 +18186,7 @@ impl AplicacaoError {
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
     /// webhook re-checking a per-tenant `:politicas` overlay's
     /// retries-vs-rate cross-axis invariant after a cluster-local
-    /// `:politicas` override the MESH-COMPOSITION §III.2 #3 roadmap
+    /// `:politicas` override the roadmap
     /// acknowledges resolves an *effective* per-edge [`MeshPolicy`], a
     /// future per-`:contratos`-edge `:politicas` override the M4 CR
     /// resolver projects, an M4 per-cluster `:politicas`-cap resolver
@@ -18693,7 +18693,7 @@ aplicacao_caixa_only_ctors! {
 // three-line struct-literal against a caller-side `&str` / `&String`, the
 // exact "same block re-inlined at every consumer" shape the PRIME DIRECTIVE
 // names as a bug. Every one of the compile-time guarantees in
-// MESH-COMPOSITION.md §III.3 (a `:entrada :paths` entry whose value doesn't
+// (a `:entrada :paths` entry whose value doesn't
 // start with `/` becomes a caixa-build error, not a Gateway API webhook
 // rejection at `kubectl apply` time; a duplicated `:entrada :paths` entry
 // becomes a caixa-build error, not a silent last-writer-wins render) now
@@ -18808,7 +18808,7 @@ aplicacao_path_only_ctors! {
 // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission webhook re-
 // checking each `:politicas` axis against a cluster-local `:politicas` cap
 // overlay, a future per-`:contratos`-edge `:politicas` override the
-// MESH-COMPOSITION §III.2 #3 roadmap acknowledges resolving an *effective*
+// roadmap acknowledges resolving an *effective*
 // per-edge [`MeshPolicy`] and emitting the same per-axis diagnostic on the
 // same input as `feira build`, an M4 per-cluster `:politicas`-cap resolver
 // projecting a per-tenant per-axis ceiling into the same diagnostic shape,
@@ -27897,7 +27897,7 @@ mod tests {
 
     #[test]
     fn pubsub_edge_breaks_cycle_per_mesh_composition_iii_3() {
-        // MESH-COMPOSITION §III.3 explicitly says NATS pub-sub is
+        // explicitly says NATS pub-sub is
         // "acyclic by construction" — so a cycle whose closing edge
         // is pub-sub should NOT raise ContratoCycle.
         let mut s = three_member_spec();
@@ -28132,7 +28132,7 @@ mod tests {
         // duplicates — they're distinct typed edges differing on the
         // payload axis. The duplicate-gate must not over-match here,
         // since the cart-calls-catalog-on-multiple-paths shape is the
-        // canonical multi-endpoint pattern (MESH-COMPOSITION §III.1
+        // canonical multi-endpoint pattern (
         // example: cart calls catalog at /products/:id, payment at
         // /charge — same shape extends to two paths on one para).
         let mut s = three_member_spec();
@@ -28394,7 +28394,7 @@ mod tests {
         // [`WitTarget::PUBSUB_FIELD_NAME`] /
         // [`WitTarget::STORE_FIELD_NAME`] const at every site — the
         // canonical "same shape, written N times" duplication
-        // THEORY.md §I.3.5 promotes to a build-time concern. A future
+        // promotes to a build-time concern. A future
         // [`WitTarget`] variant addition (`Rest`/`Grpc` split of
         // [`WitTarget::Http`], `Queue`-shaped peer of
         // [`WitTarget::Store`]) is one match-arm edit at
@@ -31292,7 +31292,7 @@ mod tests {
         // the enum variant — three sites that expressed no compile-time
         // link back to the closed-set typed dispatch a future fourth
         // `:placement :estrategia` (e.g. an `Anycast` mesh-anycast arm
-        // for the future MESH-COMPOSITION §II.5 hint the roadmap names)
+        // for the future hint the roadmap names)
         // would have to thread through in lockstep or one fixture would
         // silently disagree with the others on which arms consume the
         // `:shard-key` axis. Peer of the sibling
@@ -31360,13 +31360,13 @@ mod tests {
         // [`Placement::shard_key`] axis under
         // [`AplicacaoSpec::validate_placement`]'s `Sharded` ↔ non-`Sharded`
         // partition. Today the accept-set is the singleton `{Sharded}` —
-        // `Sharded` is the Akka-style hash-keyed distribution arm
-        // (MESH-COMPOSITION §II.4), `SingleNode` (Erlang/OTP takeover —
+        // `Sharded` is the Akka-style hash-keyed distribution arm,
+        // `SingleNode` (Erlang/OTP takeover —
         // §II.1) and `Replicated` (active-active) refuse the axis through
         // [`AplicacaoError::ShardKeyOnNonSharded`].
         //
         // Pins the per-arm truth-table so a future arm addition (an
-        // `Anycast` mesh-anycast arm the MESH-COMPOSITION §II.5 hint the
+        // `Anycast` mesh-anycast arm the hint the
         // roadmap names, a `WeightedShard` promotion the future M5
         // adaptive-placement engine acknowledges) that landed a variant
         // without extending this predicate's arm-set would surface as a
@@ -31402,7 +31402,7 @@ mod tests {
                 "PlacementStrategy::{variant:?}.requires_shard_key() must \
                  be {expected} (the substrate-canonical cross-slot invariant \
                  on the :placement :shard-key axis; today `Sharded` is the \
-                 singleton consuming arm — MESH-COMPOSITION §II.4)",
+                 singleton consuming arm)",
             );
         }
     }
@@ -31771,7 +31771,7 @@ mod tests {
         // reverse-projection consumers that iterate the accept-set for
         // a "did you mean" hint) reads through this slice, so a future
         // variant addition (an `Anycast` mesh-anycast arm the
-        // MESH-COMPOSITION §II.5 hint names as a trajectory item) that
+        // hint names as a trajectory item) that
         // grows the enum but forgets to grow [`Self::ALL`] silently
         // truncates every downstream consumer's accept-set at the same
         // pre-addition boundary — this pin fails at caixa-core build
@@ -37379,7 +37379,7 @@ mod tests {
         // suffix emit's drift. A future arm addition (a `"d"` day suffix
         // once Envoy's `rate_limit_action` grows daily-bucket support, a
         // `"ms"` sub-second window once high-throughput per-edge policies
-        // come into scope per MESH-COMPOSITION §III.2 #3 — both
+        // come into scope — both
         // trajectory items the sibling
         // [`RateLimitUnit::window_from_suffix`] doc block already names)
         // extends [`RateLimitUnit::ALL`] as a single edit and this pin
@@ -37691,7 +37691,7 @@ mod tests {
         // [`RateLimit::from_canonical(rate, unit)`]: for every closed-set
         // [`RateLimitUnit::ALL`] arm and every scalar-`rate` witness in a
         // representative sweep (`{1, 100, u32::MAX}` — canonical minimum,
-        // author-surface exemplar carried in `MESH-COMPOSITION.md` §III.2,
+        // author-surface exemplar carried in the design,
         // and the upper-bound saturation witness at `u32::MAX` that pins
         // the accessor is `u32`-transparent), the round-trip
         // `from_canonical(rate, unit).canonical_unit() == Some(unit)` and
@@ -47243,8 +47243,8 @@ mod tests {
     #[test]
     fn validate_no_self_membership_accepts_distinct_membros() {
         // Positive control: distinct member names (including a member
-        // that is itself an Aplicacao — recursive composition is valid,
-        // MESH-COMPOSITION §V) pass the gate.
+        // that is itself an Aplicacao — recursive composition is valid)
+        // pass the gate.
         let membros = vec![membro("catalog", "^0.1"), membro("sub-aplicacao", "^0.1")];
         validate_no_self_membership(&membros, "checkout").unwrap();
     }
@@ -48925,7 +48925,7 @@ mod tests {
     fn wit_contract_is_self_loop_returns_false_on_distinct_endpoints_across_permutations() {
         // The complement pin: [`WitContract::is_self_loop`] must return
         // `false` on every well-shaped inter-Servico contract (the
-        // author-intended `:contratos` shape MESH-COMPOSITION §III.1
+        // author-intended `:contratos` shape
         // names — "Servico A calls Servico B" between two distinct
         // graph nodes). Pins against a future silent detour that
         // inverted the predicate (an accidental `!= ` swap for `==`
@@ -50149,7 +50149,7 @@ mod tests {
         // operator authors on one consumer without the other, or an
         // accidental hint-family collapse (`low-latency` → `latency`
         // that dropped the qualifier prefix). Four values sweep the
-        // MESH-COMPOSITION §II.4 vocabulary the accept-set names — the
+        // vocabulary the accept-set names — the
         // canonical adaptive-compression-weight biases the future M4
         // placement engine reads.
         for hint in [
@@ -50457,7 +50457,7 @@ mod tests {
         // [`AplicacaoError::PlacementWithoutClusters`] refusal keys off),
         // the singleton slice (the minimal `SingleNode`-shape cohort),
         // and multi-entry cohorts (the peer `Replicated` / `Sharded`
-        // multi-cluster shapes MESH-COMPOSITION §II.1 / §II.4 declare).
+        // multi-cluster shapes declare).
         //
         // Pins against a future silent detour that returned
         // `&Vec<String>` (which would type-check but leak the storage-
@@ -50620,7 +50620,7 @@ mod tests {
         // validation sentinel every [`AplicacaoError::NoMembros`]
         // refusal keys off), the singleton slice (the minimal one-
         // Servico Aplicacao shape), and multi-entry cohorts (the peer
-        // multi-Servico shapes MESH-COMPOSITION §III.1 declares as the
+        // multi-Servico shapes the design declares as the
         // load-bearing identity of the application graph).
         //
         // Pins against a future silent detour that returned
@@ -50799,7 +50799,7 @@ mod tests {
         // an Aplicacao whose members exchange no typed edges renders
         // through), the singleton slice (the minimal one-edge Aplicacao
         // shape), and multi-entry cohorts (the peer multi-edge shapes
-        // MESH-COMPOSITION §III.1 declares as the load-bearing edge-set
+        // the design declares as the load-bearing edge-set
         // of the application graph).
         //
         // Pins against a future silent detour that returned
@@ -51030,7 +51030,7 @@ mod tests {
         // impl but silently break every downstream caller that relied
         // on the reference sharing the composite's backing identity), a
         // reference to an operator-resolved overlay (the future
-        // per-cluster `:politicas-overrides` slot MESH-COMPOSITION §V
+        // per-cluster `:politicas-overrides` slot
         // acknowledges — its resolution must land at exactly this
         // accessor body, not silently divert the raw slot away from a
         // second consumer), or an axis-shuffled projection (a future
@@ -51416,7 +51416,7 @@ mod tests {
         // impl but silently break every downstream caller that relied on
         // the reference sharing the composite's backing identity), a
         // reference to an operator-resolved overlay (the future per-
-        // cluster `:placement-overrides` slot MESH-COMPOSITION §V
+        // cluster `:placement-overrides` slot
         // acknowledges — its resolution must land at exactly this
         // accessor body, not silently divert the raw slot away from a
         // second consumer), or an axis-shuffled projection (a future
@@ -51657,7 +51657,7 @@ mod tests {
         // relied on the reference sharing the composite's backing
         // identity), a reference to an operator-resolved overlay
         // (the future per-cluster `:entrada-overrides` slot the
-        // MESH-COMPOSITION §V federation roadmap acknowledges — its
+        // federation roadmap acknowledges — its
         // resolution must land at exactly this accessor body, not
         // silently divert the raw slot away from a second consumer),
         // a `None` → `Some(Entrada::default)` cluster-default
@@ -52025,7 +52025,7 @@ mod tests {
         // input, so a future consumer that re-validates the one slot
         // (the M4 admission webhook re-checking `:contratos` after a
         // per-`(:de, :para)` edge patch, the per-`:contratos`-edge
-        // `:politicas` override MESH-COMPOSITION §III.2 #3
+        // `:politicas` override
         // acknowledges — which resolves an effective per-edge
         // [`MeshPolicy`] and must re-check the edge's identity closure
         // before it can key a per-edge override off the endpoint
@@ -53020,7 +53020,7 @@ mod tests {
         // read the breaker's rolling-window duration as a per-call
         // deadline), a `None → Some(Duration::MAX)` cluster-default
         // projection (which would silently re-introduce the
-        // MESH-COMPOSITION §V CSE-invariant-violating "no infinite
+        // CSE-invariant-violating "no infinite
         // blocking" arm at the emit boundary), or a bounds-collapsing
         // accessor that clamped the return through `POLICY_TIMEOUT_MAX`
         // (the `AplicacaoSpec::validate` gate owns the bounds; the
@@ -55435,7 +55435,7 @@ mod tests {
     #[test]
     fn placement_estrategia_default_pins_m3_canonical_value() {
         // Pin [`PLACEMENT_ESTRATEGIA_DEFAULT`] at
-        // [`PlacementStrategy::Replicated`] — MESH-COMPOSITION §II.2's
+        // [`PlacementStrategy::Replicated`] —
         // active-active-across-every-named-cluster arm, the closest
         // canonical M3 production reference the substrate carries and
         // the arm the caixa-mesh `programs.yaml` fan-out already keys off
@@ -55445,7 +55445,7 @@ mod tests {
         // substrate discovers hash-keyed distribution as the more
         // common production shape, a tightening to `SingleNode` for
         // stateful Erlang/OTP distributed-app-takeover semantics
-        // MESH-COMPOSITION §II.1 names, a per-cluster overlay the
+        // the design names, a per-cluster overlay the
         // operator pins through a future `:placement-overrides` slot)
         // as a deliberate test edit, not a silent contract migration.
         // Peer of the sibling M2 per-supervisor value pins
@@ -56205,7 +56205,7 @@ mod tests {
         // pinned so a silent `.destination()` swap at the ctor body
         // surfaces here rather than at a downstream diagnostic mis-
         // attribution far from the self-loop diagnostic's owner
-        // (the `caller` side per MESH-COMPOSITION §III.1's typed edge
+        // (the `caller` side per typed edge
         // direction).
         //
         // Deliberately constructs a non-self-loop pair (`"cart" →

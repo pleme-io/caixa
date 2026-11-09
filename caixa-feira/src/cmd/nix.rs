@@ -120,7 +120,7 @@ mod tests {
         // Byte-equal today (`Caixa::nome` is `&self.nome`, `Caixa::versao`
         // is `&self.versao`, `Caixa::kind` returns `self.kind` by copy);
         // the pin catches any future accessor extension (SemVer-2 build-
-        // metadata canonicalization the CAIXA-SDLC §I SemVer-2 pin
+        // metadata canonicalization the SemVer-2 pin
         // acknowledges, per-edition pre-release-tag overlay dispatched
         // through the sibling universal-axis scalars) whose `feira nix`
         // flake-emit would silently split the `pname` / `version` fields
@@ -170,7 +170,7 @@ mod tests {
         // `render_flake` must resolve to a non-empty comment string for
         // every [`CaixaKind`] variant, so a future kind addition (a
         // seventh variant beyond Biblioteca/Binario/Servico/Supervisor/
-        // Aplicacao/Acao — the CAIXA-SDLC §I six-kind roster the
+        // Aplicacao/Acao — the six-kind roster the
         // CLAUDE.md ★★ table pins) that lands without extending the
         // match arm surfaces at `cargo test` here rather than at
         // `feira nix` runtime with a phantom-branch fallback.

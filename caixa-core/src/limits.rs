@@ -125,7 +125,7 @@ pub const LIMITS_MEMORY_WASM32_PAGE_BYTES: u64 = 64 * 1024;
 /// the typed per-process deadline into a nominal-only contract: the
 /// wasm-engine's epoch-deadline cancellation reaches for a `Duration`
 /// so long no realistic synchronous wasm call can hit it, the runaway-
-/// process invariant the MESH-COMPOSITION §V "no infinite blocking" CSE
+/// process invariant the "no infinite blocking" CSE
 /// invariant pins at the per-Servico layer degenerates to a runtime,
 /// not build-time, contract. Pairs with the
 /// [`crate::POLICY_TIMEOUT_MAX`] cap on the sibling `:politicas :timeout`
@@ -1025,7 +1025,7 @@ pub enum LimitsError {
          fractional / decimal-shaped magnitude (`\"1.5KiB\"`, `\"1.0MiB\"`, `\"0.5GiB\"`, \
          `\"+1024\"`) round-trips through `render_byte_size` to a *different* canonical \
          form (`\"1536\"`, `\"1MiB\"`, `\"512MiB\"`, `\"1KiB\"`) on first serialize — \
-         breaking the THEORY.md §V.2.7 render-determinism contract every typed slot \
+         breaking the render-determinism contract every typed slot \
          carries. Pick an integer magnitude in the unit that divides cleanly (write \
          `\"1536\"` instead of `\"1.5KiB\"`; `\"512MiB\"` instead of `\"0.5GiB\"`)"
     )]
@@ -1266,7 +1266,7 @@ pub enum LimitsError {
          (LIMITS_WALL_CLOCK_MAX = 1h = 3600s) — a value above this cap turns the typed \
          per-call deadline into a nominal-only contract (the wasm-engine's epoch-deadline \
          cancellation reaches for a `Duration` so long no realistic synchronous wasm call \
-         can hit it), and the MESH-COMPOSITION §V \"no infinite blocking\" CSE invariant \
+         can hit it), and the \"no infinite blocking\" CSE invariant \
          degenerates to enforcement only at the per-Servico cgroup / Kubernetes \
          activeDeadlineSeconds layer — far above the per-call granularity the typed \
          `:limits :wall-clock` slot is meant to express. Pin a value in 1ms..=1h \
@@ -1368,7 +1368,7 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // a *different* canonical string on the next emit (`"1.5KiB"` →
     // 1536 → `"1536"`, `"1.0MiB"` → 1048576 → `"1MiB"`, `"0.5GiB"` →
     // 536870912 → `"512MiB"`, `"+1024"` → 1024 → `"1KiB"`) — breaking
-    // the THEORY.md §V.2.7 render-determinism contract every typed slot
+    // the render-determinism contract every typed slot
     // carries.
     //
     // Strict canonical form: every byte of the magnitude is an ASCII

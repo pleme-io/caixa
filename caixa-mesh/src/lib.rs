@@ -139,7 +139,7 @@ pub(crate) fn programs_for_aplicacao_from_spec(
     // to scope each entry by its parent Aplicacao's distribution
     // strategy.
     //
-    // Wiring it through turns MESH-COMPOSITION §III.4 ("the
+    // Wiring it through turns ("the
     // application graph is a compile-time typed value … rendered
     // through to whatever runtime layer makes sense") + §V
     // ("cross-cluster federation: `:placement :replicated
@@ -1599,7 +1599,7 @@ pub use caixa_core::KUBE_KEY_SPEC;
 /// drift root cause. And splitting the controller across renderers
 /// would silently reintroduce the two-data-planes drift the mesh
 /// composition "one identity layer, one data plane" invariant
-/// (MESH-COMPOSITION.md §V) closes — the emitted `Gateway`'s
+/// closes — the emitted `Gateway`'s
 /// controller and the sibling `CiliumNetworkPolicy`'s controller
 /// would land in distinct reconcilers, and the intra-mesh
 /// identity-aware policy stops matching the ingress-side traffic at
@@ -2283,7 +2283,7 @@ pub use caixa_core::KUBE_PROTOCOL_TCP;
 /// CRD schema validator drops as unrecognized at apply time — the
 /// Gateway API implementation's per-rule request-dispatch loop would
 /// silently no-op the per-rule wall-clock deadline (the "no infinite
-/// blocking" guarantee MESH-COMPOSITION.md §V mandates for every
+/// blocking" guarantee the design mandates for every
 /// rendered per-`:politicas` mesh-composition edge silently regresses
 /// to the pre-overlay unbounded-request semantic, and every external
 /// `:entrada` flow the route was authored to bound by the typed
@@ -2348,7 +2348,7 @@ pub use caixa_core::GATEWAY_API_KEY_TIMEOUTS;
 /// apiserver-side Gateway API CRD schema validator drops as unrecognized
 /// at apply time — the Gateway API implementation's per-rule request-
 /// dispatch loop would silently no-op the per-rule retry budget (the
-/// "no infinite retrying without bound" guarantee MESH-COMPOSITION.md §V
+/// "no infinite retrying without bound" guarantee
 /// mandates for every rendered per-`:politicas` mesh-composition edge
 /// silently regresses to the pre-overlay unbounded-retry semantic, and
 /// every external `:entrada` flow the route was authored to cap by the
@@ -2372,7 +2372,7 @@ pub use caixa_core::GATEWAY_API_KEY_TIMEOUTS;
 /// Gateway-API-CRD-body-axis surface — closes the per-Gateway-API-
 /// `HTTPRoute`-per-rule `:politicas` overlay axis re-export pair
 /// (`timeouts` for `:politicas :timeout`, `retry` for `:politicas
-/// :retries`) both MESH-COMPOSITION.md §V "no infinite blocking / no
+/// :retries`) both "no infinite blocking / no
 /// infinite retrying" guarantees rest on. Peer to the sibling load-
 /// bearing K8s-CR-schema-axis re-exports every downstream apiserver-
 /// side CRD-schema-validator navigates the same per-rule retry-policy
@@ -2416,7 +2416,7 @@ pub use caixa_core::GATEWAY_API_KEY_RETRY;
 /// implementation's per-rule request-dispatch loop would silently
 /// parse the retry sub-shape as an empty `HTTPRouteRetry` with the
 /// typed `u32` attempt count discarded (the "no infinite retrying
-/// without bound" guarantee MESH-COMPOSITION.md §V mandates for
+/// without bound" guarantee the design mandates for
 /// every rendered per-`:politicas` mesh-composition edge silently
 /// regresses to the pre-overlay unbounded-retry semantic, and every
 /// external `:entrada` flow the route was authored to cap by the
@@ -2484,7 +2484,7 @@ pub use caixa_core::GATEWAY_API_KEY_ATTEMPTS;
 /// implementation's per-rule request-dispatch loop would silently parse
 /// the timeouts sub-shape as an empty `HTTPRouteTimeouts` with the
 /// typed `Duration` request-deadline discarded (the "no infinite
-/// blocking" guarantee MESH-COMPOSITION.md §V mandates for every
+/// blocking" guarantee the design mandates for every
 /// rendered per-`:politicas` mesh-composition edge silently regresses
 /// to the pre-overlay unbounded-blocking semantic, and every external
 /// `:entrada` flow the route was authored to cap by the typed
@@ -2508,7 +2508,7 @@ pub use caixa_core::GATEWAY_API_KEY_ATTEMPTS;
 /// `HTTPRoute.spec.rules[].timeouts.request`, sibling to the parent-
 /// leaf pair (`retry` container + `attempts` leaf) closed in the
 /// immediately-preceding [`GATEWAY_API_KEY_ATTEMPTS`] lift (e2e136b).
-/// Both MESH-COMPOSITION.md §V "no infinite blocking / no infinite
+/// Both "no infinite blocking / no infinite
 /// retrying" guarantees now rest on typed lifts at both container-axis
 /// and leaf-scalar-axis nesting levels. Peer to the sibling load-
 /// bearing K8s-CR-schema-axis re-exports every downstream apiserver-
@@ -2587,7 +2587,7 @@ pub(crate) fn cilium_network_policies_from_spec(
     // serde and read non-empty for `MeshPolicy::is_empty`, but no
     // caixa-side renderer surfaced it as a cluster artifact. Wiring
     // it through the CiliumNetworkPolicy renderer turns the
-    // MESH-COMPOSITION §V CSE invariant ("every Aplicacao declares
+    // CSE invariant ("every Aplicacao declares
     // `:politicas :mtls-required t` — no plaintext intra-mesh") from
     // a validate-time gate into a runtime-enforced contract: Cilium's
     // identity-aware data plane refuses every ingress edge that
@@ -2634,7 +2634,7 @@ pub(crate) fn cilium_network_policies_from_spec(
     // Fan typed edges into per-`(:de, :para)` groups — the policy
     // identity axis. A `BTreeMap` keyed by the pair gives deterministic
     // policy order independent of `:contratos` declaration order
-    // (THEORY.md §V.2.7 render determinism), and collapses the
+    // (render determinism), and collapses the
     // validate-permitted "same caller-callee pair, different payload"
     // contratos (cart→catalog at `/products` and `/search`) onto the
     // single CiliumNetworkPolicy whose `metadata.name` they'd otherwise
@@ -3011,7 +3011,7 @@ pub(crate) fn gateway_routes_from_spec(
     // eBPF-identity data plane the sibling `cilium_network_policies`
     // renderer emits `CiliumNetworkPolicy` documents against, closing
     // the mesh-composition "one identity layer, one data plane"
-    // invariant (MESH-COMPOSITION.md §V). The controller-choice value
+    // invariant. The controller-choice value
     // threads through the lifted [`DEFAULT_GATEWAY_CLASS_NAME`]
     // re-export so a future substrate-side controller migration
     // (Cilium → Envoy Gateway / Istio Gateway / any per-edition
@@ -3155,7 +3155,7 @@ pub(crate) fn gateway_routes_from_spec(
     // was inert at the cluster boundary — `AplicacaoSpec::validate`
     // refused zero values (PolicyTimeoutZero), but a non-zero timeout
     // never reached an emitted artifact. Wiring it through the
-    // HTTPRoute renderer turns the MESH-COMPOSITION §V CSE invariant
+    // HTTPRoute renderer turns the CSE invariant
     // ("every Aplicacao declares :politicas :timeout — no infinite
     // blocking") from a validate-time gate into a runtime-enforced
     // contract: the cluster's apiserver-side Gateway API parser will
@@ -3182,7 +3182,7 @@ pub(crate) fn gateway_routes_from_spec(
     // [`AplicacaoSpec::validate`] (which refuses zero via
     // [`AplicacaoError::PolicyRetriesZero`]) — a non-zero attempt
     // count never reached an emitted artifact. Wiring it through the
-    // HTTPRoute renderer turns the MESH-COMPOSITION §V CSE invariant
+    // HTTPRoute renderer turns the CSE invariant
     // ("no infinite retrying without bound") into a runtime-enforced
     // contract: the cluster's data plane (Envoy / Cilium L7) caps
     // the retry budget at exactly the typed slot's value, so a
@@ -3206,7 +3206,7 @@ pub(crate) fn gateway_routes_from_spec(
     // than an open-coded `.retries` field access, so a future
     // extension of the axis (a per-`:contratos`-edge override overlay
     // the operator pins through a `:contratos :retries` slot the
-    // MESH-COMPOSITION §III.2 #2 roadmap acknowledges, a per-cluster
+    // roadmap acknowledges, a per-cluster
     // retry-default overlay the M4 CR materializer resolves per-CR,
     // a promotion of the plain `u32` attempt-count to a richer
     // `{attempts, codes, backoff}` sub-block once the Gateway API
@@ -4542,7 +4542,7 @@ mod tests {
         // apply time (the Gateway API implementation's per-rule
         // request-dispatch loop silently no-ops the per-rule wall-
         // clock deadline, the "no infinite blocking" guarantee
-        // MESH-COMPOSITION.md §V mandates for every rendered per-
+        // the design mandates for every rendered per-
         // `:politicas` mesh-composition edge silently regresses to the
         // pre-overlay unbounded-request semantic). Bridge-arm peer to
         // [`kube_key_protocol_re_export_points_at_caixa_core_canonical`]
@@ -4611,7 +4611,7 @@ mod tests {
         // validator drops as unrecognized at apply time (the Gateway
         // API implementation's per-rule request-dispatch loop silently
         // no-ops the per-rule retry budget, the "no infinite retrying
-        // without bound" guarantee MESH-COMPOSITION.md §V mandates for
+        // without bound" guarantee the design mandates for
         // every rendered per-`:politicas` mesh-composition edge
         // silently regresses to the pre-overlay unbounded-retry
         // semantic). Bridge-arm peer to
@@ -4624,7 +4624,7 @@ mod tests {
         // — closes the per-Gateway-API-`HTTPRoute`-per-rule `:politicas`
         // overlay axis re-export pair (`timeouts` for `:politicas
         // :timeout`, `retry` for `:politicas :retries`) both
-        // MESH-COMPOSITION.md §V "no infinite blocking / no infinite
+        // "no infinite blocking / no infinite
         // retrying" guarantees rest on.
         caixa_core::assert_str_reexport_identity(
             "GATEWAY_API_KEY_RETRY",
@@ -4679,7 +4679,7 @@ mod tests {
         // from as unrecognized at apply time (the Gateway API
         // implementation's per-rule request-dispatch loop parses the
         // retry sub-shape as an empty `HTTPRouteRetry`, the "no
-        // infinite retrying without bound" guarantee MESH-COMPOSITION.md
+        // infinite retrying without bound" guarantee
         // §V mandates for every rendered per-`:politicas` mesh-
         // composition edge silently regresses to the pre-overlay
         // unbounded-retry semantic). Bridge-arm peer to
@@ -4691,7 +4691,7 @@ mod tests {
         // + [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
         // + [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
         // — closes the parent-leaf axis pair (`retry` container +
-        // `attempts` leaf) both MESH-COMPOSITION.md §V "no infinite
+        // `attempts` leaf) both "no infinite
         // retrying" guarantees rest on, one nesting level deeper than
         // the parent per-rule retry-policy container axis (`retry`).
         caixa_core::assert_str_reexport_identity(
@@ -4749,7 +4749,7 @@ mod tests {
         // unrecognized at apply time (the Gateway API implementation's
         // per-rule request-dispatch loop parses the timeouts sub-shape
         // as an empty `HTTPRouteTimeouts`, the "no infinite blocking"
-        // guarantee MESH-COMPOSITION.md §V mandates for every rendered
+        // guarantee the design mandates for every rendered
         // per-`:politicas` mesh-composition edge silently regresses to
         // the pre-overlay unbounded-blocking semantic). Bridge-arm peer
         // to
@@ -4762,7 +4762,7 @@ mod tests {
         // + [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
         // + [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
         // — closes the second parent-leaf axis pair (`timeouts`
-        // container + `request` leaf) both MESH-COMPOSITION.md §V "no
+        // container + `request` leaf) both "no
         // infinite blocking / no infinite retrying" guarantees rest
         // on, sibling to the parent-leaf pair (`retry` container +
         // `attempts` leaf) closed in the immediately-preceding
@@ -5884,7 +5884,7 @@ mod tests {
         // splitting the Gateway controller across renderers would
         // silently reintroduce the two-data-planes drift the mesh
         // composition "one identity layer, one data plane" invariant
-        // (MESH-COMPOSITION.md §V) closes — the emitted `Gateway`'s
+        // closes — the emitted `Gateway`'s
         // controller and the sibling `CiliumNetworkPolicy`'s eBPF
         // reconciler would land in distinct data planes, and the
         // intra-mesh identity-aware policy would stop matching the
@@ -6536,7 +6536,7 @@ mod tests {
         // verbatim) but would silently split the emit-side write from
         // any future substrate-side rewrite the accessor grows (a
         // per-cluster alias table, an M4 namespace-qualified rewrite,
-        // the `:membros :nome-suffix` overlay MESH-COMPOSITION §III.2
+        // the `:membros :nome-suffix` overlay
         // acknowledges). Asserted against the accessor byte-for-byte,
         // per-membro, in declaration order — a mutation of the emit
         // site back to `.caixa.clone()` still passes this pin *today*
@@ -6618,7 +6618,7 @@ mod tests {
         // accessor grows (a per-cluster alias table the operator pins
         // through a future `:placement`-scoped slot, an M4 namespace-
         // qualified rewrite the CR materializer applies per-CR, the
-        // future `:nome-suffix` overlay the MESH-COMPOSITION §III.2
+        // future `:nome-suffix` overlay the
         // roadmap acknowledges). Asserted against the accessor byte-
         // for-byte, per-entry — a mutation of the emit site back to
         // `.nome.clone()` still passes this pin *today* (nome() is
@@ -6667,7 +6667,7 @@ mod tests {
         // the peer per-CNP `String`-carry site. A future extension of
         // the accessor to a richer author surface (a per-cluster alias
         // table, an M4 namespace-qualified rewrite, the future
-        // `:nome-suffix` overlay MESH-COMPOSITION §III.2 acknowledges)
+        // `:nome-suffix` overlay the design acknowledges)
         // that landed on the accessor but not on this label would have
         // silently split the parent-Aplicacao identity between two
         // consumers — the operator's `kubectl -n tatara-system get cnp
@@ -7366,7 +7366,7 @@ mod tests {
         // through. Pin both the key spelling and the value to guard
         // against future rename / placement-engine semantic drift —
         // the `affinity:` value flows into the M3 Adaptive compression
-        // weighting (MESH-COMPOSITION §V) and the wasm-operator's pod
+        // weighting and the wasm-operator's pod
         // affinity overlay.
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
@@ -7418,7 +7418,7 @@ mod tests {
         // ShardedKeyEmpty arm). Pin that the typed slot's value
         // round-trips through to `placement.shardKey` under the
         // canonical camelCase key — the future Akka-style cluster-
-        // sharding reconciler (MESH-COMPOSITION §II.4) keys off this
+        // sharding reconciler keys off this
         // exact spelling to compute hash-based entity placement.
         let mut c = aplicacao_caixa();
         if let Some(p) = c.placement.as_mut() {
@@ -7504,7 +7504,7 @@ mod tests {
         // `app-operator` reconciler's per-Aplicacao takeover dispatch,
         // the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
         // materializer's admission-time typed-enum bind, the M3
-        // Adaptive compression weighting per MESH-COMPOSITION.md §V).
+        // Adaptive compression weighting).
         // Peer with the [`programs_entry_placement_uses_lifted_canonical_key`]
         // canonical-literal pin on the sibling per-entry overlay-key
         // surface — that pin anchors the top-level `placement:` byte,
@@ -7570,8 +7570,8 @@ mod tests {
         // .Values.cluster` filter, the future `app-operator` reconciler's
         // per-Aplicacao cluster-set dispatch, the future
         // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-
-        // time typed-list bind, the M3 Adaptive per-cluster weighting per
-        // MESH-COMPOSITION.md §V). Peer with the
+        // time typed-list bind, the M3 Adaptive per-cluster weighting).
+        // Peer with the
         // [`m3_placement_key_estrategia_pins_canonical_value`] canonical-
         // literal pin on the sibling per-sub-block strategy-discriminator
         // surface — that pin anchors the per-`placement:` `estrategia:`
@@ -7634,7 +7634,7 @@ mod tests {
         // `affinity` field, and the exact scalar every downstream
         // placement-hint consumer weights off (the lareira-fleet-programs
         // aggregator's per-entry M3 Adaptive compression pass per
-        // MESH-COMPOSITION.md §V, the future `app-operator` reconciler's
+        // the future `app-operator` reconciler's
         // per-Aplicacao pod-affinity / node-affinity K8s-primitive
         // materializer, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
         // materializer's admission-time typed-string bind, the M4 cross-
@@ -7714,12 +7714,12 @@ mod tests {
         // `shard_key` field, and the exact scalar every downstream shard-
         // dispatch consumer materializes off (the lareira-fleet-programs
         // aggregator's per-entry M3 shard-pool dispatch materializer per
-        // MESH-COMPOSITION.md §II.4, the future `app-operator`
+        // the future `app-operator`
         // reconciler's per-Aplicacao `ShardedResource` CR emitter, the
         // future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
         // admission-time typed-string bind, the M4 Orleans-style virtual-
-        // actor runtime's per-grain placement dispatch per
-        // RUNTIME-PATTERNS.md). Peer with the
+        // actor runtime's per-grain placement dispatch).
+        // Peer with the
         // [`m3_placement_key_estrategia_pins_canonical_value`] +
         // [`m3_placement_key_clusters_pins_canonical_value`] +
         // [`m3_placement_key_affinity_pins_canonical_value`] canonical-
@@ -8704,7 +8704,7 @@ mod tests {
         // paths on the per-Aplicacao L4 port axis (the resolver's own
         // typed dispatch at caixa-core, this renderer's emit-side reach
         // for it) must agree at every point on the port scalar the
-        // emitted HTTPRoute renders, per the MESH-COMPOSITION §V "one
+        // emitted HTTPRoute renders "one
         // identity layer, one data plane" invariant that the CNP L4
         // whitelist port and the HTTPRoute `backendRefs[].port` name the
         // same destination Servico's listener.
@@ -9414,7 +9414,7 @@ mod tests {
             // same substrate accessor. The extracted `metadata` sub-
             // mapping stays bound for the sibling `.iter()` walk that
             // pins the alphabetical-iteration determinism contract
-            // this test protects (THEORY.md §V.2.7).
+            // this test protects.
             let metadata = kube_metadata(p).expect("metadata mapping");
             let keys = mapping_str_keys(metadata);
             assert_eq!(
@@ -9494,7 +9494,7 @@ mod tests {
         // https://gateway-api.sigs.k8s.io/api-types/httproute/#timeouts
         // Before this overlay landed the typed slot was inert past
         // validate() — the rendered HTTPRoute carried no timeouts:
-        // block, so MESH-COMPOSITION §V "no infinite blocking" was
+        // block, so "no infinite blocking" was
         // a build-time gate without runtime teeth. This test is the
         // pinned proof that the slot now reaches the cluster artifact.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
@@ -9816,7 +9816,7 @@ mod tests {
         // https://docs.cilium.io/en/stable/network/servicemesh/mutual-authentication/
         // Before this overlay landed the typed slot was inert past
         // validate() — the rendered CNP carried no authentication:
-        // block, so MESH-COMPOSITION §V "no plaintext intra-mesh"
+        // block, so "no plaintext intra-mesh"
         // was a build-time gate without runtime teeth. This test is
         // the pinned proof that the slot now reaches the cluster
         // artifact (the fail-before-pass-after pin: the assertion
@@ -10122,7 +10122,7 @@ mod tests {
     /// the sibling drift-detection gate at the caixa-mesh boundary so a
     /// future extension of the `:entrada` slot (a per-cluster ingress
     /// alias table pinned through a future `:entrada-overrides` overlay
-    /// the MESH-COMPOSITION §V federation roadmap acknowledges, an M4
+    /// the federation roadmap acknowledges, an M4
     /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-
     /// webhook per-tenant `:host` rewrite, a canonicalization pass that
     /// lowercases the DNS-1123 label post-parse) that landed on the

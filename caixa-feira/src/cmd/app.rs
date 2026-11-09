@@ -498,7 +498,7 @@ mod tests {
         //
         // Byte-equal today (both accessors are `&self.<field>`); the
         // pin catches any future accessor extension (SemVer-2 build-
-        // metadata canonicalization the CAIXA-SDLC §I SemVer-2 pin
+        // metadata canonicalization the SemVer-2 pin
         // acknowledges, per-edition pre-release-tag overlay dispatched
         // through the sibling [`caixa_core::Caixa::edicao`]
         // universal-axis scalar) whose `feira app graph` header line

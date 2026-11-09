@@ -1002,7 +1002,7 @@ fn build_values_yaml(
     // (and the peer [`caixa_flux::programs_yaml_entry`] site) each
     // re-derived collapse onto one canonical composition, so a future
     // change to the per-Servico splice / overlay shape (the M4 typed
-    // per-edge policy overlay slot addition MESH-COMPOSITION §III.2 #3
+    // per-edge policy overlay slot addition
     // acknowledges, a change to the precedence rule once per-Aplicacao
     // operator overrides land, a canonicalization pass on the merged
     // key set) reaches both renderers by construction instead of a
